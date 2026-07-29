@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tele2 Sales</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: var(--tg-theme-bg-color, #ffffff);
+            --text: var(--tg-theme-text-color, #000000);
+            --hint: var(--tg-theme-hint-color, #999999);
+            --button: var(--tg-theme-button-color, #0088cc);
+            --button-text: var(--tg-theme-button-text-color, #ffffff);
+            --secondary: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            --success: #34c759;
+            --danger: #ff3b30;
+            --warning: #ff9500;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 16px;
+            padding-bottom: 100px;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--secondary);
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+        .header .date {
+            color: var(--hint);
+            font-size: 13px;
+            background: var(--secondary);
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--secondary);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .card h2 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        @media (max-width: 400px) {
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        .stat-item {
+            background: var(--bg);
+            padding: 12px 8px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--button);
+        }
+        .stat-label {
+            font-size: 10px;
+            color: var(--hint);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        /* Progress */
+        .progress-item {
+            margin-bottom: 12px;
+        }
+        .progress-item:last-child {
+            margin-bottom: 0;
+        }
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        .progress-label .value {
+            color: var(--hint);
+        }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--bg);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: var(--button);
+            transition: width 0.6s ease;
+        }
+        .progress-fill.done {
+            background: var(--success);
+        }
+        .progress-fill.fail {
+            background: var(--danger);
+        }
+        .progress-fill.warning {
+            background: var(--warning);
+        }
+
+        /* Employees List */
+        .employee-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--bg);
+        }
+        .employee-item:last-child {
+            border-bottom: none;
+        }
+        .employee-name {
+            font-weight: 500;
+            font-size: 14px;
+        }
+        .employee-stats {
+            font-size: 12px;
+            color: var(--hint);
+            display: flex;
+            gap: 12px;
+        }
+        .employee-stats span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Top employee */
+        .top-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--bg);
+        }
+        .top-item:last-child {
+            border-bottom: none;
+        }
+        .top-rank {
+            font-weight: 700;
+            color: var(--button);
+            width: 24px;
+        }
+        .top-name {
+            flex: 1;
+            font-size: 14px;
+        }
+        .top-score {
+            font-weight: 600;
+            color: var(--button);
+            font-size: 14px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .tab {
+            flex: 1;
+            padding: 10px 0;
+            text-align: center;
+            border-radius: 10px;
+            background: var(--secondary);
+            color: var(--text);
+            border: none;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            background: var(--button);
+            color: var(--button-text);
+        }
+        .tab:active {
+            transform: scale(0.96);
+        }
+
+        /* FAB */
+        .fab {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 32px);
+            max-width: 400px;
+            padding: 14px;
+            border: none;
+            border-radius: 14px;
+            background: var(--button);
+            color: var(--button-text);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            transition: all 0.2s;
+        }
+        .fab:active {
+            transform: translateX(-50%) scale(0.96);
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 30px 0;
+            color: var(--hint);
+            font-size: 14px;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 30px 0;
+            color: var(--hint);
+        }
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4) infinite;
+        }
+        @keyframes dots {
+            0% {
+                content: '';
+            }
+            25% {
+                content: '.';
+            }
+            50% {
+                content: '..';
+            }
+            75% {
+                content: '...';
+            }
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            max-width: 90%;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+        .toast.success {
+            background: var(--success);
+        }
+        .toast.error {
+            background: var(--danger);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            align-items: flex-end;
+            justify-content: center;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal {
+            background: var(--bg);
+            border-radius: 20px 20px 0 0;
+            padding: 24px 20px 32px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+            }
+            to {
+                transform: translateY(0);
+            }
+        }
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .modal-close {
+            float: right;
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--hint);
+            cursor: pointer;
+        }
+        .modal .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .modal .btn-group .btn-option {
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: var(--secondary);
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .modal .btn-group .btn-option:active {
+            transform: scale(0.95);
+        }
+        .modal .btn-group .btn-option.selected {
+            background: var(--button);
+            color: var(--button-text);
+        }
+        .modal .btn-primary {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            background: var(--button);
+            color: var(--button-text);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+        .modal .btn-primary:active {
+            transform: scale(0.96);
+        }
+        .modal .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .modal .input-group {
+            margin-bottom: 12px;
+        }
+        .modal .input-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        .modal .input-group input,
+        .modal .input-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--secondary);
+            border-radius: 10px;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 15px;
+            outline: none;
+        }
+        .modal .input-group input:focus {
+            border-color: var(--button);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Modal -->
+    <div id="modal" class="modal-overlay">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal()">✕</button>
+            <div class="modal-title" id="modalTitle">Добавить продажу</div>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <!-- App -->
+    <div id="app">
+        <div class="header">
+            <h1>🍉 Tele2 Sales</h1>
+            <span class="date" id="currentDate"></span>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Дашборд</button>
+            <button class="tab" data-tab="employees" onclick="switchTab('employees')">👥 Сотрудники</button>
+            <button class="tab" data-tab="my" onclick="switchTab('my')">👤 Мой план</button>
+        </div>
+
+        <!-- Tab: Dashboard -->
+        <div id="tab-dashboard">
+            <div class="card">
+                <h2>📈 Продажи сегодня</h2>
+                <div class="stats-grid" id="todayStats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="statSim">0</div>
+                        <div class="stat-label">SIM</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statMnp">0</div>
+                        <div class="stat-label">MNP</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statPa">0</div>
+                        <div class="stat-label">ПА</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statCombo">0</div>
+                        <div class="stat-label">Комбо</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statPhones">0</div>
+                        <div class="stat-label">Телефоны</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statAccessories">0</div>
+                        <div class="stat-label">Аксессуары</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🏆 Топ сотрудников</h2>
+                <div id="topEmployees">
+                    <div class="loading">Загрузка</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Employees -->
+        <div id="tab-employees" style="display:none;">
+            <div class="card">
+                <h2>👥 Все сотрудники</h2>
+                <div id="employeesList">
+                    <div class="loading">Загрузка</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: My -->
+        <div id="tab-my" style="display:none;">
+            <div class="card">
+                <h2>📋 Мой план на сегодня</h2>
+                <div id="myProgress">
+                    <div class="loading">Загрузка</div>
+                </div>
+            </div>
+        </div>
+
+        <button class="fab" onclick="openAddSale()">➕ Добавить продажу</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        const API_URL = window.location.origin;
+        let currentTab = 'dashboard';
+        let employees = [];
+        let stores = [];
+
+        // ===== Утилиты =====
+        function today() {
+            return new Date().toISOString().slice(0, 10);
+        }
+
+        function formatDate(date) {
+            const d = new Date(date);
+            return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            toast.classList.add('show');
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        // ===== Вкладки =====
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+
+            document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+            document.getElementById(`tab-${tab}`).style.display = 'block';
+
+            if (tab === 'dashboard') { loadDashboard();
+                loadTopEmployees(); }
+            if (tab === 'employees') loadEmployees();
+            if (tab === 'my') loadMyProgress();
+        }
+
+        // ===== Загрузка данных =====
+        async function loadDashboard() {
+            try {
+                const res = await fetch(`${API_URL}/stats/daily?date=${today()}`);
+                const data = await res.json();
+
+                const totals = data.reduce((acc, store) => ({
+                    sim: acc.sim + store.sim,
+                    mnp: acc.mnp + store.mnp,
+                    pa: acc.pa + store.pa,
+                    combo: acc.combo + store.combo,
+                    phones: acc.phones + store.phones,
+                    accessories: acc.accessories + store.accessories
+                }), { sim: 0, mnp: 0, pa: 0, combo: 0, phones: 0, accessories: 0 });
+
+                document.getElementById('statSim').textContent = totals.sim;
+                document.getElementById('statMnp').textContent = totals.mnp;
+                document.getElementById('statPa').textContent = totals.pa;
+                document.getElementById('statCombo').textContent = totals.combo;
+                document.getElementById('statPhones').textContent = totals.phones;
+                document.getElementById('statAccessories').textContent = totals.accessories;
+            } catch (err) {
+                console.error('Ошибка загрузки дашборда:', err);
+            }
+        }
+
+        async function loadTopEmployees() {
+            try {
+                const res = await fetch(`${API_URL}/sales?date=${today()}`);
+                const sales = await res.json();
+
+                const empMap = {};
+                sales.forEach(s => {
+                    if (!empMap[s.employee_id]) {
+                        empMap[s.employee_id] = {
+                            name: s.full_name,
+                            total: 0,
+                            sim: 0,
+                            combo: 0,
+                            phones: 0
+                        };
+                    }
+                    empMap[s.employee_id].sim += s.sim || 0;
+                    empMap[s.employee_id].combo += s.combo || 0;
+                    empMap[s.employee_id].phones += s.phones || 0;
+                    empMap[s.employee_id].total += (s.sim || 0) + (s.combo || 0) + (s.phones || 0);
+                });
+
+                const sorted = Object.values(empMap).sort((a, b) => b.total - a.total);
+
+                const container = document.getElementById('topEmployees');
+                if (sorted.length === 0) {
+                    container.innerHTML = '<div class="empty-state">Нет продаж сегодня</div>';
+                    return;
+                }
+
+                container.innerHTML = sorted.slice(0, 5).map((e, i) => `
+                        <div class="top-item">
+                            <span class="top-rank">#${i + 1}</span>
+                            <span class="top-name">${e.name}</span>
+                            <span class="top-score">${e.total}</span>
+                        </div>
+                    `).join('');
+            } catch (err) {
+                console.error('Ошибка загрузки топов:', err);
+            }
+        }
+
+        async function loadEmployees() {
+            try {
+                const [empRes, salesRes] = await Promise.all([
+                    fetch(`${API_URL}/employees`),
+                    fetch(`${API_URL}/sales?date=${today()}`)
+                ]);
+
+                employees = await empRes.json();
+                const sales = await salesRes.json();
+
+                const empMap = {};
+                sales.forEach(s => {
+                    if (!empMap[s.employee_id]) {
+                        empMap[s.employee_id] = { sim: 0, combo: 0, phones: 0 };
+                    }
+                    empMap[s.employee_id].sim += s.sim || 0;
+                    empMap[s.employee_id].combo += s.combo || 0;
+                    empMap[s.employee_id].phones += s.phones || 0;
+                });
+
+                const container = document.getElementById('employeesList');
+                container.innerHTML = employees.map(e => {
+                    const stats = empMap[e.id] || { sim: 0, combo: 0, phones: 0 };
+                    return `
+                            <div class="employee-item">
+                                <span class="employee-name">${e.full_name}</span>
+                                <span class="employee-stats">
+                                    <span>📱 ${stats.sim}</span>
+                                    <span>📦 ${stats.combo}</span>
+                                    <span>📱 ${stats.phones}</span>
+                                </span>
+                            </div>
+                        `;
+                }).join('');
+            } catch (err) {
+                console.error('Ошибка загрузки сотрудников:', err);
+            }
+        }
+
+        async function loadMyProgress() {
+            // Для демо — сотрудник с id=1
+            const employeeId = 1;
+            try {
+                const res = await fetch(`${API_URL}/employee/progress/${employeeId}?date=${today()}`);
+                const data = await res.json();
+
+                const container = document.getElementById('myProgress');
+                if (!data.sim || data.total.plan === 0) {
+                    container.innerHTML = '<div class="empty-state">Нет плана на сегодня</div>';
+                    return;
+                }
+
+                const metrics = [
+                    { key: 'sim', label: 'SIM' },
+                    { key: 'mnp', label: 'MNP' },
+                    { key: 'pa', label: 'ПА' },
+                    { key: 'combo', label: 'Комбо' },
+                    { key: 'phones', label: 'Телефоны' }
+                ];
+
+                let html = '';
+                for (const m of metrics) {
+                    const plan = data[m.key]?.plan || 0;
+                    const fact = data[m.key]?.fact || 0;
+                    const percent = plan > 0 ? Math.round((fact / plan) * 100) : 0;
+                    const cls = percent >= 100 ? 'done' : percent >= 70 ? 'warning' : 'fail';
+
+                    html += `
+                            <div class="progress-item">
+                                <div class="progress-label">
+                                    <span>${m.label}</span>
+                                    <span class="value">${fact} / ${plan}</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill ${cls}" style="width: ${Math.min(percent, 100)}%"></div>
+                                </div>
+                            </div>
+                        `;
+                }
+
+                html += `
+                        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--bg);">
+                            <div class="progress-label">
+                                <strong>Итого</strong>
+                                <strong>${data.total.fact} / ${data.total.plan} (${data.total.percent}%)</strong>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill ${data.total.percent >= 100 ? 'done' : data.total.percent >= 70 ? 'warning' : 'fail'}" 
+                                     style="width: ${Math.min(data.total.percent, 100)}%"></div>
+                            </div>
+                        </div>
+                    `;
+
+                container.innerHTML = html;
+            } catch (err) {
+                console.error('Ошибка загрузки прогресса:', err);
+            }
+        }
+
+        // ===== Модалка добавления продажи =====
+        async function openAddSale() {
+            try {
+                // Загружаем сотрудников и точки
+                const [empRes, storeRes] = await Promise.all([
+                    fetch(`${API_URL}/employees`),
+                    fetch(`${API_URL}/stores`)
+                ]);
+                employees = await empRes.json();
+                stores = await storeRes.json();
+
+                if (employees.length === 0) {
+                    showToast('Нет сотрудников', 'error');
+                    return;
+                }
+
+                const modal = document.getElementById('modal');
+                const body = document.getElementById('modalBody');
+
+                // Выбираем первого сотрудника и первую точку
+                const defaultEmp = employees[0];
+                const defaultStore = stores[0] || { id: '' };
+
+                body.innerHTML = `
+                        <div class="input-group">
+                            <label>Сотрудник</label>
+                            <select id="modalEmployee">
+                                ${employees.map(e => `<option value="${e.id}">${e.full_name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Точка</label>
+                            <select id="modalStore">
+                                ${stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Тип продажи</label>
+                            <select id="modalMetric">
+                                <option value="sim">SIM</option>
+                                <option value="mnp">MNP</option>
+                                <option value="pa">ПА</option>
+                                <option value="combo">Комбо</option>
+                                <option value="phones">Телефон</option>
+                                <option value="accessories">Аксессуары</option>
+                                <option value="insurance">Страховка</option>
+                                <option value="wink">Wink</option>
+                                <option value="shpd">ШПД</option>
+                                <option value="focus">ФО</option>
+                                <option value="plotter">Плоттер</option>
+                                <option value="hb">HB</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Количество</label>
+                            <input type="number" id="modalValue" placeholder="Введите число" min="1" value="1">
+                        </div>
+                        <button class="btn-primary" onclick="submitSale()">✅ Добавить продажу</button>
+                    `;
+
+                document.getElementById('modalTitle').textContent = '➕ Добавить продажу';
+                modal.classList.add('show');
+
+            } catch (err) {
+                console.error('Ошибка открытия модалки:', err);
+                showToast('Ошибка загрузки данных', 'error');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('show');
+        }
+
+        async function submitSale() {
+            const employeeId = document.getElementById('modalEmployee').value;
+            const storeId = document.getElementById('modalStore').value;
+            const metric = document.getElementById('modalMetric').value;
+            const value = parseInt(document.getElementById('modalValue').value);
+
+            if (!value || value < 1) {
+                showToast('Введите корректное количество', 'error');
+                return;
+            }
+
+            try {
+                const body = {
+                    employee_id: parseInt(employeeId),
+                    store_id: storeId,
+                    sale_date: today(),
+                    [metric]: value
+                };
+
+                const res = await fetch(`${API_URL}/sales`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) throw new Error('Ошибка сервера');
+
+                closeModal();
+                showToast(`✅ Добавлено ${value}`, 'success');
+
+                // Обновляем данные
+                loadAll();
+
+            } catch (err) {
+                console.error('Ошибка добавления:', err);
+                showToast('❌ Ошибка при добавлении', 'error');
+            }
+        }
+
+        // ===== Загрузка всех данных =====
+        function loadAll() {
+            document.getElementById('currentDate').textContent = formatDate(today());
+            if (currentTab === 'dashboard') {
+                loadDashboard();
+                loadTopEmployees();
+            }
+        }
+
+        // ===== Запуск =====
+        loadAll();
+
+        // Обновление каждые 30 секунд
+        setInterval(() => {
+            if (currentTab === 'dashboard') {
+                loadDashboard();
+                loadTopEmployees();
+            }
+        }, 30000);
+
+        // Telegram настройки
+        tg.MainButton.hide();
+
+        // Закрытие модалки по клику вне
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeModal();
+        });
+
+        console.log('🍉 Tele2 Mini App загружен!');
+    </script>
+</body>
+</html>
