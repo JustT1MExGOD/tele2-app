@@ -164,7 +164,7 @@ bot.command('stats', async (ctx) => {
 
 // ===== КОМАНДА /app — ОТКРЫТЬ MINI APP =====
 bot.command('app', async (ctx) => {
-    const url = 'https://nasty-rocks-shout.loca.lt'; // Ваш новый адрес
+    const url = 'https://tele2-app-production.up.railway.app/'; // Ваш новый адрес
 
     await ctx.reply(
         '🍉 Открой Tele2 Mini App прямо в Telegram!\n\n' +
