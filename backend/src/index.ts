@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { query } from './db/index.js';
 import { startBot } from './bot/index.js';
 import { startReportCron } from './cron/report.js';
+import { todayMoscow } from './utils/date.js';
 
 dotenv.config();
 
@@ -65,7 +66,7 @@ app.get('/employees', async () => {
 
 app.get('/sales', async (request) => {
   const { date } = request.query as { date?: string };
-  const saleDate = date || new Date().toISOString().slice(0, 10);
+  const saleDate = date || todayMoscow();;
 
   const res = await query(
     `SELECT s.*, e.full_name, st.name as store_name
@@ -81,45 +82,47 @@ app.get('/sales', async (request) => {
 
 app.post('/sales', async (request) => {
   const body = request.body as any;
-  const {
-    employee_id,
-    store_id,
-    sale_date,
-    sim = 0, mnp = 0, pa = 0, combo = 0,
-    settings = 0, accessories = 0, insurance = 0, phones = 0,
-    wink = 0, shpd = 0, focus = 0,
-    credit_request = 0, credit_issued = 0,
-    plotter = 0, hb = 0,
-  } = body;
+  const { employee_id, store_id, sale_date, ...metrics } = body;
 
-  const res = await query(
-    `INSERT INTO sales (
-      employee_id, store_id, sale_date,
-      sim, mnp, pa, combo, settings, accessories, insurance, phones,
-      wink, shpd, focus, credit_request, credit_issued, plotter, hb
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+  const fields = [
+    'sim','mnp','pa','combo','settings','accessories','insurance',
+    'phones','wink','shpd','focus','credit_request','credit_issued','plotter','hb'
+  ];
+
+  // берём только переданные метрики
+  const setParts: string[] = [];
+  const insertCols = ['employee_id', 'store_id', 'sale_date'];
+  const insertVals: any[] = [employee_id, store_id, sale_date];
+  const placeholders = ['$1', '$2', '$3'];
+  let i = 4;
+
+  for (const f of fields) {
+    if (metrics[f] !== undefined && metrics[f] !== null) {
+      insertCols.push(f);
+      insertVals.push(Number(metrics[f]) || 0);
+      placeholders.push('$' + i);
+      setParts.push(`${f} = sales.${f} + EXCLUDED.${f}`);
+      i++;
+    }
+  }
+
+  setParts.push('updated_at = now()');
+
+  const sql = `
+    INSERT INTO sales (${insertCols.join(',')})
+    VALUES (${placeholders.join(',')})
     ON CONFLICT (employee_id, store_id, sale_date)
-    DO UPDATE SET
-      sim = EXCLUDED.sim, mnp = EXCLUDED.mnp, pa = EXCLUDED.pa,
-      combo = EXCLUDED.combo, settings = EXCLUDED.settings,
-      accessories = EXCLUDED.accessories, insurance = EXCLUDED.insurance,
-      phones = EXCLUDED.phones, wink = EXCLUDED.wink, shpd = EXCLUDED.shpd,
-      focus = EXCLUDED.focus, credit_request = EXCLUDED.credit_request,
-      credit_issued = EXCLUDED.credit_issued, plotter = EXCLUDED.plotter,
-      hb = EXCLUDED.hb, updated_at = now()
-    RETURNING *`,
-    [
-      employee_id, store_id, sale_date,
-      sim, mnp, pa, combo, settings, accessories, insurance, phones,
-      wink, shpd, focus, credit_request, credit_issued, plotter, hb,
-    ]
-  );
+    DO UPDATE SET ${setParts.join(', ')}
+    RETURNING *
+  `;
+
+  const res = await query(sql, insertVals);
   return res.rows[0];
 });
 
 app.get('/schedules', async (request) => {
   const { date } = request.query as { date?: string };
-  const workDate = date || new Date().toISOString().slice(0, 10);
+  const workDate = date || todayMoscow();;
 
   const res = await query(
     `SELECT sch.*, e.full_name, st.name as store_name
@@ -149,6 +152,13 @@ app.post('/schedules', async (request) => {
     [employee_id, store_id, work_date, shift_text, hours]
   );
   return res.rows[0];
+});
+
+app.get('/plans', async () => {
+  const res = await query(
+    `SELECT * FROM store_plans WHERE plan_date IS NULL`
+  );
+  return res.rows;
 });
 
 // ===== ВАЖНО: порт и host =====

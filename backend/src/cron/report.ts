@@ -1,16 +1,14 @@
 import cron from 'node-cron';
 import { query } from '../db/index.js';
 import { bot } from '../bot/index.js';
+import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
 
 function getCurrentTime(): string {
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2, '0');
-  const m = String(now.getMinutes()).padStart(2, '0');
-  return `${h}:${m}`;
+  return nowTimeMoscow(); // вместо локального/UTC
 }
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayMoscow();
 }
 
 async function wasSent(key: string): Promise<boolean> {

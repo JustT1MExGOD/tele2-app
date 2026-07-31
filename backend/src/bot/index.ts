@@ -1,6 +1,7 @@
 import { Bot } from 'grammy';
 import dotenv from 'dotenv';
 import { query } from '../db/index.js';
+import { todayMoscow } from '../utils/date.js';
 
 dotenv.config();
 
@@ -39,7 +40,7 @@ bot.command('employees', async (ctx) => {
 });
 
 bot.command('schedule', async (ctx) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayMoscow();
   const res = await query(
     `SELECT e.full_name, st.name as store_name, sch.shift_text, sch.hours
      FROM schedules sch
@@ -60,7 +61,7 @@ bot.command('schedule', async (ctx) => {
 });
 
 bot.command('plan', async (ctx) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayMoscow();
   const storesRes = await query('SELECT * FROM stores ORDER BY hours');
   let result = `📋 Дневной план на ${today}\n\n`;
 
@@ -103,7 +104,7 @@ bot.command('plan', async (ctx) => {
 });
 
 bot.command('sales', async (ctx) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayMoscow();
   const res = await query(
     `SELECT e.full_name, st.name as store_name, s.sim, s.mnp, s.pa, s.combo, s.phones
      FROM sales s
@@ -128,7 +129,7 @@ bot.command('sales', async (ctx) => {
 
 
 bot.command('stats', async (ctx) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayMoscow();
   const month = today.slice(0, 7);
   
   const res = await query(
@@ -213,7 +214,7 @@ bot.on('message:text', async (ctx) => {
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayMoscow();
     const sch = await query(
       `SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2`,
       [empId, today]
@@ -267,7 +268,7 @@ bot.on('message:text', async (ctx) => {
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayMoscow();
 
     await query(
       `INSERT INTO sales (employee_id, store_id, sale_date, ${state.metric})
