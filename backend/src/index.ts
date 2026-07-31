@@ -10,6 +10,7 @@ import { startBot, notifyChat } from './bot/index.js';
 import { startReportCron } from './cron/report.js';
 import { calculateAllBFQ } from './services/bfq.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
+import { registerV3Routes } from './routes-v3.js';
 
 dotenv.config();
 
@@ -364,6 +365,7 @@ app.get('/bfq', async (request) => {
 const port = Number(process.env.PORT) || 3000;
 
 try {
+  await registerV3Routes(app);
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`🚀 Сервер на 0.0.0.0:${port}`);
   console.log(`📅 Сегодня (МСК): ${todayMoscow()}`);
