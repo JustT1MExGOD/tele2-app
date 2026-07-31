@@ -8,7 +8,6 @@ import { fileURLToPath } from 'url';
 import { query } from './db/index.js';
 import { startBot, notifyChat } from './bot/index.js';
 import { startReportCron } from './cron/report.js';
-import { calculateAllBFQ } from './services/bfq.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { registerV3Routes } from './routes-v3.js';
 
@@ -72,53 +71,12 @@ app.get('/plans', async () => {
 // ===== EMPLOYEES =====
 app.get('/employees', async () => {
   const res = await query(
-    `SELECT id, full_name, short_name, telegram_id, is_active
+    `SELECT id, full_name, short_name, telegram_id, is_active, role
      FROM employees
      WHERE is_active = true
      ORDER BY id`
   );
   return res.rows;
-});
-
-// ===== ME / BIND =====
-app.get('/me', async (request, reply) => {
-  const telegramId = (request.headers['x-telegram-id'] as string) || '';
-  if (!telegramId) return reply.code(401).send({ error: 'no telegram id' });
-
-  const res = await query(
-    `SELECT id as employee_id, full_name, short_name, telegram_id
-     FROM employees
-     WHERE telegram_id = $1
-     LIMIT 1`,
-    [telegramId]
-  );
-  if (!res.rows[0]) return reply.code(404).send({ error: 'not bound' });
-  return res.rows[0];
-});
-
-app.post('/me/bind', async (request, reply) => {
-  const body = request.body as any;
-  const telegram_id = body?.telegram_id;
-  const employee_id = Number(body?.employee_id);
-  if (!telegram_id || !employee_id) {
-    return reply.code(400).send({ error: 'telegram_id and employee_id required' });
-  }
-
-  // снимаем привязку с других, если была
-  await query(`UPDATE employees SET telegram_id = NULL WHERE telegram_id = $1`, [
-    telegram_id,
-  ]);
-  await query(`UPDATE employees SET telegram_id = $1 WHERE id = $2`, [
-    telegram_id,
-    employee_id,
-  ]);
-
-  const res = await query(
-    `SELECT id as employee_id, full_name, short_name, telegram_id
-     FROM employees WHERE id = $1`,
-    [employee_id]
-  );
-  return res.rows[0];
 });
 
 // ===== SALES =====
@@ -185,6 +143,18 @@ app.post('/sales', async (request, reply) => {
 
   const res = await query(sql, insertVals);
   const row = res.rows[0];
+
+  // audit
+  try {
+    const metric = fields.find((f) => body[f] !== undefined && body[f] !== null && body[f] !== '');
+    if (metric) {
+      await query(
+        `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source)
+         VALUES ($1, $2, $3, $4, $5, 'api')`,
+        [employee_id, store_id, sale_date, metric, Number(body[metric]) || 0]
+      );
+    }
+  } catch (_) {}
 
   // уведомление в чат
   try {
@@ -353,19 +323,14 @@ app.get('/employee/progress/:id', async (request) => {
   return result;
 });
 
-// ===== BFQ =====
-app.get('/bfq', async (request) => {
-  const { month } = request.query as { month?: string };
-  const m = month || currentMonthMoscow();
-  const items = await calculateAllBFQ(m);
-  return { month: m, items };
-});
+// ===== V3: /me, /bfq, bulk schedule, history, export =====
+// НЕ дублируй /me и /bfq здесь — они внутри registerV3Routes
+await registerV3Routes(app);
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;
 
 try {
-  await registerV3Routes(app);
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`🚀 Сервер на 0.0.0.0:${port}`);
   console.log(`📅 Сегодня (МСК): ${todayMoscow()}`);
