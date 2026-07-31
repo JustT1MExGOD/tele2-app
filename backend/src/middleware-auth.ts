@@ -6,7 +6,7 @@
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { query } from '../db/index.js';
+import { query } from './db/index.js';
 
 export type Role = 'employee' | 'manager' | 'admin';
 
