@@ -322,6 +322,24 @@ bot.on('message:text', async (ctx) => {
 
 
 export async function startBot() {
-  await bot.start();
-  console.log('🤖 Telegram бот запущен');
+  const token = process.env.BOT_TOKEN;
+  if (!token) {
+    console.warn('BOT_TOKEN не задан — бот не запускается');
+    return;
+  }
+
+  try {
+    // если webhook висел — снимаем, но не падаем при ошибке
+    try {
+      await bot.api.deleteWebhook({ drop_pending_updates: true });
+    } catch (e: any) {
+      console.warn('deleteWebhook:', e.message || e);
+    }
+
+    await bot.start();
+    console.log('Telegram бот запущен');
+  } catch (err: any) {
+    console.error('Ошибка запуска бота:', err.message || err);
+    // не делаем process.exit — API должен жить без бота
+  }
 }
