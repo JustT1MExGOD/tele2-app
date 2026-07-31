@@ -8,910 +8,808 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    :root {
-      --bg: var(--tg-theme-bg-color, #0f0f12);
-      --text: var(--tg-theme-text-color, #f2f2f7);
-      --hint: var(--tg-theme-hint-color, #8e8e93);
-      --button: var(--tg-theme-button-color, #2aabee);
-      --button-text: var(--tg-theme-button-text-color, #ffffff);
-      --secondary: var(--tg-theme-secondary-bg-color, #1c1c1e);
-      --card: var(--tg-theme-secondary-bg-color, #1c1c1e);
+    :root, [data-theme="light"] {
+      --bg: #f2f2f7;
+      --surface: #ffffff;
+      --surface-2: #f2f2f7;
+      --text: #111111;
+      --text-secondary: #6b6b6b;
+      --hint: #8e8e93;
+      --border: rgba(0,0,0,0.06);
+      --accent: #000000;
+      --accent-soft: #f2f2f7;
+      --primary: #2aabee;
+      --primary-soft: rgba(42,171,238,0.12);
       --success: #34c759;
-      --danger: #ff453a;
-      --warning: #ff9f0a;
-      --border: rgba(255,255,255,0.06);
-      --radius: 16px;
+      --danger: #ff3b30;
+      --warning: #ff9500;
+      --shadow: 0 2px 12px rgba(0,0,0,0.06);
+      --header-bg: #000000;
+      --header-text: #ffffff;
+      --nav-bg: #ffffff;
+      --nav-border: rgba(0,0,0,0.08);
+      --icon-bg: #f2f2f7;
+      --radius: 20px;
+      --radius-sm: 14px;
     }
 
-    body {
+    [data-theme="dark"] {
+      --bg: #000000;
+      --surface: #1c1c1e;
+      --surface-2: #2c2c2e;
+      --text: #f2f2f7;
+      --text-secondary: #aeaeb2;
+      --hint: #8e8e93;
+      --border: rgba(255,255,255,0.08);
+      --accent: #ffffff;
+      --accent-soft: #2c2c2e;
+      --primary: #2aabee;
+      --primary-soft: rgba(42,171,238,0.18);
+      --success: #30d158;
+      --danger: #ff453a;
+      --warning: #ff9f0a;
+      --shadow: 0 2px 16px rgba(0,0,0,0.4);
+      --header-bg: #000000;
+      --header-text: #ffffff;
+      --nav-bg: #1c1c1e;
+      --nav-border: rgba(255,255,255,0.1);
+      --icon-bg: #2c2c2e;
+    }
+
+    html, body {
+      height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
-      padding: 14px 14px 110px;
-      min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
 
-    /* ===== Header ===== */
-    .header {
+    body {
+      padding-bottom: 88px;
+      min-height: 100vh;
+    }
+
+    /* ===== Top header (как на скрине) ===== */
+    .app-header {
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 12px 16px 28px;
+      position: relative;
+    }
+    .app-header-top {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
     }
-    .header h1 {
-      font-size: 22px;
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
       font-weight: 700;
+      color: #fff;
+      overflow: hidden;
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .header-actions { display: flex; gap: 10px; align-items: center; }
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .store-pill {
+      display: inline-block;
+      background: #fff;
+      color: #111;
+      border-radius: 16px;
+      padding: 12px 16px;
+      box-shadow: var(--shadow);
+      max-width: 70%;
+    }
+    [data-theme="dark"] .store-pill {
+      background: #1c1c1e;
+      color: #f2f2f7;
+    }
+    .store-pill .label {
+      font-size: 12px;
+      color: var(--hint);
+      margin-bottom: 2px;
+    }
+    .store-pill .value {
+      font-size: 18px;
+      font-weight: 800;
       letter-spacing: -0.3px;
     }
-    .header .date {
+
+    /* ===== Sheet content ===== */
+    .sheet {
+      margin-top: -16px;
+      background: var(--bg);
+      border-radius: 24px 24px 0 0;
+      padding: 16px 14px 20px;
+      min-height: calc(100vh - 120px);
+    }
+
+    .section {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 6px 0;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .section-title {
       font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      padding: 14px 16px 8px;
+    }
+    .section-sub {
+      font-size: 12px;
       color: var(--hint);
-      background: var(--secondary);
-      padding: 6px 12px;
-      border-radius: 20px;
       font-weight: 500;
     }
 
-    /* ===== Tabs ===== */
-    .tabs {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 14px;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      padding-bottom: 2px;
-    }
-    .tabs::-webkit-scrollbar { display: none; }
-    .tab {
-      flex: 0 0 auto;
-      padding: 9px 14px;
-      border-radius: 12px;
-      background: var(--secondary);
-      color: var(--hint);
-      border: none;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all 0.2s;
-    }
-    .tab.active {
-      background: var(--button);
-      color: var(--button-text);
-    }
-    .tab:active { transform: scale(0.96); }
-
-    /* ===== Cards ===== */
-    .card {
-      background: var(--card);
-      border-radius: var(--radius);
-      padding: 16px;
-      margin-bottom: 12px;
-      border: 1px solid var(--border);
-    }
-    .card-title {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--text);
-    }
-    .card-title .badge {
-      margin-left: auto;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--hint);
-      background: var(--bg);
-      padding: 3px 8px;
-      border-radius: 8px;
-    }
-
-    /* ===== Stats grid ===== */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-    .stat-item {
-      background: var(--bg);
-      padding: 14px 8px;
-      border-radius: 12px;
-      text-align: center;
-    }
-    .stat-value {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--button);
-      line-height: 1.1;
-    }
-    .stat-label {
-      font-size: 10px;
-      color: var(--hint);
-      margin-top: 5px;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      font-weight: 600;
-    }
-
-    /* ===== Store card (План дня) ===== */
-    .store-card {
-      background: var(--card);
-      border-radius: var(--radius);
-      margin-bottom: 12px;
-      border: 1px solid var(--border);
-      overflow: hidden;
-    }
-    .store-header {
-      padding: 14px 16px;
+    /* List rows (как Продать SIM) */
+    .row {
       display: flex;
       align-items: center;
       gap: 12px;
+      padding: 12px 16px;
       cursor: pointer;
-      user-select: none;
+      transition: background 0.15s;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+      color: var(--text);
+      font: inherit;
     }
-    .store-header:active { opacity: 0.85; }
-    .store-icon {
+    .row:active { background: var(--surface-2); }
+    .row-icon {
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: linear-gradient(135deg, #2aabee, #1a8fd0);
+      background: var(--icon-bg);
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 18px;
       flex-shrink: 0;
+      color: var(--text-secondary);
     }
-    .store-info { flex: 1; min-width: 0; }
-    .store-name {
-      font-size: 15px;
-      font-weight: 700;
+    .row-body { flex: 1; min-width: 0; }
+    .row-title {
+      font-size: 16px;
+      font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .store-meta {
-      font-size: 12px;
+    .row-sub {
+      font-size: 13px;
       color: var(--hint);
       margin-top: 2px;
     }
+    .row-chevron {
+      color: var(--hint);
+      font-size: 18px;
+      font-weight: 300;
+      flex-shrink: 0;
+    }
+    .row-value {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      flex-shrink: 0;
+    }
+
+    /* Stats chips */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 4px 12px 14px;
+    }
+    .stat-chip {
+      background: var(--surface-2);
+      border-radius: 14px;
+      padding: 12px 8px;
+      text-align: center;
+    }
+    .stat-chip .n {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.4px;
+    }
+    .stat-chip .l {
+      font-size: 10px;
+      color: var(--hint);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      margin-top: 3px;
+    }
+
+    /* Progress */
+    .progress-block { padding: 4px 16px 14px; }
+    .progress-item { margin-bottom: 12px; }
+    .progress-item:last-child { margin-bottom: 0; }
+    .progress-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 6px;
+      gap: 8px;
+    }
+    .progress-top .name { font-weight: 600; }
+    .progress-top .val { color: var(--hint); font-variant-numeric: tabular-nums; }
+    .bar {
+      height: 6px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .bar > i {
+      display: block;
+      height: 100%;
+      border-radius: 3px;
+      background: var(--primary);
+      transition: width 0.45s ease;
+    }
+    .bar > i.good { background: var(--success); }
+    .bar > i.mid { background: var(--warning); }
+    .bar > i.bad { background: var(--danger); }
+
+    /* Store plan cards */
+    .store-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .store-head {
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+    }
+    .store-head:active { opacity: 0.85; }
+    .store-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .store-meta { flex: 1; min-width: 0; }
+    .store-name { font-size: 16px; font-weight: 700; }
+    .store-code { font-size: 12px; color: var(--hint); margin-top: 2px; }
     .store-pct {
       font-size: 16px;
-      font-weight: 700;
-      min-width: 48px;
+      font-weight: 800;
+      min-width: 44px;
       text-align: right;
     }
     .store-pct.good { color: var(--success); }
     .store-pct.mid { color: var(--warning); }
     .store-pct.bad { color: var(--danger); }
-    .store-chevron {
-      color: var(--hint);
-      font-size: 18px;
-      transition: transform 0.25s;
-      margin-left: 4px;
-    }
-    .store-card.open .store-chevron { transform: rotate(180deg); }
-
     .store-body {
       display: none;
       padding: 0 16px 16px;
       border-top: 1px solid var(--border);
     }
     .store-card.open .store-body { display: block; }
-
-    .block-title {
-      font-size: 12px;
-      font-weight: 700;
+    .block-label {
+      font-size: 11px;
+      font-weight: 800;
       color: var(--hint);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.4px;
       margin: 14px 0 8px;
     }
-
-    .staff-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 10px;
-    }
-    .staff-chip {
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip {
       font-size: 12px;
-      background: var(--bg);
-      color: var(--text);
+      background: var(--surface-2);
       padding: 5px 10px;
       border-radius: 20px;
       font-weight: 500;
     }
 
-    /* ===== Progress ===== */
-    .progress-item { margin-bottom: 10px; }
-    .progress-item:last-child { margin-bottom: 0; }
-    .progress-label {
+    /* Schedule month */
+    .month-nav {
       display: flex;
+      align-items: center;
       justify-content: space-between;
-      font-size: 13px;
-      margin-bottom: 5px;
+      padding: 4px 4px 12px;
       gap: 8px;
     }
-    .progress-label .name { font-weight: 500; }
-    .progress-label .value {
-      color: var(--hint);
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
+    .month-nav button {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: none;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 20px;
+      box-shadow: var(--shadow);
+      cursor: pointer;
     }
-    .progress-bar {
-      width: 100%;
-      height: 7px;
-      background: var(--bg);
-      border-radius: 4px;
+    .month-nav .label {
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .sch-emp {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 12px;
       overflow: hidden;
     }
-    .progress-fill {
-      height: 100%;
-      border-radius: 4px;
-      background: var(--button);
-      transition: width 0.5s ease;
-      min-width: 0;
-    }
-    .progress-fill.done { background: var(--success); }
-    .progress-fill.fail { background: var(--danger); }
-    .progress-fill.warning { background: var(--warning); }
-
-    /* ===== Lists ===== */
-    .list-item {
+    .sch-emp-head {
+      padding: 12px 14px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 0;
       border-bottom: 1px solid var(--border);
-      gap: 10px;
-    }
-    .list-item:last-child { border-bottom: none; }
-    .list-name { font-weight: 500; font-size: 14px; flex: 1; min-width: 0; }
-    .list-stats {
-      font-size: 12px;
-      color: var(--hint);
-      display: flex;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-    .rank {
       font-weight: 700;
-      color: var(--button);
-      width: 28px;
-      flex-shrink: 0;
-    }
-    .score {
-      font-weight: 700;
-      color: var(--button);
       font-size: 14px;
     }
+    .sch-emp-head .cnt { font-size: 12px; color: var(--hint); font-weight: 600; }
+    .sch-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      padding: 10px;
+    }
+    .sch-cell {
+      aspect-ratio: 1;
+      border-radius: 10px;
+      background: var(--surface-2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: var(--hint);
+      min-height: 40px;
+    }
+    .sch-cell .d { font-size: 13px; font-weight: 700; color: var(--text); }
+    .sch-cell.work {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+    .sch-cell.work .d { color: var(--primary); }
+    .sch-cell .s {
+      font-size: 8px;
+      margin-top: 1px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0 1px;
+    }
+    .sch-cell.off { opacity: 0.5; }
 
-    /* ===== FAB ===== */
+    /* Today schedule list */
+    .today-store {
+      margin-bottom: 4px;
+    }
+
+    /* FAB */
     .fab {
       position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: calc(100% - 28px);
-      max-width: 420px;
-      padding: 15px;
+      right: 16px;
+      bottom: 96px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
       border: none;
-      border-radius: 14px;
-      background: var(--button);
-      color: var(--button-text);
-      font-size: 16px;
-      font-weight: 700;
+      background: var(--primary);
+      color: #fff;
+      font-size: 28px;
+      font-weight: 300;
+      box-shadow: 0 8px 24px rgba(42,171,238,0.4);
+      z-index: 80;
       cursor: pointer;
-      box-shadow: 0 8px 24px rgba(42, 171, 238, 0.35);
-      z-index: 50;
-      transition: transform 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
     }
-    .fab:active { transform: translateX(-50%) scale(0.97); }
+    .fab:active { transform: scale(0.94); }
 
-    /* ===== Empty / Loading ===== */
-    .empty-state, .loading {
+    /* Bottom nav */
+    .bottom-nav {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: var(--nav-bg);
+      border-top: 1px solid var(--nav-border);
+      display: flex;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      z-index: 100;
+    }
+    .nav-item {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--hint);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 2px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .nav-item .ico { font-size: 22px; line-height: 1; }
+    .nav-item.active { color: var(--text); }
+
+    /* Empty / loading / skeleton */
+    .empty {
       text-align: center;
-      padding: 28px 12px;
+      padding: 32px 16px;
       color: var(--hint);
       font-size: 14px;
     }
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+      background-size: 200% 100%;
+      animation: sk 1.2s ease infinite;
+      border-radius: 10px;
+      height: 16px;
+      margin: 10px 16px;
+    }
+    @keyframes sk {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
 
-    /* ===== Toast ===== */
+    /* Toast */
     .toast {
       position: fixed;
       top: 16px;
       left: 50%;
-      transform: translateX(-50%) translateY(-20px);
-      padding: 12px 20px;
-      border-radius: 12px;
-      background: rgba(30,30,32,0.95);
+      transform: translateX(-50%) translateY(-12px);
+      background: rgba(20,20,22,0.92);
       color: #fff;
+      padding: 12px 18px;
+      border-radius: 14px;
       font-size: 14px;
-      font-weight: 500;
-      z-index: 2000;
+      font-weight: 600;
+      z-index: 3000;
       opacity: 0;
       transition: all 0.25s;
       pointer-events: none;
-      max-width: 90%;
+      max-width: 88%;
       text-align: center;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     }
     .toast.show {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
-    .toast.success { background: var(--success); }
-    .toast.error { background: var(--danger); }
+    .toast.ok { background: var(--success); }
+    .toast.err { background: var(--danger); }
 
-    /* ===== Modal ===== */
-    .modal-overlay {
+    /* Modal bottom sheet */
+    .overlay {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.55);
-      z-index: 1000;
+      background: rgba(0,0,0,0.45);
+      z-index: 2000;
       align-items: flex-end;
       justify-content: center;
     }
-    .modal-overlay.show { display: flex; }
-    .modal {
-      background: var(--bg);
-      border-radius: 20px 20px 0 0;
-      padding: 20px 18px 28px;
+    .overlay.show { display: flex; }
+    .sheet-modal {
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
       width: 100%;
       max-width: 520px;
-      max-height: 88vh;
+      max-height: 90vh;
       overflow-y: auto;
-      animation: slideUp 0.28s ease;
+      padding: 12px 16px 28px;
+      animation: up 0.28s ease;
     }
-    @keyframes slideUp {
+    @keyframes up {
       from { transform: translateY(100%); }
       to { transform: translateY(0); }
     }
-    .modal-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
+    .grab {
+      width: 36px;
+      height: 4px;
+      background: var(--hint);
+      border-radius: 2px;
+      margin: 4px auto 14px;
+      opacity: 0.4;
     }
     .modal-title {
-      font-size: 18px;
-      font-weight: 700;
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 14px;
+      letter-spacing: -0.3px;
     }
-    .modal-close {
-      background: var(--secondary);
-      border: none;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      color: var(--hint);
-      font-size: 18px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .input-group { margin-bottom: 14px; }
-    .input-group label {
+    .field { margin-bottom: 14px; }
+    .field label {
       display: block;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
       color: var(--hint);
-      margin-bottom: 6px;
       text-transform: uppercase;
       letter-spacing: 0.3px;
+      margin-bottom: 6px;
     }
-    .input-group input,
-    .input-group select {
+    .field select, .field input {
       width: 100%;
-      padding: 12px 14px;
+      padding: 13px 14px;
+      border-radius: 14px;
       border: 1px solid var(--border);
-      border-radius: 12px;
-      background: var(--secondary);
+      background: var(--surface-2);
       color: var(--text);
-      font-size: 15px;
+      font-size: 16px;
       outline: none;
       appearance: none;
     }
-    .input-group input:focus,
-    .input-group select:focus {
-      border-color: var(--button);
-    }
-
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 8px;
     }
-    .metric-chip {
+    .mchip {
       padding: 12px 6px;
-      border: 1px solid var(--border);
       border-radius: 12px;
-      background: var(--secondary);
+      border: 1px solid var(--border);
+      background: var(--surface-2);
       color: var(--text);
       font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.15s;
-    }
-    .metric-chip.selected {
-      background: var(--button);
-      color: var(--button-text);
-      border-color: var(--button);
-    }
-    .metric-chip:active { transform: scale(0.96); }
-
-    .btn-primary {
-      width: 100%;
-      padding: 15px;
-      border: none;
-      border-radius: 14px;
-      background: var(--button);
-      color: var(--button-text);
-      font-size: 16px;
       font-weight: 700;
       cursor: pointer;
-      margin-top: 8px;
+      text-align: center;
     }
-    .btn-primary:active { transform: scale(0.98); }
-    .btn-primary:disabled { opacity: 0.45; }
-
-    .quick-values {
+    .mchip.on {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .quick {
       display: flex;
       gap: 8px;
       margin-top: 8px;
     }
-    .quick-values button {
+    .quick button {
       flex: 1;
       padding: 10px;
+      border-radius: 12px;
       border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--secondary);
+      background: var(--surface-2);
       color: var(--text);
-      font-weight: 600;
+      font-weight: 700;
       font-size: 14px;
       cursor: pointer;
     }
-    .quick-values button:active { background: var(--button); color: var(--button-text); }
+    .btn-main {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 16px;
+      background: var(--accent);
+      color: var(--header-text);
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    [data-theme="light"] .btn-main { color: #fff; }
+    .btn-main:disabled { opacity: 0.4; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .link-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      cursor: pointer;
+    }
+    .link-row:active { background: var(--surface-2); }
+    .link-row .left .t { font-size: 16px; font-weight: 600; }
+    .link-row .left .s { font-size: 13px; color: var(--hint); margin-top: 2px; }
   </style>
 </head>
-<body>
+<body data-theme="light">
   <div id="toast" class="toast"></div>
 
-  <div id="modal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-head">
-        <div class="modal-title" id="modalTitle">Добавить продажу</div>
-        <button class="modal-close" onclick="closeModal()">✕</button>
-      </div>
+  <div id="overlay" class="overlay">
+    <div class="sheet-modal">
+      <div class="grab"></div>
+      <div class="modal-title" id="modalTitle">Добавить продажу</div>
       <div id="modalBody"></div>
     </div>
   </div>
 
-  <div id="app">
-    <div class="header">
-      <h1>🍉 Tele2 Sales</h1>
-      <span class="date" id="currentDate">—</span>
+  <!-- Header -->
+  <div class="app-header">
+    <div class="app-header-top">
+      <div class="avatar" id="userAvatar">T2</div>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="toggleTheme()" title="Тема">◐</button>
+        <button class="icon-btn" onclick="refreshAll()" title="Обновить">↻</button>
+      </div>
     </div>
-
-    <div class="tabs">
-      <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Дашборд</button>
-      <button class="tab" data-tab="plan" onclick="switchTab('plan')">📋 План дня</button>
-      <button class="tab" data-tab="employees" onclick="switchTab('employees')">👥 Сотрудники</button>
-      <button class="tab" data-tab="my" onclick="switchTab('my')">👤 Мой план</button>
+    <div class="store-pill">
+      <div class="label">Сегодня</div>
+      <div class="value" id="headerDate">—</div>
     </div>
+  </div>
 
-    <!-- Dashboard -->
-    <div id="tab-dashboard">
-      <div class="card">
-        <div class="card-title">📈 Продажи сегодня</div>
-        <div class="stats-grid">
-          <div class="stat-item"><div class="stat-value" id="statSim">0</div><div class="stat-label">SIM</div></div>
-          <div class="stat-item"><div class="stat-value" id="statMnp">0</div><div class="stat-label">MNP</div></div>
-          <div class="stat-item"><div class="stat-value" id="statPa">0</div><div class="stat-label">ПА</div></div>
-          <div class="stat-item"><div class="stat-value" id="statCombo">0</div><div class="stat-label">Комбо</div></div>
-          <div class="stat-item"><div class="stat-value" id="statPhones">0</div><div class="stat-label">Телефоны</div></div>
-          <div class="stat-item"><div class="stat-value" id="statAccessories">0</div><div class="stat-label">Аксессуары</div></div>
+  <div class="sheet">
+    <!-- ===== MAIN ===== -->
+    <div id="page-home" class="page active">
+      <div class="section">
+        <div class="section-title">Продажи сегодня</div>
+        <div class="stats-row" id="homeStats">
+          <div class="stat-chip"><div class="n" id="hSim">0</div><div class="l">SIM</div></div>
+          <div class="stat-chip"><div class="n" id="hMnp">0</div><div class="l">MNP</div></div>
+          <div class="stat-chip"><div class="n" id="hPa">0</div><div class="l">ПА</div></div>
+          <div class="stat-chip"><div class="n" id="hCombo">0</div><div class="l">Комбо</div></div>
+          <div class="stat-chip"><div class="n" id="hPhones">0</div><div class="l">Телефоны</div></div>
+          <div class="stat-chip"><div class="n" id="hAcc">0</div><div class="l">Аксы</div></div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">🏆 Топ сотрудников</div>
-        <div id="topEmployees"><div class="loading">Загрузка</div></div>
+      <div class="section">
+        <div class="section-title">Быстрые действия</div>
+        <button class="row" onclick="openAddSale()">
+          <div class="row-icon">➕</div>
+          <div class="row-body"><div class="row-title">Добавить продажу</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="switchPage('plan')">
+          <div class="row-icon">📋</div>
+          <div class="row-body"><div class="row-title">План дня по точкам</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="switchPage('today')">
+          <div class="row-icon">👥</div>
+          <div class="row-body"><div class="row-title">Кто на смене сегодня</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Топ сотрудников</div>
+        <div id="homeTop"><div class="skeleton"></div><div class="skeleton"></div></div>
+      </div>
+
+      <div class="section">
+        <button class="link-row" onclick="switchPage('bfq')">
+          <div class="left">
+            <div class="t">BFQ</div>
+            <div class="s">Рейтинг за месяц</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
       </div>
     </div>
 
-    <!-- Plan day -->
-    <div id="tab-plan" style="display:none;">
-      <div id="planStores"><div class="loading">Загрузка</div></div>
+    <!-- ===== PLAN DAY ===== -->
+    <div id="page-plan" class="page">
+      <div id="planList"><div class="skeleton"></div><div class="skeleton"></div></div>
     </div>
 
-    <!-- Employees -->
-    <div id="tab-employees" style="display:none;">
-      <div class="card">
-        <div class="card-title">👥 Все сотрудники</div>
-        <div id="employeesList"><div class="loading">Загрузка</div></div>
+    <!-- ===== TODAY SCHEDULE ===== -->
+    <div id="page-today" class="page">
+      <div id="todayList"><div class="skeleton"></div></div>
+    </div>
+
+    <!-- ===== MONTH SCHEDULE ===== -->
+    <div id="page-schedule" class="page">
+      <div class="month-nav">
+        <button onclick="shiftMonth(-1)">‹</button>
+        <div class="label" id="monthLabel">—</div>
+        <button onclick="shiftMonth(1)">›</button>
+      </div>
+      <div id="monthBoard"><div class="skeleton"></div></div>
+    </div>
+
+    <!-- ===== MY PLAN ===== -->
+    <div id="page-my" class="page">
+      <div class="section">
+        <div class="section-title" id="myTitle">Мой план</div>
+        <div id="myBody"><div class="skeleton"></div><div class="skeleton"></div></div>
+      </div>
+      <div class="section" id="myBindSection" style="display:none;">
+        <div class="section-title">Привязка аккаунта</div>
+        <div class="progress-block">
+          <div class="field">
+            <label>Кто вы?</label>
+            <select id="bindEmployee"></select>
+          </div>
+          <button class="btn-main" onclick="bindMe()">Привязать Telegram</button>
+        </div>
       </div>
     </div>
 
-    <!-- My plan -->
-    <div id="tab-my" style="display:none;">
-      <div class="card">
-        <div class="card-title">📋 Мой план на сегодня</div>
-        <div id="myProgress"><div class="loading">Загрузка</div></div>
+    <!-- ===== BFQ ===== -->
+    <div id="page-bfq" class="page">
+      <div class="section">
+        <div class="section-title">BFQ за месяц</div>
+        <div id="bfqList"><div class="skeleton"></div></div>
       </div>
     </div>
 
-    <button class="fab" onclick="openAddSale()">➕ Добавить продажу</button>
+    <!-- ===== MORE / TEAM ===== -->
+    <div id="page-team" class="page">
+      <div class="section">
+        <div class="section-title">Сотрудники</div>
+        <div id="teamList"><div class="skeleton"></div></div>
+      </div>
+    </div>
   </div>
 
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
-    try { tg.setHeaderColor('secondary_bg_color'); } catch (_) {}
+  <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
 
-    const API_URL = window.location.origin;
-    let currentTab = 'dashboard';
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-page="home" onclick="switchPage('home')">
+      <span class="ico">🏠</span>Главное
+    </button>
+    <button class="nav-item" data-page="plan" onclick="switchPage('plan')">
+      <span class="ico">📋</span>План
+    </button>
+    <button class="nav-item" data-page="schedule" onclick="switchPage('schedule')">
+      <span class="ico">📅</span>График
+    </button>
+    <button class="nav-item" data-page="my" onclick="switchPage('my')">
+      <span class="ico">👤</span>Мой
+    </button>
+    <button class="nav-item" data-page="team" onclick="switchPage('team')">
+      <span class="ico">👥</span>Команда
+    </button>
+  </nav>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
+    }
+
+    const API = window.location.origin;
+    let page = 'home';
     let employees = [];
     let stores = [];
     let selectedMetric = 'sim';
+    let scheduleMonth = todayMoscow().slice(0, 7);
+    let me = null; // { employee_id, full_name, ... }
 
-    // ===== Dates (Moscow) =====
-    function todayMoscow() {
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Europe/Moscow',
-        year: 'numeric', month: '2-digit', day: '2-digit'
-      }).format(new Date());
-    }
-
-    function formatDateRu(isoDate) {
-      try {
-        const [y, m, d] = isoDate.split('-');
-        return d + '.' + m;
-      } catch {
-        return isoDate;
-      }
-    }
-
-    function showToast(message, type = '') {
-      const el = document.getElementById('toast');
-      el.textContent = message;
-      el.className = 'toast show ' + type;
-      clearTimeout(el._t);
-      el._t = setTimeout(() => el.classList.remove('show'), 2500);
-    }
-
-    function pctClass(p) {
-      if (p >= 100) return 'done';
-      if (p >= 70) return 'warning';
-      return 'fail';
-    }
-
-    function pctTone(p) {
-      if (p >= 100) return 'good';
-      if (p >= 70) return 'mid';
-      return 'bad';
-    }
-
-    function progressRow(label, fact, plan) {
-      const f = Number(fact) || 0;
-      const p = Number(plan) || 0;
-      const percent = p > 0 ? Math.round((f / p) * 100) : (f > 0 ? 100 : 0);
-      const width = Math.min(percent, 100);
-      return `
-        <div class="progress-item">
-          <div class="progress-label">
-            <span class="name">${label}</span>
-            <span class="value">${f} / ${p}${p ? ' · ' + percent + '%' : ''}</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill ${pctClass(percent)}" style="width:${width}%"></div>
-          </div>
-        </div>`;
-    }
-
-    // ===== Tabs =====
-    function switchTab(tab) {
-      currentTab = tab;
-      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-      document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
-      document.getElementById('tab-' + tab).style.display = 'block';
-
-      if (tab === 'dashboard') {
-        loadDashboard();
-        loadTopEmployees();
-      }
-      if (tab === 'plan') loadPlanDay();
-      if (tab === 'employees') loadEmployees();
-      if (tab === 'my') loadMyProgress();
-    }
-
-    // ===== Dashboard =====
-    async function loadDashboard() {
-      try {
-        const res = await fetch(API_URL + '/stats/daily?date=' + todayMoscow());
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : [];
-
-        const totals = list.reduce((acc, s) => ({
-          sim: acc.sim + (Number(s.sim) || 0),
-          mnp: acc.mnp + (Number(s.mnp) || 0),
-          pa: acc.pa + (Number(s.pa) || 0),
-          combo: acc.combo + (Number(s.combo) || 0),
-          phones: acc.phones + (Number(s.phones) || 0),
-          accessories: acc.accessories + (Number(s.accessories) || 0)
-        }), { sim: 0, mnp: 0, pa: 0, combo: 0, phones: 0, accessories: 0 });
-
-        document.getElementById('statSim').textContent = totals.sim;
-        document.getElementById('statMnp').textContent = totals.mnp;
-        document.getElementById('statPa').textContent = totals.pa;
-        document.getElementById('statCombo').textContent = totals.combo;
-        document.getElementById('statPhones').textContent = totals.phones;
-        document.getElementById('statAccessories').textContent = totals.accessories;
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    async function loadTopEmployees() {
-      try {
-        const res = await fetch(API_URL + '/sales?date=' + todayMoscow());
-        const sales = await res.json();
-        const list = Array.isArray(sales) ? sales : [];
-
-        const map = {};
-        list.forEach(s => {
-          if (!map[s.employee_id]) {
-            map[s.employee_id] = { name: s.full_name, total: 0 };
-          }
-          map[s.employee_id].total +=
-            (Number(s.sim) || 0) + (Number(s.mnp) || 0) + (Number(s.pa) || 0) +
-            (Number(s.combo) || 0) + (Number(s.phones) || 0);
-        });
-
-        const sorted = Object.values(map).sort((a, b) => b.total - a.total);
-        const box = document.getElementById('topEmployees');
-
-        if (!sorted.length) {
-          box.innerHTML = '<div class="empty-state">Нет продаж сегодня</div>';
-          return;
-        }
-
-        box.innerHTML = sorted.slice(0, 5).map((e, i) => `
-          <div class="list-item">
-            <span class="rank">#${i + 1}</span>
-            <span class="list-name">${e.name}</span>
-            <span class="score">${e.total}</span>
-          </div>
-        `).join('');
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    // ===== Plan day (главный экран как в таблице) =====
-    async function loadPlanDay() {
-      const box = document.getElementById('planStores');
-      box.innerHTML = '<div class="loading">Загрузка</div>';
-
-      try {
-        const date = todayMoscow();
-        const [storesRes, statsRes, schedRes, plansRes] = await Promise.all([
-          fetch(API_URL + '/stores'),
-          fetch(API_URL + '/stats/daily?date=' + date),
-          fetch(API_URL + '/schedules?date=' + date),
-          fetch(API_URL + '/plans').catch(() => null)
-        ]);
-
-        stores = await storesRes.json();
-        const stats = await statsRes.json();
-        const schedules = await schedRes.json();
-        let plans = [];
-        if (plansRes && plansRes.ok) {
-          plans = await plansRes.json();
-        }
-
-        const statsMap = {};
-        (Array.isArray(stats) ? stats : []).forEach(s => {
-          statsMap[s.store_id || s.id] = s;
-        });
-
-        const planMap = {};
-        (Array.isArray(plans) ? plans : []).forEach(p => {
-          if (p.plan_date == null || p.plan_date === date) {
-            planMap[p.store_id] = p;
-          }
-        });
-
-        // fallback: plan fields may live on store object
-        (Array.isArray(stores) ? stores : []).forEach(st => {
-          if (!planMap[st.id] && (st.sim != null || st.plan_sim != null)) {
-            planMap[st.id] = {
-              sim: st.plan_sim ?? st.sim ?? 0,
-              mnp: st.plan_mnp ?? st.mnp ?? 0,
-              pa: st.plan_pa ?? st.pa ?? 0,
-              combo: st.plan_combo ?? st.combo ?? 0,
-              phones: st.plan_phones ?? st.phones ?? 0,
-              accessories: st.plan_accessories ?? st.accessories ?? 0,
-              insurance: st.plan_insurance ?? st.insurance ?? 0,
-              wink: st.plan_wink ?? st.wink ?? 0,
-              shpd: st.plan_shpd ?? st.shpd ?? 0,
-              focus: st.plan_focus ?? st.focus ?? 0,
-              settings: st.plan_settings ?? st.settings ?? 0,
-              credit_request: st.plan_credit_request ?? st.credit_request ?? 0,
-              credit_issued: st.plan_credit_issued ?? st.credit_issued ?? 0
-            };
-          }
-        });
-
-        const staffByStore = {};
-        (Array.isArray(schedules) ? schedules : []).forEach(sch => {
-          if (!staffByStore[sch.store_id]) staffByStore[sch.store_id] = [];
-          staffByStore[sch.store_id].push(sch);
-        });
-
-        const storeList = Array.isArray(stores) ? stores.slice().sort((a, b) => (a.hours || 0) - (b.hours || 0)) : [];
-
-        if (!storeList.length) {
-          box.innerHTML = '<div class="empty-state">Нет точек</div>';
-          return;
-        }
-
-        box.innerHTML = storeList.map((store, idx) => {
-          const fact = statsMap[store.id] || {};
-          const plan = planMap[store.id] || {};
-          const staff = staffByStore[store.id] || [];
-
-          const keys = ['sim', 'mnp', 'pa', 'combo', 'phones'];
-          let sumFact = 0, sumPlan = 0;
-          keys.forEach(k => {
-            sumFact += Number(fact[k]) || 0;
-            sumPlan += Number(plan[k]) || 0;
-          });
-          const overall = sumPlan > 0 ? Math.round((sumFact / sumPlan) * 100) : (sumFact > 0 ? 100 : 0);
-
-          const staffHtml = staff.length
-            ? `<div class="staff-chips">${staff.map(s =>
-                `<span class="staff-chip">${s.full_name || 'Сотрудник'}${s.shift_text ? ' · ' + s.shift_text : ''}</span>`
-              ).join('')}</div>`
-            : `<div class="store-meta" style="margin-top:8px">Нет сотрудников на смене</div>`;
-
-          return `
-            <div class="store-card ${idx === 0 ? 'open' : ''}" id="store-${store.id}">
-              <div class="store-header" onclick="toggleStore('${store.id}')">
-                <div class="store-icon">📍</div>
-                <div class="store-info">
-                  <div class="store-name">${store.name || store.id}</div>
-                  <div class="store-meta">${store.code || ''} · ${store.work_time || ''}</div>
-                </div>
-                <div class="store-pct ${pctTone(overall)}">${overall}%</div>
-                <div class="store-chevron">▾</div>
-              </div>
-              <div class="store-body">
-                ${staffHtml}
-
-                <div class="block-title">Блок GI</div>
-                ${progressRow('Симкарты', fact.sim, plan.sim)}
-                ${progressRow('MNP', fact.mnp, plan.mnp)}
-                ${progressRow('Абики / золото', fact.pa, plan.pa)}
-
-                <div class="block-title">Топ ап и товарка</div>
-                ${progressRow('Комбо', fact.combo, plan.combo)}
-                ${progressRow('Телефоны', fact.phones, plan.phones)}
-                ${progressRow('Аксессуары', fact.accessories, plan.accessories)}
-                ${progressRow('Страховки', fact.insurance, plan.insurance)}
-                ${progressRow('Настройки', fact.settings, plan.settings)}
-
-                <div class="block-title">Ростелеком</div>
-                ${progressRow('WINK', fact.wink, plan.wink)}
-                ${progressRow('ШПД', fact.shpd, plan.shpd)}
-                ${progressRow('ФО', fact.focus, plan.focus)}
-
-                <div class="block-title">Кредиты</div>
-                ${progressRow('Заявка', fact.credit_request, plan.credit_request)}
-                ${progressRow('Выданный', fact.credit_issued, plan.credit_issued)}
-              </div>
-            </div>`;
-        }).join('');
-      } catch (err) {
-        console.error(err);
-        box.innerHTML = '<div class="empty-state">Ошибка загрузки плана</div>';
-      }
-    }
-
-    function toggleStore(id) {
-      const el = document.getElementById('store-' + id);
-      if (el) el.classList.toggle('open');
-    }
-
-    // ===== Employees =====
-    async function loadEmployees() {
-      try {
-        const [empRes, salesRes] = await Promise.all([
-          fetch(API_URL + '/employees'),
-          fetch(API_URL + '/sales?date=' + todayMoscow())
-        ]);
-        employees = await empRes.json();
-        const sales = await salesRes.json();
-
-        const map = {};
-        (Array.isArray(sales) ? sales : []).forEach(s => {
-          if (!map[s.employee_id]) map[s.employee_id] = { sim: 0, combo: 0, phones: 0 };
-          map[s.employee_id].sim += Number(s.sim) || 0;
-          map[s.employee_id].combo += Number(s.combo) || 0;
-          map[s.employee_id].phones += Number(s.phones) || 0;
-        });
-
-        const box = document.getElementById('employeesList');
-        const list = Array.isArray(employees) ? employees : [];
-        if (!list.length) {
-          box.innerHTML = '<div class="empty-state">Нет сотрудников</div>';
-          return;
-        }
-
-        box.innerHTML = list.map(e => {
-          const st = map[e.id] || { sim: 0, combo: 0, phones: 0 };
-          return `
-            <div class="list-item">
-              <span class="list-name">${e.full_name}</span>
-              <span class="list-stats">
-                <span>SIM ${st.sim}</span>
-                <span>К ${st.combo}</span>
-                <span>Т ${st.phones}</span>
-              </span>
-            </div>`;
-        }).join('');
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    // ===== My progress =====
-    async function loadMyProgress() {
-      // TODO: привязать telegram_id -> employee_id
-      const employeeId = 1;
-      const box = document.getElementById('myProgress');
-
-      try {
-        const res = await fetch(API_URL + '/employee/progress/' + employeeId + '?date=' + todayMoscow());
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
-
-        const metrics = [
-          { key: 'sim', label: 'SIM' },
-          { key: 'mnp', label: 'MNP' },
-          { key: 'pa', label: 'ПА' },
-          { key: 'combo', label: 'Комбо' },
-          { key: 'phones', label: 'Телефоны' }
-        ];
-
-        let html = '';
-        for (const m of metrics) {
-          const plan = data[m.key]?.plan ?? 0;
-          const fact = data[m.key]?.fact ?? 0;
-          html += progressRow(m.label, fact, plan);
-        }
-
-        if (data.total) {
-          html += `
-            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-              ${progressRow('Итого', data.total.fact, data.total.plan)}
-            </div>`;
-        }
-
-        box.innerHTML = html || '<div class="empty-state">Нет плана на сегодня</div>';
-      } catch (err) {
-        box.innerHTML = '<div class="empty-state">Нет данных по сотруднику</div>';
-      }
-    }
-
-    // ===== Add sale modal =====
     const METRICS = [
       { id: 'sim', label: 'SIM' },
       { id: 'mnp', label: 'MNP' },
@@ -927,69 +825,657 @@
       { id: 'hb', label: 'HB' }
     ];
 
-    async function openAddSale() {
-      try {
-        const [empRes, storeRes] = await Promise.all([
-          fetch(API_URL + '/employees'),
-          fetch(API_URL + '/stores')
-        ]);
-        employees = await empRes.json();
-        stores = await storeRes.json();
+    // ===== Utils =====
+    function todayMoscow() {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Moscow',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).format(new Date());
+    }
 
-        if (!employees.length) {
-          showToast('Нет сотрудников', 'error');
+    function formatDateRu(iso) {
+      try {
+        const [y, m, d] = iso.split('-');
+        return `${d}.${m}.${y}`;
+      } catch { return iso; }
+    }
+
+    function toast(msg, type = '') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show ' + type;
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove('show'), 2400);
+    }
+
+    function pctTone(p) {
+      if (p >= 100) return 'good';
+      if (p >= 70) return 'mid';
+      return 'bad';
+    }
+
+    function progressHTML(label, fact, plan) {
+      const f = Number(fact) || 0;
+      const p = Number(plan) || 0;
+      const percent = p > 0 ? Math.round((f / p) * 100) : (f > 0 ? 100 : 0);
+      const w = Math.min(percent, 100);
+      return `
+        <div class="progress-item">
+          <div class="progress-top">
+            <span class="name">${label}</span>
+            <span class="val">${f} / ${p}${p ? ' · ' + percent + '%' : ''}</span>
+          </div>
+          <div class="bar"><i class="${pctTone(percent)}" style="width:${w}%"></i></div>
+        </div>`;
+    }
+
+    function tgUser() {
+      return tg?.initDataUnsafe?.user || null;
+    }
+
+    // ===== Theme =====
+    function applyTheme(theme) {
+      document.body.setAttribute('data-theme', theme);
+      localStorage.setItem('t2_theme', theme);
+      if (tg) {
+        try {
+          tg.setBackgroundColor(theme === 'dark' ? '#000000' : '#f2f2f7');
+        } catch (_) {}
+      }
+    }
+
+    function toggleTheme() {
+      const cur = document.body.getAttribute('data-theme') || 'light';
+      applyTheme(cur === 'light' ? 'dark' : 'light');
+    }
+
+    // ===== Navigation =====
+    function switchPage(name) {
+      page = name;
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      const el = document.getElementById('page-' + name);
+      if (el) el.classList.add('active');
+
+      document.querySelectorAll('.nav-item').forEach(n => {
+        n.classList.toggle('active', n.dataset.page === name);
+      });
+
+      // hide fab on some pages optional
+      if (name === 'home' || name === 'plan' || name === 'team') {
+        document.querySelector('.fab').style.display = 'flex';
+      }
+
+      loadPage(name);
+    }
+
+    function loadPage(name) {
+      if (name === 'home') { loadHome(); }
+      if (name === 'plan') { loadPlanDay(); }
+      if (name === 'today') { loadTodaySchedule(); }
+      if (name === 'schedule') { loadMonthSchedule(); }
+      if (name === 'my') { loadMyPlan(); }
+      if (name === 'bfq') { loadBFQ(); }
+      if (name === 'team') { loadTeam(); }
+    }
+
+    async function refreshAll() {
+      toast('Обновляю…');
+      await loadPage(page);
+      toast('Готово', 'ok');
+    }
+
+    // ===== HOME =====
+    async function loadHome() {
+      document.getElementById('headerDate').textContent = formatDateRu(todayMoscow());
+      try {
+        const [statsRes, salesRes] = await Promise.all([
+          fetch(API + '/stats/daily?date=' + todayMoscow()),
+          fetch(API + '/sales?date=' + todayMoscow())
+        ]);
+        const stats = await statsRes.json();
+        const sales = await salesRes.json();
+        const list = Array.isArray(stats) ? stats : [];
+
+        const t = list.reduce((a, s) => ({
+          sim: a.sim + (+s.sim || 0),
+          mnp: a.mnp + (+s.mnp || 0),
+          pa: a.pa + (+s.pa || 0),
+          combo: a.combo + (+s.combo || 0),
+          phones: a.phones + (+s.phones || 0),
+          accessories: a.accessories + (+s.accessories || 0)
+        }), { sim: 0, mnp: 0, pa: 0, combo: 0, phones: 0, accessories: 0 });
+
+        document.getElementById('hSim').textContent = t.sim;
+        document.getElementById('hMnp').textContent = t.mnp;
+        document.getElementById('hPa').textContent = t.pa;
+        document.getElementById('hCombo').textContent = t.combo;
+        document.getElementById('hPhones').textContent = t.phones;
+        document.getElementById('hAcc').textContent = t.accessories;
+
+        const map = {};
+        (Array.isArray(sales) ? sales : []).forEach(s => {
+          if (!map[s.employee_id]) map[s.employee_id] = { name: s.full_name, total: 0, id: s.employee_id };
+          map[s.employee_id].total += (+s.sim || 0) + (+s.mnp || 0) + (+s.pa || 0) + (+s.combo || 0) + (+s.phones || 0);
+        });
+        const top = Object.values(map).sort((a, b) => b.total - a.total).slice(0, 5);
+        const box = document.getElementById('homeTop');
+        if (!top.length) {
+          box.innerHTML = '<div class="empty">Нет продаж сегодня</div>';
+        } else {
+          box.innerHTML = top.map((e, i) => `
+            <button class="row" onclick="openEmployeeCard(${e.id})">
+              <div class="row-icon">${i + 1}</div>
+              <div class="row-body"><div class="row-title">${e.name}</div></div>
+              <div class="row-value">${e.total}</div>
+              <div class="row-chevron">›</div>
+            </button>
+          `).join('');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // ===== PLAN DAY =====
+    async function loadPlanDay() {
+      const box = document.getElementById('planList');
+      box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+      try {
+        const date = todayMoscow();
+        const [stRes, statsRes, schRes, plansRes] = await Promise.all([
+          fetch(API + '/stores'),
+          fetch(API + '/stats/daily?date=' + date),
+          fetch(API + '/schedules?date=' + date),
+          fetch(API + '/plans')
+        ]);
+        stores = await stRes.json();
+        const stats = await statsRes.json();
+        const schedules = await schRes.json();
+        const plans = await plansRes.json();
+
+        const statsMap = {};
+        (Array.isArray(stats) ? stats : []).forEach(s => { statsMap[s.store_id || s.id] = s; });
+        const planMap = {};
+        (Array.isArray(plans) ? plans : []).forEach(p => {
+          if (p.plan_date == null) planMap[p.store_id] = p;
+        });
+        const staffMap = {};
+        (Array.isArray(schedules) ? schedules : []).forEach(s => {
+          if (!staffMap[s.store_id]) staffMap[s.store_id] = [];
+          staffMap[s.store_id].push(s);
+        });
+
+        const list = (Array.isArray(stores) ? stores : []).slice().sort((a, b) => (a.hours || 0) - (b.hours || 0));
+        if (!list.length) {
+          box.innerHTML = '<div class="empty">Нет точек</div>';
           return;
         }
 
-        selectedMetric = 'sim';
+        box.innerHTML = list.map((store, idx) => {
+          const fact = statsMap[store.id] || {};
+          const plan = planMap[store.id] || {};
+          const staff = staffMap[store.id] || [];
+          const keys = ['sim', 'mnp', 'pa', 'combo', 'phones'];
+          let sf = 0, sp = 0;
+          keys.forEach(k => { sf += +fact[k] || 0; sp += +plan[k] || 0; });
+          const overall = sp > 0 ? Math.round((sf / sp) * 100) : (sf > 0 ? 100 : 0);
+
+          return `
+            <div class="store-card ${idx === 0 ? 'open' : ''}" id="sc-${store.id}">
+              <div class="store-head" onclick="toggleStore('${store.id}')">
+                <div class="store-badge">${(store.short_name || store.name || '?').slice(0, 2)}</div>
+                <div class="store-meta">
+                  <div class="store-name">${store.name}</div>
+                  <div class="store-code">${store.code || ''} · ${store.work_time || ''}</div>
+                </div>
+                <div class="store-pct ${pctTone(overall)}">${overall}%</div>
+              </div>
+              <div class="store-body">
+                ${staff.length ? `<div class="chips">${staff.map(s =>
+                  `<span class="chip">${s.full_name}${s.shift_text ? ' · ' + s.shift_text : ''}</span>`
+                ).join('')}</div>` : '<div class="empty" style="padding:12px 0">Нет на смене</div>'}
+
+                <div class="block-label">Блок GI</div>
+                ${progressHTML('Симкарты', fact.sim, plan.sim)}
+                ${progressHTML('MNP', fact.mnp, plan.mnp)}
+                ${progressHTML('Абики / золото', fact.pa, plan.pa)}
+
+                <div class="block-label">Товарка</div>
+                ${progressHTML('Комбо', fact.combo, plan.combo)}
+                ${progressHTML('Телефоны', fact.phones, plan.phones)}
+                ${progressHTML('Аксессуары', fact.accessories, plan.accessories)}
+                ${progressHTML('Страховки', fact.insurance, plan.insurance)}
+
+                <div class="block-label">Ростелеком</div>
+                ${progressHTML('WINK', fact.wink, plan.wink)}
+                ${progressHTML('ШПД', fact.shpd, plan.shpd)}
+                ${progressHTML('ФО', fact.focus, plan.focus)}
+
+                <div class="block-label">Кредиты</div>
+                ${progressHTML('Заявка', fact.credit_request, plan.credit_request)}
+                ${progressHTML('Выданный', fact.credit_issued, plan.credit_issued)}
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        console.error(e);
+        box.innerHTML = '<div class="empty">Ошибка загрузки</div>';
+      }
+    }
+
+    function toggleStore(id) {
+      document.getElementById('sc-' + id)?.classList.toggle('open');
+    }
+
+    // ===== TODAY SCHEDULE =====
+    async function loadTodaySchedule() {
+      const box = document.getElementById('todayList');
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const date = todayMoscow();
+        const [schRes, stRes] = await Promise.all([
+          fetch(API + '/schedules?date=' + date),
+          fetch(API + '/stores')
+        ]);
+        const schedules = await schRes.json();
+        stores = await stRes.json();
+
+        if (!Array.isArray(schedules) || !schedules.length) {
+          box.innerHTML = '<div class="section"><div class="empty">Сегодня никого в графике</div></div>';
+          return;
+        }
+
+        const byStore = {};
+        schedules.forEach(s => {
+          if (!byStore[s.store_id]) byStore[s.store_id] = [];
+          byStore[s.store_id].push(s);
+        });
+
+        box.innerHTML = (Array.isArray(stores) ? stores : []).map(store => {
+          const list = byStore[store.id] || [];
+          if (!list.length) return '';
+          return `
+            <div class="section today-store">
+              <div class="section-title">${store.name}
+                <div class="section-sub">${store.code || ''}</div>
+              </div>
+              ${list.map(s => `
+                <button class="row" onclick="openEmployeeCard(${s.employee_id})">
+                  <div class="row-icon">👤</div>
+                  <div class="row-body">
+                    <div class="row-title">${s.full_name}</div>
+                    <div class="row-sub">${s.shift_text || ''} · ${s.hours || ''}ч</div>
+                  </div>
+                  <div class="row-chevron">›</div>
+                </button>
+              `).join('')}
+            </div>`;
+        }).join('') || '<div class="section"><div class="empty">Пусто</div></div>';
+      } catch (e) {
+        box.innerHTML = '<div class="empty">Ошибка</div>';
+      }
+    }
+
+    // ===== MONTH SCHEDULE =====
+    function shiftMonth(delta) {
+      const [y, m] = scheduleMonth.split('-').map(Number);
+      const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+      scheduleMonth = d.toISOString().slice(0, 7);
+      loadMonthSchedule();
+    }
+
+    function monthLabel(ym) {
+      const names = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+      const [y, m] = ym.split('-');
+      return names[+m - 1] + ' ' + y;
+    }
+
+    function daysInMonth(ym) {
+      const [y, m] = ym.split('-').map(Number);
+      return new Date(y, m, 0).getDate();
+    }
+
+    async function loadMonthSchedule() {
+      document.getElementById('monthLabel').textContent = monthLabel(scheduleMonth);
+      const box = document.getElementById('monthBoard');
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const res = await fetch(API + '/schedules/month?month=' + scheduleMonth);
+        let data;
+        if (res.ok) {
+          data = await res.json();
+        } else {
+          // fallback: empty
+          data = { items: [] };
+        }
+        const items = data.items || [];
+
+        const byEmp = {};
+        items.forEach(row => {
+          const id = row.employee_id;
+          if (!byEmp[id]) byEmp[id] = { name: row.full_name, days: {} };
+          const key = String(row.work_date).slice(0, 10);
+          byEmp[id].days[key] = row;
+        });
+
+        if (!Object.keys(byEmp).length) {
+          const empRes = await fetch(API + '/employees');
+          const emps = await empRes.json();
+          (emps || []).forEach(e => { byEmp[e.id] = { name: e.full_name, days: {} }; });
+        }
+
+        const total = daysInMonth(scheduleMonth);
+        const list = Object.values(byEmp).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+
+        box.innerHTML = list.map(emp => {
+          const workCount = Object.keys(emp.days).length;
+          let cells = '';
+          for (let d = 1; d <= total; d++) {
+            const key = scheduleMonth + '-' + String(d).padStart(2, '0');
+            const row = emp.days[key];
+            if (row) {
+              const short = (row.store_short || row.store_name || '').slice(0, 4);
+              cells += `<div class="sch-cell work" title="${row.store_name || ''} ${row.shift_text || ''}">
+                <div class="d">${d}</div><div class="s">${short}</div></div>`;
+            } else {
+              cells += `<div class="sch-cell off"><div class="d">${d}</div></div>`;
+            }
+          }
+          return `
+            <div class="sch-emp">
+              <div class="sch-emp-head">
+                <span>${emp.name}</span>
+                <span class="cnt">${workCount} смен</span>
+              </div>
+              <div class="sch-grid">${cells}</div>
+            </div>`;
+        }).join('') || '<div class="empty">Нет данных</div>';
+      } catch (e) {
+        console.error(e);
+        box.innerHTML = '<div class="empty">Нужен API /schedules/month</div>';
+      }
+    }
+
+    // ===== MY PLAN + BIND =====
+    async function loadMyPlan() {
+      const body = document.getElementById('myBody');
+      const bindSec = document.getElementById('myBindSection');
+      body.innerHTML = '<div class="skeleton"></div>';
+
+      const user = tgUser();
+      if (user?.photo_url) {
+        document.getElementById('userAvatar').innerHTML = `<img src="${user.photo_url}" alt="">`;
+      } else if (user?.first_name) {
+        document.getElementById('userAvatar').textContent = user.first_name[0];
+      }
+
+      try {
+        // try /me
+        const meRes = await fetch(API + '/me', {
+          headers: { 'X-Telegram-Id': String(user?.id || '') }
+        });
+        if (meRes.ok) {
+          me = await meRes.json();
+        } else {
+          me = null;
+        }
+      } catch {
+        me = null;
+      }
+
+      if (!me?.employee_id) {
+        document.getElementById('myTitle').textContent = 'Мой план';
+        body.innerHTML = '<div class="empty">Привяжите аккаунт к сотруднику</div>';
+        bindSec.style.display = 'block';
+        const empRes = await fetch(API + '/employees');
+        employees = await empRes.json();
+        document.getElementById('bindEmployee').innerHTML =
+          (employees || []).map(e => `<option value="${e.id}">${e.full_name}</option>`).join('');
+        return;
+      }
+
+      bindSec.style.display = 'none';
+      document.getElementById('myTitle').textContent = me.full_name || 'Мой план';
+
+      try {
+        const res = await fetch(API + '/employee/progress/' + me.employee_id + '?date=' + todayMoscow());
+        if (!res.ok) throw new Error('no progress');
+        const data = await res.json();
+        const metrics = [
+          { key: 'sim', label: 'SIM' },
+          { key: 'mnp', label: 'MNP' },
+          { key: 'pa', label: 'ПА' },
+          { key: 'combo', label: 'Комбо' },
+          { key: 'phones', label: 'Телефоны' }
+        ];
+        let html = '<div class="progress-block">';
+        for (const m of metrics) {
+          html += progressHTML(m.label, data[m.key]?.fact, data[m.key]?.plan);
+        }
+        if (data.total) {
+          html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
+            progressHTML('Итого', data.total.fact, data.total.plan) + '</div>';
+        }
+        html += '</div>';
+        body.innerHTML = html;
+      } catch {
+        body.innerHTML = '<div class="empty">Нет данных по плану</div>';
+      }
+    }
+
+    async function bindMe() {
+      const user = tgUser();
+      if (!user?.id) {
+        toast('Откройте из Telegram', 'err');
+        return;
+      }
+      const employeeId = document.getElementById('bindEmployee').value;
+      try {
+        const res = await fetch(API + '/me/bind', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telegram_id: user.id, employee_id: Number(employeeId) })
+        });
+        if (!res.ok) throw new Error('bind fail');
+        toast('Привязано', 'ok');
+        loadMyPlan();
+      } catch (e) {
+        toast('Ошибка привязки — нужен API /me/bind', 'err');
+      }
+    }
+
+    // ===== TEAM =====
+    async function loadTeam() {
+      const box = document.getElementById('teamList');
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const [empRes, salesRes] = await Promise.all([
+          fetch(API + '/employees'),
+          fetch(API + '/sales?date=' + todayMoscow())
+        ]);
+        employees = await empRes.json();
+        const sales = await salesRes.json();
+        const map = {};
+        (Array.isArray(sales) ? sales : []).forEach(s => {
+          if (!map[s.employee_id]) map[s.employee_id] = { sim: 0, phones: 0, combo: 0 };
+          map[s.employee_id].sim += +s.sim || 0;
+          map[s.employee_id].phones += +s.phones || 0;
+          map[s.employee_id].combo += +s.combo || 0;
+        });
+        const list = Array.isArray(employees) ? employees : [];
+        box.innerHTML = list.map(e => {
+          const st = map[e.id] || { sim: 0, phones: 0, combo: 0 };
+          return `
+            <button class="row" onclick="openEmployeeCard(${e.id})">
+              <div class="row-icon">👤</div>
+              <div class="row-body">
+                <div class="row-title">${e.full_name}</div>
+                <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones}</div>
+              </div>
+              <div class="row-chevron">›</div>
+            </button>`;
+        }).join('') || '<div class="empty">Нет сотрудников</div>';
+      } catch {
+        box.innerHTML = '<div class="empty">Ошибка</div>';
+      }
+    }
+
+    // ===== Employee card =====
+    async function openEmployeeCard(id) {
+      document.getElementById('modalTitle').textContent = 'Сотрудник';
+      document.getElementById('modalBody').innerHTML = '<div class="empty">Загрузка…</div>';
+      document.getElementById('overlay').classList.add('show');
+
+      try {
+        const [empRes, salesRes, schRes] = await Promise.all([
+          fetch(API + '/employees'),
+          fetch(API + '/sales?date=' + todayMoscow()),
+          fetch(API + '/schedules?date=' + todayMoscow())
+        ]);
+        const emps = await empRes.json();
+        const sales = await salesRes.json();
+        const schedules = await schRes.json();
+        const emp = (emps || []).find(e => String(e.id) === String(id));
+        const sale = (sales || []).find(s => String(s.employee_id) === String(id));
+        const sch = (schedules || []).find(s => String(s.employee_id) === String(id));
+
+        document.getElementById('modalTitle').textContent = emp?.full_name || 'Сотрудник';
         document.getElementById('modalBody').innerHTML = `
-          <div class="input-group">
+          <div class="field">
+            <label>Смена сегодня</label>
+            <div style="font-size:15px;font-weight:600">
+              ${sch ? `${sch.store_name || sch.store_id} · ${sch.shift_text || ''} (${sch.hours || ''}ч)` : 'Выходной / нет в графике'}
+            </div>
+          </div>
+          <div class="block-label">Продажи сегодня</div>
+          <div class="progress-block">
+            ${progressHTML('SIM', sale?.sim, 0)}
+            ${progressHTML('MNP', sale?.mnp, 0)}
+            ${progressHTML('ПА', sale?.pa, 0)}
+            ${progressHTML('Комбо', sale?.combo, 0)}
+            ${progressHTML('Телефоны', sale?.phones, 0)}
+            ${progressHTML('Аксессуары', sale?.accessories, 0)}
+            ${progressHTML('Wink', sale?.wink, 0)}
+            ${progressHTML('ШПД', sale?.shpd, 0)}
+          </div>
+          <button class="btn-main" onclick="openAddSale(${id})">Добавить продажу</button>
+        `;
+      } catch (e) {
+        document.getElementById('modalBody').innerHTML = '<div class="empty">Ошибка</div>';
+      }
+    }
+
+    // ===== BFQ =====
+    async function loadBFQ() {
+      const box = document.getElementById('bfqList');
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const res = await fetch(API + '/bfq');
+        if (!res.ok) throw new Error('no bfq');
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.items || []);
+        if (!list.length) {
+          box.innerHTML = '<div class="empty">Нет данных BFQ</div>';
+          return;
+        }
+        box.innerHTML = list.map((e, i) => `
+          <div class="row">
+            <div class="row-icon">${i + 1}</div>
+            <div class="row-body">
+              <div class="row-title">${e.full_name || e.name}</div>
+              <div class="row-sub">SIM ${e.sim ?? '—'} · MNP ${e.mnp ?? '—'}</div>
+            </div>
+            <div class="row-value">${e.total ?? e.bfq ?? '—'}</div>
+          </div>
+        `).join('');
+      } catch {
+        box.innerHTML = '<div class="empty">Эндпоинт /bfq пока не готов</div>';
+      }
+    }
+
+    // ===== ADD SALE (smart) =====
+    async function openAddSale(presetEmployeeId) {
+      try {
+        const [empRes, storeRes, schRes] = await Promise.all([
+          fetch(API + '/employees'),
+          fetch(API + '/stores'),
+          fetch(API + '/schedules?date=' + todayMoscow())
+        ]);
+        employees = await empRes.json();
+        stores = await storeRes.json();
+        const schedules = await schRes.json();
+
+        const schByEmp = {};
+        (Array.isArray(schedules) ? schedules : []).forEach(s => {
+          schByEmp[s.employee_id] = s.store_id;
+        });
+
+        // default employee: me, or preset, or first on shift
+        let defaultEmp = presetEmployeeId || me?.employee_id || (schedules[0] && schedules[0].employee_id) || employees[0]?.id;
+        let defaultStore = schByEmp[defaultEmp] || stores[0]?.id;
+
+        selectedMetric = 'sim';
+        document.getElementById('modalTitle').textContent = 'Добавить продажу';
+        document.getElementById('modalBody').innerHTML = `
+          <div class="field">
             <label>Сотрудник</label>
-            <select id="modalEmployee">
-              ${employees.map(e => `<option value="${e.id}">${e.full_name}</option>`).join('')}
+            <select id="modalEmployee" onchange="onEmpChange()">
+              ${(employees || []).map(e =>
+                `<option value="${e.id}" ${String(e.id) === String(defaultEmp) ? 'selected' : ''}>${e.full_name}</option>`
+              ).join('')}
             </select>
           </div>
-          <div class="input-group">
-            <label>Точка</label>
+          <div class="field">
+            <label>Точка <span style="font-weight:500;text-transform:none;color:var(--primary)">(из графика)</span></label>
             <select id="modalStore">
-              ${stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+              ${(stores || []).map(s =>
+                `<option value="${s.id}" ${s.id === defaultStore ? 'selected' : ''}>${s.name}</option>`
+              ).join('')}
             </select>
           </div>
-          <div class="input-group">
-            <label>Тип продажи</label>
-            <div class="metric-grid" id="metricGrid">
+          <div class="field">
+            <label>Тип</label>
+            <div class="metric-grid">
               ${METRICS.map(m => `
-                <button type="button" class="metric-chip ${m.id === 'sim' ? 'selected' : ''}"
-                  data-metric="${m.id}" onclick="pickMetric('${m.id}')">${m.label}</button>
+                <button type="button" class="mchip ${m.id === 'sim' ? 'on' : ''}" data-m="${m.id}"
+                  onclick="pickMetric('${m.id}')">${m.label}</button>
               `).join('')}
             </div>
           </div>
-          <div class="input-group">
+          <div class="field">
             <label>Количество</label>
-            <input type="number" id="modalValue" inputmode="decimal" placeholder="Число" min="1" value="1">
-            <div class="quick-values">
+            <input type="number" id="modalValue" inputmode="decimal" value="1" min="1">
+            <div class="quick">
               <button type="button" onclick="setVal(1)">1</button>
               <button type="button" onclick="setVal(2)">2</button>
               <button type="button" onclick="setVal(5)">5</button>
               <button type="button" onclick="setVal(10)">10</button>
             </div>
           </div>
-          <button class="btn-primary" onclick="submitSale()">✅ Добавить</button>
+          <button class="btn-main" onclick="submitSale()">Добавить</button>
         `;
 
-        document.getElementById('modalTitle').textContent = 'Добавить продажу';
-        document.getElementById('modal').classList.add('show');
-      } catch (err) {
-        console.error(err);
-        showToast('Ошибка загрузки', 'error');
+        // store map for smart change
+        window._schByEmp = schByEmp;
+        document.getElementById('overlay').classList.add('show');
+      } catch (e) {
+        console.error(e);
+        toast('Ошибка загрузки', 'err');
+      }
+    }
+
+    function onEmpChange() {
+      const id = document.getElementById('modalEmployee').value;
+      const storeId = window._schByEmp?.[id];
+      if (storeId) {
+        const sel = document.getElementById('modalStore');
+        if (sel) sel.value = storeId;
       }
     }
 
     function pickMetric(id) {
       selectedMetric = id;
-      document.querySelectorAll('.metric-chip').forEach(b => {
-        b.classList.toggle('selected', b.dataset.metric === id);
-      });
+      document.querySelectorAll('.mchip').forEach(b => b.classList.toggle('on', b.dataset.m === id));
     }
 
     function setVal(n) {
@@ -997,72 +1483,70 @@
     }
 
     function closeModal() {
-      document.getElementById('modal').classList.remove('show');
+      document.getElementById('overlay').classList.remove('show');
     }
 
     async function submitSale() {
       const employeeId = document.getElementById('modalEmployee').value;
       const storeId = document.getElementById('modalStore').value;
       const value = Number(String(document.getElementById('modalValue').value).replace(',', '.'));
-
       if (!value || value <= 0) {
-        showToast('Введите количество', 'error');
+        toast('Введите число', 'err');
         return;
       }
-
       try {
-        const body = {
-          employee_id: Number(employeeId),
-          store_id: storeId,
-          sale_date: todayMoscow(),
-          [selectedMetric]: value
-        };
-
-        const res = await fetch(API_URL + '/sales', {
+        const res = await fetch(API + '/sales', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          body: JSON.stringify({
+            employee_id: Number(employeeId),
+            store_id: storeId,
+            sale_date: todayMoscow(),
+            [selectedMetric]: value
+          })
         });
-
-        if (!res.ok) throw new Error('server');
-
+        if (!res.ok) throw new Error('fail');
         closeModal();
-        showToast('Добавлено: ' + value, 'success');
-        refreshCurrent();
-      } catch (err) {
-        console.error(err);
-        showToast('Ошибка при добавлении', 'error');
+        toast('Добавлено: ' + value, 'ok');
+        loadPage(page);
+      } catch {
+        toast('Ошибка сохранения', 'err');
       }
     }
 
-    function refreshCurrent() {
-      document.getElementById('currentDate').textContent = formatDateRu(todayMoscow());
-      if (currentTab === 'dashboard') {
-        loadDashboard();
-        loadTopEmployees();
-      } else if (currentTab === 'plan') {
-        loadPlanDay();
-      } else if (currentTab === 'employees') {
-        loadEmployees();
-      } else if (currentTab === 'my') {
-        loadMyProgress();
-      }
-    }
-
-    // init
-    refreshCurrent();
-    setInterval(() => {
-      if (currentTab === 'dashboard') {
-        loadDashboard();
-        loadTopEmployees();
-      }
-    }, 30000);
-
-    document.getElementById('modal').addEventListener('click', (e) => {
-      if (e.target.id === 'modal') closeModal();
+    // overlay close
+    document.getElementById('overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'overlay') closeModal();
     });
 
-    console.log('Tele2 Mini App ready');
+    // pull-to-refresh simple
+    let touchStartY = 0;
+    document.addEventListener('touchstart', (e) => {
+      if (window.scrollY === 0) touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      if (touchStartY && e.changedTouches[0].clientY - touchStartY > 80 && window.scrollY === 0) {
+        refreshAll();
+      }
+      touchStartY = 0;
+    }, { passive: true });
+
+    // init
+    applyTheme(localStorage.getItem('t2_theme') || 'light');
+    document.getElementById('headerDate').textContent = formatDateRu(todayMoscow());
+    loadHome();
+
+    // try load me silently
+    (async () => {
+      const user = tgUser();
+      if (!user?.id) return;
+      try {
+        const res = await fetch(API + '/me', { headers: { 'X-Telegram-Id': String(user.id) } });
+        if (res.ok) me = await res.json();
+      } catch (_) {}
+    })();
+
+    console.log('Tele2 Sales UI v2 ready');
   </script>
 </body>
 </html>

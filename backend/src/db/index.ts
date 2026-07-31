@@ -5,27 +5,17 @@ dotenv.config();
 
 const { Pool } = pg;
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes('localhost')
+    ? false
+    : { rejectUnauthorized: false },
 });
 
-pool.on('connect', async (client) => {
-    await client.query("SET client_encoding TO 'UTF8'");
+pool.on('connect', (client) => {
+  client.query("SET client_encoding TO 'UTF8'").catch(() => {});
 });
 
 export async function query(text: string, params?: any[]) {
-    const client = await pool.connect();
-    try {
-        const result = await client.query(text, params);
-        return result;
-    } finally {
-        client.release();
-    }
-}
-
-export async function testConnection() {
-    const res = await query('SELECT id, code, name FROM stores ORDER BY hours');
-    console.log('Точки из базы:');
-    console.table(res.rows);
-    return res.rows;
+  return pool.query(text, params);
 }

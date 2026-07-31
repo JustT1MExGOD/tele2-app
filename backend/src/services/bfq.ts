@@ -5,14 +5,13 @@ function num(v: any) {
 }
 
 export async function calculateBFQ(employeeId: number, month: string) {
-  const start = month;
-  const endDate = new Date(month);
-  endDate.setMonth(endDate.getMonth() + 1);
+  const start = month.endsWith('-01') ? month : `${month}-01`;
+  const endDate = new Date(start + 'T00:00:00Z');
+  endDate.setUTCMonth(endDate.getUTCMonth() + 1);
   const end = endDate.toISOString().slice(0, 10);
 
-  // Факт за месяц
   const factRes = await query(
-    `SELECT 
+    `SELECT
        COALESCE(SUM(sim),0) as sim,
        COALESCE(SUM(mnp),0) as mnp,
        COALESCE(SUM(pa),0) as pa,
@@ -29,13 +28,11 @@ export async function calculateBFQ(employeeId: number, month: string) {
   );
   const fact = factRes.rows[0] || {};
 
-  // План (берём любой доступный)
   const planRes = await query(
     `SELECT * FROM store_plans WHERE plan_date IS NULL LIMIT 1`
   );
   const plan = planRes.rows[0] || {};
 
-  // VMR
   const manualRes = await query(
     `SELECT vmr_avg, penalty FROM bfq_manual
      WHERE employee_id = $1 AND month = $2`,
@@ -44,25 +41,19 @@ export async function calculateBFQ(employeeId: number, month: string) {
   const vmr = num(manualRes.rows[0]?.vmr_avg);
   const penalty = num(manualRes.rows[0]?.penalty);
 
-  // Простые проценты
   const simPct = plan.sim ? num(fact.sim) / num(plan.sim) : 0;
   const mnpPct = plan.mnp ? num(fact.mnp) / num(plan.mnp) : 0;
   const paPct = plan.pa ? num(fact.pa) / num(plan.pa) : 0;
 
-  // Упрощённый BFQ
   let score = 0;
-
-  // GI блок (до 50)
   if (simPct >= 0.95) score += Math.min(simPct, 1.15) * 25;
   if (mnpPct >= 1) score += 25;
   else if (mnpPct > 0) score += 20;
 
-  // VMR (до 12)
   if (vmr >= 95) score += 12;
   else if (vmr >= 77) score += 10;
   else if (vmr >= 74) score += 5;
 
-  // Прибыль
   if (paPct >= 0.9) score += 5;
   if (num(fact.phones) > 0) score += 3;
   if (num(fact.accessories) > 0) score += 2;
@@ -76,6 +67,23 @@ export async function calculateBFQ(employeeId: number, month: string) {
     pa: num(fact.pa),
     phones: num(fact.phones),
     vmr,
-    penalty
+    penalty,
   };
+}
+
+export async function calculateAllBFQ(month: string) {
+  const emps = await query(
+    `SELECT id, full_name FROM employees WHERE is_active = true ORDER BY full_name`
+  );
+  const result = [];
+  for (const e of emps.rows) {
+    const bfq = await calculateBFQ(Number(e.id), month);
+    result.push({
+      employee_id: e.id,
+      full_name: e.full_name,
+      ...bfq,
+    });
+  }
+  result.sort((a, b) => b.total - a.total);
+  return result;
 }
