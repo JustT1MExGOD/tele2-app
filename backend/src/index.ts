@@ -155,9 +155,14 @@ app.post('/schedules', async (request) => {
 });
 
 app.get('/plans', async () => {
-  const res = await query(
-    `SELECT * FROM store_plans WHERE plan_date IS NULL`
-  );
+  const res = await query(`
+    SELECT store_id, plan_date,
+           sim, mnp, pa, combo, settings, accessories, insurance,
+           phones, wink, shpd, focus, credit_request, credit_issued
+    FROM store_plans
+    WHERE plan_date IS NULL
+    ORDER BY store_id
+  `);
   return res.rows;
 });
 
