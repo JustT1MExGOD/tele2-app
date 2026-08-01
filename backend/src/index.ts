@@ -13,6 +13,8 @@ import { registerV3Routes } from './routes-v3.js';
 import { registerPlansV5Routes } from './routes-plans-v5.js';
 import { registerV8Routes } from './routes-v8.js';
 import { registerSupportRoutes } from './routes-support.js';
+import { registerV13Routes } from './routes-v13.js';
+import { runSmartAlertsTick } from './services/alerts.js';
 
 dotenv.config();
 
@@ -510,7 +512,7 @@ try {
   await registerV8Routes(app);
   console.log('✅ Access (v8) routes registered');
 } catch (e: any) {
-  console.error('Support routes failed:', e?.message || e);
+  console.error('V8 routes failed:', e?.message || e);
 }
 
 try {
@@ -518,6 +520,14 @@ try {
   console.log('✅ Support routes registered');
 } catch (e: any) {
   console.error('Support routes failed:', e?.message || e);
+}
+
+// ===== V13: смены, NLP, offline, live, insights, alerts =====
+try {
+  await registerV13Routes(app);
+  console.log('✅ V13 routes registered');
+} catch (e: any) {
+  console.error('V13 routes failed:', e?.message || e);
 }
 
 // ===== START =====
@@ -530,6 +540,11 @@ try {
 
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
   startReportCron();
+
+  // умные алерты каждые 30 мин (внутри — только 11–21 МСК)
+  setInterval(() => {
+    runSmartAlertsTick().catch((e) => console.error('alerts tick:', e?.message || e));
+  }, 30 * 60 * 1000);
 } catch (err) {
   app.log.error(err);
   process.exit(1);

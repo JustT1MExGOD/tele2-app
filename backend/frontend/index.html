@@ -1361,6 +1361,14 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('live')">
+          <div class="row-icon">🗺</div>
+          <div class="row-body">
+            <div class="row-title">Сеть live</div>
+            <div class="row-sub">Кто на смене · % плана · касса</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="startTutorial()">
           <div class="row-icon">🎓</div>
           <div class="row-body">
@@ -1405,12 +1413,15 @@
       <!-- Личный кабинет -->
       <div id="lkRoot">
         <div id="lkProfile"></div>
+        <div id="lkShift"></div>
+        <div id="lkInsight"></div>
         <div id="lkToday"></div>
         <div id="lkDayMetrics"></div>
         <div id="lkMonth"></div>
         <div id="lkWeek"></div>
         <div id="lkSales"></div>
         <div id="lkBfq"></div>
+        <div id="lkGamification"></div>
         <div id="lkActions"></div>
       </div>
 
@@ -1602,7 +1613,16 @@
 
   <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
 
-  <nav class="bottom-nav">
+  
+    <div id="page-live" class="page">
+      <div class="section">
+        <div class="section-title">Сеть сейчас</div>
+        <div id="liveMeta" class="empty" style="text-align:left;padding:8px 16px"></div>
+        <div id="liveList"><div class="skeleton"></div></div>
+      </div>
+    </div>
+
+<nav class="bottom-nav">
     <button class="nav-item active" data-page="home" onclick="switchPage('home')">
       <span class="ico">🏠</span>Главное
     </button>
@@ -1620,6 +1640,7 @@
     </button>
   </nav>
 
+  <script src="/offline-queue.js"></script>
   <script>
     const tg = window.Telegram?.WebApp;
     if (tg) {
@@ -1628,7 +1649,7 @@
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
     }
 
-    const APP_VERSION = '12.1';
+    const APP_VERSION = '13.0';
     const API = window.location.origin;
 
     function haptic(type = 'light') {
@@ -1807,6 +1828,7 @@
       if (name === 'cash') { loadCash(); }
       if (name === 'access') { loadAccessRequests(); }
       if (name === 'supervisor') { loadSupervisorDash(); }
+      if (name === 'live') { loadLiveMap(); }
     }
 
     async function refreshAll() {
@@ -2377,7 +2399,7 @@
       const root = document.getElementById('lkRoot');
       if (root) {
         root.style.display = 'block';
-        ['lkProfile','lkToday','lkDayMetrics','lkMonth','lkWeek','lkSales','lkBfq','lkActions']
+        ['lkProfile','lkShift','lkInsight','lkToday','lkDayMetrics','lkMonth','lkWeek','lkSales','lkBfq','lkGamification','lkActions']
           .forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<div class="skeleton" style="margin-bottom:10px"></div>';
@@ -2708,7 +2730,25 @@
             <div class="la-title">Обучение</div>
             <div class="la-sub">Как пользоваться</div>
           </button>
+          <button class="lk-action" onclick="openShiftSession()">
+            <div class="la-ico">🟢</div>
+            <div class="la-title">Смена</div>
+            <div class="la-sub">Открыть / закрыть</div>
+          </button>
+          <button class="lk-action" onclick="openQuickSale()">
+            <div class="la-ico">⚡</div>
+            <div class="la-title">Быстрый ввод</div>
+            <div class="la-sub">«две симки mnp»</div>
+          </button>
+          <button class="lk-action" onclick="switchPage('live')">
+            <div class="la-ico">🗺</div>
+            <div class="la-title">Сеть live</div>
+            <div class="la-sub">Все точки</div>
+          </button>
         </div>`;
+
+      // v13: сессия смены + инсайт + геймификация
+      loadShiftAndInsight(empId);
     }
 
     async function bindMe() {
@@ -3617,6 +3657,28 @@
         loadPage(page);
       } catch (e) {
         console.error(e);
+        // офлайн-очередь
+        if (typeof OfflineQueue !== 'undefined') {
+          try {
+            const metrics = {};
+            for (const [k, v] of Object.entries(saleSelection)) {
+              const n = Number(v);
+              if (n > 0) metrics[k] = n;
+            }
+            await OfflineQueue.enqueueSale({
+              store_id: storeId,
+              employee_id: Number(employeeId),
+              metrics,
+              sale_date: todayMoscow()
+            });
+            closeModal();
+            saleSelection = {};
+            toast('Нет сети — сохранено в очередь, уйдёт при Wi‑Fi', 'ok');
+            return;
+          } catch (e2) {
+            console.error(e2);
+          }
+        }
         toast('Ошибка сохранения', 'err');
       }
     }
@@ -4275,7 +4337,266 @@
     // Вызывается после успешной загрузки /me (если функция есть в init)
     window.maybeOfferTutorial = maybeOfferTutorial;
 
-    console.log('T2 Sales UI v11 — Design System');
+    
+    // ===== V13: смена / инсайт / live / quick sale =====
+    async function geoCoords() {
+      try {
+        const pos = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 })
+        );
+        return {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy_m: pos.coords.accuracy
+        };
+      } catch (_) {
+        return { lat: null, lng: null, accuracy_m: null };
+      }
+    }
+
+    async function openShiftSession() {
+      try {
+        const geo = await geoCoords();
+        const res = await fetch(API + '/shifts/open', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify(geo)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.message || 'fail');
+        toast('Смена открыта', 'ok');
+        try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
+        loadMyPlan();
+      } catch (e) {
+        toast(e.message || 'Не удалось открыть смену', 'err');
+      }
+    }
+
+    async function closeShiftSession() {
+      const report = prompt('Краткий самоотчёт (что мешало / что зашло)?') || '';
+      const moodStr = prompt('Настроение 1–5 (Enter = 4)', '4');
+      const mood = Math.min(5, Math.max(1, Number(moodStr) || 4));
+      try {
+        const geo = await geoCoords();
+        const res = await fetch(API + '/shifts/close', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ ...geo, self_report: report, mood })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.message || 'fail');
+        let msg = 'Смена закрыта';
+        if (data.ideal_shift) msg += ' · ⭐ идеальная';
+        if (data.plan_pct != null) msg += ' · ' + data.plan_pct + '% плана';
+        toast(msg, 'ok');
+        try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
+        if (data.ideal_shift || (data.plan_pct >= 100)) {
+          try { confettiBurst && confettiBurst(); } catch (_) {}
+        }
+        loadMyPlan();
+      } catch (e) {
+        toast(e.message || 'Не закрыть смену', 'err');
+      }
+    }
+
+    async function loadShiftAndInsight(empId) {
+      const shiftEl = document.getElementById('lkShift');
+      const insightEl = document.getElementById('lkInsight');
+      const gamEl = document.getElementById('lkGamification');
+      if (shiftEl) shiftEl.innerHTML = '';
+      if (insightEl) insightEl.innerHTML = '';
+      if (gamEl) gamEl.innerHTML = '';
+
+      try {
+        const [curRes, insRes, selfRes] = await Promise.all([
+          fetch(API + '/shifts/current', { headers: authHeaders() }),
+          fetch(API + '/me/insight', { headers: authHeaders() }),
+          fetch(API + '/me/self-stats', { headers: authHeaders() })
+        ]);
+        const cur = curRes.ok ? await curRes.json() : {};
+        const ins = insRes.ok ? await insRes.json() : {};
+        const self = selfRes.ok ? await selfRes.json() : {};
+
+        if (shiftEl) {
+          const sess = cur.session;
+          if (sess) {
+            shiftEl.innerHTML = `
+              <div class="progress-block" style="margin-bottom:12px">
+                <div class="section-title" style="margin-bottom:8px">Смена открыта</div>
+                <div style="font-size:13px;color:var(--hint);margin-bottom:10px">
+                  ${sess.store_name || sess.store_id} · с ${String(sess.opened_at || '').slice(11, 16) || '—'} МСК
+                </div>
+                <button class="btn-main" style="background:#e74c3c" onclick="closeShiftSession()">Закрыть смену</button>
+              </div>`;
+          } else {
+            shiftEl.innerHTML = `
+              <div class="progress-block" style="margin-bottom:12px">
+                <div class="section-title" style="margin-bottom:8px">Смена</div>
+                <div style="font-size:13px;color:var(--hint);margin-bottom:10px">Открой смену на точке — зафиксируем время и гео</div>
+                <button class="btn-main" onclick="openShiftSession()">Открыть смену</button>
+              </div>`;
+          }
+        }
+
+        if (insightEl && ins.insight) {
+          const i = ins.insight;
+          const focus = (i.focus || []).map(f => `<div style="font-size:12px;margin-top:4px">• ${f}</div>`).join('');
+          const split = i.split;
+          let splitHtml = '';
+          if (split?.before_lunch && split?.after_lunch) {
+            splitHtml = `<div style="margin-top:10px;font-size:12px;color:var(--hint)">
+              До 15:00: SIM ${split.before_lunch.sim || 0} · MNP ${split.before_lunch.mnp || 0}<br>
+              После: SIM ${split.after_lunch.sim || 0} · MNP ${split.after_lunch.mnp || 0}
+            </div>`;
+          }
+          insightEl.innerHTML = `
+            <div class="progress-block" style="margin-bottom:12px">
+              <div class="section-title" style="margin-bottom:8px">Фокус сейчас</div>
+              <div style="font-size:14px;line-height:1.4">${i.message || ''}</div>
+              ${focus}${splitHtml}
+            </div>`;
+        }
+
+        if (gamEl && self.gamification) {
+          const g = self.gamification;
+          const best = self.best_shift;
+          gamEl.innerHTML = `
+            <div class="progress-block" style="margin-bottom:12px">
+              <div class="section-title" style="margin-bottom:8px">Прогресс</div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px">
+                <div class="lk-pill">lvl <strong>${g.level || 1}</strong> ${g.title || ''}</div>
+                <div class="lk-pill">XP <strong>${g.xp || 0}</strong>${g.next_level_xp != null ? ' / ' + g.next_level_xp : ''}</div>
+                <div class="lk-pill">🔥 <strong>${g.streak_days || 0}</strong> дн.</div>
+              </div>
+              ${best ? `<div style="margin-top:8px;font-size:12px;color:var(--hint)">Лучшая смена: ${best.date} · score ${best.score}</div>` : ''}
+            </div>`;
+        }
+      } catch (e) {
+        console.error('shift/insight', e);
+      }
+    }
+
+    // hook into loadMyPlan: call after profile rendered
+    const _loadMyPlanOrig = typeof loadMyPlan === 'function' ? loadMyPlan : null;
+    // We call loadShiftAndInsight from patched actions - inject call via monkey after empId known
+    // Patch: after bindSec hide, when we have empId, call loadShiftAndInsight
+
+    async function openQuickSale() {
+      document.getElementById('modalTitle').textContent = 'Быстрый ввод';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="empty" style="text-align:left;padding:0 0 12px">
+          Пример: <b>две симки и одно mnp</b> · <b>3 sim 1 па</b>
+        </div>
+        <div class="field">
+          <label>Фраза</label>
+          <input id="quickSaleText" placeholder="две симки одно mnp" />
+        </div>
+        <div id="quickSalePreview" class="empty" style="display:none;text-align:left"></div>
+        <button class="btn-main" onclick="submitQuickSale()">Разобрать и записать</button>
+        <button class="btn-ghost" style="margin-top:8px;width:100%" onclick="previewQuickSale()">Только разобрать</button>
+      `;
+      openModal();
+      setTimeout(() => document.getElementById('quickSaleText')?.focus(), 200);
+    }
+
+    async function previewQuickSale() {
+      const text = document.getElementById('quickSaleText')?.value || '';
+      const res = await fetch(API + '/sales/parse', {
+        method: 'POST', headers: authHeaders(true),
+        body: JSON.stringify({ text })
+      });
+      const data = await res.json();
+      const el = document.getElementById('quickSalePreview');
+      if (!el) return;
+      el.style.display = 'block';
+      const m = data.metrics || {};
+      const keys = Object.keys(m);
+      el.textContent = keys.length
+        ? keys.map(k => k + ': ' + m[k]).join(', ') + ' · confidence ' + Math.round((data.confidence || 0) * 100) + '%'
+        : 'Не разобрано';
+    }
+
+    async function submitQuickSale() {
+      const text = document.getElementById('quickSaleText')?.value || '';
+      if (!text.trim()) { toast('Введи фразу', 'err'); return; }
+      try {
+        const res = await fetch(API + '/sales/quick', {
+          method: 'POST', headers: authHeaders(true),
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'fail');
+        closeModal();
+        const m = data.parsed?.metrics || {};
+        toast('Записано: ' + Object.keys(m).map(k => k + ' ' + m[k]).join(', '), 'ok');
+        loadPage(page);
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
+      }
+    }
+
+    async function loadLiveMap() {
+      const box = document.getElementById('liveList');
+      const meta = document.getElementById('liveMeta');
+      if (box) box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const res = await fetch(API + '/network/live', { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const data = await res.json();
+        if (meta) meta.textContent = 'Дата: ' + (data.date || todayMoscow()) + ' · обновление при открытии экрана';
+        const stores = data.stores || [];
+        if (!stores.length) {
+          box.innerHTML = '<div class="empty">Нет точек</div>';
+          return;
+        }
+        box.innerHTML = stores.map(st => {
+          const statusColor = st.status === 'critical' ? '#e74c3c' : st.status === 'warn' ? '#f39c12' : '#2ecc71';
+          const staff = (st.staff || []).map(s => s.short_name || s.full_name || s.employee_id).join(', ') || 'никого';
+          const cash = st.cash
+            ? `Касса Δ ${st.cash.delta}`
+            : 'Касса —';
+          return `
+            <div class="progress-block" style="margin-bottom:10px;border-left:4px solid ${st.color || statusColor}">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <strong>${st.name}</strong>
+                <span style="color:${statusColor};font-weight:700">${st.plan_pct || 0}%</span>
+              </div>
+              <div style="font-size:12px;color:var(--hint);margin-top:4px">
+                ${staff}<br>
+                SIM ${st.fact?.sim || 0}/${st.plan?.sim || 0} · MNP ${st.fact?.mnp || 0}/${st.plan?.mnp || 0}<br>
+                ${cash}
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        console.error(e);
+        if (box) box.innerHTML = '<div class="empty">Нужен API /network/live (V13)</div>';
+      }
+    }
+
+    function confettiBurst() {
+      // лёгкий confetti без библиотек
+      const colors = ['#6d9eeb', '#ff6d01', '#ffd966', '#2ecc71', '#e74c3c'];
+      for (let i = 0; i < 24; i++) {
+        const el = document.createElement('div');
+        el.style.cssText = `position:fixed;top:-10px;left:${Math.random()*100}%;width:8px;height:8px;background:${colors[i%colors.length]};border-radius:2px;z-index:9999;pointer-events:none;animation:t2fall ${1+Math.random()}s linear forwards`;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 2000);
+      }
+    }
+
+    // CSS fall
+    (function(){
+      if (document.getElementById('t2-v13-style')) return;
+      const s = document.createElement('style');
+      s.id = 't2-v13-style';
+      s.textContent = '@keyframes t2fall{to{transform:translateY(100vh) rotate(360deg);opacity:0}}';
+      document.head.appendChild(s);
+    })();
+
+
+    console.log('T2 Sales UI v13');
+
   </script>
 </body>
 </html>
