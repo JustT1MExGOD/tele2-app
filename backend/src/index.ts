@@ -14,6 +14,7 @@ import { registerPlansV5Routes } from './routes-plans-v5.js';
 import { registerV8Routes } from './routes-v8.js';
 import { registerSupportRoutes } from './routes-support.js';
 import { registerV13Routes } from './routes-v13.js';
+import { registerPromoRoutes } from './routes-promos.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 
 dotenv.config();
@@ -528,6 +529,13 @@ try {
   console.log('✅ V13 routes registered');
 } catch (e: any) {
   console.error('V13 routes failed:', e?.message || e);
+}
+
+try {
+  await registerPromoRoutes(app);
+  console.log('✅ Promo routes registered');
+} catch (e: any) {
+  console.error('Promo routes failed:', e?.message || e);
 }
 
 // ===== START =====

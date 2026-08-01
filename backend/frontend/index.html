@@ -1300,6 +1300,33 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
+  
+    .mt-more {
+      margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px;
+    }
+    .mt-toggle {
+      width: 100%; border: none; background: transparent; color: var(--primary);
+      font-size: 13px; font-weight: 600; padding: 8px; cursor: pointer;
+      text-align: center;
+    }
+    .mt-extra { display: none; margin-top: 8px; }
+    .mt-extra.open { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .promo-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px; border-radius: 14px; background: var(--surface);
+      border: 1px solid var(--border); margin-bottom: 8px; cursor: pointer;
+    }
+    .promo-item:active { opacity: 0.85; }
+    .promo-mask { font-family: ui-monospace, monospace; font-weight: 700; letter-spacing: 0.06em; }
+    .promo-meta { font-size: 11px; color: var(--hint); }
+    .promo-code-big {
+      font-size: 22px; font-weight: 800; letter-spacing: 0.08em;
+      font-family: ui-monospace, monospace; text-align: center;
+      padding: 16px; margin: 12px 0;
+      background: rgba(59,184,245,0.12); border-radius: 14px;
+      border: 1px dashed rgba(59,184,245,0.35); user-select: all;
+    }
+
   </style>
 </head>
 <body data-theme="light">
@@ -1416,6 +1443,14 @@
           <div class="row-body">
             <div class="row-title">Расчёт комбо</div>
             <div class="row-sub">Телефон − скидка + 28% + 1900</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="openPromos()">
+          <div class="row-icon">🎫</div>
+          <div class="row-body">
+            <div class="row-title">Промокоды РТК</div>
+            <div class="row-sub">Общий пул · скрытый список</div>
           </div>
           <div class="row-chevron">›</div>
         </button>
@@ -1599,6 +1634,11 @@
     <div id="page-monthplan" class="page">
       <div class="section">
         <div class="section-title">Планы и факт за месяц</div>
+        <div class="month-nav" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 12px 4px">
+          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" onclick="shiftPlanMonth(-1)">‹</button>
+          <div id="planMonthLabel" style="font-weight:700;min-width:120px;text-align:center"></div>
+          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" onclick="shiftPlanMonth(1)">›</button>
+        </div>
         <div id="monthPlanMeta" class="empty" style="padding:8px 16px;text-align:left"></div>
         <div id="monthPlanList" style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="skeleton"></div></div>
       </div>
@@ -1636,7 +1676,7 @@
     <div id="page-cash" class="page">
       <div class="section">
         <div class="section-title">Касса по дням</div>
-        <div class="empty" style="text-align:left;padding:8px 16px" id="cashMeta">Факт − 1С = плюс/минус</div>
+        <div class="empty" style="text-align:left;padding:8px 16px" id="cashMeta">Δ = факт − (1С + 2000)</div>
         <div id="cashTable" style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="skeleton"></div></div>
       </div>
       <div class="section" id="cashEditSection" style="display:none">
@@ -1716,7 +1756,7 @@
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
     }
 
-    const APP_VERSION = '13.2.1';
+    const APP_VERSION = '13.3';
     const API = window.location.origin;
 
     function haptic(type = 'light') {
@@ -1743,6 +1783,7 @@
     let stores = [];
     let saleSelection = {}; // { sim: 2, mnp: 1 } — мультивыбор метрик
     let scheduleMonth = todayMoscow().slice(0, 7);
+    let planMonth = todayMoscow().slice(0, 7);
     let me = null; // { employee_id, full_name, role, is_manager }
 
     function canAdmin() {
@@ -2073,23 +2114,25 @@
       document.getElementById('modalTitle').textContent = 'О приложении';
       document.getElementById('modalBody').innerHTML = `
         <div class="about-ver">T2 Sales</div>
-        <div style="font-size:13px;color:var(--hint);margin-bottom:14px">версия ${APP_VERSION} · Design System</div>
+        <div style="font-size:13px;color:var(--hint);margin-bottom:14px">версия ${APP_VERSION} · Railway · МСК</div>
         <div class="about-block">
-          <b>Что нового в v11</b><br>
-          • Design System: токены цвета, типографика, отступы<br>
-          • Единые радиусы, тени и motion<br>
-          • Навигация с blur, активный primary<br>
-          • CTA и FAB по системе<br>
-          • Светлая / тёмная тема на токенах
+          <b>v13 — операционное ядро</b><br>
+          • Смена-сессия (open/close + гео + самоотчёт)<br>
+          • Быстрый ввод: «две симки mnp»<br>
+          • Офлайн-очередь продаж<br>
+          • Live-карта сети · инсайты · геймификация<br>
+          • Умные алерты · what-if · прогноз
         </div>
         <div class="about-block">
-          <b>Из v10</b><br>
-          • Личный кабинет · мульти-продажи · обучение<br>
-          • Стрик · пульс сети · haptic
+          <b>v12–13.3</b><br>
+          • Личный кабинет · мульти-метрики · BFQ<br>
+          • Планы месяца (все метрики + архив)<br>
+          • Касса: Δ = факт − (1С + 2000)<br>
+          • Промокоды РТК · поддержка · роли
         </div>
         <div class="about-block">
           <b>Стек</b><br>
-          Telegram Mini App · Node.js · Fastify · PostgreSQL · Railway
+          Telegram Mini App · Node.js · Fastify · PostgreSQL · Grammy · Railway
         </div>
         <div class="about-block">
           <b>Точки</b><br>
@@ -2098,7 +2141,8 @@
         <button class="btn-main" onclick="startTutorial();closeModal()">Пройти обучение</button>
         <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)" onclick="closeModal()">Закрыть</button>
       `;
-      document.getElementById('overlay').classList.add('show');
+      if (typeof openModal === 'function') openModal();
+      else document.getElementById('overlay')?.classList.add('show');
     }
 
     // ===== PLAN DAY =====
@@ -3061,55 +3105,78 @@
     async function loadMonthPlans() {
       const box = document.getElementById('monthPlanList');
       const meta = document.getElementById('monthPlanMeta');
+      const label = document.getElementById('planMonthLabel');
+      if (!planMonth) planMonth = todayMoscow().slice(0, 7);
+      if (label) label.textContent = monthLabel(planMonth);
       if (box) box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const month = todayMoscow().slice(0, 7);
-        const res = await fetch(API + '/plans/employees/month?month=' + month);
+        const res = await fetch(API + '/plans/employees/month?month=' + planMonth, { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const rows = data.rows || [];
-        if (meta) meta.innerHTML = `<b>${month}</b> · ${rows.length} сотр. · ост. дней ${data.remaining_days ?? '—'}`;
+        if (meta) {
+          meta.innerHTML = `Сотрудников: <b>${rows.length}</b> · ост. дней: <b>${data.remaining_days ?? '—'}</b>`;
+        }
 
-        const metrics = [
+        const MAIN = [
           { id: 'sim', label: 'SIM' }, { id: 'mnp', label: 'MNP' }, { id: 'pa', label: 'ПА' },
           { id: 'combo', label: 'Комбо' }, { id: 'phones', label: 'Тел' }, { id: 'accessories', label: 'Аксы' }
         ];
+        const EXTRA = [
+          { id: 'settings', label: 'Настр' }, { id: 'insurance', label: 'Страх' },
+          { id: 'wink', label: 'Wink' }, { id: 'shpd', label: 'ШПД' },
+          { id: 'focus', label: 'ФО' }, { id: 'credit', label: 'Кредит' },
+          { id: 'plotter', label: 'Плот' }, { id: 'hb', label: 'HB' }
+        ];
+
+        function cell(m, fact, pct) {
+          const f = Number(fact[m.id]) || 0;
+          const pc = Number(pct[m.id]) || 0;
+          const tone = pc >= 100 ? 'good' : pc >= 50 ? 'warn' : (f > 0 ? '' : 'bad');
+          return `<div class="mt-cell ${tone}"><div class="v">${f}</div><div class="l">${m.label}</div></div>`;
+        }
 
         if (!rows.length) {
-          box.innerHTML = '<div class="empty">Нет планов на месяц</div>';
+          box.innerHTML = '<div class="empty">Нет данных за ' + planMonth + '</div>';
           if (typeof loadStoreDailyPlans === 'function') loadStoreDailyPlans();
           return;
         }
 
-        let html = '<div class="mobile-table">' + rows.map(r => {
+        let html = '<div class="mobile-table">' + rows.map((r, idx) => {
           const plan = r.plan || {};
           const fact = r.fact || {};
           const pct = r.pct || {};
           const nameClick = canManage()
-            ? `onclick="editEmployeeMonthPlan(${r.employee_id}, '${String(r.full_name || '').replace(/'/g, "\\'")}')"`
+            ? `onclick="event.stopPropagation();editEmployeeMonthPlan(${r.employee_id}, '${String(r.full_name || '').replace(/'/g, "\\'")}')"`
             : '';
-          const cells = metrics.map(m => {
-            const f = Number(fact[m.id]) || 0;
-            const pc = Number(pct[m.id]) || 0;
-            const tone = pc >= 100 ? 'good' : pc >= 50 ? 'warn' : (f > 0 ? '' : 'bad');
-            return `<div class="mt-cell ${tone}"><div class="v">${f}</div><div class="l">${m.label}</div></div>`;
-          }).join('');
-          return `<div class="mt-card" ${nameClick} style="${nameClick ? 'cursor:pointer' : ''}">
-            <div class="mt-card-head"><div>
-              <div class="mt-name">${r.full_name || ''}</div>
-              <div class="mt-meta">${r.role || ''} · смен ${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</div>
-            </div></div>
-            <div class="mt-grid">${cells}</div>
+          const mainCells = MAIN.map(m => cell(m, fact, pct)).join('');
+          const extraCells = EXTRA.map(m => cell(m, fact, pct)).join('');
+          const eid = 'mpx-' + idx;
+          return `<div class="mt-card">
+            <div class="mt-card-head" ${nameClick} style="${nameClick ? 'cursor:pointer' : ''}">
+              <div>
+                <div class="mt-name">${r.full_name || ''}</div>
+                <div class="mt-meta">${r.role || ''} · смен ${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</div>
+              </div>
+            </div>
+            <div class="mt-grid">${mainCells}</div>
+            <div class="mt-more">
+              <button type="button" class="mt-toggle" onclick="toggleMonthExtra('${eid}', this)">Ещё метрики ▾</button>
+              <div class="mt-extra" id="${eid}">${extraCells}</div>
+            </div>
           </div>`;
         }).join('') + '</div>';
 
         const tf = (data.totals && data.totals.fact) || null;
         if (tf) {
           html += `<div class="mt-card" style="margin:0 12px 16px;border-color:var(--primary)">
-            <div class="mt-name" style="margin-bottom:10px">Итого сеть</div>
-            <div class="mt-grid">${metrics.map(m =>
-              `<div class="mt-cell"><div class="v">${Number(tf[m.id])||0}</div><div class="l">${m.label}</div></div>`
-            ).join('')}</div></div>`;
+            <div class="mt-name" style="margin-bottom:10px">Итого сеть · ${planMonth}</div>
+            <div class="mt-grid">${MAIN.map(m => cell(m, tf, {})).join('')}</div>
+            <div class="mt-more">
+              <button type="button" class="mt-toggle" onclick="toggleMonthExtra('mpx-tot', this)">Ещё метрики ▾</button>
+              <div class="mt-extra" id="mpx-tot">${EXTRA.map(m => cell(m, tf, {})).join('')}</div>
+            </div>
+          </div>`;
         }
         box.innerHTML = html;
         if (typeof loadStoreDailyPlans === 'function') loadStoreDailyPlans();
@@ -3118,6 +3185,22 @@
         if (box) box.innerHTML = '<div class="empty">Планы месяца недоступны</div>';
       }
     }
+
+    function shiftPlanMonth(delta) {
+      const [y, m] = planMonth.split('-').map(Number);
+      const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+      planMonth = d.toISOString().slice(0, 7);
+      loadMonthPlans();
+    }
+
+    function toggleMonthExtra(id, btn) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const open = el.classList.toggle('open');
+      if (btn) btn.textContent = open ? 'Свернуть ▴' : 'Ещё метрики ▾';
+    }
+
+
 
 
     async function loadStoreDailyPlans() {
@@ -3175,7 +3258,7 @@
 
     async function editEmployeeMonthPlan(employeeId, name) {
       if (!canManage()) return;
-      const month = scheduleMonth || todayMoscow().slice(0, 7);
+      const month = planMonth || scheduleMonth || todayMoscow().slice(0, 7);
       const res = await fetch(API + '/plans/employees/' + employeeId + '/month?month=' + month);
       const p = res.ok ? await res.json() : {};
       document.getElementById('modalTitle').textContent = 'План: ' + (name || employeeId);
@@ -4647,7 +4730,123 @@
     })();
 
 
-    console.log('T2 Sales UI v13.2.1');
+    
+    // ===== PROMOCODES RTK =====
+    async function openPromos() {
+      document.getElementById('modalTitle').textContent = 'Промокоды РТК';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="empty" style="text-align:left;padding:0 0 12px;line-height:1.4">
+          Общий пул. Коды скрыты — открой карточку, чтобы увидеть. Если использовал — отметь, код исчезнет у всех.
+        </div>
+        <button class="btn-main" onclick="openAddPromo()">+ Добавить промокод</button>
+        <div id="promoList" style="margin-top:14px"><div class="skeleton"></div></div>
+      `;
+      if (typeof openModal === 'function') openModal();
+      else document.getElementById('overlay')?.classList.add('show');
+      loadPromos();
+    }
+
+    async function loadPromos() {
+      const box = document.getElementById('promoList');
+      if (!box) return;
+      try {
+        const res = await fetch(API + '/promos', { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const data = await res.json();
+        const items = data.items || [];
+        if (!items.length) {
+          box.innerHTML = '<div class="empty">Пока пусто — добавь первый код</div>';
+          return;
+        }
+        box.innerHTML = items.map(it => `
+          <div class="promo-item" onclick="openPromoCard(${it.id})">
+            <div>
+              <div class="promo-mask">${it.mask || '••••'}</div>
+              <div class="promo-meta">${it.created_by_name || ''} · ${String(it.created_at || '').slice(0,10)}</div>
+            </div>
+            <div style="color:var(--hint)">›</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error(e);
+        box.innerHTML = '<div class="empty">Нужен API /promos (накати SQL + routes)</div>';
+      }
+    }
+
+    function openAddPromo() {
+      document.getElementById('modalTitle').textContent = 'Новый промокод РТК';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="field"><label>Промокод</label>
+          <input id="promoCode" placeholder="XXXX-XXXX" autocomplete="off"></div>
+        <div class="field"><label>Заметка (необязательно)</label>
+          <input id="promoNote" placeholder="откуда / для чего"></div>
+        <button class="btn-main" onclick="submitPromo()">Сохранить</button>
+        <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)" onclick="openPromos()">Назад к списку</button>
+      `;
+      setTimeout(() => document.getElementById('promoCode')?.focus(), 200);
+    }
+
+    async function submitPromo() {
+      const code = document.getElementById('promoCode')?.value?.trim();
+      const note = document.getElementById('promoNote')?.value?.trim() || '';
+      if (!code) { toast('Введи код', 'err'); return; }
+      try {
+        const res = await fetch(API + '/promos', {
+          method: 'POST', headers: authHeaders(true),
+          body: JSON.stringify({ code, note })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'fail');
+        toast('Добавлено', 'ok');
+        openPromos();
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
+      }
+    }
+
+    async function openPromoCard(id) {
+      try {
+        const res = await fetch(API + '/promos/' + id, { headers: authHeaders() });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'not found');
+        document.getElementById('modalTitle').textContent = 'Промокод РТК';
+        document.getElementById('modalBody').innerHTML = `
+          <div class="empty" style="text-align:left;padding:0">Полный код (можно выделить):</div>
+          <div class="promo-code-big" id="promoFullCode">${data.code || ''}</div>
+          ${data.note ? `<div class="empty" style="text-align:left">${data.note}</div>` : ''}
+          <div class="promo-meta" style="text-align:center;margin-bottom:12px">${data.created_by_name || ''}</div>
+          <button class="btn-main" onclick="promoMarkUsed(${id})">Промокод использован</button>
+          <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)" onclick="promoKeep(${id})">Не использован</button>
+        `;
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
+      }
+    }
+
+    async function promoMarkUsed(id) {
+      try {
+        const res = await fetch(API + '/promos/' + id + '/use', {
+          method: 'POST', headers: authHeaders(true), body: '{}'
+        });
+        if (!res.ok) throw new Error('fail');
+        toast('Списан из пула', 'ok');
+        openPromos();
+      } catch {
+        toast('Ошибка', 'err');
+      }
+    }
+
+    async function promoKeep(id) {
+      try {
+        await fetch(API + '/promos/' + id + '/keep', {
+          method: 'POST', headers: authHeaders(true), body: '{}'
+        });
+      } catch (_) {}
+      openPromos();
+    }
+
+
+    console.log('T2 Sales UI v13.3');
 
   </script>
 </body>
