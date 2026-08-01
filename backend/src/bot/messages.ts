@@ -220,19 +220,3 @@ export function saleNotificationMulti(opts: {
     `${lines}`
   );
 }
-
-export function supportTicketAdmin(opts: {
-  from: string;
-  category: string;
-  message: string;
-  ticketId: number | string;
-}) {
-  return (
-    `🆘 <b>Тикет #${esc(opts.ticketId)}</b>\n` +
-    `👤 ${esc(opts.from)}\n` +
-    `📂 ${esc(opts.category)}\n\n` +
-    `${esc(opts.message)}\n\n` +
-    `<i>Ответь в Mini App → Поддержка (только admin)</i>`
-  );
-}
-

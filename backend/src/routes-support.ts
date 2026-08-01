@@ -125,7 +125,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
           from: request.user!.full_name || 'Сотрудник',
           category: 'chat',
           message: text,
-          ticketId: id
+          ticketId: Number(id)
         })
       );
     }

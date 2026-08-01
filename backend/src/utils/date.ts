@@ -16,3 +16,12 @@ export function currentMonthMoscow(): string {
 export function monthStart(month: string): string {
   return month.length === 7 ? `${month}-01` : month.slice(0, 10);
 }
+
+export function nowTimeMoscow(): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(new Date());
+}
