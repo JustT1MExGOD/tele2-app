@@ -962,6 +962,85 @@
     .lk-action .la-title { font-size: 13px; font-weight: 800; }
     .lk-action .la-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 
+    /* ===== v10 Global ===== */
+    .greet-card {
+      background: linear-gradient(135deg, #111 0%, #1c1c2e 50%, #0d2137 100%);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      position: relative;
+      overflow: hidden;
+    }
+    .greet-card::before {
+      content: '';
+      position: absolute;
+      right: -20px; top: -40px;
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(42,171,238,0.4), transparent 70%);
+    }
+    .greet-hi {
+      font-size: 13px; font-weight: 600;
+      opacity: 0.75; margin-bottom: 2px;
+      position: relative; z-index: 1;
+    }
+    .greet-name {
+      font-size: 22px; font-weight: 800;
+      letter-spacing: -0.4px; margin-bottom: 10px;
+      position: relative; z-index: 1;
+    }
+    .greet-badges {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      position: relative; z-index: 1;
+    }
+    .greet-badge {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 5px 10px;
+      font-size: 11px; font-weight: 700;
+    }
+    .greet-badge.fire {
+      background: rgba(255,149,0,0.25);
+      border-color: rgba(255,149,0,0.3);
+      color: #ffb340;
+    }
+    .pulse-row {
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .pulse-chip {
+      flex: 1; min-width: 90px;
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow);
+    }
+    .pulse-chip .pc-l {
+      font-size: 10px; font-weight: 700;
+      color: var(--hint); text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .pulse-chip .pc-v {
+      font-size: 16px; font-weight: 800;
+      margin-top: 2px;
+    }
+    .pulse-chip .pc-v.up { color: var(--success); }
+    .pulse-chip .pc-v.down { color: var(--danger); }
+    .about-block {
+      background: var(--surface-2);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+    .about-block b { color: var(--text); }
+    .about-ver {
+      font-size: 28px; font-weight: 800;
+      letter-spacing: -0.5px; margin-bottom: 4px;
+    }
+
     .quick {
       display: flex;
       gap: 8px;
@@ -1051,6 +1130,10 @@
   <div class="sheet">
     <!-- ===== MAIN / CONTROL CENTER ===== -->
     <div id="page-home" class="page active">
+      <div class="section" id="homeGreeting" style="padding-bottom:4px">
+        <div id="greetingCard"></div>
+      </div>
+
       <div class="section" id="myDaySection">
         <div class="section-title">Мой день</div>
         <div id="myDayBody"><div class="skeleton"></div></div>
@@ -1066,6 +1149,7 @@
           <div class="stat-chip"><div class="n" id="hPhones">0</div><div class="l">Телефоны</div></div>
           <div class="stat-chip"><div class="n" id="hAcc">0</div><div class="l">Аксы</div></div>
         </div>
+        <div id="networkPulse" style="margin-top:10px"></div>
       </div>
 
       <div class="section">
@@ -1133,6 +1217,14 @@
           <div class="row-body">
             <div class="row-title">Обучение</div>
             <div class="row-sub">Интерактивный тур по приложению</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="openAbout()">
+          <div class="row-icon">ℹ️</div>
+          <div class="row-body">
+            <div class="row-title">О приложении</div>
+            <div class="row-sub">T2 Sales v10 · что нового</div>
           </div>
           <div class="row-chevron">›</div>
         </button>
@@ -1382,7 +1474,28 @@
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
     }
 
+    const APP_VERSION = '10.0.0';
     const API = window.location.origin;
+
+    function haptic(type = 'light') {
+      try {
+        if (!tg?.HapticFeedback) return;
+        if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+        else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+        else if (type === 'medium') tg.HapticFeedback.impactOccurred('medium');
+        else tg.HapticFeedback.impactOccurred('light');
+      } catch (_) {}
+    }
+
+    function greetingByHour() {
+      const h = Number(new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Moscow', hour: '2-digit', hour12: false
+      }).format(new Date()));
+      if (h < 6) return 'Доброй ночи';
+      if (h < 12) return 'Доброе утро';
+      if (h < 18) return 'Добрый день';
+      return 'Добрый вечер';
+    }
     let page = 'home';
     let employees = [];
     let stores = [];
@@ -1451,6 +1564,9 @@
     }
 
     function toast(msg, type = '') {
+      if (type === 'ok' || type === 'success') haptic('success');
+      else if (type === 'err' || type === 'error') haptic('error');
+      else haptic('light');
       const el = document.getElementById('toast');
       el.textContent = msg;
       el.className = 'toast show ' + type;
@@ -1587,10 +1703,35 @@
 
     async function loadHome() {
       document.getElementById('headerDate').textContent = formatDateRu(todayMoscow());
+
+      // Приветствие
+      const user = tgUser();
+      const firstName = me?.full_name?.split(' ')[1] || me?.full_name?.split(' ')[0] || user?.first_name || 'команда';
+      const streak = Number(localStorage.getItem('t2_streak') || 0);
+      const lastSaleDay = localStorage.getItem('t2_last_sale_day') || '';
+      const today = todayMoscow();
+      let showStreak = streak;
+      if (lastSaleDay && lastSaleDay !== today) {
+        // streak не сбрасываем на главной — только показываем
+      }
+      const greetEl = document.getElementById('greetingCard');
+      if (greetEl) {
+        greetEl.innerHTML = `
+          <div class="greet-card">
+            <div class="greet-hi">${greetingByHour()}</div>
+            <div class="greet-name">${firstName}</div>
+            <div class="greet-badges">
+              <span class="greet-badge">T2 Sales v${APP_VERSION}</span>
+              ${showStreak > 0 ? `<span class="greet-badge fire">🔥 ${showStreak} дн. подряд</span>` : `<span class="greet-badge">Внеси продажу — начни стрик</span>`}
+              ${me?.role === 'manager' || me?.role === 'admin' ? `<span class="greet-badge">Управляющий</span>` : ''}
+            </div>
+          </div>`;
+      }
+
       loadMyDay();
       try {
         const [statsRes, dashRes] = await Promise.all([
-          fetch(API + '/stats/daily?date=' + todayMoscow()),
+          fetch(API + '/stats/daily?date=' + today),
           fetch(API + '/dashboard')
         ]);
         const stats = await statsRes.json();
@@ -1612,6 +1753,27 @@
         document.getElementById('hPhones').textContent = t.phones;
         document.getElementById('hAcc').textContent = t.accessories;
 
+        // Пульс сети
+        const units = (t.sim || 0) + (t.mnp || 0) + (t.pa || 0) + (t.combo || 0);
+        const pulse = document.getElementById('networkPulse');
+        if (pulse) {
+          pulse.innerHTML = `
+            <div class="pulse-row">
+              <div class="pulse-chip">
+                <div class="pc-l">Единицы</div>
+                <div class="pc-v">${units}</div>
+              </div>
+              <div class="pulse-chip">
+                <div class="pc-l">Телефоны ₽</div>
+                <div class="pc-v">${Number(t.phones || 0).toLocaleString('ru-RU')}</div>
+              </div>
+              <div class="pulse-chip">
+                <div class="pc-l">Аксы ₽</div>
+                <div class="pc-v">${Number(t.accessories || 0).toLocaleString('ru-RU')}</div>
+              </div>
+            </div>`;
+        }
+
         const box = document.getElementById('homeTop');
         if (dashRes.ok) {
           const dash = await dashRes.json();
@@ -1621,9 +1783,10 @@
           } else {
             box.innerHTML = leaders.slice(0, 5).map((e, i) => {
               const total = (+e.sim || 0) + (+e.mnp || 0) + (+e.pa || 0) + (+e.combo || 0);
+              const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
               return `
-              <button class="row" onclick="openEmployeeCard(${e.id})">
-                <div class="row-icon">${i + 1}</div>
+              <button class="row" onclick="openEmployeeCard(${e.id || e.employee_id})">
+                <div class="row-icon">${medal}</div>
                 <div class="row-body">
                   <div class="row-title">${e.full_name}</div>
                   <div class="row-sub">SIM ${e.sim || 0} · MNP ${e.mnp || 0} · ПА ${e.pa || 0}</div>
@@ -1639,6 +1802,52 @@
       } catch (e) {
         console.error(e);
       }
+    }
+
+    function bumpStreak() {
+      const today = todayMoscow();
+      const last = localStorage.getItem('t2_last_sale_day') || '';
+      let streak = Number(localStorage.getItem('t2_streak') || 0);
+      if (last === today) return streak;
+      const yday = (() => {
+        const d = new Date(today + 'T12:00:00');
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().slice(0, 10);
+      })();
+      streak = last === yday ? streak + 1 : 1;
+      localStorage.setItem('t2_streak', String(streak));
+      localStorage.setItem('t2_last_sale_day', today);
+      return streak;
+    }
+
+    function openAbout() {
+      haptic('light');
+      document.getElementById('modalTitle').textContent = 'О приложении';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="about-ver">T2 Sales</div>
+        <div style="font-size:13px;color:var(--hint);margin-bottom:14px">версия ${APP_VERSION} · Global Update</div>
+        <div class="about-block">
+          <b>Что нового в v10</b><br>
+          • Полноценный личный кабинет сотрудника<br>
+          • Мультивыбор метрик при продаже<br>
+          • Интерактивное обучение<br>
+          • Приветствие и стрик продаж<br>
+          • Пульс сети на главной<br>
+          • Haptic-отклик в Telegram<br>
+          • Медали в топе за 7 дней
+        </div>
+        <div class="about-block">
+          <b>Стек</b><br>
+          Telegram Mini App · Node.js · Fastify · PostgreSQL · Railway
+        </div>
+        <div class="about-block">
+          <b>Точки</b><br>
+          Космонавтов 20А · Калинина 2 · Калинина 11
+        </div>
+        <button class="btn-main" onclick="startTutorial();closeModal()">Пройти обучение</button>
+        <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)" onclick="closeModal()">Закрыть</button>
+      `;
+      document.getElementById('overlay').classList.add('show');
     }
 
     // ===== PLAN DAY =====
@@ -3101,7 +3310,9 @@
           throw new Error(err.message || 'fail');
         }
         closeModal();
-        toast('Добавлено: ' + parts.join(', '), 'ok');
+        const streak = bumpStreak();
+        const streakMsg = streak > 1 ? ` · 🔥 ${streak} дн.` : '';
+        toast('Добавлено: ' + parts.join(', ') + streakMsg, 'ok');
         saleSelection = {};
         loadPage(page);
       } catch (e) {
@@ -3743,7 +3954,7 @@
     // Вызывается после успешной загрузки /me (если функция есть в init)
     window.maybeOfferTutorial = maybeOfferTutorial;
 
-    console.log('T2 Sales UI v9 — personal cabinet + tutorial');
+    console.log('T2 Sales UI v10 — Global Update');
   </script>
 </body>
 </html>
