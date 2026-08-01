@@ -769,6 +769,31 @@
       padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
     }
     #tutorialOverlay.show { display: flex; }
+    #tutorialOverlay {
+      background: rgba(8,10,20,.72);
+      backdrop-filter: blur(10px);
+    }
+    .tut-card {
+      box-shadow: 0 20px 60px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06);
+      border-radius: 20px;
+      animation: tutIn .35s ease;
+    }
+    @keyframes tutIn {
+      from { opacity: 0; transform: translateY(16px) scale(.98); }
+      to { opacity: 1; transform: none; }
+    }
+    .tut-dot.on {
+      width: 18px;
+      border-radius: 999px;
+      background: var(--primary, #2AABEE);
+    }
+    .tut-highlight {
+      outline: 3px solid var(--primary, #2AABEE) !important;
+      outline-offset: 4px;
+      box-shadow: 0 0 0 8px rgba(42,171,238,.2);
+      border-radius: 12px;
+      transition: outline .2s, box-shadow .2s;
+    }
     .tut-card {
       width: 100%;
       max-width: 440px;
@@ -1512,8 +1537,9 @@
         <div id="faqList"><div class="skeleton"></div></div>
       </div>
       <div class="section">
-        <div class="section-title">Написать в поддержку</div>
+        <div class="section-title">Чат с поддержкой</div>
         <div class="progress-block">
+          <div id="supportChat" style="max-height:280px;overflow-y:auto;margin-bottom:12px"></div>
           <div class="field">
             <label>Сообщение</label>
             <input id="supportMsg" placeholder="Опишите вопрос или проблему">
@@ -1521,6 +1547,10 @@
           <button class="btn-main" onclick="sendSupport()">Отправить</button>
           <div id="supportResult" class="empty" style="display:none;padding-top:12px"></div>
         </div>
+      </div>
+      <div class="section" id="adminTicketsSection" style="display:none">
+        <div class="section-title">Тикеты (только admin)</div>
+        <div id="adminTicketsList"><div class="skeleton"></div></div>
       </div>
     </div>
 
@@ -1626,6 +1656,11 @@
     let saleSelection = {}; // { sim: 2, mnp: 1 } — мультивыбор метрик
     let scheduleMonth = todayMoscow().slice(0, 7);
     let me = null; // { employee_id, full_name, role, is_manager }
+
+    function canAdmin() {
+      const r = (me && me.role) || '';
+      return r === 'admin';
+    }
 
     function canManage() {
       return me?.role === 'manager' || me?.role === 'admin' || me?.is_manager === true;
@@ -2364,22 +2399,26 @@
         me = null;
       }
 
-      // employee_id может быть в разных полях
-      const empId = me?.employee_id || me?.id || null;
+      // employee_id может быть в разных полях; bound:false = не привязан
+      const empId = (me && me.bound !== false)
+        ? (me.employee_id || me.id || null)
+        : null;
 
       if (!empId) {
         if (root) root.style.display = 'none';
-        bindSec.style.display = 'block';
+        if (bindSec) bindSec.style.display = 'block';
         try {
           const empRes = await fetch(API + '/employees');
           employees = await empRes.json();
+          const unbound = (employees || []).filter(e => !e.telegram_id || Number(e.telegram_id) === 0);
+          const list = unbound.length ? unbound : (employees || []);
           document.getElementById('bindEmployee').innerHTML =
-            (employees || []).map(e => `<option value="${e.id}">${e.full_name}</option>`).join('');
+            list.map(e => `<option value="${e.id}">${e.full_name}</option>`).join('');
         } catch (_) {}
         return;
       }
 
-      bindSec.style.display = 'none';
+      if (bindSec) bindSec.style.display = 'none';
       if (root) root.style.display = 'block';
 
       const today = todayMoscow();
@@ -3092,25 +3131,80 @@
       loadMonthPlans();
     }
 
-    async function loadSupport() {
+        async function loadSupport() {
       const box = document.getElementById('faqList');
       try {
         const res = await fetch(API + '/support/faq');
         const list = res.ok ? await res.json() : [];
         if (!list.length) {
           box.innerHTML = '<div class="empty">FAQ пока пуст</div>';
-          return;
+        } else {
+          box.innerHTML = list.map(f => `
+            <button class="row" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">
+              <div class="row-body"><div class="row-title">${f.question}</div></div>
+              <div class="row-chevron">›</div>
+            </button>
+            <div class="empty" style="display:none;text-align:left;padding:0 16px 14px;color:var(--text-secondary)">${f.answer}</div>
+          `).join('');
         }
-        box.innerHTML = list.map(f => `
-          <button class="row" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">
-            <div class="row-body"><div class="row-title">${f.question}</div></div>
-            <div class="row-chevron">›</div>
-          </button>
-          <div class="empty" style="display:none;text-align:left;padding:0 16px 14px;color:var(--text-secondary)">${f.answer}</div>
-        `).join('');
       } catch {
         box.innerHTML = '<div class="empty">Не удалось загрузить FAQ</div>';
       }
+
+      // мой чат / последние тикеты
+      const chat = document.getElementById('supportChat');
+      if (chat) {
+        try {
+          const r = await fetch(API + '/support/my', { headers: authHeaders() });
+          if (r.ok) {
+            const tickets = await r.json();
+            if (!tickets.length) {
+              chat.innerHTML = '<div class="empty" style="padding:8px 0">Пока нет обращений</div>';
+            } else {
+              chat.innerHTML = tickets.slice(0, 8).map(tk => `
+                <div class="progress-block" style="margin-bottom:8px;padding:10px 12px">
+                  <div style="font-size:12px;color:var(--hint)">#${tk.id} · ${tk.status || ''}</div>
+                  <div style="font-size:14px;margin:4px 0">${tk.message || ''}</div>
+                  ${tk.admin_reply ? `<div style="font-size:13px;color:var(--primary);margin-top:6px">↩ ${tk.admin_reply}</div>` : ''}
+                </div>
+              `).join('');
+            }
+          }
+        } catch (_) {}
+      }
+
+      const adm = document.getElementById('adminTicketsSection');
+      if (adm && canAdmin()) {
+        adm.style.display = '';
+        try {
+          const r = await fetch(API + '/support/tickets', { headers: authHeaders() });
+          const list = r.ok ? await r.json() : [];
+          const box2 = document.getElementById('adminTicketsList');
+          if (!list.length) box2.innerHTML = '<div class="empty">Нет тикетов</div>';
+          else box2.innerHTML = list.map(tk => `
+            <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">
+              <div class="row-title">#${tk.id} ${tk.full_name || ''}</div>
+              <div class="row-sub">${tk.message || ''}</div>
+              <button class="btn-main" style="margin-top:4px" onclick="replyTicket(${tk.id})">Ответить</button>
+            </div>
+          `).join('');
+        } catch (_) {}
+      } else if (adm) {
+        adm.style.display = 'none';
+      }
+    }
+
+    async function replyTicket(id) {
+      if (!canAdmin()) { toast('Только admin', 'err'); return; }
+      const text = prompt('Ответ на тикет #' + id);
+      if (!text) return;
+      const res = await fetch(API + '/support/tickets/' + id + '/reply', {
+        method: 'POST', headers: authHeaders(true),
+        body: JSON.stringify({ reply: text })
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Ответ отправлен', 'ok');
+      loadSupport();
     }
 
     async function sendSupport() {
@@ -3323,20 +3417,28 @@
           schByEmp[s.employee_id] = s.store_id;
         });
 
-        // default employee: me, or preset, or first on shift
-        let defaultEmp = presetEmployeeId || me?.employee_id || (schedules[0] && schedules[0].employee_id) || employees[0]?.id;
+        const isMgr = canManage();
+        let empList = employees || [];
+        if (!isMgr && me?.employee_id) {
+          empList = empList.filter(e => String(e.id) === String(me.employee_id));
+          if (!empList.length) empList = [{ id: me.employee_id, full_name: me.full_name || 'Я' }];
+        }
+        let defaultEmp = isMgr
+          ? (presetEmployeeId || me?.employee_id || (schedules[0] && schedules[0].employee_id) || empList[0]?.id)
+          : (me?.employee_id || empList[0]?.id);
         let defaultStore = schByEmp[defaultEmp] || stores[0]?.id;
 
-        saleSelection = { sim: 1 };
+        saleSelection = {};
         document.getElementById('modalTitle').textContent = 'Добавить продажу';
         document.getElementById('modalBody').innerHTML = `
           <div class="field">
             <label>Сотрудник</label>
-            <select id="modalEmployee" onchange="onEmpChange()">
-              ${(employees || []).map(e =>
+            <select id="modalEmployee" onchange="onEmpChange()" ${isMgr ? '' : 'disabled'}>
+              ${empList.map(e =>
                 `<option value="${e.id}" ${String(e.id) === String(defaultEmp) ? 'selected' : ''}>${e.full_name}</option>`
               ).join('')}
             </select>
+            ${isMgr ? '' : '<div style="font-size:12px;color:var(--hint);margin-top:4px">Можно вносить только свои продажи</div>'}
           </div>
           <div class="field">
             <label>Точка <span style="font-weight:500;text-transform:none;color:var(--primary)">(из графика)</span></label>
@@ -3428,6 +3530,41 @@
 
     function closeModal() {
       document.getElementById('overlay').classList.remove('show');
+    }
+
+
+    async function openCorrectSale(saleRow) {
+      if (!saleRow) return;
+      const isMgr = canManage();
+      if (!isMgr && me?.employee_id && String(saleRow.employee_id) !== String(me.employee_id)) {
+        toast('Нельзя править чужие продажи', 'err');
+        return;
+      }
+      saleSelection = {};
+      document.getElementById('modalTitle').textContent = 'Исправить продажу (дельта)';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="empty" style="text-align:left;padding:0 0 10px">
+          Укажи <b>изменение</b>: −1 уменьшит, +1 добавит. Сотрудник: ${saleRow.full_name || saleRow.employee_id}
+        </div>
+        <input type="hidden" id="modalEmployee" value="${saleRow.employee_id}">
+        <input type="hidden" id="modalStore" value="${saleRow.store_id}">
+        <div class="field">
+          <label>Метрики для правки</label>
+          <div class="metric-grid" id="metricGrid"></div>
+        </div>
+        <div class="field">
+          <label>Дельта</label>
+          <div id="saleQtyList" class="qty-list"></div>
+          <div class="quick">
+            <button type="button" onclick="setAllQty(-1)">−1</button>
+            <button type="button" onclick="setAllQty(1)">+1</button>
+            <button type="button" onclick="setAllQty(-5)">−5</button>
+          </div>
+        </div>
+        <button class="btn-main" onclick="submitSale()">Сохранить правку</button>
+      `;
+      renderSaleMetrics();
+      document.getElementById('overlay').classList.add('show');
     }
 
     async function submitSale() {
@@ -3682,7 +3819,7 @@
     // ===== ACCESS REQUESTS UI =====
     async function loadAccessRequests() {
       const box = document.getElementById('accessList');
-      if (!canApprove()) {
+      if (!canAdmin() && !canApprove()) {
         box.innerHTML = '<div class="empty">Только manager / супервайзер</div>';
         return;
       }
@@ -4037,7 +4174,7 @@
       },
       {
         title: 'Поддержка',
-        text: 'Если что-то сломалось или есть вопрос — напиши в поддержку. Сообщение уйдёт администратору в личку. Управляющий может отвечать прямо из приложения.',
+        text: 'Если что-то сломалось или есть вопрос — напиши в чат поддержки. Сообщение уйдёт администратору. Отвечать на тикеты может только admin.',
         page: 'home'
       },
       {

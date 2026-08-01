@@ -12,6 +12,7 @@ import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { registerV3Routes } from './routes-v3.js';
 import { registerPlansV5Routes } from './routes-plans-v5.js';
 import { registerV8Routes } from './routes-v8.js';
+import { registerSupportRoutes } from './routes-support.js';
 
 dotenv.config();
 
@@ -112,7 +113,7 @@ app.get('/sales', async (request) => {
   return res.rows;
 });
 
-// Прибавление метрик, без обнуления остальных
+// Прибавление метрик (+ правка через delta отрицательный)
 app.post('/sales', async (request, reply) => {
   const body = request.body as any;
   const employee_id = Number(body.employee_id);
@@ -121,6 +122,27 @@ app.post('/sales', async (request, reply) => {
 
   if (!employee_id || !store_id) {
     return reply.code(400).send({ error: 'employee_id and store_id required' });
+  }
+
+  // employee может писать только за себя; manager/admin — за всех
+  const tg =
+    (request.headers['x-telegram-id'] as string) ||
+    (request.headers['x-telegram-user-id'] as string);
+  if (tg) {
+    const me = await query(
+      `SELECT id, role FROM employees WHERE telegram_id = $1::bigint LIMIT 1`,
+      [Number(tg)]
+    );
+    const u = me.rows[0];
+    if (u) {
+      const role = u.role || 'employee';
+      if (role !== 'manager' && role !== 'admin' && Number(u.id) !== employee_id) {
+        return reply.code(403).send({
+          error: 'forbidden',
+          message: 'Можно вносить продажи только за себя'
+        });
+      }
+    }
   }
 
   const fields = [
@@ -132,14 +154,18 @@ app.post('/sales', async (request, reply) => {
   const insertVals: any[] = [employee_id, store_id, sale_date];
   const placeholders = ['$1', '$2', '$3'];
   const setParts: string[] = [];
+  const applied: { metric: string; value: number }[] = [];
   let i = 4;
 
   for (const f of fields) {
     if (body[f] !== undefined && body[f] !== null && body[f] !== '') {
+      const val = Number(body[f]) || 0;
       insertCols.push(f);
-      insertVals.push(Number(body[f]) || 0);
+      insertVals.push(val);
       placeholders.push('$' + i);
-      setParts.push(`${f} = sales.${f} + EXCLUDED.${f}`);
+      // GREATEST чтобы не уйти в минус при корректировке
+      setParts.push(`${f} = GREATEST(0, sales.${f} + EXCLUDED.${f})`);
+      applied.push({ metric: f, value: val });
       i++;
     }
   }
@@ -160,19 +186,16 @@ app.post('/sales', async (request, reply) => {
   const res = await query(sql, insertVals);
   const row = res.rows[0];
 
-  // audit
   try {
-    const metric = fields.find((f) => body[f] !== undefined && body[f] !== null && body[f] !== '');
-    if (metric) {
+    for (const a of applied) {
       await query(
-        `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source)
-         VALUES ($1, $2, $3, $4, $5, 'api')`,
-        [employee_id, store_id, sale_date, metric, Number(body[metric]) || 0]
+        `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source, created_by)
+         VALUES ($1, $2, $3, $4, $5, 'api', $6)`,
+        [employee_id, store_id, sale_date, a.metric, a.value, tg ? Number(tg) : null]
       );
     }
   } catch (_) {}
 
-  // уведомление в чат
   try {
     const info = await query(
       `SELECT e.full_name, st.name as store_name
@@ -180,21 +203,21 @@ app.post('/sales', async (request, reply) => {
        WHERE e.id = $1 AND st.id = $2`,
       [employee_id, store_id]
     );
-    const metric = fields.find((f) => body[f] !== undefined && body[f] !== null);
-    if (metric && info.rows[0]) {
-      const names: Record<string, string> = {
-        sim: 'SIM', mnp: 'MNP', pa: 'ПА', combo: 'Комбо', phones: 'Телефон',
-        accessories: 'Аксессуары', insurance: 'Страховки', wink: 'Wink',
-        shpd: 'ШПД', focus: 'ФО', plotter: 'Плоттер', hb: 'HB',
-      };
-      await notifyChat(
-        `${info.rows[0].full_name} сделал продажу: ${body[metric]} ${names[metric] || metric} на ${info.rows[0].store_name}`
-      );
+    if (info.rows[0] && applied.length) {
+      const { saleNotificationMulti } = await import('./bot/messages.js');
+      const text = saleNotificationMulti({
+        employeeName: info.rows[0].full_name,
+        storeName: info.rows[0].store_name,
+        items: applied.map((a) => ({ metric: a.metric, value: a.value }))
+      });
+      await notifyChat(text);
     }
   } catch (_) {}
 
   return row;
 });
+
+
 
 // ===== SCHEDULES =====
 app.get('/schedules', async (request) => {
@@ -206,7 +229,7 @@ app.get('/schedules', async (request) => {
      FROM schedules sch
      JOIN employees e ON e.id = sch.employee_id
      JOIN stores st ON st.id = sch.store_id
-     WHERE sch.work_date = $1
+     WHERE sch.work_date::date = $1::date
      ORDER BY st.hours, e.full_name`,
     [workDate]
   );
@@ -356,7 +379,14 @@ try {
   await registerV8Routes(app);
   console.log('✅ Access (v8) routes registered');
 } catch (e: any) {
-  console.error('V8 routes failed:', e?.message || e);
+  console.error('Support routes failed:', e?.message || e);
+}
+
+try {
+  await registerSupportRoutes(app);
+  console.log('✅ Support routes registered');
+} catch (e: any) {
+  console.error('Support routes failed:', e?.message || e);
 }
 
 // ===== START =====
