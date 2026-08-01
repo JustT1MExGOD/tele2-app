@@ -733,6 +733,235 @@
       border-radius: 14px !important;
     }
 
+    /* ===== Личный кабинет ===== */
+    .lk-hero {
+      background: linear-gradient(145deg, #0a0a0a 0%, #1a1a2e 55%, #16213e 100%);
+      border-radius: var(--radius);
+      padding: 20px 18px 18px;
+      color: #fff;
+      margin-bottom: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .lk-hero::after {
+      content: '';
+      position: absolute;
+      right: -30px; top: -30px;
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(42,171,238,0.35), transparent 70%);
+      pointer-events: none;
+    }
+    .lk-hero-top {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+    .lk-avatar {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: #333;
+      border: 2px solid rgba(255,255,255,0.2);
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; font-weight: 800; color: #fff;
+    }
+    .lk-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .lk-name {
+      font-size: 18px; font-weight: 800; letter-spacing: -0.3px;
+      line-height: 1.2; margin-bottom: 4px;
+    }
+    .lk-role {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 700;
+      padding: 4px 10px; border-radius: 20px;
+      background: rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.9);
+    }
+    .lk-role.manager { background: rgba(255,214,10,0.2); color: #ffd60a; }
+    .lk-hero-meta {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-top: 14px; position: relative; z-index: 1;
+    }
+    .lk-pill {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 8px 12px;
+      font-size: 12px; font-weight: 600;
+      color: rgba(255,255,255,0.9);
+    }
+    .lk-pill strong { color: #fff; font-weight: 800; }
+
+    .lk-ring-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+      display: flex; gap: 16px; align-items: center;
+    }
+    .lk-ring {
+      width: 88px; height: 88px; flex-shrink: 0;
+      position: relative;
+    }
+    .lk-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .lk-ring circle {
+      fill: none; stroke-width: 8;
+      stroke-linecap: round;
+    }
+    .lk-ring .bg { stroke: var(--surface-2); }
+    .lk-ring .fg { stroke: var(--primary); transition: stroke-dashoffset 0.6s ease; }
+    .lk-ring .fg.good { stroke: var(--success); }
+    .lk-ring .fg.mid { stroke: var(--warning); }
+    .lk-ring .fg.bad { stroke: var(--danger); }
+    .lk-ring-val {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-weight: 800; font-size: 20px; letter-spacing: -0.5px;
+    }
+    .lk-ring-val small {
+      font-size: 10px; font-weight: 600;
+      color: var(--hint); text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .lk-ring-info { flex: 1; min-width: 0; }
+    .lk-ring-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+    .lk-ring-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.35; }
+    .lk-ring-store {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 8px; font-size: 12px; font-weight: 700;
+      padding: 5px 10px; border-radius: 10px;
+      background: var(--surface-2);
+    }
+    .lk-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    .lk-metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .lk-metric {
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+    .lk-metric .lm-label {
+      font-size: 11px; font-weight: 700;
+      color: var(--hint); text-transform: uppercase;
+      letter-spacing: 0.03em; margin-bottom: 4px;
+    }
+    .lk-metric .lm-val {
+      font-size: 20px; font-weight: 800; letter-spacing: -0.4px;
+    }
+    .lk-metric .lm-plan {
+      font-size: 12px; color: var(--text-secondary); margin-top: 2px;
+    }
+    .lk-metric .lm-bar {
+      height: 4px; border-radius: 2px;
+      background: var(--surface-2); margin-top: 8px; overflow: hidden;
+    }
+    .lk-metric .lm-bar i {
+      display: block; height: 100%; border-radius: 2px;
+      background: var(--primary);
+    }
+    .lk-metric .lm-bar i.good { background: var(--success); }
+    .lk-metric .lm-bar i.mid { background: var(--warning); }
+    .lk-metric .lm-bar i.bad { background: var(--danger); }
+
+    .lk-week {
+      display: flex; gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .lk-day {
+      flex: 0 0 52px;
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 10px 6px;
+      text-align: center;
+      box-shadow: var(--shadow);
+      border: 2px solid transparent;
+    }
+    .lk-day.today { border-color: var(--primary); }
+    .lk-day.off { opacity: 0.45; }
+    .lk-day .wd {
+      font-size: 10px; font-weight: 700;
+      color: var(--hint); text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .lk-day .dn {
+      font-size: 16px; font-weight: 800; margin-bottom: 6px;
+    }
+    .lk-day .st {
+      width: 10px; height: 10px; border-radius: 50%;
+      margin: 0 auto;
+      background: var(--surface-2);
+    }
+
+    .lk-sale-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .lk-sale-row:last-child { border-bottom: none; }
+    .lk-sale-row .ls-date { font-weight: 700; }
+    .lk-sale-row .ls-metrics {
+      color: var(--text-secondary); font-size: 12px;
+      text-align: right; max-width: 60%;
+    }
+
+    .lk-bfq-card {
+      background: linear-gradient(135deg, #1a1a2e, #0f3460);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .lk-bfq-card .bfq-label {
+      font-size: 12px; font-weight: 700;
+      opacity: 0.7; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .lk-bfq-card .bfq-score {
+      font-size: 32px; font-weight: 800; letter-spacing: -1px;
+      margin-top: 2px;
+    }
+    .lk-bfq-card .bfq-rank {
+      text-align: right;
+      font-size: 13px; font-weight: 600; opacity: 0.85;
+    }
+
+    .lk-actions-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .lk-action {
+      background: var(--surface);
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 14px 12px;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      color: var(--text);
+    }
+    .lk-action .la-ico { font-size: 20px; margin-bottom: 6px; }
+    .lk-action .la-title { font-size: 13px; font-weight: 800; }
+    .lk-action .la-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
     .quick {
       display: flex;
       gap: 8px;
@@ -932,13 +1161,24 @@
 
     <!-- ===== MY PLAN ===== -->
     <div id="page-my" class="page">
-      <div class="section">
-        <div class="section-title" id="myTitle">Мой план</div>
-        <div id="myBody"><div class="skeleton"></div><div class="skeleton"></div></div>
+      <!-- Личный кабинет -->
+      <div id="lkRoot">
+        <div id="lkProfile"></div>
+        <div id="lkToday"></div>
+        <div id="lkDayMetrics"></div>
+        <div id="lkMonth"></div>
+        <div id="lkWeek"></div>
+        <div id="lkSales"></div>
+        <div id="lkBfq"></div>
+        <div id="lkActions"></div>
       </div>
+
       <div class="section" id="myBindSection" style="display:none;">
         <div class="section-title">Привязка аккаунта</div>
         <div class="progress-block">
+          <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px;line-height:1.4">
+            Чтобы видеть личный план, смены и рейтинг — привяжи Telegram к сотруднику.
+          </p>
           <div class="field">
             <label>Кто вы?</label>
             <select id="bindEmployee"></select>
@@ -1692,10 +1932,54 @@
     }
 
     // ===== MY PLAN + BIND =====
+    function ringSVG(pct) {
+      const r = 36;
+      const c = 2 * Math.PI * r;
+      const p = Math.max(0, Math.min(100, Number(pct) || 0));
+      const offset = c - (p / 100) * c;
+      const tone = pctTone(p);
+      return `
+        <div class="lk-ring">
+          <svg viewBox="0 0 88 88">
+            <circle class="bg" cx="44" cy="44" r="${r}" />
+            <circle class="fg ${tone}" cx="44" cy="44" r="${r}"
+              stroke-dasharray="${c}" stroke-dashoffset="${offset}" />
+          </svg>
+          <div class="lk-ring-val">${Math.round(p)}%<small>план</small></div>
+        </div>`;
+    }
+
+    function metricCard(label, fact, plan) {
+      const f = Number(fact) || 0;
+      const p = Number(plan) || 0;
+      const percent = p > 0 ? Math.round((f / p) * 100) : (f > 0 ? 100 : 0);
+      const w = Math.min(percent, 100);
+      return `
+        <div class="lk-metric">
+          <div class="lm-label">${label}</div>
+          <div class="lm-val">${f}</div>
+          <div class="lm-plan">из ${p} · ${percent}%</div>
+          <div class="lm-bar"><i class="${pctTone(percent)}" style="width:${w}%"></i></div>
+        </div>`;
+    }
+
+    function roleLabel(role) {
+      if (role === 'manager' || role === 'admin') return 'Управляющий';
+      if (role === 'supervisor') return 'Супервайзер';
+      return 'Сотрудник';
+    }
+
     async function loadMyPlan() {
-      const body = document.getElementById('myBody');
       const bindSec = document.getElementById('myBindSection');
-      body.innerHTML = '<div class="skeleton"></div>';
+      const root = document.getElementById('lkRoot');
+      if (root) {
+        root.style.display = 'block';
+        ['lkProfile','lkToday','lkDayMetrics','lkMonth','lkWeek','lkSales','lkBfq','lkActions']
+          .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<div class="skeleton" style="margin-bottom:10px"></div>';
+          });
+      }
 
       const user = tgUser();
       if (user?.photo_url) {
@@ -1705,57 +1989,317 @@
       }
 
       try {
-        // try /me
-        const meRes = await fetch(API + '/me', {
-          headers: { 'X-Telegram-Id': String(user?.id || '') }
-        });
-        if (meRes.ok) {
-          me = await meRes.json();
-        } else {
-          me = null;
-        }
+        const meRes = await fetch(API + '/me', { headers: authHeaders() });
+        if (meRes.ok) me = await meRes.json();
+        else me = null;
       } catch {
         me = null;
       }
 
-      if (!me?.employee_id) {
-        document.getElementById('myTitle').textContent = 'Мой план';
-        body.innerHTML = '<div class="empty">Привяжите аккаунт к сотруднику</div>';
+      // employee_id может быть в разных полях
+      const empId = me?.employee_id || me?.id || null;
+
+      if (!empId) {
+        if (root) root.style.display = 'none';
         bindSec.style.display = 'block';
-        const empRes = await fetch(API + '/employees');
-        employees = await empRes.json();
-        document.getElementById('bindEmployee').innerHTML =
-          (employees || []).map(e => `<option value="${e.id}">${e.full_name}</option>`).join('');
+        try {
+          const empRes = await fetch(API + '/employees');
+          employees = await empRes.json();
+          document.getElementById('bindEmployee').innerHTML =
+            (employees || []).map(e => `<option value="${e.id}">${e.full_name}</option>`).join('');
+        } catch (_) {}
         return;
       }
 
       bindSec.style.display = 'none';
-      document.getElementById('myTitle').textContent = me.full_name || 'Мой план';
+      if (root) root.style.display = 'block';
 
-      try {
-        const res = await fetch(API + '/employee/progress/' + me.employee_id + '?date=' + todayMoscow());
-        if (!res.ok) throw new Error('no progress');
-        const data = await res.json();
-        const metrics = [
+      const today = todayMoscow();
+      const month = today.slice(0, 7);
+
+      // Параллельная загрузка
+      const [dayRes, progRes, monthSchRes, salesRes, bfqRes, monthPlanRes] = await Promise.allSettled([
+        fetch(API + '/me/day', { headers: authHeaders() }),
+        fetch(API + '/employee/progress/' + empId + '?date=' + today),
+        fetch(API + '/schedules/month?month=' + month),
+        fetch(API + '/sales?date=' + today),
+        fetch(API + '/bfq?month=' + month),
+        fetch(API + '/plans/employees/month?month=' + month)
+      ]);
+
+      async function jsonOk(settled) {
+        if (settled.status !== 'fulfilled' || !settled.value.ok) return null;
+        try { return await settled.value.json(); } catch { return null; }
+      }
+
+      const dayData = await jsonOk(dayRes);
+      const progData = await jsonOk(progRes);
+      const monthSch = await jsonOk(monthSchRes);
+      const salesData = await jsonOk(salesRes);
+      const bfqData = await jsonOk(bfqRes);
+      const monthPlans = await jsonOk(monthPlanRes);
+
+      // --- Профиль ---
+      const fullName = me.full_name || user?.first_name || 'Сотрудник';
+      const role = me.role || 'employee';
+      const photo = user?.photo_url;
+      const shift = dayData?.shift || null;
+      const storeName = shift?.store_name || shift?.store_id || null;
+      const storeId = shift?.store_id;
+      const color = storeColor(storeId);
+
+      document.getElementById('lkProfile').innerHTML = `
+        <div class="lk-hero">
+          <div class="lk-hero-top">
+            <div class="lk-avatar">
+              ${photo ? `<img src="${photo}" alt="">` : (fullName[0] || 'T')}
+            </div>
+            <div>
+              <div class="lk-name">${fullName}</div>
+              <span class="lk-role ${role === 'manager' || role === 'admin' ? 'manager' : ''}">${roleLabel(role)}</span>
+            </div>
+          </div>
+          <div class="lk-hero-meta">
+            ${storeName ? `<div class="lk-pill">📍 <strong>${storeName}</strong></div>` : `<div class="lk-pill">Сегодня выходной</div>`}
+            ${shift?.shift_text ? `<div class="lk-pill">🕒 <strong>${shift.shift_text}</strong>${shift.hours ? ' · ' + shift.hours + 'ч' : ''}</div>` : ''}
+            <div class="lk-pill">📅 <strong>${formatDateRu(today)}</strong></div>
+          </div>
+        </div>`;
+
+      // --- Кольцо прогресса дня ---
+      const tot = dayData?.total || progData?.total || {};
+      const dayPct = tot.pct != null ? tot.pct : (
+        tot.plan > 0 ? Math.round((tot.fact / tot.plan) * 100) : 0
+      );
+
+      document.getElementById('lkToday').innerHTML = `
+        <div class="section-title" style="margin-bottom:8px">Сегодня</div>
+        <div class="lk-ring-card">
+          ${ringSVG(dayPct)}
+          <div class="lk-ring-info">
+            <div class="lk-ring-title">${storeName ? 'Смена на точке' : 'Нет смены'}</div>
+            <div class="lk-ring-sub">
+              ${storeName
+                ? `Выполнение дневного плана по ключевым метрикам.`
+                : `В графике на сегодня тебя нет — продажи всё равно можно добавить.`}
+            </div>
+            ${storeName ? `
+              <div class="lk-ring-store">
+                <span class="lk-dot" style="background:${color}"></span>
+                ${storeName}${shift?.shift_text ? ' · ' + shift.shift_text : ''}
+              </div>` : ''}
+          </div>
+        </div>`;
+
+      // --- Метрики дня ---
+      const pr = dayData?.progress || progData || {};
+      const dayKeys = [
+        { key: 'sim', label: 'SIM' },
+        { key: 'mnp', label: 'MNP' },
+        { key: 'pa', label: 'ПА' },
+        { key: 'combo', label: 'Комбо' },
+        { key: 'phones', label: 'Телефоны' },
+        { key: 'accessories', label: 'Аксы' }
+      ];
+      document.getElementById('lkDayMetrics').innerHTML = `
+        <div class="section-title" style="margin-bottom:8px">Факт / план дня</div>
+        <div class="lk-metrics-grid">
+          ${dayKeys.map(m => {
+            const x = pr[m.key] || {};
+            const fact = x.fact != null ? x.fact : (x.value != null ? x.value : (typeof x === 'number' ? x : 0));
+            const plan = x.plan != null ? x.plan : 0;
+            return metricCard(m.label, fact, plan);
+          }).join('')}
+        </div>`;
+
+      // --- Месяц ---
+      let monthHtml = '';
+      const myMonth = Array.isArray(monthPlans)
+        ? monthPlans.find(p => String(p.employee_id) === String(empId) || String(p.id) === String(empId))
+        : null;
+
+      if (myMonth) {
+        const mm = [
           { key: 'sim', label: 'SIM' },
           { key: 'mnp', label: 'MNP' },
           { key: 'pa', label: 'ПА' },
           { key: 'combo', label: 'Комбо' },
-          { key: 'phones', label: 'Телефоны' }
+          { key: 'phones', label: 'Тел' }
         ];
-        let html = '<div class="progress-block">';
-        for (const m of metrics) {
-          html += progressHTML(m.label, data[m.key]?.fact, data[m.key]?.plan);
-        }
-        if (data.total) {
-          html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
-            progressHTML('Итого', data.total.fact, data.total.plan) + '</div>';
-        }
-        html += '</div>';
-        body.innerHTML = html;
-      } catch {
-        body.innerHTML = '<div class="empty">Нет данных по плану</div>';
+        monthHtml = `
+          <div class="section-title" style="margin-bottom:8px">Месяц ${month}</div>
+          <div class="progress-block" style="margin-bottom:12px">
+            ${mm.map(m => {
+              const fact = myMonth['fact_' + m.key] ?? myMonth[m.key + '_fact'] ?? myMonth.fact?.[m.key] ?? 0;
+              const plan = myMonth['plan_' + m.key] ?? myMonth[m.key + '_plan'] ?? myMonth[m.key] ?? myMonth.plan?.[m.key] ?? 0;
+              // fallback: если приходит fact/plan объектом или просто plan-поля
+              const f = Number(myMonth.fact?.[m.key] ?? myMonth[m.key + '_f'] ?? fact) || 0;
+              const p = Number(myMonth.plan?.[m.key] ?? plan) || 0;
+              // ещё один fallback — иногда fact лежит рядом
+              const ff = Number(myMonth.sim_fact ?? (m.key === 'sim' ? myMonth.fact_sim : null) ?? f) || f;
+              const pp = Number(myMonth.sim_plan ?? (m.key === 'sim' ? myMonth.plan_sim : null) ?? p) || p;
+              return progressHTML(m.label,
+                myMonth[m.key + '_fact'] ?? myMonth['fact_' + m.key] ?? myMonth.facts?.[m.key] ?? myMonth.fact?.[m.key] ?? 0,
+                myMonth[m.key + '_plan'] ?? myMonth['plan_' + m.key] ?? myMonth.plans?.[m.key] ?? myMonth[m.key] ?? 0
+              );
+            }).join('')}
+          </div>`;
+      } else {
+        // Собираем факт за месяц из sales если endpoint month plans пустой
+        monthHtml = `
+          <div class="section-title" style="margin-bottom:8px">Месяц ${month}</div>
+          <div class="progress-block" style="margin-bottom:12px">
+            <div class="empty" style="padding:8px 0">Месячный план подтянется, когда будут данные</div>
+          </div>`;
       }
+      document.getElementById('lkMonth').innerHTML = monthHtml;
+
+      // --- Неделя (график) ---
+      const schedules = Array.isArray(monthSch)
+        ? monthSch
+        : (monthSch?.items || monthSch?.schedules || []);
+      const mySch = schedules.filter(s => String(s.employee_id) === String(empId));
+      const byDate = {};
+      mySch.forEach(s => {
+        const d = String(s.work_date || s.date || '').slice(0, 10);
+        if (d) byDate[d] = s;
+      });
+
+      // 7 дней вокруг сегодня (сегодня ±3, или текущая неделя пн-вс)
+      const base = new Date(today + 'T12:00:00');
+      const weekDays = [];
+      // показываем 7 дней начиная с понедельника текущей недели
+      const dow = base.getDay(); // 0 вс
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      for (let i = 0; i < 7; i++) {
+        const dt = new Date(base);
+        dt.setDate(base.getDate() + mondayOffset + i);
+        const iso = dt.toISOString().slice(0, 10);
+        weekDays.push(iso);
+      }
+      // если сегодня не в диапазоне — сдвиг: просто 7 дней от сегодня-3
+      if (!weekDays.includes(today)) {
+        weekDays.length = 0;
+        for (let i = -3; i <= 3; i++) {
+          const dt = new Date(base);
+          dt.setDate(base.getDate() + i);
+          weekDays.push(dt.toISOString().slice(0, 10));
+        }
+      }
+
+      const wdNames = ['вс','пн','вт','ср','чт','пт','сб'];
+      document.getElementById('lkWeek').innerHTML = `
+        <div class="section-title" style="margin-bottom:8px">Моя неделя</div>
+        <div class="lk-week">
+          ${weekDays.map(iso => {
+            const d = new Date(iso + 'T12:00:00');
+            const sch = byDate[iso];
+            const isToday = iso === today;
+            const col = sch ? storeColor(sch.store_id) : 'var(--surface-2)';
+            return `
+              <div class="lk-day ${isToday ? 'today' : ''} ${sch ? '' : 'off'}">
+                <div class="wd">${wdNames[d.getDay()]}</div>
+                <div class="dn">${d.getDate()}</div>
+                <div class="st" style="background:${col}" title="${sch ? (sch.store_name || sch.store_id || '') : 'вых'}"></div>
+              </div>`;
+          }).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--hint);margin:4px 0 12px">
+          Цвет точки = смена · серый = выходной
+        </div>`;
+
+      // --- Продажи сегодня (личные) ---
+      const allSales = Array.isArray(salesData) ? salesData : (salesData?.items || []);
+      const mySales = allSales.filter(s => String(s.employee_id) === String(empId));
+      const metricLabels = {
+        sim: 'SIM', mnp: 'MNP', pa: 'ПА', combo: 'Комбо', phones: 'Тел',
+        accessories: 'Аксы', insurance: 'Страх', wink: 'Wink', shpd: 'ШПД',
+        focus: 'ФО', settings: 'Настр', plotter: 'Плот', hb: 'НВ',
+        credit_request: 'Кр.заявка', credit_issued: 'Кр.выдан'
+      };
+
+      let salesHtml = '';
+      if (mySales.length) {
+        // агрегируем одну строку на сегодня
+        const agg = {};
+        mySales.forEach(s => {
+          Object.keys(metricLabels).forEach(k => {
+            const v = Number(s[k]) || 0;
+            if (v) agg[k] = (agg[k] || 0) + v;
+          });
+        });
+        const parts = Object.entries(agg).map(([k, v]) => `${metricLabels[k]} ${v}`);
+        salesHtml = `
+          <div class="section-title" style="margin-bottom:8px">Мои продажи сегодня</div>
+          <div class="progress-block" style="margin-bottom:12px">
+            <div class="lk-sale-row">
+              <div class="ls-date">${formatDateRu(today)}</div>
+              <div class="ls-metrics">${parts.join(' · ') || '—'}</div>
+            </div>
+            <button class="btn-main" style="margin-top:10px" onclick="openAddSale(${empId})">+ Ещё продажа</button>
+          </div>`;
+      } else {
+        salesHtml = `
+          <div class="section-title" style="margin-bottom:8px">Мои продажи сегодня</div>
+          <div class="progress-block" style="margin-bottom:12px">
+            <div class="empty" style="padding:8px 0">Пока пусто</div>
+            <button class="btn-main" onclick="openAddSale(${empId})">+ Добавить продажу</button>
+          </div>`;
+      }
+      document.getElementById('lkSales').innerHTML = salesHtml;
+
+      // --- BFQ ---
+      const bfqList = Array.isArray(bfqData) ? bfqData : (bfqData?.items || bfqData?.employees || []);
+      const myBfq = bfqList.find(e =>
+        String(e.employee_id) === String(empId) || String(e.id) === String(empId)
+      );
+      const sorted = [...bfqList].sort((a, b) =>
+        (Number(b.total ?? b.bfq ?? 0) - Number(a.total ?? a.bfq ?? 0))
+      );
+      const rank = myBfq
+        ? sorted.findIndex(e =>
+            String(e.employee_id) === String(empId) || String(e.id) === String(empId)
+          ) + 1
+        : null;
+      const score = myBfq ? (myBfq.total ?? myBfq.bfq ?? '—') : '—';
+
+      document.getElementById('lkBfq').innerHTML = `
+        <div class="lk-bfq-card" onclick="switchPage('bfq')" style="cursor:pointer">
+          <div>
+            <div class="bfq-label">BFQ за месяц</div>
+            <div class="bfq-score">${score}</div>
+          </div>
+          <div class="bfq-rank">
+            ${rank ? `#${rank} в сети` : 'Нет рейтинга'}
+            <div style="font-size:11px;opacity:0.6;margin-top:4px">открыть →</div>
+          </div>
+        </div>`;
+
+      // --- Быстрые действия ---
+      document.getElementById('lkActions').innerHTML = `
+        <div class="section-title" style="margin-bottom:8px">Действия</div>
+        <div class="lk-actions-grid">
+          <button class="lk-action" onclick="openAddSale(${empId})">
+            <div class="la-ico">➕</div>
+            <div class="la-title">Продажа</div>
+            <div class="la-sub">Внести метрики</div>
+          </button>
+          <button class="lk-action" onclick="switchPage('schedule')">
+            <div class="la-ico">📅</div>
+            <div class="la-title">График</div>
+            <div class="la-sub">Месяц целиком</div>
+          </button>
+          <button class="lk-action" onclick="switchPage('plan')">
+            <div class="la-ico">🎯</div>
+            <div class="la-title">План дня</div>
+            <div class="la-sub">Все точки</div>
+          </button>
+          <button class="lk-action" onclick="startTutorial()">
+            <div class="la-ico">🎓</div>
+            <div class="la-title">Обучение</div>
+            <div class="la-sub">Как пользоваться</div>
+          </button>
+        </div>`;
     }
 
     async function bindMe() {
@@ -3082,8 +3626,8 @@
         page: 'schedule'
       },
       {
-        title: 'Мой план',
-        text: 'Личный факт и план на месяц. Если Telegram ещё не привязан — привяжи себя в этом разделе, чтобы видеть свои цифры и получать уведомления.',
+        title: 'Личный кабинет',
+        text: 'Вкладка «Мой» — твой профиль, смена сегодня, факт/план дня, прогресс месяца, неделя в цвете точек, продажи, BFQ и быстрые действия. Если Telegram не привязан — привяжи себя здесь.',
         page: 'my'
       },
       {
@@ -3199,7 +3743,7 @@
     // Вызывается после успешной загрузки /me (если функция есть в init)
     window.maybeOfferTutorial = maybeOfferTutorial;
 
-    console.log('T2 Sales UI v8.1 + interactive tutorial');
+    console.log('T2 Sales UI v9 — personal cabinet + tutorial');
   </script>
 </body>
 </html>
