@@ -297,18 +297,4 @@ export async function registerV4Routes(app: FastifyInstance) {
     );
     return res.rows;
   });
-
-  app.post('/support/tickets/:id/reply', async (request, reply) => {
-    if (!requireManager(request, reply)) return;
-    const { id } = request.params as { id: string };
-    const { reply: text } = request.body as any;
-    if (!text) return reply.code(400).send({ error: 'reply required' });
-    const res = await query(
-      `UPDATE support_tickets
-       SET admin_reply = $1, status = 'answered', answered_at = now()
-       WHERE id = $2 RETURNING *`,
-      [String(text), Number(id)]
-    );
-    return res.rows[0];
-  });
 }
