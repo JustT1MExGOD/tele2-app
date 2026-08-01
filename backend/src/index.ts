@@ -7,9 +7,11 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { query } from './db/index.js';
 import { startBot, notifyChat } from './bot/index.js';
-import { startReportCron } from './cron/report.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { registerV3Routes } from './routes-v3.js';
+import { startReportCron } from './cron/reports.js';
+import { saleNotification } from './bot-messages.js';
+import { registerV4Routes } from './routes-v4.js';
 
 dotenv.config();
 
@@ -172,8 +174,13 @@ app.post('/sales', async (request, reply) => {
         shpd: 'ШПД', focus: 'ФО', plotter: 'Плоттер', hb: 'HB',
       };
       await notifyChat(
-        `${info.rows[0].full_name} сделал продажу: ${body[metric]} ${names[metric] || metric} на ${info.rows[0].store_name}`
-      );
+        saleNotification({
+            employeeName: info.rows[0].full_name,
+            storeName: info.rows[0].store_name,
+            metric,
+            value: body[metric],
+        })
+        );
     }
   } catch (_) {}
 
@@ -331,6 +338,8 @@ await registerV3Routes(app);
 const port = Number(process.env.PORT) || 3000;
 
 try {
+  await registerV3Routes(app);
+  await registerV4Routes(app);
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`🚀 Сервер на 0.0.0.0:${port}`);
   console.log(`📅 Сегодня (МСК): ${todayMoscow()}`);

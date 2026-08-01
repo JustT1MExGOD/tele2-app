@@ -2,6 +2,7 @@ import { Bot } from 'grammy';
 import dotenv from 'dotenv';
 import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
+import { saleNotification, privateWelcome } from '../bot-messages.js';
 
 dotenv.config();
 
@@ -22,19 +23,14 @@ function webAppUrl() {
 
 if (bot) {
   bot.command('start', async (ctx) => {
-    const url = process.env.WEBAPP_URL || '';
-    if (url) {
-      await ctx.reply('Tele2 Sales — открой приложение:', {
-        reply_markup: {
-          inline_keyboard: [[{ text: '🍉 Открыть Mini App', web_app: { url } }]],
-        },
-      });
-    } else {
-      await ctx.reply(
-        'Привет! Бот Tele2.\n\n/stores /employees /schedule /plan /sales /add'
-      );
-    }
+  const url = process.env.WEBAPP_URL || '';
+  await ctx.reply(privateWelcome(ctx.from?.first_name), {
+    parse_mode: 'HTML',
+    reply_markup: url
+      ? { inline_keyboard: [[{ text: '🍉 Открыть T2 Sales', web_app: { url } }]] }
+      : undefined,
   });
+});
 
   bot.command('stores', async (ctx) => {
     const res = await query('SELECT code, name, work_time FROM stores ORDER BY hours');
@@ -115,8 +111,11 @@ export async function notifyChat(text: string) {
   const chatId = process.env.CHAT_ID;
   if (!bot || !chatId) return;
   try {
-    await bot.api.sendMessage(chatId, text);
+    await bot.api.sendMessage(chatId, text, { parse_mode: 'HTML' });
   } catch (e) {
     console.error('notifyChat error', e);
+    try {
+      await bot.api.sendMessage(chatId, text.replace(/<[^>]+>/g, ''));
+    } catch (_) {}
   }
 }

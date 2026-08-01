@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Tele2 Sales</title>
+  <title>T2 Sales</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -402,8 +402,10 @@
     .sch-cell.work {
       background: var(--primary-soft);
       color: var(--primary);
+      border: 1.5px solid transparent;
     }
-    .sch-cell.work .d { color: var(--primary); }
+    .sch-cell.work .d { color: inherit; font-weight: 800; }
+    .sch-cell.work .s { color: inherit; opacity: 0.9; }
     .sch-cell .s {
       font-size: 8px;
       margin-top: 1px;
@@ -701,6 +703,16 @@
           <div class="row-body"><div class="row-title">Кто на смене сегодня</div></div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('monthplan')">
+          <div class="row-icon">📅</div>
+          <div class="row-body"><div class="row-title">Планы на месяц</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="switchPage('support')">
+          <div class="row-icon">💬</div>
+          <div class="row-body"><div class="row-title">Поддержка</div></div>
+          <div class="row-chevron">›</div>
+        </button>
       </div>
 
       <div class="section">
@@ -798,6 +810,16 @@
           <div class="row-body"><div class="row-title">Экспорт графика CSV</div></div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="openAddEmployee()">
+          <div class="row-icon">➕</div>
+          <div class="row-body"><div class="row-title">Добавить сотрудника</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="openAddStore()">
+          <div class="row-icon">🏪</div>
+          <div class="row-body"><div class="row-title">Добавить точку</div></div>
+          <div class="row-chevron">›</div>
+        </button>
       </div>
     </div>
 
@@ -806,6 +828,33 @@
       <div class="section">
         <div class="section-title">История продаж</div>
         <div id="historyList"><div class="skeleton"></div></div>
+      </div>
+    </div>
+
+    <!-- ===== MONTH PLAN ===== -->
+    <div id="page-monthplan" class="page">
+      <div class="section">
+        <div class="section-title">Планы на месяц</div>
+        <div id="monthPlanList"><div class="skeleton"></div></div>
+      </div>
+    </div>
+
+    <!-- ===== SUPPORT ===== -->
+    <div id="page-support" class="page">
+      <div class="section">
+        <div class="section-title">Частые вопросы</div>
+        <div id="faqList"><div class="skeleton"></div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">Написать в поддержку</div>
+        <div class="progress-block">
+          <div class="field">
+            <label>Сообщение</label>
+            <input id="supportMsg" placeholder="Опишите вопрос или проблему">
+          </div>
+          <button class="btn-main" onclick="sendSupport()">Отправить</button>
+          <div id="supportResult" class="empty" style="display:none;padding-top:12px"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -848,6 +897,17 @@
 
     function canManage() {
       return me?.role === 'manager' || me?.role === 'admin' || me?.is_manager === true;
+    }
+
+    const STORE_COLORS = {
+      kosmonavtov: '#6d9eeb',
+      kalinina2: '#ff6d01',
+      kalinina11: '#ffd966'
+    };
+
+    function storeColor(storeId, store) {
+      if (store && store.color) return store.color;
+      return STORE_COLORS[storeId] || '#2aabee';
     }
 
     function authHeaders(json = false) {
@@ -963,6 +1023,8 @@
       if (name === 'bfq') { loadBFQ(); }
       if (name === 'team') { loadTeam(); }
       if (name === 'history') { loadHistory(); }
+      if (name === 'monthplan') { loadMonthPlans(); }
+      if (name === 'support') { loadSupport(); }
     }
 
     async function refreshAll() {
@@ -1236,7 +1298,9 @@
               : '';
             if (row) {
               const short = (row.store_short || row.store_name || '').slice(0, 4);
-              cells += `<div class="sch-cell work" ${click} title="${row.store_name || ''} ${row.shift_text || ''}">
+              const col = storeColor(row.store_id);
+              cells += `<div class="sch-cell work" ${click} title="${row.store_name || ''} ${row.shift_text || ''}"
+                style="background:${col}22;color:${col};border-color:${col}">
                 <div class="d">${d}</div><div class="s">${short}</div></div>`;
             } else {
               cells += `<div class="sch-cell off" ${click}><div class="d">${d}</div></div>`;
@@ -1424,15 +1488,25 @@
         box.innerHTML = list.map(e => {
           const st = map[e.id] || { sim: 0, phones: 0, combo: 0 };
           const roleBadge = e.role === 'manager' || e.role === 'admin' ? ' · ⭐' : '';
+          const adminBtns = canManage()
+            ? `<div style="display:flex;gap:6px;padding:0 16px 10px">
+                <button class="mchip" style="flex:1" onclick="event.stopPropagation();setRole(${e.id},'manager')">Manager</button>
+                <button class="mchip" style="flex:1" onclick="event.stopPropagation();setRole(${e.id},'employee')">Employee</button>
+                <button class="mchip" style="flex:1;color:var(--danger)" onclick="event.stopPropagation();removeEmployee(${e.id})">Удалить</button>
+              </div>`
+            : '';
           return `
-            <button class="row" onclick="openEmployeeCard(${e.id})">
-              <div class="row-icon">👤</div>
-              <div class="row-body">
-                <div class="row-title">${e.full_name}${roleBadge}</div>
-                <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones}</div>
-              </div>
-              <div class="row-chevron">›</div>
-            </button>`;
+            <div>
+              <button class="row" onclick="openEmployeeCard(${e.id})">
+                <div class="row-icon">👤</div>
+                <div class="row-body">
+                  <div class="row-title">${e.full_name}${roleBadge}</div>
+                  <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones} · ${e.role || 'employee'}</div>
+                </div>
+                <div class="row-chevron">›</div>
+              </button>
+              ${adminBtns}
+            </div>`;
         }).join('') || '<div class="empty">Нет сотрудников</div>';
       } catch {
         box.innerHTML = '<div class="empty">Ошибка</div>';
@@ -1599,6 +1673,224 @@
       } catch {
         box.innerHTML = '<div class="empty">Нужна привязка Telegram</div>';
       }
+    }
+
+    async function loadMonthPlans() {
+      const box = document.getElementById('monthPlanList');
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        let res = await fetch(API + '/plans/monthly');
+        if (!res.ok) res = await fetch(API + '/plans');
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        if (!list.length) {
+          box.innerHTML = '<div class="empty">Нет планов</div>';
+          return;
+        }
+        // normalize: plans may be from /plans without store name
+        const stRes = await fetch(API + '/stores');
+        const st = await stRes.json();
+        const stMap = {};
+        (st || []).forEach(s => { stMap[s.id] = s; });
+
+        box.innerHTML = list.map(p => {
+          const store = stMap[p.store_id] || p;
+          const name = store.name || p.store_id;
+          const code = store.code || p.code || '';
+          const col = storeColor(p.store_id || store.id, store);
+          return `
+            <div class="store-card" style="border-left:4px solid ${col}">
+              <div class="store-head" style="cursor:default">
+                <div class="store-badge" style="background:${col}33;color:${col}">${(name || '?').slice(0, 2)}</div>
+                <div class="store-meta">
+                  <div class="store-name">${name}</div>
+                  <div class="store-code">${code}</div>
+                </div>
+              </div>
+              <div class="store-body" style="display:block;border-top:1px solid var(--border)">
+                <div class="stats-row" style="padding:12px 0 4px">
+                  <div class="stat-chip"><div class="n">${p.sim || 0}</div><div class="l">SIM</div></div>
+                  <div class="stat-chip"><div class="n">${p.mnp || 0}</div><div class="l">MNP</div></div>
+                  <div class="stat-chip"><div class="n">${p.pa || 0}</div><div class="l">ПА</div></div>
+                  <div class="stat-chip"><div class="n">${p.combo || 0}</div><div class="l">Комбо</div></div>
+                  <div class="stat-chip"><div class="n">${p.phones || 0}</div><div class="l">Тел</div></div>
+                  <div class="stat-chip"><div class="n">${p.shpd || 0}</div><div class="l">ШПД</div></div>
+                </div>
+                ${canManage() ? `<button class="row" onclick="editMonthPlan('${p.store_id}')"><div class="row-body"><div class="row-title">Изменить план</div></div><div class="row-chevron">›</div></button>` : ''}
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        box.innerHTML = '<div class="empty">Ошибка загрузки</div>';
+      }
+    }
+
+    async function editMonthPlan(storeId) {
+      if (!canManage()) return;
+      const res = await fetch(API + '/plans/monthly');
+      const list = await res.json();
+      const p = (list || []).find(x => x.store_id === storeId) || {};
+      document.getElementById('modalTitle').textContent = 'План на месяц';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="field"><label>SIM</label><input type="number" id="mp_sim" value="${p.sim || 0}"></div>
+        <div class="field"><label>MNP</label><input type="number" id="mp_mnp" value="${p.mnp || 0}"></div>
+        <div class="field"><label>ПА</label><input type="number" id="mp_pa" value="${p.pa || 0}"></div>
+        <div class="field"><label>Комбо</label><input type="number" id="mp_combo" value="${p.combo || 0}"></div>
+        <div class="field"><label>Телефоны</label><input type="number" id="mp_phones" value="${p.phones || 0}"></div>
+        <div class="field"><label>ШПД</label><input type="number" id="mp_shpd" value="${p.shpd || 0}"></div>
+        <button class="btn-main" onclick="saveMonthPlan('${storeId}')">Сохранить</button>
+      `;
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    async function saveMonthPlan(storeId) {
+      const body = {
+        sim: Number(document.getElementById('mp_sim').value) || 0,
+        mnp: Number(document.getElementById('mp_mnp').value) || 0,
+        pa: Number(document.getElementById('mp_pa').value) || 0,
+        combo: Number(document.getElementById('mp_combo').value) || 0,
+        phones: Number(document.getElementById('mp_phones').value) || 0,
+        shpd: Number(document.getElementById('mp_shpd').value) || 0
+      };
+      const res = await fetch(API + '/plans/monthly/' + storeId, {
+        method: 'PUT',
+        headers: authHeaders(true),
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('План сохранён', 'ok');
+      closeModal();
+      loadMonthPlans();
+    }
+
+    async function loadSupport() {
+      const box = document.getElementById('faqList');
+      try {
+        const res = await fetch(API + '/support/faq');
+        const list = res.ok ? await res.json() : [];
+        if (!list.length) {
+          box.innerHTML = '<div class="empty">FAQ пока пуст</div>';
+          return;
+        }
+        box.innerHTML = list.map(f => `
+          <button class="row" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">
+            <div class="row-body"><div class="row-title">${f.question}</div></div>
+            <div class="row-chevron">›</div>
+          </button>
+          <div class="empty" style="display:none;text-align:left;padding:0 16px 14px;color:var(--text-secondary)">${f.answer}</div>
+        `).join('');
+      } catch {
+        box.innerHTML = '<div class="empty">Не удалось загрузить FAQ</div>';
+      }
+    }
+
+    async function sendSupport() {
+      const message = document.getElementById('supportMsg').value.trim();
+      if (!message) { toast('Введите сообщение', 'err'); return; }
+      try {
+        const res = await fetch(API + '/support', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            message,
+            telegram_id: tgUser()?.id,
+            full_name: me?.full_name || tgUser()?.first_name || 'Гость'
+          })
+        });
+        const data = await res.json();
+        const el = document.getElementById('supportResult');
+        el.style.display = 'block';
+        el.textContent = data.auto_reply || data.message || 'Отправлено';
+        document.getElementById('supportMsg').value = '';
+        toast('Отправлено', 'ok');
+      } catch {
+        toast('Ошибка отправки', 'err');
+      }
+    }
+
+    function openAddEmployee() {
+      if (!canManage()) return;
+      document.getElementById('modalTitle').textContent = 'Новый сотрудник';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="field"><label>ФИО</label><input id="ne_name" placeholder="Иванов Иван Иванович"></div>
+        <div class="field"><label>Роль</label>
+          <select id="ne_role">
+            <option value="employee">employee</option>
+            <option value="manager">manager</option>
+          </select>
+        </div>
+        <button class="btn-main" onclick="saveNewEmployee()">Создать</button>
+      `;
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    async function saveNewEmployee() {
+      const full_name = document.getElementById('ne_name').value.trim();
+      const role = document.getElementById('ne_role').value;
+      if (!full_name) { toast('Укажите ФИО', 'err'); return; }
+      const res = await fetch(API + '/employees', {
+        method: 'POST',
+        headers: authHeaders(true),
+        body: JSON.stringify({ full_name, role })
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Сотрудник добавлен', 'ok');
+      closeModal();
+      loadTeam();
+    }
+
+    function openAddStore() {
+      if (!canManage()) return;
+      document.getElementById('modalTitle').textContent = 'Новая точка';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="field"><label>ID (латиница)</label><input id="ns_id" placeholder="lenina15"></div>
+        <div class="field"><label>Название</label><input id="ns_name" placeholder="Ленина 15"></div>
+        <div class="field"><label>Код</label><input id="ns_code" placeholder="123456"></div>
+        <div class="field"><label>Цвет</label><input id="ns_color" value="#6d9eeb"></div>
+        <button class="btn-main" onclick="saveNewStore()">Создать</button>
+      `;
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    async function saveNewStore() {
+      const id = document.getElementById('ns_id').value.trim();
+      const name = document.getElementById('ns_name').value.trim();
+      const code = document.getElementById('ns_code').value.trim();
+      const color = document.getElementById('ns_color').value.trim();
+      if (!id || !name) { toast('ID и название обязательны', 'err'); return; }
+      const res = await fetch(API + '/stores', {
+        method: 'POST',
+        headers: authHeaders(true),
+        body: JSON.stringify({ id, name, code, color })
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Точка создана', 'ok');
+      closeModal();
+      stores = [];
+    }
+
+    async function setRole(id, role) {
+      if (!canManage()) return;
+      const res = await fetch(API + '/employees/' + id, {
+        method: 'PATCH',
+        headers: authHeaders(true),
+        body: JSON.stringify({ role })
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Роль: ' + role, 'ok');
+      loadTeam();
+    }
+
+    async function removeEmployee(id) {
+      if (!canManage()) return;
+      if (!confirm('Деактивировать сотрудника?')) return;
+      const res = await fetch(API + '/employees/' + id, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Удалён', 'ok');
+      loadTeam();
     }
 
     async function exportCSV(type) {
@@ -1777,7 +2069,7 @@
       } catch (_) {}
     })();
 
-    console.log('Tele2 Sales UI v3 ready');
+    console.log('T2 Sales UI v4 ready');
   </script>
 </body>
 </html>
