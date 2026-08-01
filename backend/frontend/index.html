@@ -3017,13 +3017,14 @@
         <div class="field"><label>Комбо</label><input type="number" id="mp_combo" value="${p.combo || 0}"></div>
         <div class="field"><label>Телефоны</label><input type="number" id="mp_phones" value="${p.phones || 0}"></div>
         <div class="field"><label>Аксессуары</label><input type="number" id="mp_accessories" value="${p.accessories || 0}"></div>
+        <div class="field"><label>Настройки / Доп</label><input type="number" id="mp_settings" value="${p.settings || 0}"></div>
         <div class="field"><label>ФО</label><input type="number" id="mp_focus" value="${p.focus || 0}"></div>
         <div class="field"><label>Wink</label><input type="number" id="mp_wink" value="${p.wink || 0}"></div>
         <div class="field"><label>ШПД</label><input type="number" id="mp_shpd" value="${p.shpd || 0}"></div>
         <div class="field"><label>Страховки</label><input type="number" id="mp_insurance" value="${p.insurance || 0}"></div>
-        <div class="field"><label>Кредит</label><input type="number" id="mp_credit" value="${p.credit || 0}"></div>
+        <div class="field"><label>Кредит</label><input type="number" id="mp_credit" value="${p.credit || p.credit_issued || 0}"></div>
         <div class="field"><label>Плоттер</label><input type="number" id="mp_plotter" value="${p.plotter || 0}"></div>
-        <div class="field"><label>HB</label><input type="number" id="mp_hb" value="${p.hb || 0}"></div>
+        <div class="field"><label>HB / НВ</label><input type="number" id="mp_hb" value="${p.hb || 0}"></div>
         <button class="btn-main" onclick="saveEmployeeMonthPlan(${employeeId})">Сохранить план</button>
       `;
       document.getElementById('overlay').classList.add('show');
@@ -3039,6 +3040,7 @@
         combo: Number(document.getElementById('mp_combo').value) || 0,
         phones: Number(document.getElementById('mp_phones').value) || 0,
         accessories: Number(document.getElementById('mp_accessories').value) || 0,
+        settings: Number(document.getElementById('mp_settings')?.value) || 0,
         focus: Number(document.getElementById('mp_focus').value) || 0,
         wink: Number(document.getElementById('mp_wink').value) || 0,
         shpd: Number(document.getElementById('mp_shpd').value) || 0,

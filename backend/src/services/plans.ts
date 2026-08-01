@@ -253,11 +253,24 @@ export async function getEmployeeDailyPlan(employeeId: number, date: string) {
   };
 }
 
+/** Доли точек по умолчанию, если plan_share в БД = 0 / NULL */
+const DEFAULT_SHARES: Record<string, number> = {
+  kosmonavtov: 0.5,
+  kalinina11: 0.3,
+  kalinina2: 0.2
+};
+
+function storeShare(st: { id: string; plan_share?: any }) {
+  const fromDb = num(st.plan_share);
+  if (fromDb > 0) return fromDb;
+  return DEFAULT_SHARES[st.id] ?? 0;
+}
+
 /**
  * Дневные планы точек:
- * 1) Берём остатки месячных планов всех сотрудников
- * 2) Делим на remaining_days
- * 3) Размазываем по точкам: plan_share (0.5 / 0.3 / 0.2)
+ * 1) Остатки месячных планов всех сотрудников (план − факт)
+ * 2) Делим на remaining_days → пул на день (ceil)
+ * 3) Размазываем по точкам: plan_share (50/30/20), ceil
  */
 export async function computeStoreDailyPlans(date?: string) {
   const d = date || todayMoscow();
@@ -266,22 +279,24 @@ export async function computeStoreDailyPlans(date?: string) {
   const div = remainingDays > 0 ? remainingDays : 1;
 
   const emps = await query(
-    `SELECT id FROM employees WHERE is_active = true`
+    `SELECT id FROM employees WHERE COALESCE(is_active, true) = true`
   );
 
   const pool: Record<string, number> = {};
   for (const m of METRICS) pool[m] = 0;
 
+  let employeesWithPlan = 0;
   for (const e of emps.rows) {
     const planRow = await getEmployeeMonthPlan(Number(e.id), month);
     if (!planRow) continue;
+    employeesWithPlan += 1;
     const fact = await getEmployeeMonthFacts(Number(e.id), month);
     for (const m of METRICS) {
+      // credit в employee_month_plans, credit_issued в sales — уже замаплено в getEmployeeMonthFacts как credit
       pool[m] += Math.max(0, num(planRow[m]) - num(fact[m]));
     }
   }
 
-  // daily total pool — целые числа, округление ВВЕРХ
   const daily: Record<string, number> = {};
   for (const m of METRICS) {
     daily[m] = Math.ceil(pool[m] / div);
@@ -290,12 +305,26 @@ export async function computeStoreDailyPlans(date?: string) {
   const stores = await query(
     `SELECT id, name, code, color, plan_share
      FROM stores
-     WHERE is_active = true OR is_active IS NULL
-     ORDER BY plan_share DESC NULLS LAST`
+     WHERE COALESCE(is_active, true) = true
+     ORDER BY id`
   );
 
+  // Нормализуем доли, если сумма > 0 (на случай кастомных долей)
+  let shareSum = 0;
+  const shares: Record<string, number> = {};
+  for (const st of stores.rows) {
+    shares[st.id] = storeShare(st);
+    shareSum += shares[st.id];
+  }
+  if (shareSum <= 0) {
+    // fallback: поровну
+    const n = Math.max(1, stores.rows.length);
+    for (const st of stores.rows) shares[st.id] = 1 / n;
+    shareSum = 1;
+  }
+
   const result = stores.rows.map((st: any) => {
-    const share = num(st.plan_share) || 0;
+    const share = shares[st.id] / (shareSum || 1);
     const plan: Record<string, number> = {};
     for (const m of METRICS) {
       plan[m] = Math.ceil(daily[m] * share);
@@ -305,7 +334,7 @@ export async function computeStoreDailyPlans(date?: string) {
       name: st.name,
       code: st.code,
       color: st.color,
-      plan_share: share,
+      plan_share: Math.round(share * 1000) / 1000,
       plan
     };
   });
@@ -314,6 +343,7 @@ export async function computeStoreDailyPlans(date?: string) {
     date: d,
     month: month,
     remaining_days: remainingDays,
+    employees_with_plan: employeesWithPlan,
     pool_remaining: pool,
     daily_total: daily,
     stores: result
@@ -321,12 +351,19 @@ export async function computeStoreDailyPlans(date?: string) {
 }
 
 /**
- * Записать вычисленные дневные планы точек в store_plans на конкретную дату
- * (plan_date = date), не трогая шаблон plan_date IS NULL
+ * Записать дневные планы точек в store_plans на дату.
+ * Удаляем старые строки за эту дату и вставляем заново (надёжнее ON CONFLICT).
+ * Шаблон plan_date IS NULL не трогаем.
  */
 export async function materializeStoreDailyPlans(date?: string) {
   const computed = await computeStoreDailyPlans(date);
   const d = computed.date;
+
+  // убрать предыдущую материализацию на этот день
+  await query(
+    `DELETE FROM store_plans WHERE plan_date = $1`,
+    [d]
+  );
 
   for (const st of computed.stores) {
     const p = st.plan;
@@ -334,48 +371,31 @@ export async function materializeStoreDailyPlans(date?: string) {
       `INSERT INTO store_plans (
          store_id, plan_date,
          sim, mnp, pa, combo, phones, accessories, focus, settings,
-         wink, shpd, insurance, credit_issued, plotter
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-       ON CONFLICT DO NOTHING`,
+         wink, shpd, insurance, credit_issued, plotter, hb
+       ) VALUES (
+         $1,$2,
+         $3,$4,$5,$6,$7,$8,$9,$10,
+         $11,$12,$13,$14,$15,$16
+       )`,
       [
-        st.store_id, d,
-        p.sim, p.mnp, p.pa, p.combo, p.phones, p.accessories,
-        p.focus, p.settings, p.wink, p.shpd, p.insurance, p.credit, p.plotter
+        st.store_id,
+        d,
+        num(p.sim),
+        num(p.mnp),
+        num(p.pa),
+        num(p.combo),
+        num(p.phones),
+        num(p.accessories),
+        num(p.focus),
+        num(p.settings),
+        num(p.wink),
+        num(p.shpd),
+        num(p.insurance),
+        num(p.credit), // credit → credit_issued
+        num(p.plotter),
+        num(p.hb)
       ]
-    ).catch(async () => {
-      // fallback: update if row exists without unique
-      const exists = await query(
-        `SELECT 1 FROM store_plans WHERE store_id = $1 AND plan_date = $2`,
-        [st.store_id, d]
-      );
-      if (exists.rows.length) {
-        await query(
-          `UPDATE store_plans SET
-             sim=$3, mnp=$4, pa=$5, combo=$6, phones=$7, accessories=$8,
-             focus=$9, settings=$10, wink=$11, shpd=$12, insurance=$13,
-             credit_issued=$14, plotter=$15
-           WHERE store_id=$1 AND plan_date=$2`,
-          [
-            st.store_id, d,
-            p.sim, p.mnp, p.pa, p.combo, p.phones, p.accessories,
-            p.focus, p.settings, p.wink, p.shpd, p.insurance, p.credit, p.plotter
-          ]
-        );
-      } else {
-        await query(
-          `INSERT INTO store_plans (
-             store_id, plan_date,
-             sim, mnp, pa, combo, phones, accessories, focus, settings,
-             wink, shpd, insurance, credit_issued, plotter
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-          [
-            st.store_id, d,
-            p.sim, p.mnp, p.pa, p.combo, p.phones, p.accessories,
-            p.focus, p.settings, p.wink, p.shpd, p.insurance, p.credit, p.plotter
-          ]
-        );
-      }
-    });
+    );
   }
 
   return computed;
