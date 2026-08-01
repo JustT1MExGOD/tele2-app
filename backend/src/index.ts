@@ -336,6 +336,110 @@ app.get('/dashboard', async () => {
   };
 });
 
+// ===== CASH =====
+app.get('/cash/table', async (request) => {
+  const q = request.query as { from?: string; to?: string };
+  const from = (q.from || todayMoscow().slice(0, 8) + '01').slice(0, 10);
+  const to = (q.to || todayMoscow()).slice(0, 10);
+
+  const storesRes = await query(
+    `SELECT id, name, code FROM stores
+     WHERE COALESCE(is_active, true) = true
+     ORDER BY hours NULLS LAST, name`
+  );
+  const stList = storesRes.rows;
+
+  const cashRes = await query(
+    `SELECT store_id, cash_date::text as cash_date,
+            cash_fact, cash_1c,
+            (cash_fact - cash_1c) as delta, comment
+     FROM store_cash
+     WHERE cash_date >= $1::date AND cash_date <= $2::date
+     ORDER BY cash_date`,
+    [from, to]
+  );
+
+  // даты: все дни периода, где есть касса + сегодня
+  const dateSet = new Set<string>();
+  for (const r of cashRes.rows) {
+    dateSet.add(String(r.cash_date).slice(0, 10));
+  }
+  dateSet.add(to);
+  // заполнить месяц по дням (чтобы таблица не была пустой)
+  const start = new Date(from + 'T12:00:00');
+  const end = new Date(to + 'T12:00:00');
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    dateSet.add(d.toISOString().slice(0, 10));
+  }
+  const dates = [...dateSet].sort().reverse();
+
+  const cells: Record<string, Record<string, any>> = {};
+  for (const r of cashRes.rows) {
+    const d = String(r.cash_date).slice(0, 10);
+    if (!cells[d]) cells[d] = {};
+    cells[d][r.store_id] = {
+      cash_fact: Number(r.cash_fact),
+      cash_1c: Number(r.cash_1c),
+      delta: Number(r.delta),
+      comment: r.comment
+    };
+  }
+
+  return {
+    from,
+    to,
+    stores: stList,
+    dates,
+    cells
+  };
+});
+
+app.put('/cash', async (request, reply) => {
+  const body = request.body as any;
+  const store_id = body.store_id;
+  const cash_date = String(body.cash_date || todayMoscow()).slice(0, 10);
+  const cash_fact = Number(body.cash_fact) || 0;
+  const cash_1c = Number(body.cash_1c) || 0;
+  const comment = body.comment || null;
+
+  if (!store_id) {
+    return reply.code(400).send({ error: 'store_id required' });
+  }
+
+  const res = await query(
+    `INSERT INTO store_cash (store_id, cash_date, cash_fact, cash_1c, comment, updated_at)
+     VALUES ($1, $2, $3, $4, $5, now())
+     ON CONFLICT (store_id, cash_date)
+     DO UPDATE SET
+       cash_fact = EXCLUDED.cash_fact,
+       cash_1c = EXCLUDED.cash_1c,
+       comment = EXCLUDED.comment,
+       updated_at = now()
+     RETURNING *`,
+    [store_id, cash_date, cash_fact, cash_1c, comment]
+  );
+  return res.rows[0];
+});
+
+app.get('/cash', async (request) => {
+  const q = request.query as { from?: string; to?: string; store_id?: string };
+  const from = q.from || todayMoscow().slice(0, 8) + '01';
+  const to = q.to || todayMoscow();
+  const params: any[] = [from, to];
+  let sql = `
+    SELECT c.*, st.name as store_name
+    FROM store_cash c
+    LEFT JOIN stores st ON st.id = c.store_id
+    WHERE c.cash_date >= $1::date AND c.cash_date <= $2::date`;
+  if (q.store_id) {
+    params.push(q.store_id);
+    sql += ` AND c.store_id = $${params.length}`;
+  }
+  sql += ` ORDER BY c.cash_date DESC, st.name`;
+  const res = await query(sql, params);
+  return res.rows;
+});
+
 // ===== EMPLOYEE PROGRESS =====
 app.get('/employee/progress/:id', async (request) => {
   const { id } = request.params as { id: string };
