@@ -1327,6 +1327,87 @@
       border: 1px dashed rgba(59,184,245,0.35); user-select: all;
     }
 
+  
+    .gate-shell {
+      max-width: 420px;
+      margin: 0 auto;
+      padding: 28px 16px 48px;
+      min-height: 100%;
+      box-sizing: border-box;
+    }
+    .gate-top {
+      text-align: center;
+      margin-bottom: 20px;
+      padding-top: 12px;
+    }
+    .gate-logo {
+      font-size: 48px;
+      line-height: 1;
+      margin-bottom: 10px;
+      filter: drop-shadow(0 8px 24px rgba(59,184,245,0.35));
+    }
+    .gate-brand {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      margin-bottom: 6px;
+    }
+    .gate-sub {
+      color: var(--hint);
+      font-size: 14px;
+      line-height: 1.4;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+    .gate-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 24px;
+      padding: 22px 18px 20px;
+      background: linear-gradient(165deg, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.04) 100%);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+    }
+    [data-theme="light"] .gate-card,
+    html:not([data-theme="dark"]) .gate-card {
+      background: linear-gradient(165deg, #ffffff 0%, #f4f5f7 100%);
+    }
+    .gate-card .bind-glow {
+      position: absolute; inset: -30% -10% auto;
+      height: 140px;
+      background: radial-gradient(ellipse, rgba(59,184,245,0.22), transparent 70%);
+      pointer-events: none;
+    }
+    .gate-card .field { text-align: left; position: relative; }
+    .gate-card .field label {
+      display: block; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--hint); margin-bottom: 6px;
+    }
+    .gate-card input, .gate-card select {
+      width: 100%; box-sizing: border-box;
+      border-radius: 14px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text);
+      padding: 14px 16px; font-size: 16px;
+      outline: none;
+    }
+    .gate-card input:focus, .gate-card select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+    .gate-title {
+      position: relative;
+      font-size: 20px; font-weight: 800;
+      letter-spacing: -0.03em; margin-bottom: 8px;
+      text-align: center;
+    }
+    .gate-desc {
+      position: relative;
+      font-size: 14px; color: var(--hint);
+      line-height: 1.45; text-align: center;
+      margin-bottom: 18px;
+    }
+
   </style>
 </head>
 <body data-theme="light">
@@ -1710,10 +1791,13 @@
   </div>
 
   <!-- ACCESS GATE (блокирует UI) -->
-  <div id="accessGate" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg);overflow:auto;padding:24px 16px 40px">
-    <div style="max-width:420px;margin:0 auto">
-      <div style="font-size:28px;font-weight:800;letter-spacing:-0.5px;margin-bottom:8px">T2 Sales</div>
-      <div id="gateSubtitle" style="color:var(--hint);margin-bottom:20px;font-size:15px">Доступ только для сотрудников сети</div>
+  <div id="accessGate" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg);overflow:auto">
+    <div class="gate-shell">
+      <div class="gate-top">
+        <div class="gate-logo">🍉</div>
+        <div class="gate-brand">T2 Sales</div>
+        <div id="gateSubtitle" class="gate-sub">Доступ только для сотрудников сети</div>
+      </div>
       <div id="gateBody"></div>
     </div>
   </div>
@@ -1756,7 +1840,7 @@
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
     }
 
-    const APP_VERSION = '13.3';
+    const APP_VERSION = '13.3.1';
     const API = window.location.origin;
 
     function haptic(type = 'light') {
@@ -3857,54 +3941,67 @@
       document.querySelector('.fab')?.style && (document.querySelector('.fab').style.display = 'none');
 
       const status = st.status || st.user?.access_status || 'none';
+      const tgName = [tgUser()?.first_name, tgUser()?.last_name].filter(Boolean).join(' ').trim();
+      const tid = tgUser()?.id || '—';
 
       if (status === 'pending') {
-        sub.textContent = 'Заявка на проверке';
+        if (sub) sub.textContent = 'Заявка на проверке';
         body.innerHTML = `
-          <div class="progress-block">
-            <div style="font-size:18px;font-weight:700;margin-bottom:8px">⏳ Ожидайте подтверждения</div>
-            <div style="color:var(--hint);line-height:1.45">
-              Manager или супервайзер должен подтвердить, что вы сотрудник сети.
-              Обычно это занимает несколько минут.
+          <div class="gate-card">
+            <div class="bind-glow"></div>
+            <div style="font-size:40px;text-align:center;margin-bottom:8px;position:relative">⏳</div>
+            <div class="gate-title">Ожидайте подтверждения</div>
+            <div class="gate-desc">
+              Manager или супервайзер подтвердит, что вы сотрудник сети.
+              Обычно это несколько минут.
             </div>
-            <button class="btn-main" style="margin-top:16px" onclick="bootApp()">Обновить статус</button>
+            <button class="btn-main" onclick="bootApp()">Обновить статус</button>
           </div>`;
         return;
       }
+
       if (status === 'rejected' || status === 'blocked') {
-        sub.textContent = 'Доступ закрыт';
-        const tid = tgUser()?.id || '—';
+        if (sub) sub.textContent = 'Доступ закрыт';
         body.innerHTML = `
-          <div class="bind-hero" style="margin:0">
+          <div class="gate-card">
             <div class="bind-glow"></div>
-            <div class="bind-emoji">🔒</div>
-            <div class="bind-title">В доступе отказано</div>
-            <div class="bind-sub">Напиши управляющему или admin. Если это ошибка — попроси выставить access_status = active.</div>
-            <div class="bind-foot">Telegram ID: <code>${tid}</code></div>
-            <button class="btn-main" style="margin-top:16px" onclick="bootApp()">Проверить снова</button>
+            <div style="font-size:40px;text-align:center;margin-bottom:8px;position:relative">🔒</div>
+            <div class="gate-title">В доступе отказано</div>
+            <div class="gate-desc">
+              Напиши управляющему или admin.
+              Если ошибка — пусть выставят access_status = active.
+            </div>
+            <div class="bind-foot" style="position:relative;margin-bottom:12px">Telegram ID: <code>${tid}</code></div>
+            <button class="btn-main" onclick="bootApp()">Проверить снова</button>
             <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)"
               onclick="showAccessGate({status:'none'})">Подать заявку заново</button>
           </div>`;
         return;
       }
 
-      // none / anonymous — форма заявки
-      sub.textContent = 'Регистрация в T2 Sales';
+      // none — форма регистрации
+      if (sub) sub.textContent = 'Регистрация · один раз';
       body.innerHTML = `
-        <div class="progress-block">
-          <div style="font-size:15px;color:var(--hint);margin-bottom:14px;line-height:1.45">
-            Укажите ФИО как в команде. После подтверждения manager или супервайзером откроется полный доступ.
+        <div class="gate-card">
+          <div class="bind-glow"></div>
+          <div class="gate-title">Добро пожаловать</div>
+          <div class="gate-desc">
+            Укажи ФИО как в команде. После подтверждения manager откроется полный доступ к плану, сменам и продажам.
           </div>
-          <div class="field"><label>ФИО</label>
-            <input id="gateName" placeholder="Иванов Иван Иванович" value="${tgUser()?.first_name || ''} ${tgUser()?.last_name || ''}">
+          <div class="field">
+            <label>ФИО</label>
+            <input id="gateName" placeholder="Иванов Иван Иванович" value="${(tgName || '').replace(/"/g, '&quot;')}">
           </div>
-          <div class="field"><label>Комментарий (необязательно)</label>
+          <div class="field">
+            <label>Комментарий</label>
             <input id="gateMsg" placeholder="Точка / с какого числа">
           </div>
-          <div class="field"><label>Я из списка (если знаете)</label>
+          <div class="field">
+            <label>Я из списка</label>
             <select id="gateClaim"><option value="">— новый сотрудник —</option></select>
           </div>
-          <button class="btn-main" onclick="submitAccessRequest()">Отправить заявку</button>
+          <button class="btn-main" style="margin-top:8px" onclick="submitAccessRequest()">Отправить заявку</button>
+          <div class="bind-foot" style="position:relative;margin-top:14px">ID: ${tid} · T2 Sales ${typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''}</div>
         </div>`;
       loadGateDirectory();
     }
