@@ -333,13 +333,12 @@ app.get('/employee/progress/:id', async (request) => {
 // ===== V3: /me, /bfq, bulk schedule, history, export =====
 // НЕ дублируй /me и /bfq здесь — они внутри registerV3Routes
 await registerV3Routes(app);
+await registerV4Routes(app);
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;
 
 try {
-  await registerV3Routes(app);
-  await registerV4Routes(app);
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`🚀 Сервер на 0.0.0.0:${port}`);
   console.log(`📅 Сегодня (МСК): ${todayMoscow()}`);
