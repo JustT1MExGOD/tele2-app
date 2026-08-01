@@ -7,16 +7,9 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { query } from './db/index.js';
 import { startBot, notifyChat } from './bot/index.js';
+import { startReportCron } from './cron/reports.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { registerV3Routes } from './routes-v3.js';
-import { startReportCron } from './cron/reports.js';
-import { saleNotification } from './bot-messages.js';
-import { registerV4Routes } from './routes-v4.js';
-import { registerPlansV5Routes } from './routes-plans-v5.js';
-import { registerV6Routes } from './routes-v6.js';
-import { startAlertCron } from './cron/alerts.js';
-import { registerV7Routes } from './routes-v7.js';
-import { registerV8Routes } from './routes-v8.js';
 
 dotenv.config();
 
@@ -63,7 +56,21 @@ app.get('/stores', async () => {
 });
 
 // ===== PLANS =====
-app.get('/plans', async () => {
+// ?date=YYYY-MM-DD → дневные планы на дату (если есть), иначе шаблон plan_date IS NULL
+app.get('/plans', async (request) => {
+  const { date } = (request.query || {}) as { date?: string };
+  if (date) {
+    const day = await query(
+      `SELECT store_id, plan_date,
+              sim, mnp, pa, combo, settings, accessories, insurance,
+              phones, wink, shpd, focus, credit_request, credit_issued, plotter, hb
+       FROM store_plans
+       WHERE plan_date = $1
+       ORDER BY store_id`,
+      [date]
+    );
+    if (day.rows.length) return day.rows;
+  }
   const res = await query(`
     SELECT store_id, plan_date,
            sim, mnp, pa, combo, settings, accessories, insurance,
@@ -179,13 +186,8 @@ app.post('/sales', async (request, reply) => {
         shpd: 'ШПД', focus: 'ФО', plotter: 'Плоттер', hb: 'HB',
       };
       await notifyChat(
-        saleNotification({
-            employeeName: info.rows[0].full_name,
-            storeName: info.rows[0].store_name,
-            metric,
-            value: body[metric],
-        })
-        );
+        `${info.rows[0].full_name} сделал продажу: ${body[metric]} ${names[metric] || metric} на ${info.rows[0].store_name}`
+      );
     }
   } catch (_) {}
 
@@ -338,11 +340,6 @@ app.get('/employee/progress/:id', async (request) => {
 // ===== V3: /me, /bfq, bulk schedule, history, export =====
 // НЕ дублируй /me и /bfq здесь — они внутри registerV3Routes
 await registerV3Routes(app);
-await registerV4Routes(app);
-await registerPlansV5Routes(app);
-await registerV6Routes(app);
-await registerV7Routes(app);
-await registerV8Routes(app);
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;
@@ -354,7 +351,6 @@ try {
 
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
   startReportCron();
-  startAlertCron();
 } catch (err) {
   app.log.error(err);
   process.exit(1);

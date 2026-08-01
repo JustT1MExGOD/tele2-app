@@ -1983,23 +1983,55 @@
       box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
       try {
         const date = todayMoscow();
-        const [stRes, statsRes, schRes, plansRes] = await Promise.all([
+        // 1) факт + график + шаблон/день из /plans?date=
+        // 2) параллельно computed из /plans/stores/daily (из месячных планов сотрудников)
+        const [stRes, statsRes, schRes, plansRes, dailyRes] = await Promise.all([
           fetch(API + '/stores'),
           fetch(API + '/stats/daily?date=' + date),
           fetch(API + '/schedules?date=' + date),
-          fetch(API + '/plans')
+          fetch(API + '/plans?date=' + date),
+          fetch(API + '/plans/stores/daily?date=' + date)
         ]);
         stores = await stRes.json();
         const stats = await statsRes.json();
         const schedules = await schRes.json();
         const plans = await plansRes.json();
+        let dailyComputed = null;
+        try {
+          if (dailyRes.ok) dailyComputed = await dailyRes.json();
+        } catch (_) {}
 
         const statsMap = {};
         (Array.isArray(stats) ? stats : []).forEach(s => { statsMap[s.store_id || s.id] = s; });
+
+        // Приоритет планов:
+        // A) материализованные на сегодня (plan_date = date)
+        // B) computed из месячных планов сотрудников (/plans/stores/daily)
+        // C) шаблон plan_date IS NULL
         const planMap = {};
+        const todayStr = date;
+
         (Array.isArray(plans) ? plans : []).forEach(p => {
-          if (p.plan_date == null) planMap[p.store_id] = p;
+          const pd = p.plan_date ? String(p.plan_date).slice(0, 10) : null;
+          if (pd === todayStr) {
+            planMap[p.store_id] = { ...p, _src: 'day' };
+          } else if (pd == null && !planMap[p.store_id]) {
+            planMap[p.store_id] = { ...p, _src: 'template' };
+          }
         });
+
+        if (dailyComputed?.stores?.length) {
+          dailyComputed.stores.forEach(st => {
+            const hasDay = planMap[st.store_id]?._src === 'day';
+            // если на сегодня ещё не записали в БД — берём live-расчёт
+            if (!hasDay && st.plan) {
+              const anyPositive = Object.values(st.plan).some(v => Number(v) > 0);
+              if (anyPositive || !planMap[st.store_id]) {
+                planMap[st.store_id] = { store_id: st.store_id, ...st.plan, _src: 'computed' };
+              }
+            }
+          });
+        }
         const staffMap = {};
         (Array.isArray(schedules) ? schedules : []).forEach(s => {
           if (!staffMap[s.store_id]) staffMap[s.store_id] = [];
