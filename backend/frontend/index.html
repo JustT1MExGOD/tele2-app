@@ -3622,17 +3622,33 @@
 
       try {
         const res = await fetch(API + '/access/status', { headers: authHeaders() });
-        const st = await res.json();
+
+        // Если роута ещё нет (404) — не блокируем, пускаем через /me
+        if (res.status === 404) {
+          console.warn('/access/status not found — skip gate');
+          try {
+            const meRes = await fetch(API + '/me', { headers: authHeaders() });
+            if (meRes.ok) me = await meRes.json();
+          } catch (_) {}
+          hideAccessGate();
+          loadHome();
+          maybeOfferTutorial();
+          return;
+        }
+
+        const st = await res.json().catch(() => ({}));
         const status = st.status === 'active' || st.user?.access_status === 'active'
           ? 'active'
           : (st.status || st.user?.access_status || 'none');
 
-        if (status !== 'active') {
-          showAccessGate(st);
-          return;
+        if (status === 'anonymous' || status === 'none' || status === 'pending' || status === 'rejected' || status === 'blocked') {
+          // anonymous без telegram — уже обработан выше
+          if (status !== 'anonymous') {
+            showAccessGate(st);
+            return;
+          }
         }
 
-        // load me
         me = st.user || me;
         try {
           const meRes = await fetch(API + '/me', { headers: authHeaders() });
@@ -3644,7 +3660,6 @@
 
         hideAccessGate();
 
-        // role UI
         const btnAcc = document.getElementById('btnAccessRequests');
         const btnSv = document.getElementById('btnSupervisor');
         if (btnAcc) btnAcc.style.display = canApprove() ? '' : 'none';
@@ -3654,7 +3669,13 @@
         maybeOfferTutorial();
       } catch (e) {
         console.error(e);
-        showAccessGate({ status: 'none' });
+        // сеть/парс — не запираем в gate навечно
+        try {
+          const meRes = await fetch(API + '/me', { headers: authHeaders() });
+          if (meRes.ok) me = await meRes.json();
+        } catch (_) {}
+        hideAccessGate();
+        loadHome();
       }
     }
 

@@ -10,6 +10,8 @@ import { startBot, notifyChat } from './bot/index.js';
 import { startReportCron } from './cron/reports.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { registerV3Routes } from './routes-v3.js';
+import { registerPlansV5Routes } from './routes-plans-v5.js';
+import { registerV8Routes } from './routes-v8.js';
 
 dotenv.config();
 
@@ -340,6 +342,22 @@ app.get('/employee/progress/:id', async (request) => {
 // ===== V3: /me, /bfq, bulk schedule, history, export =====
 // НЕ дублируй /me и /bfq здесь — они внутри registerV3Routes
 await registerV3Routes(app);
+
+// ===== Plans v5: месячные / дневные планы точек =====
+try {
+  await registerPlansV5Routes(app);
+  console.log('✅ Plans routes registered');
+} catch (e: any) {
+  console.error('Plans routes failed:', e?.message || e);
+}
+
+// ===== V8: /access/status, /access/request, заявки =====
+try {
+  await registerV8Routes(app);
+  console.log('✅ Access (v8) routes registered');
+} catch (e: any) {
+  console.error('V8 routes failed:', e?.message || e);
+}
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;
