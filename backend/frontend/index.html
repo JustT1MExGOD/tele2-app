@@ -1202,19 +1202,19 @@
           stores = await stRes.json();
         }
 
+        // Всегда полный список сотрудников, смены накладываем поверх
+        const empRes = await fetch(API + '/employees');
+        const emps = await empRes.json();
         const byEmp = {};
+        (emps || []).forEach(e => {
+          byEmp[e.id] = { id: e.id, name: e.full_name, days: {} };
+        });
         items.forEach(row => {
           const id = row.employee_id;
           if (!byEmp[id]) byEmp[id] = { id, name: row.full_name, days: {} };
           const key = String(row.work_date).slice(0, 10);
           byEmp[id].days[key] = row;
         });
-
-        if (!Object.keys(byEmp).length) {
-          const empRes = await fetch(API + '/employees');
-          const emps = await empRes.json();
-          (emps || []).forEach(e => { byEmp[e.id] = { id: e.id, name: e.full_name, days: {} }; });
-        }
 
         const total = daysInMonth(scheduleMonth);
         const list = Object.values(byEmp).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
