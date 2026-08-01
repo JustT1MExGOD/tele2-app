@@ -1235,114 +1235,66 @@
     .link-row .left .t { font-size: 16px; font-weight: 600; }
     .link-row .left .s { font-size: 13px; color: var(--hint); margin-top: 2px; }
   
-    /* ===== V13.1 premium surfaces ===== */
+    /* ===== V13.2 premium ===== */
     .bind-hero {
-      position: relative;
-      overflow: hidden;
-      border-radius: 24px;
-      padding: 28px 20px 24px;
+      position: relative; overflow: hidden; border-radius: 24px;
+      padding: 28px 20px 24px; margin: 12px;
       background: linear-gradient(165deg, #1a1a1f 0%, #0d0d10 50%, #12141a 100%);
-      border: 1px solid rgba(255,255,255,0.08);
-      box-shadow: var(--shadow-md);
+      border: 1px solid rgba(255,255,255,0.08); box-shadow: var(--shadow-md);
       text-align: center;
-      margin: 12px;
     }
     .bind-glow {
-      position: absolute; inset: -40% -20% auto;
-      height: 180px;
+      position: absolute; inset: -40% -20% auto; height: 180px;
       background: radial-gradient(ellipse, rgba(59,184,245,0.25), transparent 70%);
       pointer-events: none;
     }
     .bind-emoji { font-size: 42px; position: relative; margin-bottom: 8px; }
-    .bind-title {
-      position: relative;
-      font-size: 22px; font-weight: 800; letter-spacing: -0.03em;
-      margin-bottom: 8px;
-    }
-    .bind-sub {
-      position: relative;
-      font-size: 14px; color: var(--hint); line-height: 1.45;
-      max-width: 320px; margin: 0 auto;
-    }
-    .bind-foot {
-      margin-top: 14px; font-size: 11px; color: var(--hint); opacity: 0.8;
-    }
-
+    .bind-title { position: relative; font-size: 22px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; }
+    .bind-sub { position: relative; font-size: 14px; color: var(--hint); line-height: 1.45; max-width: 320px; margin: 0 auto; }
+    .bind-foot { margin-top: 14px; font-size: 11px; color: var(--hint); opacity: 0.85; }
     .mobile-table { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 16px; }
     .mt-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 14px;
-      box-shadow: var(--shadow-xs);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 14px; box-shadow: var(--shadow-xs);
     }
-    .mt-card-head {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 10px; gap: 8px;
-    }
+    .mt-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
     .mt-name { font-weight: 700; font-size: 15px; }
     .mt-meta { font-size: 11px; color: var(--hint); }
-    .mt-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
+    .mt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .mt-cell {
-      background: var(--surface-2, rgba(255,255,255,0.04));
-      border-radius: 12px;
-      padding: 10px 8px;
-      text-align: center;
+      background: rgba(255,255,255,0.04); border-radius: 12px;
+      padding: 10px 8px; text-align: center;
     }
     .mt-cell .v { font-weight: 800; font-size: 15px; letter-spacing: -0.02em; }
     .mt-cell .l { font-size: 10px; color: var(--hint); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
     .mt-cell.good .v { color: var(--success); }
     .mt-cell.warn .v { color: var(--warning); }
     .mt-cell.bad .v { color: var(--danger); }
-
     .cash-day {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      margin: 0 12px 12px;
-      overflow: hidden;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; margin: 0 12px 12px; overflow: hidden;
     }
     .cash-day-h {
-      padding: 12px 14px;
-      font-weight: 700;
-      font-size: 13px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(255,255,255,0.03);
+      padding: 12px 14px; font-weight: 700; font-size: 13px;
+      border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.03);
     }
     .cash-row {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr 1fr 0.9fr;
-      gap: 4px;
-      padding: 10px 12px;
-      font-size: 12px;
-      align-items: center;
+      display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.9fr; gap: 4px;
+      padding: 10px 12px; font-size: 12px; align-items: center;
       border-bottom: 1px solid var(--border);
     }
     .cash-row:last-child { border-bottom: none; }
     .cash-row .sn { font-weight: 600; font-size: 12px; }
     .cash-row .delta-pos { color: var(--success); font-weight: 700; }
     .cash-row .delta-neg { color: var(--danger); font-weight: 700; }
-    .cash-row .tap { color: var(--primary); font-size: 11px; }
-
     .combo-result {
-      margin-top: 16px;
-      padding: 16px;
-      border-radius: 16px;
+      margin-top: 16px; padding: 16px; border-radius: 16px; text-align: center;
       background: linear-gradient(145deg, rgba(59,184,245,0.15), rgba(48,209,88,0.08));
       border: 1px solid rgba(59,184,245,0.25);
-      text-align: center;
     }
-    .combo-result .big {
-      font-size: 28px; font-weight: 800; letter-spacing: -0.03em;
-      color: var(--primary);
-    }
-    .combo-result .hint { font-size: 12px; color: var(--hint); margin-top: 6px; }
-
-    .page > .section { animation: fadeUp 0.28s var(--ease) both; }
+    .combo-result .big { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; color: var(--primary); }
+    .combo-result .hint { font-size: 12px; color: var(--hint); margin-top: 6px; line-height: 1.4; }
+    .page > .section { animation: fadeUp 0.28s ease both; }
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
@@ -1475,6 +1427,14 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('live')">
+          <div class="row-icon">🗺</div>
+          <div class="row-body">
+            <div class="row-title">Сеть live</div>
+            <div class="row-sub">Кто на смене · % плана · касса</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="startTutorial()">
           <div class="row-icon">🎓</div>
           <div class="row-body">
@@ -1519,12 +1479,15 @@
       <!-- Личный кабинет -->
       <div id="lkRoot">
         <div id="lkProfile"></div>
+        <div id="lkShift"></div>
+        <div id="lkInsight"></div>
         <div id="lkToday"></div>
         <div id="lkDayMetrics"></div>
         <div id="lkMonth"></div>
         <div id="lkWeek"></div>
         <div id="lkSales"></div>
         <div id="lkBfq"></div>
+        <div id="lkGamification"></div>
         <div id="lkActions"></div>
       </div>
 
@@ -1539,7 +1502,7 @@
             <select id="bindEmployee"></select>
           </div>
           <button class="btn-main" style="margin-top:16px" onclick="bindMe()">Привязать и войти</button>
-          <div class="bind-foot">Данные только для работы сети · можно сменить позже у admin</div>
+          <div class="bind-foot">Данные только для работы сети</div>
         </div>
       </div>
     </div>
@@ -1717,7 +1680,16 @@
 
   <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
 
-  <nav class="bottom-nav">
+  
+    <div id="page-live" class="page">
+      <div class="section">
+        <div class="section-title">Сеть сейчас</div>
+        <div id="liveMeta" class="empty" style="text-align:left;padding:8px 16px"></div>
+        <div id="liveList"><div class="skeleton"></div></div>
+      </div>
+    </div>
+
+<nav class="bottom-nav">
     <button class="nav-item active" data-page="home" onclick="switchPage('home')">
       <span class="ico">🏠</span>Главное
     </button>
@@ -1735,6 +1707,7 @@
     </button>
   </nav>
 
+  <script src="/offline-queue.js"></script>
   <script>
     const tg = window.Telegram?.WebApp;
     if (tg) {
@@ -1743,7 +1716,7 @@
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
     }
 
-    const APP_VERSION = '13.1';
+    const APP_VERSION = '13.2';
     const API = window.location.origin;
 
     function haptic(type = 'light') {
@@ -1922,6 +1895,7 @@
       if (name === 'cash') { loadCash(); }
       if (name === 'access') { loadAccessRequests(); }
       if (name === 'supervisor') { loadSupervisorDash(); }
+      if (name === 'live') { loadLiveMap(); }
     }
 
     async function refreshAll() {
@@ -2492,7 +2466,7 @@
       const root = document.getElementById('lkRoot');
       if (root) {
         root.style.display = 'block';
-        ['lkProfile','lkToday','lkDayMetrics','lkMonth','lkWeek','lkSales','lkBfq','lkActions']
+        ['lkProfile','lkShift','lkInsight','lkToday','lkDayMetrics','lkMonth','lkWeek','lkSales','lkBfq','lkGamification','lkActions']
           .forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<div class="skeleton" style="margin-bottom:10px"></div>';
@@ -2823,7 +2797,25 @@
             <div class="la-title">Обучение</div>
             <div class="la-sub">Как пользоваться</div>
           </button>
+          <button class="lk-action" onclick="openShiftSession()">
+            <div class="la-ico">🟢</div>
+            <div class="la-title">Смена</div>
+            <div class="la-sub">Открыть / закрыть</div>
+          </button>
+          <button class="lk-action" onclick="openQuickSale()">
+            <div class="la-ico">⚡</div>
+            <div class="la-title">Быстрый ввод</div>
+            <div class="la-sub">«две симки mnp»</div>
+          </button>
+          <button class="lk-action" onclick="switchPage('live')">
+            <div class="la-ico">🗺</div>
+            <div class="la-title">Сеть live</div>
+            <div class="la-sub">Все точки</div>
+          </button>
         </div>`;
+
+      // v13: сессия смены + инсайт + геймификация
+      loadShiftAndInsight(empId);
     }
 
     async function bindMe() {
@@ -3076,9 +3068,8 @@
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const rows = data.rows || [];
-        if (meta) {
-          meta.innerHTML = `<b>${month}</b> · сотрудников ${rows.length} · осталось дней ${data.remaining_days ?? '—'}`;
-        }
+        if (meta) meta.innerHTML = `<b>${month}</b> · ${rows.length} сотр. · ост. дней ${data.remaining_days ?? '—'}`;
+
         const metrics = [
           { id: 'sim', label: 'SIM' }, { id: 'mnp', label: 'MNP' }, { id: 'pa', label: 'ПА' },
           { id: 'combo', label: 'Комбо' }, { id: 'phones', label: 'Тел' }, { id: 'accessories', label: 'Аксы' }
@@ -3086,54 +3077,45 @@
 
         if (!rows.length) {
           box.innerHTML = '<div class="empty">Нет планов на месяц</div>';
-          loadStoreDailyPlans();
+          if (typeof loadStoreDailyPlans === 'function') loadStoreDailyPlans();
           return;
         }
 
-        box.innerHTML = '<div class="mobile-table">' + rows.map(r => {
+        let html = '<div class="mobile-table">' + rows.map(r => {
           const plan = r.plan || {};
           const fact = r.fact || {};
           const pct = r.pct || {};
           const nameClick = canManage()
-            ? `onclick="editEmployeeMonthPlan(${r.employee_id}, '${String(r.full_name).replace(/'/g, "\\'")}')"`
+            ? `onclick="editEmployeeMonthPlan(${r.employee_id}, '${String(r.full_name || '').replace(/'/g, "\\'")}')"`
             : '';
           const cells = metrics.map(m => {
             const f = Number(fact[m.id]) || 0;
-            const p = Number(plan[m.id]) || 0;
             const pc = Number(pct[m.id]) || 0;
             const tone = pc >= 100 ? 'good' : pc >= 50 ? 'warn' : (f > 0 ? '' : 'bad');
-            return `<div class="mt-cell ${tone}" title="${f} / ${p}">
-              <div class="v">${f}</div>
-              <div class="l">${m.label}</div>
-            </div>`;
+            return `<div class="mt-cell ${tone}"><div class="v">${f}</div><div class="l">${m.label}</div></div>`;
           }).join('');
           return `<div class="mt-card" ${nameClick} style="${nameClick ? 'cursor:pointer' : ''}">
-            <div class="mt-card-head">
-              <div>
-                <div class="mt-name">${r.full_name}</div>
-                <div class="mt-meta">${r.role || ''} · смен ${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</div>
-              </div>
-            </div>
+            <div class="mt-card-head"><div>
+              <div class="mt-name">${r.full_name || ''}</div>
+              <div class="mt-meta">${r.role || ''} · смен ${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</div>
+            </div></div>
             <div class="mt-grid">${cells}</div>
           </div>`;
         }).join('') + '</div>';
 
-        // totals
-        const t = data.totals || {};
-        if (t.fact) {
-          const tf = t.fact;
-          box.innerHTML += `<div class="mt-card" style="margin:0 12px 16px;border-color:var(--primary)">
+        const tf = (data.totals && data.totals.fact) || null;
+        if (tf) {
+          html += `<div class="mt-card" style="margin:0 12px 16px;border-color:var(--primary)">
             <div class="mt-name" style="margin-bottom:10px">Итого сеть</div>
-            <div class="mt-grid">
-              ${metrics.map(m => `<div class="mt-cell"><div class="v">${Number(tf[m.id])||0}</div><div class="l">${m.label}</div></div>`).join('')}
-            </div>
-          </div>`;
+            <div class="mt-grid">${metrics.map(m =>
+              `<div class="mt-cell"><div class="v">${Number(tf[m.id])||0}</div><div class="l">${m.label}</div></div>`
+            ).join('')}</div></div>`;
         }
-
-        loadStoreDailyPlans();
+        box.innerHTML = html;
+        if (typeof loadStoreDailyPlans === 'function') loadStoreDailyPlans();
       } catch (e) {
         console.error(e);
-        if (box) box.innerHTML = '<div class="empty">Нужен API /plans/employees/month</div>';
+        if (box) box.innerHTML = '<div class="empty">Планы месяца недоступны</div>';
       }
     }
 
@@ -3732,6 +3714,28 @@
         loadPage(page);
       } catch (e) {
         console.error(e);
+        // офлайн-очередь
+        if (typeof OfflineQueue !== 'undefined') {
+          try {
+            const metrics = {};
+            for (const [k, v] of Object.entries(saleSelection)) {
+              const n = Number(v);
+              if (n > 0) metrics[k] = n;
+            }
+            await OfflineQueue.enqueueSale({
+              store_id: storeId,
+              employee_id: Number(employeeId),
+              metrics,
+              sale_date: todayMoscow()
+            });
+            closeModal();
+            saleSelection = {};
+            toast('Нет сети — сохранено в очередь, уйдёт при Wi‑Fi', 'ok');
+            return;
+          } catch (e2) {
+            console.error(e2);
+          }
+        }
         toast('Ошибка сохранения', 'err');
       }
     }
@@ -4060,13 +4064,12 @@
           stores = await stRes.json();
         }
         const sel = document.getElementById('cashStore');
-        if (sel) {
-          sel.innerHTML = stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-        }
+        if (sel) sel.innerHTML = stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
         const dateInp = document.getElementById('cashDate');
         if (dateInp && !dateInp.value) dateInp.value = todayMoscow();
 
-        const res = await fetch(API + '/cash/table?from=' + todayMoscow().slice(0, 8) + '01&to=' + todayMoscow());
+        const from = todayMoscow().slice(0, 8) + '01';
+        const res = await fetch(API + '/cash/table?from=' + from + '&to=' + todayMoscow());
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const stList = data.stores || stores;
@@ -4074,18 +4077,17 @@
         const cells = data.cells || {};
 
         if (!dates.length) {
-          box.innerHTML = '<div class="empty">Нет данных кассы за месяц — внеси первую строку ниже</div>';
+          box.innerHTML = '<div class="empty">Нет данных кассы — внеси первую строку</div>';
           return;
         }
 
-        // мобильные карточки по дням
         box.innerHTML = dates.map(d => {
           const rows = stList.map(s => {
             const c = (cells[d] && cells[d][s.id]) || {};
             const fact = c.cash_fact;
             const c1 = c.cash_1c;
-            const delta = c.delta != null ? Number(c.delta) :
-              (fact != null && c1 != null ? Number(fact) - Number(c1) : null);
+            const delta = c.delta != null ? Number(c.delta)
+              : (fact != null && c1 != null ? Number(fact) - Number(c1) : null);
             const dClass = delta == null ? '' : (delta >= 0 ? 'delta-pos' : 'delta-neg');
             const click = canManage()
               ? `onclick="fillCashForm('${s.id}','${d}',${Number(fact)||0},${Number(c1)||0})"`
@@ -4094,100 +4096,53 @@
               <div class="sn">${s.name || s.id}</div>
               <div>${fact != null && fact !== '' ? Number(fact).toLocaleString('ru-RU') : '—'}</div>
               <div>${c1 != null && c1 !== '' ? Number(c1).toLocaleString('ru-RU') : '—'}</div>
-              <div class="${dClass}">${delta == null || delta === '' ? '—' : (delta > 0 ? '+' : '') + Number(delta).toLocaleString('ru-RU')}</div>
+              <div class="${dClass}">${delta == null || delta === '' ? '—' : ((delta > 0 ? '+' : '') + Number(delta).toLocaleString('ru-RU'))}</div>
             </div>`;
           }).join('');
           const label = String(d).slice(8,10) + '.' + String(d).slice(5,7) + '.' + String(d).slice(2,4);
           return `<div class="cash-day">
             <div class="cash-day-h">${label}
               <span style="float:right;font-weight:500;color:var(--hint);font-size:11px">Факт · 1С · Δ</span>
-            </div>
-            ${rows}
-          </div>`;
+            </div>${rows}</div>`;
         }).join('');
       } catch (e) {
         console.error(e);
-        box.innerHTML = '<div class="empty">Касса недоступна — проверь API /cash/table</div>';
+        if (box) box.innerHTML = '<div class="empty">Касса недоступна</div>';
       }
     }
 
+
+    function fillCashForm(storeId, date, fact, c1) {
+      document.getElementById('cashStore').value = storeId;
+      document.getElementById('cashDate').value = date;
+      document.getElementById('cashFact').value = fact;
+      document.getElementById('cash1c').value = c1;
+      document.getElementById('cashEditSection')?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function saveCash() {
+      if (!canManage()) return;
+      const body = {
+        store_id: document.getElementById('cashStore').value,
+        cash_date: document.getElementById('cashDate').value || todayMoscow(),
+        cash_fact: Number(document.getElementById('cashFact').value) || 0,
+        cash_1c: Number(document.getElementById('cash1c').value) || 0,
+        comment: document.getElementById('cashComment').value || ''
+      };
+      const res = await fetch(API + '/cash', {
+        method: 'PUT',
+        headers: authHeaders(true),
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Касса сохранена', 'ok');
+      loadCash();
+    }
 
     // ===== COMBO CALC =====
-    function openComboCalc() {
-      document.getElementById('modalTitle').textContent = 'Расчёт комбо';
-      document.getElementById('modalBody').innerHTML = `
-        <div class="empty" style="text-align:left;padding:0 0 12px;line-height:1.45">
-          Формула T2:<br>
-          <b>цена − скидка% + 28% от цены + 1900</b>
-        </div>
-        <div class="field">
-          <label>Цена телефона, ₽</label>
-          <input type="number" id="comboPrice" placeholder="например 29990" inputmode="decimal">
-        </div>
-        <div class="field">
-          <label>Скидка, %</label>
-          <input type="number" id="comboDiscount" placeholder="0" value="0" inputmode="decimal">
-        </div>
-        <button class="btn-main" onclick="runComboCalc()">Посчитать</button>
-        <div id="comboOut" style="display:none" class="combo-result"></div>
-      `;
-      openModal();
-      setTimeout(() => document.getElementById('comboPrice')?.focus(), 200);
-    }
+    
 
-    function runComboCalc() {
-      const price = Number(document.getElementById('comboPrice')?.value) || 0;
-      const disc = Number(document.getElementById('comboDiscount')?.value) || 0;
-      if (price <= 0) { toast('Укажи цену', 'err'); return; }
-      const afterDisc = price * (1 - disc / 100);
-      const total = Math.round(afterDisc + price * 0.28 + 1900);
-      const el = document.getElementById('comboOut');
-      if (!el) return;
-      el.style.display = 'block';
-      el.innerHTML = `
-        <div class="big">${total.toLocaleString('ru-RU')} ₽</div>
-        <div class="hint">
-          ${price.toLocaleString('ru-RU')} − ${disc}% = ${Math.round(afterDisc).toLocaleString('ru-RU')}<br>
-          + 28% (${Math.round(price * 0.28).toLocaleString('ru-RU')}) + 1 900
-        </div>`;
-      try { tg?.HapticFeedback?.impactOccurred?.('light'); } catch (_) {}
-    }
-
-
-    async function runComboCalc() {
-      const phone_price = Number(document.getElementById('comboPrice').value);
-      const discount_pct = Number(document.getElementById('comboDisc').value);
-      if (!phone_price) { toast('Укажи цену телефона', 'err'); return; }
-      try {
-        const res = await fetch(API + '/combo/calc', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify({ phone_price, discount_pct })
-        });
-        const d = await res.json();
-        if (!res.ok) { toast(d.error || 'Ошибка', 'err'); return; }
-        document.getElementById('comboResult').innerHTML = `
-          <div class="stats-row">
-            <div class="stat-chip"><div class="n">${d.after_discount}</div><div class="l">После скидки</div></div>
-            <div class="stat-chip"><div class="n">${d.plus_28pct}</div><div class="l">+28%</div></div>
-            <div class="stat-chip"><div class="n">1900</div><div class="l">Фикс</div></div>
-          </div>
-          <div style="text-align:center;padding:16px 0 4px">
-            <div style="font-size:13px;color:var(--hint)">Итого комбо</div>
-            <div style="font-size:32px;font-weight:800;letter-spacing:-0.5px">${d.result}</div>
-          </div>`;
-      } catch {
-        // offline fallback
-        const after = phone_price - phone_price * (discount_pct / 100);
-        const p28 = phone_price * 0.28;
-        const result = Math.round((after + p28 + 1900) * 100) / 100;
-        document.getElementById('comboResult').innerHTML = `
-          <div style="text-align:center;padding:16px 0">
-            <div style="font-size:13px;color:var(--hint)">Итого комбо</div>
-            <div style="font-size:32px;font-weight:800">${result}</div>
-          </div>`;
-      }
-    }
+    
 
     // ===== CUSTOM METRICS =====
     function openAddMetric() {
@@ -4371,7 +4326,305 @@
     // Вызывается после успешной загрузки /me (если функция есть в init)
     window.maybeOfferTutorial = maybeOfferTutorial;
 
-    console.log('T2 Sales UI v11 — Design System');
+    
+    // ===== V13: смена / инсайт / live / quick sale =====
+    async function geoCoords() {
+      try {
+        const pos = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 })
+        );
+        return {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy_m: pos.coords.accuracy
+        };
+      } catch (_) {
+        return { lat: null, lng: null, accuracy_m: null };
+      }
+    }
+
+    function openComboCalc() {
+      document.getElementById('modalTitle').textContent = 'Расчёт комбо';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="empty" style="text-align:left;padding:0 0 12px;line-height:1.45">
+          Формула T2:<br><b>цена − скидка% + 28% от цены + 1900</b>
+        </div>
+        <div class="field">
+          <label>Цена телефона, ₽</label>
+          <input type="number" id="comboPrice" placeholder="29990" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>Скидка, %</label>
+          <input type="number" id="comboDiscount" value="0" inputmode="decimal">
+        </div>
+        <button type="button" class="btn-main" onclick="runComboCalc()">Посчитать</button>
+        <div id="comboOut" style="display:none" class="combo-result"></div>
+      `;
+      openModal();
+      setTimeout(() => document.getElementById('comboPrice')?.focus(), 200);
+    }
+
+    function runComboCalc() {
+      const price = Number(document.getElementById('comboPrice')?.value) || 0;
+      const disc = Number(document.getElementById('comboDiscount')?.value) || 0;
+      if (price <= 0) { toast('Укажи цену', 'err'); return; }
+      const afterDisc = price * (1 - disc / 100);
+      const total = Math.round(afterDisc + price * 0.28 + 1900);
+      const el = document.getElementById('comboOut');
+      if (!el) return;
+      el.style.display = 'block';
+      el.innerHTML = `
+        <div class="big">${total.toLocaleString('ru-RU')} ₽</div>
+        <div class="hint">
+          ${price.toLocaleString('ru-RU')} − ${disc}% = ${Math.round(afterDisc).toLocaleString('ru-RU')}<br>
+          + 28% (${Math.round(price * 0.28).toLocaleString('ru-RU')}) + 1 900
+        </div>`;
+      try { tg?.HapticFeedback?.impactOccurred?.('light'); } catch (_) {}
+    }
+
+    async function openShiftSession() {
+      try {
+        const geo = await geoCoords();
+        const res = await fetch(API + '/shifts/open', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify(geo)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.message || 'fail');
+        toast('Смена открыта', 'ok');
+        try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
+        loadMyPlan();
+      } catch (e) {
+        toast(e.message || 'Не удалось открыть смену', 'err');
+      }
+    }
+
+    async function closeShiftSession() {
+      const report = prompt('Краткий самоотчёт (что мешало / что зашло)?') || '';
+      const moodStr = prompt('Настроение 1–5 (Enter = 4)', '4');
+      const mood = Math.min(5, Math.max(1, Number(moodStr) || 4));
+      try {
+        const geo = await geoCoords();
+        const res = await fetch(API + '/shifts/close', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ ...geo, self_report: report, mood })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.message || 'fail');
+        let msg = 'Смена закрыта';
+        if (data.ideal_shift) msg += ' · ⭐ идеальная';
+        if (data.plan_pct != null) msg += ' · ' + data.plan_pct + '% плана';
+        toast(msg, 'ok');
+        try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
+        if (data.ideal_shift || (data.plan_pct >= 100)) {
+          try { confettiBurst && confettiBurst(); } catch (_) {}
+        }
+        loadMyPlan();
+      } catch (e) {
+        toast(e.message || 'Не закрыть смену', 'err');
+      }
+    }
+
+    async function loadShiftAndInsight(empId) {
+      const shiftEl = document.getElementById('lkShift');
+      const insightEl = document.getElementById('lkInsight');
+      const gamEl = document.getElementById('lkGamification');
+      if (shiftEl) shiftEl.innerHTML = '';
+      if (insightEl) insightEl.innerHTML = '';
+      if (gamEl) gamEl.innerHTML = '';
+
+      try {
+        const [curRes, insRes, selfRes] = await Promise.all([
+          fetch(API + '/shifts/current', { headers: authHeaders() }),
+          fetch(API + '/me/insight', { headers: authHeaders() }),
+          fetch(API + '/me/self-stats', { headers: authHeaders() })
+        ]);
+        const cur = curRes.ok ? await curRes.json() : {};
+        const ins = insRes.ok ? await insRes.json() : {};
+        const self = selfRes.ok ? await selfRes.json() : {};
+
+        if (shiftEl) {
+          const sess = cur.session;
+          if (sess) {
+            shiftEl.innerHTML = `
+              <div class="progress-block" style="margin-bottom:12px">
+                <div class="section-title" style="margin-bottom:8px">Смена открыта</div>
+                <div style="font-size:13px;color:var(--hint);margin-bottom:10px">
+                  ${sess.store_name || sess.store_id} · с ${String(sess.opened_at || '').slice(11, 16) || '—'} МСК
+                </div>
+                <button class="btn-main" style="background:#e74c3c" onclick="closeShiftSession()">Закрыть смену</button>
+              </div>`;
+          } else {
+            shiftEl.innerHTML = `
+              <div class="progress-block" style="margin-bottom:12px">
+                <div class="section-title" style="margin-bottom:8px">Смена</div>
+                <div style="font-size:13px;color:var(--hint);margin-bottom:10px">Открой смену на точке — зафиксируем время и гео</div>
+                <button class="btn-main" onclick="openShiftSession()">Открыть смену</button>
+              </div>`;
+          }
+        }
+
+        if (insightEl && ins.insight) {
+          const i = ins.insight;
+          const focus = (i.focus || []).map(f => `<div style="font-size:12px;margin-top:4px">• ${f}</div>`).join('');
+          const split = i.split;
+          let splitHtml = '';
+          if (split?.before_lunch && split?.after_lunch) {
+            splitHtml = `<div style="margin-top:10px;font-size:12px;color:var(--hint)">
+              До 15:00: SIM ${split.before_lunch.sim || 0} · MNP ${split.before_lunch.mnp || 0}<br>
+              После: SIM ${split.after_lunch.sim || 0} · MNP ${split.after_lunch.mnp || 0}
+            </div>`;
+          }
+          insightEl.innerHTML = `
+            <div class="progress-block" style="margin-bottom:12px">
+              <div class="section-title" style="margin-bottom:8px">Фокус сейчас</div>
+              <div style="font-size:14px;line-height:1.4">${i.message || ''}</div>
+              ${focus}${splitHtml}
+            </div>`;
+        }
+
+        if (gamEl && self.gamification) {
+          const g = self.gamification;
+          const best = self.best_shift;
+          gamEl.innerHTML = `
+            <div class="progress-block" style="margin-bottom:12px">
+              <div class="section-title" style="margin-bottom:8px">Прогресс</div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px">
+                <div class="lk-pill">lvl <strong>${g.level || 1}</strong> ${g.title || ''}</div>
+                <div class="lk-pill">XP <strong>${g.xp || 0}</strong>${g.next_level_xp != null ? ' / ' + g.next_level_xp : ''}</div>
+                <div class="lk-pill">🔥 <strong>${g.streak_days || 0}</strong> дн.</div>
+              </div>
+              ${best ? `<div style="margin-top:8px;font-size:12px;color:var(--hint)">Лучшая смена: ${best.date} · score ${best.score}</div>` : ''}
+            </div>`;
+        }
+      } catch (e) {
+        console.error('shift/insight', e);
+      }
+    }
+
+    // hook into loadMyPlan: call after profile rendered
+    const _loadMyPlanOrig = typeof loadMyPlan === 'function' ? loadMyPlan : null;
+    // We call loadShiftAndInsight from patched actions - inject call via monkey after empId known
+    // Patch: after bindSec hide, when we have empId, call loadShiftAndInsight
+
+    async function openQuickSale() {
+      document.getElementById('modalTitle').textContent = 'Быстрый ввод';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="empty" style="text-align:left;padding:0 0 12px">
+          Пример: <b>две симки и одно mnp</b> · <b>3 sim 1 па</b>
+        </div>
+        <div class="field">
+          <label>Фраза</label>
+          <input id="quickSaleText" placeholder="две симки одно mnp" />
+        </div>
+        <div id="quickSalePreview" class="empty" style="display:none;text-align:left"></div>
+        <button class="btn-main" onclick="submitQuickSale()">Разобрать и записать</button>
+        <button class="btn-ghost" style="margin-top:8px;width:100%" onclick="previewQuickSale()">Только разобрать</button>
+      `;
+      openModal();
+      setTimeout(() => document.getElementById('quickSaleText')?.focus(), 200);
+    }
+
+    async function previewQuickSale() {
+      const text = document.getElementById('quickSaleText')?.value || '';
+      const res = await fetch(API + '/sales/parse', {
+        method: 'POST', headers: authHeaders(true),
+        body: JSON.stringify({ text })
+      });
+      const data = await res.json();
+      const el = document.getElementById('quickSalePreview');
+      if (!el) return;
+      el.style.display = 'block';
+      const m = data.metrics || {};
+      const keys = Object.keys(m);
+      el.textContent = keys.length
+        ? keys.map(k => k + ': ' + m[k]).join(', ') + ' · confidence ' + Math.round((data.confidence || 0) * 100) + '%'
+        : 'Не разобрано';
+    }
+
+    async function submitQuickSale() {
+      const text = document.getElementById('quickSaleText')?.value || '';
+      if (!text.trim()) { toast('Введи фразу', 'err'); return; }
+      try {
+        const res = await fetch(API + '/sales/quick', {
+          method: 'POST', headers: authHeaders(true),
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'fail');
+        closeModal();
+        const m = data.parsed?.metrics || {};
+        toast('Записано: ' + Object.keys(m).map(k => k + ' ' + m[k]).join(', '), 'ok');
+        loadPage(page);
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
+      }
+    }
+
+    async function loadLiveMap() {
+      const box = document.getElementById('liveList');
+      const meta = document.getElementById('liveMeta');
+      if (box) box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const res = await fetch(API + '/network/live', { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const data = await res.json();
+        if (meta) meta.textContent = 'Дата: ' + (data.date || todayMoscow()) + ' · обновление при открытии экрана';
+        const stores = data.stores || [];
+        if (!stores.length) {
+          box.innerHTML = '<div class="empty">Нет точек</div>';
+          return;
+        }
+        box.innerHTML = stores.map(st => {
+          const statusColor = st.status === 'critical' ? '#e74c3c' : st.status === 'warn' ? '#f39c12' : '#2ecc71';
+          const staff = (st.staff || []).map(s => s.short_name || s.full_name || s.employee_id).join(', ') || 'никого';
+          const cash = st.cash
+            ? `Касса Δ ${st.cash.delta}`
+            : 'Касса —';
+          return `
+            <div class="progress-block" style="margin-bottom:10px;border-left:4px solid ${st.color || statusColor}">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <strong>${st.name}</strong>
+                <span style="color:${statusColor};font-weight:700">${st.plan_pct || 0}%</span>
+              </div>
+              <div style="font-size:12px;color:var(--hint);margin-top:4px">
+                ${staff}<br>
+                SIM ${st.fact?.sim || 0}/${st.plan?.sim || 0} · MNP ${st.fact?.mnp || 0}/${st.plan?.mnp || 0}<br>
+                ${cash}
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        console.error(e);
+        if (box) box.innerHTML = '<div class="empty">Нужен API /network/live (V13)</div>';
+      }
+    }
+
+    function confettiBurst() {
+      // лёгкий confetti без библиотек
+      const colors = ['#6d9eeb', '#ff6d01', '#ffd966', '#2ecc71', '#e74c3c'];
+      for (let i = 0; i < 24; i++) {
+        const el = document.createElement('div');
+        el.style.cssText = `position:fixed;top:-10px;left:${Math.random()*100}%;width:8px;height:8px;background:${colors[i%colors.length]};border-radius:2px;z-index:9999;pointer-events:none;animation:t2fall ${1+Math.random()}s linear forwards`;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 2000);
+      }
+    }
+
+    // CSS fall
+    (function(){
+      if (document.getElementById('t2-v13-style')) return;
+      const s = document.createElement('style');
+      s.id = 't2-v13-style';
+      s.textContent = '@keyframes t2fall{to{transform:translateY(100vh) rotate(360deg);opacity:0}}';
+      document.head.appendChild(s);
+    })();
+
+
+    console.log('T2 Sales UI v13.2');
+
   </script>
 </body>
 </html>
