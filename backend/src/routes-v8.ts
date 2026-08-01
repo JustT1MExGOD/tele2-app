@@ -9,6 +9,8 @@
 
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
+import { todayMoscow } from './utils/date.js';
+import { bot } from './bot/index.js';
 import {
   requireActive,
   requireManager,
@@ -16,9 +18,7 @@ import {
   getUserStoreIds,
   loadUser,
   authPlugin
-} from './middleware-auth-v8.js';
-import { todayMoscow } from './utils/date.js';
-import { bot } from './bot/index.js';
+} from './middleware-auth.js';
 
 function esc(s: any) {
   return String(s ?? '')
@@ -26,6 +26,7 @@ function esc(s: any) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 }
+
 
 export async function registerV8Routes(app: FastifyInstance) {
   // подтянуть user на каждый запрос
