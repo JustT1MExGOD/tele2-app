@@ -771,6 +771,42 @@
         <div class="section-title">Сотрудники</div>
         <div id="teamList"><div class="skeleton"></div></div>
       </div>
+      <div class="section" id="managerTools" style="display:none;">
+        <div class="section-title">Управление</div>
+        <button class="row" onclick="switchPage('history')">
+          <div class="row-icon">📜</div>
+          <div class="row-body"><div class="row-title">История продаж</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="switchPage('bfq')">
+          <div class="row-icon">🏆</div>
+          <div class="row-body"><div class="row-title">BFQ</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="exportCSV('sales')">
+          <div class="row-icon">⬇️</div>
+          <div class="row-body"><div class="row-title">Экспорт продаж CSV</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="exportCSV('bfq')">
+          <div class="row-icon">⬇️</div>
+          <div class="row-body"><div class="row-title">Экспорт BFQ CSV</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="exportCSV('schedules')">
+          <div class="row-icon">⬇️</div>
+          <div class="row-body"><div class="row-title">Экспорт графика CSV</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== HISTORY ===== -->
+    <div id="page-history" class="page">
+      <div class="section">
+        <div class="section-title">История продаж</div>
+        <div id="historyList"><div class="skeleton"></div></div>
+      </div>
     </div>
   </div>
 
@@ -808,7 +844,17 @@
     let stores = [];
     let selectedMetric = 'sim';
     let scheduleMonth = todayMoscow().slice(0, 7);
-    let me = null; // { employee_id, full_name, ... }
+    let me = null; // { employee_id, full_name, role, is_manager }
+
+    function canManage() {
+      return me?.role === 'manager' || me?.role === 'admin' || me?.is_manager === true;
+    }
+
+    function authHeaders(json = false) {
+      const h = { 'X-Telegram-Id': String(tgUser()?.id || '') };
+      if (json) h['Content-Type'] = 'application/json';
+      return h;
+    }
 
     const METRICS = [
       { id: 'sim', label: 'SIM' },
@@ -916,6 +962,7 @@
       if (name === 'my') { loadMyPlan(); }
       if (name === 'bfq') { loadBFQ(); }
       if (name === 'team') { loadTeam(); }
+      if (name === 'history') { loadHistory(); }
     }
 
     async function refreshAll() {
@@ -1150,10 +1197,15 @@
         }
         const items = data.items || [];
 
+        if (!stores.length) {
+          const stRes = await fetch(API + '/stores');
+          stores = await stRes.json();
+        }
+
         const byEmp = {};
         items.forEach(row => {
           const id = row.employee_id;
-          if (!byEmp[id]) byEmp[id] = { name: row.full_name, days: {} };
+          if (!byEmp[id]) byEmp[id] = { id, name: row.full_name, days: {} };
           const key = String(row.work_date).slice(0, 10);
           byEmp[id].days[key] = row;
         });
@@ -1161,24 +1213,33 @@
         if (!Object.keys(byEmp).length) {
           const empRes = await fetch(API + '/employees');
           const emps = await empRes.json();
-          (emps || []).forEach(e => { byEmp[e.id] = { name: e.full_name, days: {} }; });
+          (emps || []).forEach(e => { byEmp[e.id] = { id: e.id, name: e.full_name, days: {} }; });
         }
 
         const total = daysInMonth(scheduleMonth);
         const list = Object.values(byEmp).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+        const editable = canManage();
+        const hint = editable
+          ? '<div class="empty" style="padding:8px 0 12px">Нажми на день, чтобы поставить / убрать смену</div>'
+          : '';
 
-        box.innerHTML = list.map(emp => {
+        box.innerHTML = hint + list.map(emp => {
           const workCount = Object.keys(emp.days).length;
           let cells = '';
           for (let d = 1; d <= total; d++) {
             const key = scheduleMonth + '-' + String(d).padStart(2, '0');
             const row = emp.days[key];
+            const storeId = row?.store_id || (stores[0] && stores[0].id) || '';
+            const hours = row?.hours || 0;
+            const click = editable
+              ? `onclick="editDay(${emp.id}, '${key}', '${storeId}', ${hours})"`
+              : '';
             if (row) {
               const short = (row.store_short || row.store_name || '').slice(0, 4);
-              cells += `<div class="sch-cell work" title="${row.store_name || ''} ${row.shift_text || ''}">
+              cells += `<div class="sch-cell work" ${click} title="${row.store_name || ''} ${row.shift_text || ''}">
                 <div class="d">${d}</div><div class="s">${short}</div></div>`;
             } else {
-              cells += `<div class="sch-cell off"><div class="d">${d}</div></div>`;
+              cells += `<div class="sch-cell off" ${click}><div class="d">${d}</div></div>`;
             }
           }
           return `
@@ -1192,7 +1253,61 @@
         }).join('') || '<div class="empty">Нет данных</div>';
       } catch (e) {
         console.error(e);
-        box.innerHTML = '<div class="empty">Нужен API /schedules/month</div>';
+        box.innerHTML = '<div class="empty">Ошибка загрузки графика</div>';
+      }
+    }
+
+    async function editDay(employeeId, dateStr, currentStoreId, currentHours) {
+      if (!canManage()) return;
+      if (!stores.length) {
+        const stRes = await fetch(API + '/stores');
+        stores = await stRes.json();
+      }
+      document.getElementById('modalTitle').textContent = 'Смена ' + dateStr;
+      document.getElementById('modalBody').innerHTML = `
+        <div class="field">
+          <label>Точка</label>
+          <select id="schStore">
+            ${(stores || []).map(s =>
+              `<option value="${s.id}" ${s.id === currentStoreId ? 'selected' : ''}>${s.name}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Часы (0 = выходной)</label>
+          <input type="number" id="schHours" value="${currentHours || 0}" min="0" max="14">
+        </div>
+        <div class="field">
+          <label>Смена</label>
+          <input id="schText" value="${currentHours ? '10-21' : '10-21'}" placeholder="10-21">
+        </div>
+        <button class="btn-main" onclick="saveShift(${employeeId}, '${dateStr}')">Сохранить</button>
+      `;
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    async function saveShift(employeeId, dateStr) {
+      const store_id = document.getElementById('schStore').value;
+      const hours = Number(document.getElementById('schHours').value) || 0;
+      const shift_text = document.getElementById('schText').value || '';
+      try {
+        const res = await fetch(API + '/schedules/bulk', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            items: [{ employee_id: employeeId, work_date: dateStr, store_id, hours, shift_text }]
+          })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast(err.message || 'Нет прав', 'err');
+          return;
+        }
+        toast('Смена сохранена', 'ok');
+        closeModal();
+        loadMonthSchedule();
+      } catch (e) {
+        toast('Ошибка', 'err');
       }
     }
 
@@ -1273,14 +1388,15 @@
       try {
         const res = await fetch(API + '/me/bind', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(true),
           body: JSON.stringify({ telegram_id: user.id, employee_id: Number(employeeId) })
         });
         if (!res.ok) throw new Error('bind fail');
+        me = await res.json();
         toast('Привязано', 'ok');
         loadMyPlan();
       } catch (e) {
-        toast('Ошибка привязки — нужен API /me/bind', 'err');
+        toast('Ошибка привязки', 'err');
       }
     }
 
@@ -1288,6 +1404,8 @@
     async function loadTeam() {
       const box = document.getElementById('teamList');
       box.innerHTML = '<div class="skeleton"></div>';
+      const tools = document.getElementById('managerTools');
+      if (tools) tools.style.display = canManage() ? 'block' : 'none';
       try {
         const [empRes, salesRes] = await Promise.all([
           fetch(API + '/employees'),
@@ -1305,11 +1423,12 @@
         const list = Array.isArray(employees) ? employees : [];
         box.innerHTML = list.map(e => {
           const st = map[e.id] || { sim: 0, phones: 0, combo: 0 };
+          const roleBadge = e.role === 'manager' || e.role === 'admin' ? ' · ⭐' : '';
           return `
             <button class="row" onclick="openEmployeeCard(${e.id})">
               <div class="row-icon">👤</div>
               <div class="row-body">
-                <div class="row-title">${e.full_name}</div>
+                <div class="row-title">${e.full_name}${roleBadge}</div>
                 <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones}</div>
               </div>
               <div class="row-chevron">›</div>
@@ -1370,7 +1489,8 @@
       const box = document.getElementById('bfqList');
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/bfq');
+        const month = scheduleMonth || todayMoscow().slice(0, 7);
+        const res = await fetch(API + '/bfq?month=' + month);
         if (!res.ok) throw new Error('no bfq');
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.items || []);
@@ -1379,17 +1499,128 @@
           return;
         }
         box.innerHTML = list.map((e, i) => `
-          <div class="row">
+          <button class="row" onclick="openBFQCard(${e.employee_id})">
             <div class="row-icon">${i + 1}</div>
             <div class="row-body">
               <div class="row-title">${e.full_name || e.name}</div>
-              <div class="row-sub">SIM ${e.sim ?? '—'} · MNP ${e.mnp ?? '—'}</div>
+              <div class="row-sub">Кач. ${e.quality ?? '—'} · Приб. ${e.profit ?? '—'} · VMR ${e.vmr ?? 0}</div>
             </div>
             <div class="row-value">${e.total ?? e.bfq ?? '—'}</div>
+            <div class="row-chevron">›</div>
+          </button>
+        `).join('');
+      } catch {
+        box.innerHTML = '<div class="empty">Ошибка BFQ</div>';
+      }
+    }
+
+    async function openBFQCard(id) {
+      document.getElementById('modalTitle').textContent = 'BFQ';
+      document.getElementById('modalBody').innerHTML = '<div class="empty">Загрузка…</div>';
+      document.getElementById('overlay').classList.add('show');
+      try {
+        const month = todayMoscow().slice(0, 7);
+        const res = await fetch(API + '/bfq/' + id + '?month=' + month);
+        const d = await res.json();
+        const f = d.fact || {};
+        const fc = d.forecast || {};
+        let manual = '';
+        if (canManage()) {
+          manual = `
+            <div class="field"><label>VMR средний</label>
+              <input type="number" id="bfqVmr" value="${f.vmr || 0}" step="0.1"></div>
+            <div class="field"><label>Штраф</label>
+              <input type="number" id="bfqPenalty" value="${f.penalty || 0}" step="0.1"></div>
+            <button class="btn-main" onclick="saveBFQManual(${id})">Сохранить VMR / штраф</button>`;
+        }
+        document.getElementById('modalBody').innerHTML = `
+          <div class="stats-row">
+            <div class="stat-chip"><div class="n">${f.total ?? '—'}</div><div class="l">Факт</div></div>
+            <div class="stat-chip"><div class="n">${fc.total ?? '—'}</div><div class="l">Прогноз</div></div>
+            <div class="stat-chip"><div class="n">${f.quality ?? '—'}</div><div class="l">Качество</div></div>
+          </div>
+          <div class="progress-block">
+            ${progressHTML('GI', f.blocks?.gi, 50)}
+            ${progressHTML('VMR блок', f.blocks?.vmr, 12)}
+            ${progressHTML('Digital', f.blocks?.digital, 25)}
+            ${progressHTML('Top-up', f.blocks?.topUp, 15)}
+            ${progressHTML('Прибыль', f.profit, 20)}
+          </div>
+          <div class="empty" style="padding:8px 0">
+            Смены: ${d.shifts?.worked || 0} отработано · ${d.shifts?.remaining || 0} осталось
+          </div>
+          ${manual}`;
+      } catch {
+        document.getElementById('modalBody').innerHTML = '<div class="empty">Ошибка</div>';
+      }
+    }
+
+    async function saveBFQManual(employeeId) {
+      const vmr = Number(document.getElementById('bfqVmr').value) || 0;
+      const penalty = Number(document.getElementById('bfqPenalty').value) || 0;
+      const month = todayMoscow().slice(0, 7);
+      const res = await fetch(API + '/bfq/manual', {
+        method: 'POST',
+        headers: authHeaders(true),
+        body: JSON.stringify({ employee_id: employeeId, month, vmr_avg: vmr, penalty })
+      });
+      if (!res.ok) { toast('Нет прав или ошибка', 'err'); return; }
+      toast('Сохранено', 'ok');
+      closeModal();
+      loadBFQ();
+    }
+
+    async function loadHistory() {
+      const box = document.getElementById('historyList');
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const from = todayMoscow().slice(0, 8) + '01';
+        const to = todayMoscow();
+        const res = await fetch(
+          `${API}/sales/history?from=${from}&to=${to}`,
+          { headers: authHeaders() }
+        );
+        if (!res.ok) throw new Error('fail');
+        const data = await res.json();
+        const items = data.items || [];
+        if (!items.length) {
+          box.innerHTML = '<div class="empty">Нет продаж за период</div>';
+          return;
+        }
+        box.innerHTML = items.map(s => `
+          <div class="row">
+            <div class="row-body">
+              <div class="row-title">${s.full_name}</div>
+              <div class="row-sub">${String(s.sale_date).slice(0, 10)} · ${s.store_name}
+                · SIM ${s.sim || 0} · MNP ${s.mnp || 0} · ПА ${s.pa || 0}</div>
+            </div>
           </div>
         `).join('');
       } catch {
-        box.innerHTML = '<div class="empty">Эндпоинт /bfq пока не готов</div>';
+        box.innerHTML = '<div class="empty">Нужна привязка Telegram</div>';
+      }
+    }
+
+    async function exportCSV(type) {
+      if (!canManage()) { toast('Только управляющий', 'err'); return; }
+      const month = todayMoscow().slice(0, 7);
+      const from = month + '-01';
+      const to = todayMoscow();
+      let path = '';
+      if (type === 'sales') path = `/export/sales.csv?from=${from}&to=${to}`;
+      if (type === 'bfq') path = `/export/bfq.csv?month=${month}`;
+      if (type === 'schedules') path = `/export/schedules.csv?month=${month}`;
+      try {
+        const res = await fetch(API + path, { headers: authHeaders() });
+        if (!res.ok) { toast('Ошибка экспорта', 'err'); return; }
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = type + '_' + month + '.csv';
+        a.click();
+        toast('Скачано', 'ok');
+      } catch {
+        toast('Ошибка', 'err');
       }
     }
 
@@ -1541,12 +1772,12 @@
       const user = tgUser();
       if (!user?.id) return;
       try {
-        const res = await fetch(API + '/me', { headers: { 'X-Telegram-Id': String(user.id) } });
+        const res = await fetch(API + '/me', { headers: authHeaders() });
         if (res.ok) me = await res.json();
       } catch (_) {}
     })();
 
-    console.log('Tele2 Sales UI v2 ready');
+    console.log('Tele2 Sales UI v3 ready');
   </script>
 </body>
 </html>
