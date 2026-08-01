@@ -354,7 +354,7 @@ app.get('/cash/table', async (request) => {
   const cashRes = await query(
     `SELECT store_id, cash_date::text as cash_date,
             cash_fact, cash_1c,
-            (cash_fact - cash_1c) as delta, comment
+            (cash_fact - (cash_1c + 2000)) as delta, comment
      FROM store_cash
      WHERE cash_date >= $1::date AND cash_date <= $2::date
      ORDER BY cash_date`,

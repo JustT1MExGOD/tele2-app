@@ -4100,7 +4100,7 @@
             const fact = c.cash_fact;
             const c1 = c.cash_1c;
             const delta = c.delta != null ? Number(c.delta)
-              : (fact != null && c1 != null ? Number(fact) - Number(c1) : null);
+              : (fact != null && c1 != null ? Number(fact) - (Number(c1) + 2000) : null);
             const dClass = delta == null ? '' : (delta >= 0 ? 'delta-pos' : 'delta-neg');
             const click = canManage()
               ? `onclick="fillCashForm('${s.id}','${d}',${Number(fact)||0},${Number(c1)||0})"`
@@ -4115,7 +4115,7 @@
           const label = String(d).slice(8,10) + '.' + String(d).slice(5,7) + '.' + String(d).slice(2,4);
           return `<div class="cash-day">
             <div class="cash-day-h">${label}
-              <span style="float:right;font-weight:500;color:var(--hint);font-size:11px">Факт · 1С · Δ</span>
+              <span style="float:right;font-weight:500;color:var(--hint);font-size:11px">Факт · 1С · Δ (−2000)</span>
             </div>${rows}</div>`;
         }).join('');
       } catch (e) {

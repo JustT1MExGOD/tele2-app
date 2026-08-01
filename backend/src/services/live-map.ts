@@ -64,7 +64,7 @@ export async function getLiveNetworkMap() {
     const pct = keyPlan > 0 ? Math.round((keyFact / keyPlan) * 100) : 0;
 
     const cash = await query(
-      `SELECT cash_fact, cash_1c, (cash_fact - cash_1c) as delta
+      `SELECT cash_fact, cash_1c, (cash_fact - (cash_1c + 2000)) as delta
        FROM store_cash WHERE store_id = $1 AND cash_date = $2::date`,
       [st.id, today]
     );
