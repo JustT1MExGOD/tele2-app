@@ -309,6 +309,33 @@ app.get('/stats/daily', async (request) => {
   return res.rows;
 });
 
+app.get('/dashboard', async () => {
+  const today = todayMoscow();
+  const res = await query(
+    `SELECT e.id as employee_id, e.full_name,
+            COALESCE(SUM(s.sim),0)::int as sim,
+            COALESCE(SUM(s.mnp),0)::int as mnp,
+            COALESCE(SUM(s.pa),0)::int as pa,
+            COALESCE(SUM(s.combo),0)::int as combo,
+            COALESCE(SUM(s.phones),0)::float as phones,
+            COALESCE(SUM(s.accessories),0)::float as accessories,
+            (COALESCE(SUM(s.sim),0) + COALESCE(SUM(s.mnp),0)*2 + COALESCE(SUM(s.pa),0)*3)::int as score
+     FROM sales s
+     JOIN employees e ON e.id = s.employee_id
+     WHERE s.sale_date::date >= ($1::date - interval '6 days')
+       AND s.sale_date::date <= $1::date
+     GROUP BY e.id, e.full_name
+     ORDER BY score DESC, sim DESC
+     LIMIT 10`,
+    [today]
+  );
+  return {
+    top: res.rows,
+    top7: res.rows,
+    period: { from: null, to: today }
+  };
+});
+
 // ===== EMPLOYEE PROGRESS =====
 app.get('/employee/progress/:id', async (request) => {
   const { id } = request.params as { id: string };

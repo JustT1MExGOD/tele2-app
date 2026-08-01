@@ -84,6 +84,7 @@ export async function registerV3Routes(app: FastifyInstance) {
   });
 
   /** Мой день: смена + факт + дневной план */
+    /** Мой день: смена + факт + дневной план */
   app.get('/me/day', async (request, reply) => {
     const telegramId =
       (request.headers['x-telegram-id'] as string) ||
@@ -106,7 +107,6 @@ export async function registerV3Routes(app: FastifyInstance) {
     }
     const e = emp.rows[0];
 
-    // ВАЖНО: work_date::date — иначе из‑за timezone «пропадает» смена
     const sch = await query(
       `SELECT sch.*, st.name as store_name, st.color, st.code as store_code
        FROM schedules sch
@@ -143,11 +143,20 @@ export async function registerV3Routes(app: FastifyInstance) {
     );
     const monthPlan = planRow.rows[0] || null;
 
+    // факт с начала месяца (для «остаток плана»)
     const monthFact = await query(
       `SELECT
-         COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
-         COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
-         COALESCE(SUM(phones),0) as phones
+         COALESCE(SUM(sim),0) as sim,
+         COALESCE(SUM(mnp),0) as mnp,
+         COALESCE(SUM(pa),0) as pa,
+         COALESCE(SUM(combo),0) as combo,
+         COALESCE(SUM(phones),0) as phones,
+         COALESCE(SUM(accessories),0) as accessories,
+         COALESCE(SUM(settings),0) as settings,
+         COALESCE(SUM(insurance),0) as insurance,
+         COALESCE(SUM(wink),0) as wink,
+         COALESCE(SUM(shpd),0) as shpd,
+         COALESCE(SUM(focus),0) as focus
        FROM sales
        WHERE employee_id = $1
          AND sale_date >= $2::date
@@ -156,6 +165,7 @@ export async function registerV3Routes(app: FastifyInstance) {
     );
     const mf = monthFact.rows[0] || {};
 
+    // сколько смен осталось с сегодня до конца месяца
     const remShifts = await query(
       `SELECT COUNT(*)::int as cnt FROM schedules
        WHERE employee_id = $1
@@ -166,12 +176,19 @@ export async function registerV3Routes(app: FastifyInstance) {
     );
     const div = Math.max(1, Number(remShifts.rows[0]?.cnt) || 1);
 
-    const metrics = ['sim', 'mnp', 'pa', 'combo', 'phones'] as const;
+    const metrics = [
+      'sim', 'mnp', 'pa', 'combo', 'phones',
+      'accessories', 'settings', 'insurance', 'wink', 'shpd', 'focus'
+    ] as const;
+
+    // daily_plan = ceil( (месячный_план − факт_месяца) / оставшиеся_смены )
     const dailyPlan: Record<string, number> = {};
     const progress: Record<string, { fact: number; plan: number; pct: number }> = {};
+
     for (const m of metrics) {
       const left = Math.max(0, Number(monthPlan?.[m] || 0) - Number(mf[m] || 0));
       dailyPlan[m] = Math.ceil(left / div);
+
       const f = Number(fact[m]) || 0;
       const p = dailyPlan[m];
       progress[m] = {
@@ -198,7 +215,8 @@ export async function registerV3Routes(app: FastifyInstance) {
         pct: totalPlan > 0 ? Math.round((totalFact / totalPlan) * 100) : 0
       },
       month_plan: monthPlan,
-      month_fact: mf
+      month_fact: mf,
+      remaining_shifts: div
     };
   });
 
