@@ -110,7 +110,7 @@ export async function registerV6Routes(app: FastifyInstance) {
     const progress: Record<string, { fact: number; plan: number; pct: number }> = {};
     for (const m of metrics) {
       const left = Math.max(0, Number(monthPlan?.[m] || 0) - Number(mf[m] || 0));
-      dailyPlan[m] = Math.round((left / div) * 100) / 100;
+      dailyPlan[m] = Math.ceil(left / div);
       const f = Number(fact[m]) || 0;
       const p = dailyPlan[m];
       progress[m] = {

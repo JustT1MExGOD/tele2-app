@@ -184,7 +184,7 @@ export async function getMonthSummaryTable(month: string) {
     const perShift: Record<string, number> = {};
     const div = shifts > 0 ? shifts : daysInMonth(month);
     for (const m of METRICS) {
-      perShift[m] = div > 0 ? Math.round((plan[m] / div) * 100) / 100 : 0;
+      perShift[m] = div > 0 ? Math.ceil(plan[m] / div) : 0;
     }
 
     rows.push({
@@ -240,7 +240,7 @@ export async function getEmployeeDailyPlan(employeeId: number, date: string) {
   const plan: Record<string, number> = {};
   for (const m of METRICS) {
     const left = Math.max(0, num(planRow[m]) - num(fact[m]));
-    plan[m] = Math.round((left / div) * 100) / 100;
+    plan[m] = Math.ceil(left / div);
   }
 
   return {
@@ -281,10 +281,10 @@ export async function computeStoreDailyPlans(date?: string) {
     }
   }
 
-  // daily total pool
+  // daily total pool — целые числа, округление ВВЕРХ
   const daily: Record<string, number> = {};
   for (const m of METRICS) {
-    daily[m] = Math.round((pool[m] / div) * 100) / 100;
+    daily[m] = Math.ceil(pool[m] / div);
   }
 
   const stores = await query(
@@ -298,7 +298,7 @@ export async function computeStoreDailyPlans(date?: string) {
     const share = num(st.plan_share) || 0;
     const plan: Record<string, number> = {};
     for (const m of METRICS) {
-      plan[m] = Math.round(daily[m] * share * 100) / 100;
+      plan[m] = Math.ceil(daily[m] * share);
     }
     return {
       store_id: st.id,
