@@ -2,11 +2,11 @@
 
 <p align="center">
   <b>Продажи · План · График · BFQ · Личный кабинет</b><br>
-  <sub>Telegram Mini App для салонов T2 · v10 Global Update</sub>
+  <sub>Telegram Mini App для салонов T2 · v11 Design System</sub>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-10.0.0-2AABEE?style=for-the-badge" alt="v10" />
+  <img src="https://img.shields.io/badge/version-11.0.0-2AABEE?style=for-the-badge" alt="v11" />
   <img src="https://img.shields.io/badge/Telegram-Mini%20App-2AABEE?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram" />
   <img src="https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/PostgreSQL-15+-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="Postgres" />
@@ -15,16 +15,17 @@
 
 ---
 
-## v10 Global Update — что нового
+## v11 Design System — что нового
 
 | Блок | Описание |
 |------|----------|
-| **Личный кабинет** | Профиль, кольцо плана дня, метрики, месяц, неделя в цветах точек, BFQ, быстрые действия |
-| **Мульти-продажи** | Несколько метрик за один раз (SIM + MNP + Аксы…) |
-| **Обучение** | Интерактивный тур по всему приложению |
-| **Главная** | Приветствие по времени суток, стрик продаж, пульс сети, медали в топе |
-| **Haptic** | Вибрация Telegram на успех / ошибку |
-| **О приложении** | Версия и changelog прямо в Mini App |
+| **Токены** | Цвет, типографика, отступы, радиусы, тени, motion |
+| **Компоненты** | Section, Row, CTA, FAB, Nav, Toast, Skeleton на токенах |
+| **Тема** | Светлая / тёмная через один набор CSS variables |
+| **Бренд** | T2 black + electric blue, цвета точек как токены |
+
+### v10 (в базе)
+Личный кабинет · мульти-продажи · обучение · стрик · пульс сети · haptic
 
 ---
 
@@ -192,4 +193,4 @@ npm start
 
 ---
 
-**T2 Sales v10** — не таблица. Это операционная система салона в Telegram.
+**T2 Sales v11** — Design System + операционная система салона в Telegram.
