@@ -1457,6 +1457,53 @@
       50% { box-shadow: 0 0 0 10px rgba(42,171,238,.12); }
     }
 
+  
+    /* Tutorial: не блокируем клики по подсвеченному UI */
+    #tutorialOverlay.show {
+      display: flex;
+      flex-direction: column;
+      background: rgba(0,0,0,0.28) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      pointer-events: none;
+      align-items: stretch;
+      justify-content: flex-start;
+      padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    }
+    #tutorialOverlay.show.tut-dock-bottom {
+      justify-content: flex-end;
+    }
+    #tutorialOverlay .tut-card {
+      pointer-events: auto;
+      max-height: 42vh;
+      overflow-y: auto;
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+      z-index: 502;
+    }
+    .tut-highlight, .tut-highlight-pulse {
+      position: relative !important;
+      z-index: 510 !important;
+      pointer-events: auto !important;
+      outline: 3px solid var(--primary, #3bb8f5) !important;
+      outline-offset: 3px;
+      box-shadow: 0 0 0 6px rgba(59,184,245,0.35), 0 8px 24px rgba(0,0,0,0.35) !important;
+      border-radius: 12px;
+      background-clip: padding-box;
+    }
+    /* нижняя навигация поверх затемнения */
+    .bottom-nav.tut-nav-front {
+      z-index: 520 !important;
+      position: relative;
+      pointer-events: auto !important;
+      filter: none !important;
+      opacity: 1 !important;
+    }
+    .fab.tut-highlight {
+      z-index: 520 !important;
+    }
+
   </style>
 </head>
 <body data-theme="light">
@@ -1901,7 +1948,7 @@
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
     }
 
-    const APP_VERSION = '13.4';
+    const APP_VERSION = '13.4.1';
     const API = window.location.origin;
 
     function haptic(type = 'light') {
@@ -4448,11 +4495,11 @@
       },
       {
         title: 'Нижняя навигация',
-        text: 'Внизу 5 вкладок: Главное, План, График, Мой, Команда. Это твои главные разделы. Сейчас нажми на «Мой» в нижней панели.',
+        text: 'Внизу 5 вкладок: Главное, План, График, Мой, Команда. Это твои главные разделы. Плашка обучения СВЕРХУ — низ экрана свободен. Нажми синюю подсветку «Мой» внизу.',
         page: 'home',
         highlight: '.nav-item[data-page="my"]',
         action: 'tap',
-        task: '👉 Нажми вкладку «Мой» внизу экрана'
+        task: '👉 Внизу экрана (не по этой плашке) нажми «Мой» — она подсвечена'
       },
       {
         title: 'Личный кабинет',
@@ -4474,7 +4521,7 @@
         page: 'home',
         highlight: '.fab',
         action: 'tap',
-        task: '👉 Нажми большую кнопку «+» (добавить продажу)'
+        task: '👉 Нажми круглую кнопку «+» справа внизу (подсвечена). Плашка обучения не мешает.'
       },
       {
         title: 'Мульти-метрики',
@@ -4502,7 +4549,7 @@
         page: 'plan',
         action: 'tap',
         highlight: '.nav-item[data-page="plan"]',
-        task: '👉 Открой вкладку «План»'
+        task: '👉 Внизу нажми подсвеченную вкладку «План»'
       },
       {
         title: 'График',
@@ -4738,6 +4785,7 @@
       document.querySelectorAll('.tut-highlight, .tut-highlight-pulse').forEach(el => {
         el.classList.remove('tut-highlight', 'tut-highlight-pulse');
       });
+      document.querySelector('.bottom-nav')?.classList.remove('tut-nav-front');
     }
 
     function detachTutTap() {
@@ -4829,23 +4877,50 @@
         }
       }
 
+      // карточка сверху, если цель внизу (nav / fab) — чтобы не перекрывать
+      const ov = document.getElementById('tutorialOverlay');
+      const hl = step.highlight || '';
+      const targetBottom = /bottom-nav|nav-item|\.fab|data-page/.test(hl);
+      if (ov) {
+        ov.classList.toggle('tut-dock-bottom', !targetBottom && step.action !== 'tap');
+        // на tap-шагах с низом — карточка СВЕРХУ
+        if (step.action === 'tap' && targetBottom) ov.classList.remove('tut-dock-bottom');
+        else if (step.action === 'next' || step.action === 'practice') ov.classList.add('tut-dock-bottom');
+      }
+
+      // поднять bottom-nav над оверлеем
+      document.querySelector('.bottom-nav')?.classList.remove('tut-nav-front');
+      if (targetBottom) {
+        document.querySelector('.bottom-nav')?.classList.add('tut-nav-front');
+      }
+
       if (step.highlight) {
         setTimeout(() => {
           const el = document.querySelector(step.highlight);
           if (el) {
             el.classList.add('tut-highlight', 'tut-highlight-pulse');
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // не скроллим низ экрана под карточку
+            if (!targetBottom) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
           }
-        }, 200);
+        }, 180);
       }
 
       if (step.action === 'tap' && step.highlight) {
         _tutTapHandler = function (ev) {
           const el = document.querySelector(step.highlight);
           if (!el) return;
-          if (el === ev.target || el.contains(ev.target)) {
-            markStepDone('Сделано');
-            detachTutTap();
+          // клик по цели или по всей nav-item зоне
+          const nav = document.querySelector('.bottom-nav');
+          const hit = el === ev.target || el.contains(ev.target)
+            || (targetBottom && nav && nav.contains(ev.target) && ev.target.closest(step.highlight));
+          if (hit) {
+            // даём switchPage отработать
+            setTimeout(() => {
+              markStepDone('Сделано — можно жать «Далее»');
+              detachTutTap();
+            }, 50);
           }
         };
         document.addEventListener('click', _tutTapHandler, true);
