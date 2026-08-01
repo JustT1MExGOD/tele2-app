@@ -1408,6 +1408,55 @@
       margin-bottom: 18px;
     }
 
+  
+    .tut-progress {
+      height: 4px; background: rgba(255,255,255,0.08); border-radius: 99px;
+      margin: -4px 0 12px; overflow: hidden;
+    }
+    .tut-progress-bar {
+      height: 100%; width: 0%; background: var(--primary);
+      border-radius: 99px; transition: width 0.25s ease;
+    }
+    .tut-badge {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 4px 10px; border-radius: 99px; margin-bottom: 8px;
+      background: var(--primary-soft); color: var(--primary);
+    }
+    .tut-badge.mgr { background: rgba(255,159,10,0.18); color: var(--warning); }
+    .tut-task {
+      margin: 12px 0 4px; padding: 12px 14px; border-radius: 14px;
+      background: rgba(59,184,245,0.12); border: 1px dashed rgba(59,184,245,0.4);
+      font-size: 13px; font-weight: 600; line-height: 1.4;
+      color: var(--text);
+    }
+    .tut-task.done {
+      background: rgba(48,209,88,0.14); border-color: rgba(48,209,88,0.4);
+    }
+    .tut-practice {
+      margin: 10px 0; display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .tut-practice button {
+      flex: 1 1 40%; min-width: 120px; padding: 12px;
+      border-radius: 12px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text);
+      font-weight: 600; font-size: 13px; cursor: pointer;
+    }
+    .tut-practice button:active { transform: scale(0.98); }
+    .tut-practice button.ok {
+      background: rgba(48,209,88,0.18); border-color: var(--success); color: var(--success);
+    }
+    .tut-btn-next:disabled {
+      opacity: 0.4; pointer-events: none;
+    }
+    .tut-highlight-pulse {
+      animation: tutPulse 1.2s ease infinite;
+    }
+    @keyframes tutPulse {
+      0%, 100% { box-shadow: 0 0 0 4px rgba(42,171,238,.25); }
+      50% { box-shadow: 0 0 0 10px rgba(42,171,238,.12); }
+    }
+
   </style>
 </head>
 <body data-theme="light">
@@ -1416,13 +1465,17 @@
   <!-- Interactive tutorial -->
   <div id="tutorialOverlay">
     <div class="tut-card">
-      <div class="tut-step" id="tutStepLabel">Шаг 1 из 10</div>
+      <div class="tut-progress"><div class="tut-progress-bar" id="tutProgressBar"></div></div>
+      <div class="tut-badge" id="tutBadge">Сотрудник</div>
+      <div class="tut-step" id="tutStepLabel">Шаг 1</div>
       <div class="tut-title" id="tutTitle">Добро пожаловать</div>
       <div class="tut-text" id="tutText"></div>
+      <div class="tut-practice" id="tutPractice" style="display:none"></div>
+      <div class="tut-task" id="tutTask" style="display:none"></div>
       <div class="tut-dots" id="tutDots"></div>
       <div class="tut-actions">
-        <button class="tut-btn-skip" id="tutSkipBtn" onclick="skipTutorial()">Пропустить</button>
-        <button class="tut-btn-next" id="tutNextBtn" onclick="nextTutorialStep()">Далее</button>
+        <button class="tut-btn-skip" id="tutSkipBtn" type="button" onclick="skipTutorial()">Пропустить</button>
+        <button class="tut-btn-next" id="tutNextBtn" type="button" onclick="nextTutorialStep()">Далее</button>
       </div>
     </div>
   </div>
@@ -1551,11 +1604,19 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="startTutorial()">
+        <button class="row" onclick="startTutorial('employee')">
           <div class="row-icon">🎓</div>
           <div class="row-body">
-            <div class="row-title">Обучение</div>
-            <div class="row-sub">Интерактивный тур по приложению</div>
+            <div class="row-title">Обучение сотрудника</div>
+            <div class="row-sub">Полный курс · практика · тест</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" id="btnMgrTutorial" onclick="startManagerTutorial()" style="display:none">
+          <div class="row-icon">🧭</div>
+          <div class="row-body">
+            <div class="row-title">Обучение manager</div>
+            <div class="row-sub">График · планы · касса · роли</div>
           </div>
           <div class="row-chevron">›</div>
         </button>
@@ -1840,7 +1901,7 @@
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
     }
 
-    const APP_VERSION = '13.3.1';
+    const APP_VERSION = '13.4';
     const API = window.location.origin;
 
     function haptic(type = 'light') {
@@ -2222,7 +2283,7 @@
           <b>Точки</b><br>
           Космонавтов 20А · Калинина 2 · Калинина 11
         </div>
-        <button class="btn-main" onclick="startTutorial();closeModal()">Пройти обучение</button>
+        <button class="btn-main" onclick="startTutorial('employee');closeModal()">Пройти обучение</button>
         <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)" onclick="closeModal()">Закрыть</button>
       `;
       if (typeof openModal === 'function') openModal();
@@ -2920,7 +2981,7 @@
             <div class="la-title">План дня</div>
             <div class="la-sub">Все точки</div>
           </button>
-          <button class="lk-action" onclick="startTutorial()">
+          <button class="lk-action" onclick="startTutorial('employee')">
             <div class="la-ico">🎓</div>
             <div class="la-title">Обучение</div>
             <div class="la-sub">Как пользоваться</div>
@@ -4115,6 +4176,8 @@
         const btnSv = document.getElementById('btnSupervisor');
         if (btnAcc) btnAcc.style.display = canApprove() ? '' : 'none';
         if (btnSv) btnSv.style.display = (canManage() || isSupervisor()) ? '' : 'none';
+        const btnMgrTut = document.getElementById('btnMgrTutorial');
+        if (btnMgrTut) btnMgrTut.style.display = canManage() ? '' : 'none';
 
         loadHome();
         maybeOfferTutorial();
@@ -4372,152 +4435,469 @@
       closeModal();
     }
 
-    // ===== INTERACTIVE TUTORIAL =====
-    const TUTORIAL_STEPS = [
+    // ===== INTERACTIVE TUTORIAL v2 =====
+    // mode: 'employee' | 'manager'
+    // step fields: title, text, page?, highlight?, action: 'next'|'tap'|'practice',
+    //   task?, practice?: [{id,label}], note?, requireRole?
+
+    const TUTORIAL_EMPLOYEE = [
       {
         title: 'Добро пожаловать в T2 Sales',
-        text: 'Это короткий тур по приложению. За 1–2 минуты покажем, как смотреть план, вносить продажи и пользоваться инструментами.',
-        page: 'home'
+        text: 'Это рабочее приложение сети, не просто чат. Здесь план, продажи, график, касса и отчёты. Сейчас пройдём всё по шагам — пропуск недоступен, пока не закончишь.',
+        action: 'next'
       },
       {
-        title: 'Главный экран',
-        text: 'Здесь «Мой день» — твоя смена, точка и личный прогресс по плану. Ниже — топ за 7 дней и быстрые инструменты.',
+        title: 'Нижняя навигация',
+        text: 'Внизу 5 вкладок: Главное, План, График, Мой, Команда. Это твои главные разделы. Сейчас нажми на «Мой» в нижней панели.',
         page: 'home',
-        highlight: '#myDaySection'
-      },
-      {
-        title: 'Добавить продажу',
-        text: 'Кнопка «+» внизу справа. Можно выбрать сразу несколько метрик (SIM, MNP, Аксы…) и указать количество по каждой. Точка подставляется из графика.',
-        page: 'home',
-        highlight: '.fab'
-      },
-      {
-        title: 'План на день',
-        text: 'Вкладка «План» — кто сегодня на какой точке, факт / план по SIM, MNP, ПА, комбо, телефонам и остальным метрикам.',
-        page: 'plan'
-      },
-      {
-        title: 'График',
-        text: 'Месячный график всех сотрудников. Цвета точек: Космонавтов — синий, Калинина 2 — оранжевый, Калинина 11 — жёлтый. Управляющий может редактировать смены.',
-        page: 'schedule'
+        highlight: '.nav-item[data-page="my"]',
+        action: 'tap',
+        task: '👉 Нажми вкладку «Мой» внизу экрана'
       },
       {
         title: 'Личный кабинет',
-        text: 'Вкладка «Мой» — твой профиль, смена сегодня, факт/план дня, прогресс месяца, неделя в цвете точек, продажи, BFQ и быстрые действия. Если Telegram не привязан — привяжи себя здесь.',
-        page: 'my'
+        text: 'Во вкладке «Мой» — твоя смена, дневной и месячный план, продажи, BFQ. Если пишет «выходной», проверь график. Здесь же открывают и закрывают смену.',
+        page: 'my',
+        action: 'next'
       },
       {
-        title: 'Планы на месяц',
-        text: 'Сводная таблица по всем сотрудникам (как в старой Excel). Видят все. Редактировать месячные планы может только управляющий — тап по ФИО.',
-        page: 'home',
-        note: 'Ищи блок «Планы и факт за месяц» на главной или в инструментах.'
+        title: 'Открыть смену',
+        text: 'В начале дня на точке: «Открыть смену». Приложение может запросить геолокацию. В конце дня — «Закрыть смену» и короткий самоотчёт. Без открытой смены часть сценариев хуже считается.',
+        page: 'my',
+        action: 'practice',
+        task: 'Нажми зелёную кнопку «Понял: открыть смену» ниже',
+        practice: [{ id: 'shift', label: '🟢 Понял: открыть смену' }]
       },
       {
-        title: 'BFQ, Комбо, Касса',
-        text: 'В «Инструментах» на главной: BFQ — рейтинг качества, Расчёт комбо — калькулятор скидки, Касса — сверка факт / 1С по точкам.',
+        title: 'Добавить продажу',
+        text: 'Кнопка «+» справа внизу или «Продажа» в кабинете. Выбери метрики (можно несколько), укажи количество, точку подтянется из графика. Обычный сотрудник вносит только свои продажи.',
         page: 'home',
-        highlight: null
+        highlight: '.fab',
+        action: 'tap',
+        task: '👉 Нажми большую кнопку «+» (добавить продажу)'
+      },
+      {
+        title: 'Мульти-метрики',
+        text: 'Можно сразу SIM + MNP + HB. Не оставляй предвыбор «по умолчанию» — отметь нужное сам. Ошибку можно исправить дельтой (−1 / +1), если есть права.',
+        action: 'practice',
+        task: 'Отметь тренировочно две метрики ниже',
+        practice: [
+          { id: 'm_sim', label: 'SIM' },
+          { id: 'm_mnp', label: 'MNP' },
+          { id: 'm_hb', label: 'HB' }
+        ],
+        practiceNeed: 2
+      },
+      {
+        title: 'Быстрый ввод',
+        text: 'Мой → «Быстрый ввод»: напиши «две симки и одно mnp» — система разберёт фразу. Удобно, когда руки заняты на точке.',
+        page: 'my',
+        action: 'practice',
+        task: 'Нажми «Попробовать фразу»',
+        practice: [{ id: 'quick', label: '⚡ Попробовать фразу' }]
+      },
+      {
+        title: 'План дня по точкам',
+        text: 'Вкладка «План» — дневные цели точек и прогресс. Смотри, где просадка (MNP, комбо), и усиливай слабое место, а не только «удобные» метрики.',
+        page: 'plan',
+        action: 'tap',
+        highlight: '.nav-item[data-page="plan"]',
+        task: '👉 Открой вкладку «План»'
+      },
+      {
+        title: 'График',
+        text: 'Вкладка «График» — кто где и в какие часы. Цвета точек разные. Своё расписание сверяй здесь, до споров в чате.',
+        page: 'schedule',
+        action: 'next'
+      },
+      {
+        title: 'Планы за месяц',
+        text: 'Главное → «Планы и факт за месяц». 6 ключевых метрик сразу, остальные — «Ещё метрики». Стрелки ‹ › — прошлые месяцы.',
+        page: 'monthplan',
+        action: 'next'
+      },
+      {
+        title: 'Инструменты',
+        text: 'На главной: BFQ, расчёт комбо, касса, live-сеть, промокоды РТК, обучение. Комбо считается на телефоне: цена − % + 28% + 1900.',
+        page: 'home',
+        action: 'practice',
+        task: 'Открой тренировочный расчёт комбо',
+        practice: [{ id: 'combo', label: '📱 Открыть расчёт комбо' }]
+      },
+      {
+        title: 'Промокоды РТК',
+        text: 'Инструменты → Промокоды РТК. Список скрытый. Тап — полный код. «Использован» убирает код у всех. «Не использован» — оставляешь в пуле.',
+        action: 'next'
       },
       {
         title: 'Поддержка',
-        text: 'Если что-то сломалось или есть вопрос — напиши в чат поддержки. Сообщение уйдёт администратору. Отвечать на тикеты может только admin.',
-        page: 'home'
+        text: 'Если что-то сломалось — раздел поддержки / тикет. Не молчи в общем чате без фактов: лучше тикет с текстом ошибки.',
+        page: 'support',
+        action: 'next'
       },
       {
-        title: 'Готово!',
-        text: 'Тур можно открыть снова: Главная → Инструменты → Обучение. Удачных продаж 🚀',
-        page: 'home'
+        title: 'Офлайн',
+        text: 'Нет сети — продажа может уйти в очередь и синхронизироваться позже. Не вноси одно и то же десять раз подряд «на всякий случай».',
+        action: 'next'
+      },
+      {
+        title: 'Проверка — что ты запомнил',
+        text: 'Ответь на мини-тест: где смотреть личный план на сегодня?',
+        action: 'practice',
+        task: 'Выбери правильный ответ',
+        practice: [
+          { id: 'q1_ok', label: 'Вкладка «Мой»' },
+          { id: 'q1_bad1', label: 'Только чат с ботом' },
+          { id: 'q1_bad2', label: 'Только Google Таблица' }
+        ],
+        correctId: 'q1_ok'
+      },
+      {
+        title: 'Ещё вопрос',
+        text: 'Как правильно зафиксировать несколько метрик за раз?',
+        action: 'practice',
+        task: 'Выбери верный вариант',
+        practice: [
+          { id: 'q2_bad', label: 'Только одну SIM, остальное завтра' },
+          { id: 'q2_ok', label: 'Мультивыбор метрик в одной продаже' },
+          { id: 'q2_bad2', label: 'Писать в чат без приложения' }
+        ],
+        correctId: 'q2_ok'
+      },
+      {
+        title: 'Готово — базовый курс',
+        text: 'Ты прошёл обязательное обучение сотрудника. Приложение всегда можно открыть снова: Главное → Обучение. Manager’ам доступен отдельный курс по ролям.',
+        action: 'next'
+      }
+    ];
+
+    const TUTORIAL_MANAGER = [
+      {
+        title: 'Курс управляющего',
+        text: 'Ты в роли manager/admin. Здесь права шире: чужие продажи, график, планы, касса, заявки, BFQ. Пройдём всё с практикой.',
+        action: 'next'
+      },
+      {
+        title: 'Заявки на доступ',
+        text: 'Новые люди не попадают в приложение сами — только через заявку. Главное / команда → заявки. Одобри только реальных сотрудников, иначе будут «левые» продажи.',
+        page: 'access',
+        action: 'next'
+      },
+      {
+        title: 'График bulk',
+        text: 'График редактируется из Mini App: смены по дням, точка, часы. Ошибка в графике = неверный дневной план и «ложные» выходные в «Мой».',
+        page: 'schedule',
+        action: 'next'
+      },
+      {
+        title: 'Месячные планы сотрудников',
+        text: 'Планы и факт за месяц → тап по сотруднику (manager) → правка плана. Дневные цели дробятся от остатка / оставшиеся смены. Все метрики — в «Ещё».',
+        page: 'monthplan',
+        action: 'next'
+      },
+      {
+        title: 'Дневные планы точек',
+        text: 'Кнопка «Записать дневные планы в БД» материализует расчёт (доли 50/30/20 и т.д.). Без этого шаблоны/прогноз могут врать.',
+        page: 'monthplan',
+        action: 'practice',
+        task: 'Подтверди, что понял материализацию',
+        practice: [{ id: 'mat', label: 'Понял: записать планы точек' }]
+      },
+      {
+        title: 'Касса',
+        text: 'Δ = факт − (1С + 2000). Смотри дельту по дням и точкам. Красная дельта — разбор в тот же день, не в конце месяца.',
+        page: 'cash',
+        action: 'next'
+      },
+      {
+        title: 'Сеть live',
+        text: 'Инструменты → Сеть live: кто на смене, % плана, касса. Красная/жёлтая точка — приоритет внимания, не «ещё одно сообщение в чат».',
+        page: 'live',
+        action: 'next'
+      },
+      {
+        title: 'BFQ и качество',
+        text: 'BFQ — не игрушка. Смотри провал по людям, а не только топ. VMR/ручные правки — только с фактом.',
+        page: 'bfq',
+        action: 'next'
+      },
+      {
+        title: 'Чужие продажи',
+        text: 'Manager может вносить/править продажи сотрудников. Сотрудник — только свои. Не раздавай manager без необходимости.',
+        action: 'practice',
+        task: 'Выбери верное правило',
+        practice: [
+          { id: 'm1_ok', label: 'Employee = только свои продажи' },
+          { id: 'm1_bad', label: 'Все могут править всех' }
+        ],
+        correctId: 'm1_ok'
+      },
+      {
+        title: 'Роли',
+        text: 'employee / manager / admin / supervisor. Admin — поддержка и роли. Supervisor — срез своих точек. Не путай с «просто старший смены».',
+        action: 'next'
+      },
+      {
+        title: 'Отчёты бота',
+        text: 'Микро-отчёты и итог дня уходят в чат. Проверь, что планы и смены заведены — иначе отчёт будет «красивый ноль».',
+        action: 'next'
+      },
+      {
+        title: 'Проверка manager',
+        text: 'Что сделать новичку до первой смены?',
+        action: 'practice',
+        task: 'Выбери полный правильный путь',
+        practice: [
+          { id: 'm2_bad', label: 'Сразу дать admin и забыть' },
+          { id: 'm2_ok', label: 'Одобрить доступ → график → план → обучение' },
+          { id: 'm2_bad2', label: 'Только добавить в чат Telegram' }
+        ],
+        correctId: 'm2_ok'
+      },
+      {
+        title: 'Курс manager завершён',
+        text: 'Ты закрыл обучение управляющего. Можно перезапустить из Инструментов → Обучение manager.',
+        action: 'next'
       }
     ];
 
     let tutorialIndex = 0;
     let tutorialActive = false;
+    let tutorialMode = 'employee';
+    let tutorialSteps = TUTORIAL_EMPLOYEE;
+    let tutorialStepDone = false;
+    let practiceHits = new Set();
+    let _tutTapHandler = null;
 
-    function startTutorial() {
+    function startTutorial(mode) {
+      tutorialMode = mode === 'manager' ? 'manager' : 'employee';
+      tutorialSteps = tutorialMode === 'manager' ? TUTORIAL_MANAGER : TUTORIAL_EMPLOYEE;
       tutorialIndex = 0;
       tutorialActive = true;
+      tutorialStepDone = false;
+      practiceHits = new Set();
       document.getElementById('tutorialOverlay').classList.add('show');
+      const badge = document.getElementById('tutBadge');
+      if (badge) {
+        badge.textContent = tutorialMode === 'manager' ? 'Manager' : 'Сотрудник';
+        badge.classList.toggle('mgr', tutorialMode === 'manager');
+      }
       renderTutorialStep();
+      try { tg?.HapticFeedback?.impactOccurred?.('medium'); } catch (_) {}
     }
 
-    function skipTutorial() {
-      finishTutorial();
+    function startManagerTutorial() {
+      if (!canManage() && !isSupervisor?.()) {
+        toast('Курс manager только для управляющих', 'err');
+        return;
+      }
+      startTutorial('manager');
     }
 
     function nextTutorialStep() {
-      if (tutorialIndex >= TUTORIAL_STEPS.length - 1) {
+      if (!tutorialActive) return;
+      const step = tutorialSteps[tutorialIndex];
+      if (step && step.action !== 'next' && !tutorialStepDone) {
+        toast('Сначала выполни задание шага', 'err');
+        return;
+      }
+      if (tutorialIndex >= tutorialSteps.length - 1) {
         finishTutorial();
         return;
       }
       tutorialIndex += 1;
+      tutorialStepDone = false;
+      practiceHits = new Set();
       renderTutorialStep();
     }
 
-    function finishTutorial() {
+    function skipTutorial() {
+      // первое обучение сотрудника — нельзя
+      if (tutorialMode === 'employee' && !localStorage.getItem('t2_tutorial_done')) {
+        toast('Первое обучение нельзя пропустить', 'err');
+        try { tg?.HapticFeedback?.notificationOccurred?.('error'); } catch (_) {}
+        return;
+      }
+      finishTutorial(true);
+    }
+
+    function finishTutorial(skipped) {
       tutorialActive = false;
       clearTutorialHighlight();
+      detachTutTap();
       document.getElementById('tutorialOverlay').classList.remove('show');
-      try { localStorage.setItem('t2_tutorial_done', '1'); } catch (_) {}
-      toast('Обучение завершено', 'ok');
+      try {
+        if (tutorialMode === 'employee') localStorage.setItem('t2_tutorial_done', '1');
+        if (tutorialMode === 'manager') localStorage.setItem('t2_tutorial_mgr_done', '1');
+      } catch (_) {}
+      toast(skipped ? 'Обучение закрыто' : 'Обучение завершено 🎉', 'ok');
       switchPage('home');
     }
 
     function clearTutorialHighlight() {
-      document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
+      document.querySelectorAll('.tut-highlight, .tut-highlight-pulse').forEach(el => {
+        el.classList.remove('tut-highlight', 'tut-highlight-pulse');
+      });
+    }
+
+    function detachTutTap() {
+      if (_tutTapHandler) {
+        document.removeEventListener('click', _tutTapHandler, true);
+        _tutTapHandler = null;
+      }
+    }
+
+    function markStepDone(msg) {
+      tutorialStepDone = true;
+      const task = document.getElementById('tutTask');
+      if (task) {
+        task.classList.add('done');
+        if (msg) task.textContent = '✅ ' + msg;
+      }
+      const nextBtn = document.getElementById('tutNextBtn');
+      if (nextBtn) nextBtn.disabled = false;
+      try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
     }
 
     function renderTutorialStep() {
-      const step = TUTORIAL_STEPS[tutorialIndex];
+      const step = tutorialSteps[tutorialIndex];
       if (!step) return;
 
       clearTutorialHighlight();
+      detachTutTap();
+      tutorialStepDone = step.action === 'next';
+      practiceHits = new Set();
 
       if (step.page) {
         try { switchPage(step.page); } catch (_) {}
       }
 
-      document.getElementById('tutStepLabel').textContent =
-        'Шаг ' + (tutorialIndex + 1) + ' из ' + TUTORIAL_STEPS.length;
+      const total = tutorialSteps.length;
+      const n = tutorialIndex + 1;
+      document.getElementById('tutStepLabel').textContent = 'Шаг ' + n + ' из ' + total;
       document.getElementById('tutTitle').textContent = step.title;
       document.getElementById('tutText').textContent =
-        step.text + (step.note ? '\n\n' + step.note : '');
+        step.text + (step.note ? '\\n\\n' + step.note : '');
+
+      const bar = document.getElementById('tutProgressBar');
+      if (bar) bar.style.width = Math.round((n / total) * 100) + '%';
 
       const dots = document.getElementById('tutDots');
-      dots.innerHTML = TUTORIAL_STEPS.map((_, i) =>
-        `<div class="tut-dot ${i === tutorialIndex ? 'on' : ''}"></div>`
-      ).join('');
+      if (dots) {
+        // не спамим 20 точек — каждые 4
+        dots.innerHTML = tutorialSteps.map((_, i) =>
+          `<div class="tut-dot ${i === tutorialIndex ? 'on' : ''}"></div>`
+        ).join('');
+      }
 
+      const taskEl = document.getElementById('tutTask');
+      const pracEl = document.getElementById('tutPractice');
       const nextBtn = document.getElementById('tutNextBtn');
-      nextBtn.textContent = tutorialIndex >= TUTORIAL_STEPS.length - 1 ? 'Готово' : 'Далее';
-
       const skipBtn = document.getElementById('tutSkipBtn');
-      skipBtn.style.visibility = tutorialIndex >= TUTORIAL_STEPS.length - 1 ? 'hidden' : 'visible';
+
+      if (taskEl) {
+        if (step.task) {
+          taskEl.style.display = 'block';
+          taskEl.classList.remove('done');
+          taskEl.textContent = step.task;
+        } else taskEl.style.display = 'none';
+      }
+
+      if (pracEl) {
+        if (step.practice && step.practice.length) {
+          pracEl.style.display = 'flex';
+          pracEl.innerHTML = step.practice.map(p =>
+            `<button type="button" data-pid="${p.id}" onclick="onTutPractice('${p.id}')">${p.label}</button>`
+          ).join('');
+        } else {
+          pracEl.style.display = 'none';
+          pracEl.innerHTML = '';
+        }
+      }
+
+      nextBtn.textContent = tutorialIndex >= total - 1 ? 'Завершить' : 'Далее';
+      nextBtn.disabled = !tutorialStepDone;
+
+      // skip: нельзя на первом employee-курсе
+      const firstEmployee = tutorialMode === 'employee' && !localStorage.getItem('t2_tutorial_done');
+      if (skipBtn) {
+        if (firstEmployee) {
+          skipBtn.style.display = 'none';
+        } else {
+          skipBtn.style.display = '';
+          skipBtn.style.visibility = tutorialIndex >= total - 1 ? 'hidden' : 'visible';
+        }
+      }
 
       if (step.highlight) {
         setTimeout(() => {
           const el = document.querySelector(step.highlight);
           if (el) {
-            el.classList.add('tut-highlight');
+            el.classList.add('tut-highlight', 'tut-highlight-pulse');
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
-        }, 180);
+        }, 200);
+      }
+
+      if (step.action === 'tap' && step.highlight) {
+        _tutTapHandler = function (ev) {
+          const el = document.querySelector(step.highlight);
+          if (!el) return;
+          if (el === ev.target || el.contains(ev.target)) {
+            markStepDone('Сделано');
+            detachTutTap();
+          }
+        };
+        document.addEventListener('click', _tutTapHandler, true);
       }
     }
 
-    // Авто-предложение обучения при первом заходе (после привязки)
+    function onTutPractice(pid) {
+      const step = tutorialSteps[tutorialIndex];
+      if (!step) return;
+      const btn = document.querySelector('#tutPractice button[data-pid="' + pid + '"]');
+      if (btn) btn.classList.add('ok');
+
+      if (step.correctId) {
+        if (pid === step.correctId) {
+          markStepDone('Верно');
+        } else {
+          toast('Неверно — подумай ещё', 'err');
+          try { tg?.HapticFeedback?.notificationOccurred?.('error'); } catch (_) {}
+          if (btn) setTimeout(() => btn.classList.remove('ok'), 400);
+        }
+        return;
+      }
+
+      practiceHits.add(pid);
+      const need = step.practiceNeed || 1;
+      if (practiceHits.size >= need) {
+        markStepDone('Практика ок');
+      }
+
+      // side effects for realism
+      if (pid === 'combo') {
+        try { openComboCalc(); } catch (_) {}
+      }
+      if (pid === 'quick') {
+        toast('Пример: «две симки и одно mnp»', 'ok');
+      }
+    }
+
     function maybeOfferTutorial() {
       try {
         if (localStorage.getItem('t2_tutorial_done')) return;
-        if (localStorage.getItem('t2_tutorial_offered')) return;
-        localStorage.setItem('t2_tutorial_offered', '1');
+        // первое обучение — принудительно, без флага offered-skip
         setTimeout(() => {
-          if (!tutorialActive) startTutorial();
-        }, 1200);
+          if (!tutorialActive) startTutorial('employee');
+        }, 900);
       } catch (_) {}
     }
 
-    // Вызывается после успешной загрузки /me (если функция есть в init)
     window.maybeOfferTutorial = maybeOfferTutorial;
+    window.startTutorial = startTutorial;
+    window.startManagerTutorial = startManagerTutorial;
+
 
     
     // ===== V13: смена / инсайт / live / quick sale =====
