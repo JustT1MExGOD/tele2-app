@@ -1716,7 +1716,7 @@
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
     }
 
-    const APP_VERSION = '13.2';
+    const APP_VERSION = '13.2.1';
     const API = window.location.origin;
 
     function haptic(type = 'light') {
@@ -3627,8 +3627,14 @@
       renderSaleQtyList();
     }
 
+    function openModal() {
+      const ov = document.getElementById('overlay');
+      if (!ov) { console.error('overlay missing'); return; }
+      ov.classList.add('show');
+    }
+
     function closeModal() {
-      document.getElementById('overlay').classList.remove('show');
+      document.getElementById('overlay')?.classList.remove('show');
     }
 
 
@@ -3784,10 +3790,17 @@
       }
       if (status === 'rejected' || status === 'blocked') {
         sub.textContent = 'Доступ закрыт';
+        const tid = tgUser()?.id || '—';
         body.innerHTML = `
-          <div class="progress-block">
-            <div style="font-size:18px;font-weight:700;margin-bottom:8px">❌ В доступе отказано</div>
-            <div style="color:var(--hint)">Напишите своему управляющему или супервайзеру.</div>
+          <div class="bind-hero" style="margin:0">
+            <div class="bind-glow"></div>
+            <div class="bind-emoji">🔒</div>
+            <div class="bind-title">В доступе отказано</div>
+            <div class="bind-sub">Напиши управляющему или admin. Если это ошибка — попроси выставить access_status = active.</div>
+            <div class="bind-foot">Telegram ID: <code>${tid}</code></div>
+            <button class="btn-main" style="margin-top:16px" onclick="bootApp()">Проверить снова</button>
+            <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)"
+              onclick="showAccessGate({status:'none'})">Подать заявку заново</button>
           </div>`;
         return;
       }
@@ -4360,7 +4373,13 @@
         <button type="button" class="btn-main" onclick="runComboCalc()">Посчитать</button>
         <div id="comboOut" style="display:none" class="combo-result"></div>
       `;
-      openModal();
+      try {
+        if (typeof openModal === 'function') openModal();
+        else document.getElementById('overlay')?.classList.add('show');
+      } catch (e) {
+        console.error(e);
+        document.getElementById('overlay')?.classList.add('show');
+      }
       setTimeout(() => document.getElementById('comboPrice')?.focus(), 200);
     }
 
@@ -4523,7 +4542,12 @@
         <button class="btn-main" onclick="submitQuickSale()">Разобрать и записать</button>
         <button class="btn-ghost" style="margin-top:8px;width:100%" onclick="previewQuickSale()">Только разобрать</button>
       `;
-      openModal();
+      try {
+        if (typeof openModal === 'function') openModal();
+        else document.getElementById('overlay')?.classList.add('show');
+      } catch (_) {
+        document.getElementById('overlay')?.classList.add('show');
+      }
       setTimeout(() => document.getElementById('quickSaleText')?.focus(), 200);
     }
 
@@ -4623,7 +4647,7 @@
     })();
 
 
-    console.log('T2 Sales UI v13.2');
+    console.log('T2 Sales UI v13.2.1');
 
   </script>
 </body>
