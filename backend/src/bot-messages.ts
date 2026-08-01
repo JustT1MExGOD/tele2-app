@@ -37,7 +37,7 @@ const METRIC_LABEL: Record<string, string> = {
   credit_issued: 'Кредит (выдан)'
 };
 
-function pick(arr: string[]) {
+function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
