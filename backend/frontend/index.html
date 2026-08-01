@@ -672,10 +672,15 @@
   </div>
 
   <div class="sheet">
-    <!-- ===== MAIN ===== -->
+    <!-- ===== MAIN / CONTROL CENTER ===== -->
     <div id="page-home" class="page active">
+      <div class="section" id="myDaySection">
+        <div class="section-title">Мой день</div>
+        <div id="myDayBody"><div class="skeleton"></div></div>
+      </div>
+
       <div class="section">
-        <div class="section-title">Продажи сегодня</div>
+        <div class="section-title">Сеть сегодня</div>
         <div class="stats-row" id="homeStats">
           <div class="stat-chip"><div class="n" id="hSim">0</div><div class="l">SIM</div></div>
           <div class="stat-chip"><div class="n" id="hMnp">0</div><div class="l">MNP</div></div>
@@ -693,6 +698,11 @@
           <div class="row-body"><div class="row-title">Добавить продажу</div></div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('monthplan')">
+          <div class="row-icon">📊</div>
+          <div class="row-body"><div class="row-title">Планы и факт за месяц</div><div class="row-sub">видно всей команде</div></div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="switchPage('plan')">
           <div class="row-icon">📋</div>
           <div class="row-body"><div class="row-title">План дня по точкам</div></div>
@@ -703,11 +713,6 @@
           <div class="row-body"><div class="row-title">Кто на смене сегодня</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('monthplan')">
-          <div class="row-icon">📅</div>
-          <div class="row-body"><div class="row-title">Планы на месяц</div></div>
-          <div class="row-chevron">›</div>
-        </button>
         <button class="row" onclick="switchPage('support')">
           <div class="row-icon">💬</div>
           <div class="row-body"><div class="row-title">Поддержка</div></div>
@@ -716,8 +721,8 @@
       </div>
 
       <div class="section">
-        <div class="section-title">Топ сотрудников</div>
-        <div id="homeTop"><div class="skeleton"></div><div class="skeleton"></div></div>
+        <div class="section-title">Топ за 7 дней</div>
+        <div id="homeTop"><div class="skeleton"></div></div>
       </div>
 
       <div class="section">
@@ -820,7 +825,18 @@
           <div class="row-body"><div class="row-title">Добавить точку</div></div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="copyScheduleWeek()">
+          <div class="row-icon">📑</div>
+          <div class="row-body"><div class="row-title">Копировать график на неделю</div><div class="row-sub">текущая → следующая</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="loadManagerTickets()">
+          <div class="row-icon">🆘</div>
+          <div class="row-body"><div class="row-title">Тикеты поддержки</div></div>
+          <div class="row-chevron">›</div>
+        </button>
       </div>
+      <div id="ticketsBox"></div>
     </div>
 
     <!-- ===== HISTORY ===== -->
@@ -1038,16 +1054,60 @@
       toast('Готово', 'ok');
     }
 
-    // ===== HOME =====
+    // ===== HOME / MY DAY + DASH =====
+    async function loadMyDay() {
+      const box = document.getElementById('myDayBody');
+      if (!box) return;
+      const user = tgUser();
+      if (!user?.id) {
+        box.innerHTML = '<div class="empty">Открой из Telegram, чтобы видеть свой день</div>';
+        return;
+      }
+      try {
+        const res = await fetch(API + '/me/day', { headers: authHeaders() });
+        const d = await res.json();
+        if (!d.bound) {
+          box.innerHTML = `
+            <div class="empty" style="text-align:left;padding:8px 0">Аккаунт не привязан</div>
+            <button class="btn-main" onclick="switchPage('my')">Привязать себя</button>`;
+          return;
+        }
+        const shift = d.shift;
+        const tot = d.total || {};
+        const pr = d.progress || {};
+        box.innerHTML = `
+          <div class="progress-block">
+            ${shift ? `
+              <div class="row" style="border:none;padding:0 0 10px">
+                <div class="row-icon">📍</div>
+                <div class="row-body">
+                  <div class="row-title">${shift.store_name || 'Точка'}</div>
+                  <div class="row-sub">${shift.shift_text || ''} · ${shift.hours || ''}ч</div>
+                </div>
+                <div class="row-value">${tot.pct || 0}%</div>
+              </div>` : `
+              <div class="empty" style="text-align:left;padding:0 0 10px">Сегодня выходной / нет в графике</div>`}
+            ${['sim','mnp','pa','combo','phones'].map(m => {
+              const x = pr[m] || { fact: 0, plan: 0, pct: 0 };
+              const labels = { sim:'SIM', mnp:'MNP', pa:'ПА', combo:'Комбо', phones:'Тел' };
+              return progressHTML(labels[m], x.fact, x.plan);
+            }).join('')}
+            <button class="btn-main" style="margin-top:8px" onclick="openAddSale()">+ Продажа</button>
+          </div>`;
+      } catch (e) {
+        box.innerHTML = '<div class="empty">Не удалось загрузить «Мой день»</div>';
+      }
+    }
+
     async function loadHome() {
       document.getElementById('headerDate').textContent = formatDateRu(todayMoscow());
+      loadMyDay();
       try {
-        const [statsRes, salesRes] = await Promise.all([
+        const [statsRes, dashRes] = await Promise.all([
           fetch(API + '/stats/daily?date=' + todayMoscow()),
-          fetch(API + '/sales?date=' + todayMoscow())
+          fetch(API + '/dashboard')
         ]);
         const stats = await statsRes.json();
-        const sales = await salesRes.json();
         const list = Array.isArray(stats) ? stats : [];
 
         const t = list.reduce((a, s) => ({
@@ -1066,24 +1126,29 @@
         document.getElementById('hPhones').textContent = t.phones;
         document.getElementById('hAcc').textContent = t.accessories;
 
-        const map = {};
-        (Array.isArray(sales) ? sales : []).forEach(s => {
-          if (!map[s.employee_id]) map[s.employee_id] = { name: s.full_name, total: 0, id: s.employee_id };
-          map[s.employee_id].total += (+s.sim || 0) + (+s.mnp || 0) + (+s.pa || 0) + (+s.combo || 0) + (+s.phones || 0);
-        });
-        const top = Object.values(map).sort((a, b) => b.total - a.total).slice(0, 5);
         const box = document.getElementById('homeTop');
-        if (!top.length) {
-          box.innerHTML = '<div class="empty">Нет продаж сегодня</div>';
+        if (dashRes.ok) {
+          const dash = await dashRes.json();
+          const leaders = dash.leaders || dash.employees || [];
+          if (!leaders.length) {
+            box.innerHTML = '<div class="empty">Нет данных за 7 дней</div>';
+          } else {
+            box.innerHTML = leaders.slice(0, 5).map((e, i) => {
+              const total = (+e.sim || 0) + (+e.mnp || 0) + (+e.pa || 0) + (+e.combo || 0);
+              return `
+              <button class="row" onclick="openEmployeeCard(${e.id})">
+                <div class="row-icon">${i + 1}</div>
+                <div class="row-body">
+                  <div class="row-title">${e.full_name}</div>
+                  <div class="row-sub">SIM ${e.sim || 0} · MNP ${e.mnp || 0} · ПА ${e.pa || 0}</div>
+                </div>
+                <div class="row-value">${total}</div>
+                <div class="row-chevron">›</div>
+              </button>`;
+            }).join('');
+          }
         } else {
-          box.innerHTML = top.map((e, i) => `
-            <button class="row" onclick="openEmployeeCard(${e.id})">
-              <div class="row-icon">${i + 1}</div>
-              <div class="row-body"><div class="row-title">${e.name}</div></div>
-              <div class="row-value">${e.total}</div>
-              <div class="row-chevron">›</div>
-            </button>
-          `).join('');
+          box.innerHTML = '<div class="empty">Дашборд недоступен</div>';
         }
       } catch (e) {
         console.error(e);
@@ -1997,6 +2062,67 @@
       loadTeam();
     }
 
+    function mondayOf(d) {
+      const x = new Date(d + 'T12:00:00');
+      const day = x.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      x.setDate(x.getDate() + diff);
+      return x.toISOString().slice(0, 10);
+    }
+
+    async function copyScheduleWeek() {
+      if (!canManage()) return;
+      const from = mondayOf(todayMoscow());
+      const toD = new Date(from + 'T12:00:00');
+      toD.setDate(toD.getDate() + 7);
+      const to = toD.toISOString().slice(0, 10);
+      if (!confirm(`Скопировать график ${from} → неделя с ${to}?`)) return;
+      const res = await fetch(API + '/schedules/copy-week', {
+        method: 'POST',
+        headers: authHeaders(true),
+        body: JSON.stringify({ from_monday: from, to_monday: to })
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      const data = await res.json();
+      toast('Скопировано смен: ' + (data.copied || 0), 'ok');
+    }
+
+    async function loadManagerTickets() {
+      if (!canManage()) return;
+      const box = document.getElementById('ticketsBox');
+      box.innerHTML = '<div class="section"><div class="section-title">Тикеты</div><div class="skeleton"></div></div>';
+      try {
+        const res = await fetch(API + '/support/tickets', { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const list = await res.json();
+        const open = (list || []).filter(t => t.status !== 'closed');
+        box.innerHTML = `<div class="section"><div class="section-title">Тикеты (${open.length})</div>` +
+          (open.length ? open.map(t => `
+            <div class="progress-block" style="margin:8px 12px">
+              <div class="row-title">#${t.id} · ${t.full_name || 'Гость'} · ${t.status}</div>
+              <div class="row-sub" style="margin:6px 0">${t.message}</div>
+              ${t.admin_reply ? `<div class="empty" style="text-align:left">Ответ: ${t.admin_reply}</div>` : `
+              <div class="field"><input id="treply_${t.id}" placeholder="Ответ сотруднику"></div>
+              <button class="btn-main" onclick="replyTicket(${t.id})">Ответить в личку</button>`}
+            </div>`).join('') : '<div class="empty">Нет открытых</div>') + '</div>';
+      } catch {
+        box.innerHTML = '<div class="empty">Не удалось загрузить тикеты</div>';
+      }
+    }
+
+    async function replyTicket(id) {
+      const text = document.getElementById('treply_' + id)?.value?.trim();
+      if (!text) { toast('Введите ответ', 'err'); return; }
+      const res = await fetch(API + '/support/tickets/' + id + '/reply', {
+        method: 'POST',
+        headers: authHeaders(true),
+        body: JSON.stringify({ reply: text })
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Ответ отправлен', 'ok');
+      loadManagerTickets();
+    }
+
     async function exportCSV(type) {
       if (!canManage()) { toast('Только управляющий', 'err'); return; }
       const month = todayMoscow().slice(0, 7);
@@ -2173,7 +2299,7 @@
       } catch (_) {}
     })();
 
-    console.log('T2 Sales UI v4 ready');
+    console.log('T2 Sales UI v6 Control Center ready');
   </script>
 </body>
 </html>

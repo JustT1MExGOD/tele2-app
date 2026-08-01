@@ -13,6 +13,8 @@ import { startReportCron } from './cron/reports.js';
 import { saleNotification } from './bot-messages.js';
 import { registerV4Routes } from './routes-v4.js';
 import { registerPlansV5Routes } from './routes-plans-v5.js';
+import { registerV6Routes } from './routes-v6.js';
+import { startAlertCron } from './cron/alerts.js';
 
 dotenv.config();
 
@@ -336,6 +338,7 @@ app.get('/employee/progress/:id', async (request) => {
 await registerV3Routes(app);
 await registerV4Routes(app);
 await registerPlansV5Routes(app);
+await registerV6Routes(app);
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;
@@ -347,6 +350,7 @@ try {
 
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
   startReportCron();
+  startAlertCron();
 } catch (err) {
   app.log.error(err);
   process.exit(1);
