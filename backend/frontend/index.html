@@ -641,6 +641,98 @@
       color: var(--text-secondary);
       font-size: 13px;
     }
+
+    /* ===== Tutorial / Onboarding ===== */
+    #tutorialOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      align-items: flex-end;
+      justify-content: center;
+      padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    }
+    #tutorialOverlay.show { display: flex; }
+    .tut-card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 20px;
+      padding: 20px 18px 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      animation: tutIn 0.28s ease;
+    }
+    @keyframes tutIn {
+      from { transform: translateY(24px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .tut-step {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--primary, #0099ff);
+      margin-bottom: 8px;
+    }
+    .tut-title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      margin-bottom: 8px;
+      line-height: 1.25;
+    }
+    .tut-text {
+      font-size: 15px;
+      line-height: 1.45;
+      color: var(--text-secondary, #6b6b6b);
+      margin-bottom: 16px;
+    }
+    .tut-dots {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .tut-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--border, #ddd);
+    }
+    .tut-dot.on { background: var(--primary, #0099ff); width: 18px; border-radius: 4px; }
+    .tut-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .tut-actions button {
+      flex: 1;
+      padding: 13px 12px;
+      border-radius: 14px;
+      border: none;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .tut-btn-skip {
+      background: var(--surface-2, #f2f2f7);
+      color: var(--text-secondary, #6b6b6b);
+    }
+    .tut-btn-next {
+      background: #111;
+      color: #fff;
+      flex: 1.4;
+    }
+    [data-theme="dark"] .tut-btn-next { background: #fff; color: #111; }
+    .tut-highlight {
+      position: relative;
+      z-index: 510 !important;
+      box-shadow: 0 0 0 3px var(--primary, #0099ff), 0 0 0 8px rgba(0,153,255,0.25) !important;
+      border-radius: 14px !important;
+    }
+
     .quick {
       display: flex;
       gap: 8px;
@@ -689,6 +781,20 @@
 </head>
 <body data-theme="light">
   <div id="toast" class="toast"></div>
+
+  <!-- Interactive tutorial -->
+  <div id="tutorialOverlay">
+    <div class="tut-card">
+      <div class="tut-step" id="tutStepLabel">Шаг 1 из 10</div>
+      <div class="tut-title" id="tutTitle">Добро пожаловать</div>
+      <div class="tut-text" id="tutText"></div>
+      <div class="tut-dots" id="tutDots"></div>
+      <div class="tut-actions">
+        <button class="tut-btn-skip" id="tutSkipBtn" onclick="skipTutorial()">Пропустить</button>
+        <button class="tut-btn-next" id="tutNextBtn" onclick="nextTutorialStep()">Далее</button>
+      </div>
+    </div>
+  </div>
 
   <div id="overlay" class="overlay">
     <div class="sheet-modal">
@@ -790,6 +896,14 @@
           <div class="row-body">
             <div class="row-title">Касса</div>
             <div class="row-sub">Факт / 1С / плюс-минус по точкам</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="startTutorial()">
+          <div class="row-icon">🎓</div>
+          <div class="row-body">
+            <div class="row-title">Обучение</div>
+            <div class="row-sub">Интерактивный тур по приложению</div>
           </div>
           <div class="row-chevron">›</div>
         </button>
@@ -2621,6 +2735,7 @@
         if (btnSv) btnSv.style.display = (canManage() || isSupervisor()) ? '' : 'none';
 
         loadHome();
+        maybeOfferTutorial();
       } catch (e) {
         console.error(e);
         showAccessGate({ status: 'none' });
@@ -2937,7 +3052,154 @@
       closeModal();
     }
 
-    console.log('T2 Sales UI v8 access + supervisor ready');
+    // ===== INTERACTIVE TUTORIAL =====
+    const TUTORIAL_STEPS = [
+      {
+        title: 'Добро пожаловать в T2 Sales',
+        text: 'Это короткий тур по приложению. За 1–2 минуты покажем, как смотреть план, вносить продажи и пользоваться инструментами.',
+        page: 'home'
+      },
+      {
+        title: 'Главный экран',
+        text: 'Здесь «Мой день» — твоя смена, точка и личный прогресс по плану. Ниже — топ за 7 дней и быстрые инструменты.',
+        page: 'home',
+        highlight: '#myDaySection'
+      },
+      {
+        title: 'Добавить продажу',
+        text: 'Кнопка «+» внизу справа. Можно выбрать сразу несколько метрик (SIM, MNP, Аксы…) и указать количество по каждой. Точка подставляется из графика.',
+        page: 'home',
+        highlight: '.fab'
+      },
+      {
+        title: 'План на день',
+        text: 'Вкладка «План» — кто сегодня на какой точке, факт / план по SIM, MNP, ПА, комбо, телефонам и остальным метрикам.',
+        page: 'plan'
+      },
+      {
+        title: 'График',
+        text: 'Месячный график всех сотрудников. Цвета точек: Космонавтов — синий, Калинина 2 — оранжевый, Калинина 11 — жёлтый. Управляющий может редактировать смены.',
+        page: 'schedule'
+      },
+      {
+        title: 'Мой план',
+        text: 'Личный факт и план на месяц. Если Telegram ещё не привязан — привяжи себя в этом разделе, чтобы видеть свои цифры и получать уведомления.',
+        page: 'my'
+      },
+      {
+        title: 'Планы на месяц',
+        text: 'Сводная таблица по всем сотрудникам (как в старой Excel). Видят все. Редактировать месячные планы может только управляющий — тап по ФИО.',
+        page: 'home',
+        note: 'Ищи блок «Планы и факт за месяц» на главной или в инструментах.'
+      },
+      {
+        title: 'BFQ, Комбо, Касса',
+        text: 'В «Инструментах» на главной: BFQ — рейтинг качества, Расчёт комбо — калькулятор скидки, Касса — сверка факт / 1С по точкам.',
+        page: 'home',
+        highlight: null
+      },
+      {
+        title: 'Поддержка',
+        text: 'Если что-то сломалось или есть вопрос — напиши в поддержку. Сообщение уйдёт администратору в личку. Управляющий может отвечать прямо из приложения.',
+        page: 'home'
+      },
+      {
+        title: 'Готово!',
+        text: 'Тур можно открыть снова: Главная → Инструменты → Обучение. Удачных продаж 🚀',
+        page: 'home'
+      }
+    ];
+
+    let tutorialIndex = 0;
+    let tutorialActive = false;
+
+    function startTutorial() {
+      tutorialIndex = 0;
+      tutorialActive = true;
+      document.getElementById('tutorialOverlay').classList.add('show');
+      renderTutorialStep();
+    }
+
+    function skipTutorial() {
+      finishTutorial();
+    }
+
+    function nextTutorialStep() {
+      if (tutorialIndex >= TUTORIAL_STEPS.length - 1) {
+        finishTutorial();
+        return;
+      }
+      tutorialIndex += 1;
+      renderTutorialStep();
+    }
+
+    function finishTutorial() {
+      tutorialActive = false;
+      clearTutorialHighlight();
+      document.getElementById('tutorialOverlay').classList.remove('show');
+      try { localStorage.setItem('t2_tutorial_done', '1'); } catch (_) {}
+      toast('Обучение завершено', 'ok');
+      switchPage('home');
+    }
+
+    function clearTutorialHighlight() {
+      document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
+    }
+
+    function renderTutorialStep() {
+      const step = TUTORIAL_STEPS[tutorialIndex];
+      if (!step) return;
+
+      clearTutorialHighlight();
+
+      if (step.page) {
+        try { switchPage(step.page); } catch (_) {}
+      }
+
+      document.getElementById('tutStepLabel').textContent =
+        'Шаг ' + (tutorialIndex + 1) + ' из ' + TUTORIAL_STEPS.length;
+      document.getElementById('tutTitle').textContent = step.title;
+      document.getElementById('tutText').textContent =
+        step.text + (step.note ? '\n\n' + step.note : '');
+
+      const dots = document.getElementById('tutDots');
+      dots.innerHTML = TUTORIAL_STEPS.map((_, i) =>
+        `<div class="tut-dot ${i === tutorialIndex ? 'on' : ''}"></div>`
+      ).join('');
+
+      const nextBtn = document.getElementById('tutNextBtn');
+      nextBtn.textContent = tutorialIndex >= TUTORIAL_STEPS.length - 1 ? 'Готово' : 'Далее';
+
+      const skipBtn = document.getElementById('tutSkipBtn');
+      skipBtn.style.visibility = tutorialIndex >= TUTORIAL_STEPS.length - 1 ? 'hidden' : 'visible';
+
+      if (step.highlight) {
+        setTimeout(() => {
+          const el = document.querySelector(step.highlight);
+          if (el) {
+            el.classList.add('tut-highlight');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 180);
+      }
+    }
+
+    // Авто-предложение обучения при первом заходе (после привязки)
+    function maybeOfferTutorial() {
+      try {
+        if (localStorage.getItem('t2_tutorial_done')) return;
+        if (localStorage.getItem('t2_tutorial_offered')) return;
+        localStorage.setItem('t2_tutorial_offered', '1');
+        setTimeout(() => {
+          if (!tutorialActive) startTutorial();
+        }, 1200);
+      } catch (_) {}
+    }
+
+    // Вызывается после успешной загрузки /me (если функция есть в init)
+    window.maybeOfferTutorial = maybeOfferTutorial;
+
+    console.log('T2 Sales UI v8.1 + interactive tutorial');
   </script>
 </body>
 </html>
