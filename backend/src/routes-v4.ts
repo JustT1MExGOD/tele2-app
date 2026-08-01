@@ -13,6 +13,7 @@ import { query } from './db/index.js';
 import { requireManager, requireAuth, isManager } from './middleware-auth.js';
 import { notifyChat } from './bot/index.js';
 import { supportTicketAdmin } from './bot-messages.js';
+import { notifyAdmin } from './bot/index.js';
 
 export async function registerV4Routes(app: FastifyInstance) {
   // ===== MONTHLY PLANS (шаблон = месячный план точки) =====
@@ -271,17 +272,15 @@ export async function registerV4Routes(app: FastifyInstance) {
 
     // notify admin chat
     const adminChat = process.env.ADMIN_CHAT_ID || process.env.CHAT_ID;
-    if (adminChat && !autoAnswer) {
-      try {
-        await notifyChat(
-          supportTicketAdmin({
-            from: full_name,
-            category,
-            message,
-            ticketId: ticket.id
-          })
-        );
-      } catch (_) {}
+    if (!autoAnswer) {
+      await notifyAdmin(
+        supportTicketAdmin({
+          from: full_name,
+          category,
+          message,
+          ticketId: ticket.id,
+        })
+      );
     }
 
     return {

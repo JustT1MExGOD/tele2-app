@@ -107,6 +107,22 @@ export async function startBot() {
   }
 }
 
+export async function notifyAdmin(text: string) {
+  const adminId = process.env.ADMIN_TELEGRAM_ID;
+  if (!bot || !adminId) {
+    console.warn('ADMIN_TELEGRAM_ID не задан');
+    return;
+  }
+  try {
+    await bot.api.sendMessage(adminId, text, { parse_mode: 'HTML' });
+  } catch (e) {
+    console.error('notifyAdmin error', e);
+    try {
+      await bot.api.sendMessage(adminId, text.replace(/<[^>]+>/g, ''));
+    } catch (_) {}
+  }
+}
+
 export async function notifyChat(text: string) {
   const chatId = process.env.CHAT_ID;
   if (!bot || !chatId) return;

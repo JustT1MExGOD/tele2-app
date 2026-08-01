@@ -12,6 +12,7 @@ import { registerV3Routes } from './routes-v3.js';
 import { startReportCron } from './cron/reports.js';
 import { saleNotification } from './bot-messages.js';
 import { registerV4Routes } from './routes-v4.js';
+import { registerPlansV5Routes } from './routes-plans-v5.js';
 
 dotenv.config();
 
@@ -334,6 +335,7 @@ app.get('/employee/progress/:id', async (request) => {
 // НЕ дублируй /me и /bfq здесь — они внутри registerV3Routes
 await registerV3Routes(app);
 await registerV4Routes(app);
+await registerPlansV5Routes(app);
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;
