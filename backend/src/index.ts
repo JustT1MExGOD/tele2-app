@@ -15,6 +15,7 @@ import { registerV4Routes } from './routes-v4.js';
 import { registerPlansV5Routes } from './routes-plans-v5.js';
 import { registerV6Routes } from './routes-v6.js';
 import { startAlertCron } from './cron/alerts.js';
+import { registerV7Routes } from './routes-v7.js';
 
 dotenv.config();
 
@@ -339,6 +340,7 @@ await registerV3Routes(app);
 await registerV4Routes(app);
 await registerPlansV5Routes(app);
 await registerV6Routes(app);
+await registerV7Routes(app);
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;

@@ -726,10 +726,28 @@
       </div>
 
       <div class="section">
-        <button class="link-row" onclick="switchPage('bfq')">
-          <div class="left">
-            <div class="t">BFQ</div>
-            <div class="s">Рейтинг за месяц</div>
+        <div class="section-title">Инструменты</div>
+        <button class="row" onclick="switchPage('bfq')">
+          <div class="row-icon">🏆</div>
+          <div class="row-body">
+            <div class="row-title">BFQ</div>
+            <div class="row-sub">Рейтинг качества за месяц</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="openComboCalc()">
+          <div class="row-icon">📱</div>
+          <div class="row-body">
+            <div class="row-title">Расчёт комбо</div>
+            <div class="row-sub">Телефон − скидка + 28% + 1900</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
+        <button class="row" onclick="switchPage('cash')">
+          <div class="row-icon">💵</div>
+          <div class="row-body">
+            <div class="row-title">Касса</div>
+            <div class="row-sub">Факт / 1С / плюс-минус по точкам</div>
           </div>
           <div class="row-chevron">›</div>
         </button>
@@ -825,6 +843,11 @@
           <div class="row-body"><div class="row-title">Добавить точку</div></div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="openAddMetric()">
+          <div class="row-icon">🧩</div>
+          <div class="row-body"><div class="row-title">Новая метрика плана</div><div class="row-sub">SIM, MNP… + свои пункты</div></div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="copyScheduleWeek()">
           <div class="row-icon">📑</div>
           <div class="row-body"><div class="row-title">Копировать график на неделю</div><div class="row-sub">текущая → следующая</div></div>
@@ -875,6 +898,26 @@
           </div>
           <button class="btn-main" onclick="sendSupport()">Отправить</button>
           <div id="supportResult" class="empty" style="display:none;padding-top:12px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== CASH ===== -->
+    <div id="page-cash" class="page">
+      <div class="section">
+        <div class="section-title">Касса по дням</div>
+        <div class="empty" style="text-align:left;padding:8px 16px" id="cashMeta">Факт − 1С = плюс/минус</div>
+        <div id="cashTable" style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="skeleton"></div></div>
+      </div>
+      <div class="section" id="cashEditSection" style="display:none">
+        <div class="section-title">Внести кассу</div>
+        <div class="progress-block">
+          <div class="field"><label>Дата</label><input type="date" id="cashDate"></div>
+          <div class="field"><label>Точка</label><select id="cashStore"></select></div>
+          <div class="field"><label>Касса (факт)</label><input type="number" id="cashFact" placeholder="0"></div>
+          <div class="field"><label>Касса 1С</label><input type="number" id="cash1c" placeholder="0"></div>
+          <div class="field"><label>Комментарий</label><input id="cashComment" placeholder="опционально"></div>
+          <button class="btn-main" onclick="saveCash()">Сохранить</button>
         </div>
       </div>
     </div>
@@ -1046,6 +1089,7 @@
       if (name === 'history') { loadHistory(); }
       if (name === 'monthplan') { loadMonthPlans(); }
       if (name === 'support') { loadSupport(); }
+      if (name === 'cash') { loadCash(); }
     }
 
     async function refreshAll() {
@@ -2299,7 +2343,208 @@
       } catch (_) {}
     })();
 
-    console.log('T2 Sales UI v6 Control Center ready');
+    // ===== CASH =====
+    function deltaTone(d) {
+      if (d < -100) return 'background:#ff3b3033;color:#ff453a;font-weight:800';
+      if (d > 100) return 'background:#34c75933;color:#34c759;font-weight:800';
+      return 'background:#ffd96644;color:#c9a000;font-weight:700';
+    }
+
+    async function loadCash() {
+      const box = document.getElementById('cashTable');
+      const edit = document.getElementById('cashEditSection');
+      if (edit) edit.style.display = canManage() ? 'block' : 'none';
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        if (!stores.length) {
+          const stRes = await fetch(API + '/stores');
+          stores = await stRes.json();
+        }
+        const sel = document.getElementById('cashStore');
+        if (sel) {
+          sel.innerHTML = stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        }
+        const dateInp = document.getElementById('cashDate');
+        if (dateInp && !dateInp.value) dateInp.value = todayMoscow();
+
+        const res = await fetch(API + '/cash/table?from=' + todayMoscow().slice(0, 8) + '01&to=' + todayMoscow());
+        if (!res.ok) throw new Error('fail');
+        const data = await res.json();
+        const stList = data.stores || stores;
+        const dates = data.dates || [];
+        const cells = data.cells || {};
+
+        if (!dates.length) {
+          box.innerHTML = '<div class="empty">Нет данных кассы за месяц</div>';
+          return;
+        }
+
+        let head = '<th style="padding:8px;position:sticky;left:0;background:var(--surface);z-index:1">Дата</th>';
+        stList.forEach(s => {
+          head += `<th style="padding:6px;font-size:11px" colspan="3">${s.name || s.id}</th>`;
+        });
+        let sub = '<th style="position:sticky;left:0;background:var(--surface)"></th>';
+        stList.forEach(() => {
+          sub += '<th style="padding:4px;font-size:10px;color:var(--hint)">Касса</th><th style="padding:4px;font-size:10px;color:var(--hint)">1С</th><th style="padding:4px;font-size:10px;color:var(--hint)">±</th>';
+        });
+
+        const body = dates.map(d => {
+          let row = `<td style="padding:8px;position:sticky;left:0;background:var(--surface);font-weight:600;white-space:nowrap">${d.slice(8,10)}.${d.slice(5,7)}.${d.slice(2,4)}</td>`;
+          stList.forEach(s => {
+            const c = (cells[d] && cells[d][s.id]) || {};
+            const fact = c.cash_fact ?? '';
+            const c1 = c.cash_1c ?? '';
+            const delta = c.delta != null ? c.delta : (fact !== '' && c1 !== '' ? Number(fact) - Number(c1) : '');
+            const click = canManage()
+              ? `onclick="fillCashForm('${s.id}','${d}',${Number(fact)||0},${Number(c1)||0})"`
+              : '';
+            row += `<td style="padding:6px;text-align:right;font-size:12px" ${click}>${fact !== '' ? fact : '—'}</td>`;
+            row += `<td style="padding:6px;text-align:right;font-size:12px" ${click}>${c1 !== '' ? c1 : '—'}</td>`;
+            row += `<td style="padding:6px;text-align:right;font-size:12px;${delta !== '' ? deltaTone(Number(delta)) : ''}" ${click}>${delta !== '' ? delta : '—'}</td>`;
+          });
+          return `<tr style="border-bottom:1px solid var(--border)">${row}</tr>`;
+        }).join('');
+
+        box.innerHTML = `
+          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:${200 + stList.length * 180}px">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border)">${head}</tr>
+              <tr style="border-bottom:2px solid var(--border)">${sub}</tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>`;
+      } catch (e) {
+        console.error(e);
+        box.innerHTML = '<div class="empty">Нужен API /cash/table</div>';
+      }
+    }
+
+    function fillCashForm(storeId, date, fact, c1) {
+      document.getElementById('cashStore').value = storeId;
+      document.getElementById('cashDate').value = date;
+      document.getElementById('cashFact').value = fact;
+      document.getElementById('cash1c').value = c1;
+      document.getElementById('cashEditSection')?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function saveCash() {
+      if (!canManage()) return;
+      const body = {
+        store_id: document.getElementById('cashStore').value,
+        cash_date: document.getElementById('cashDate').value || todayMoscow(),
+        cash_fact: Number(document.getElementById('cashFact').value) || 0,
+        cash_1c: Number(document.getElementById('cash1c').value) || 0,
+        comment: document.getElementById('cashComment').value || ''
+      };
+      const res = await fetch(API + '/cash', {
+        method: 'PUT',
+        headers: authHeaders(true),
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Касса сохранена', 'ok');
+      loadCash();
+    }
+
+    // ===== COMBO CALC =====
+    function openComboCalc() {
+      document.getElementById('modalTitle').textContent = 'Расчёт комбо';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="empty" style="text-align:left;padding:0 0 12px">
+          Формула: цена − скидка% + 28% от цены + 1900
+        </div>
+        <div class="field">
+          <label>Стоимость телефона</label>
+          <input type="number" id="comboPrice" placeholder="например 29990">
+        </div>
+        <div class="field">
+          <label>% комбо-скидки</label>
+          <select id="comboDisc">
+            <option value="15">15%</option>
+            <option value="20">20%</option>
+            <option value="25" selected>25%</option>
+            <option value="30">30%</option>
+            <option value="35">35%</option>
+            <option value="40">40%</option>
+          </select>
+        </div>
+        <button class="btn-main" onclick="runComboCalc()">Рассчитать</button>
+        <div id="comboResult" style="margin-top:14px"></div>
+      `;
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    async function runComboCalc() {
+      const phone_price = Number(document.getElementById('comboPrice').value);
+      const discount_pct = Number(document.getElementById('comboDisc').value);
+      if (!phone_price) { toast('Укажи цену телефона', 'err'); return; }
+      try {
+        const res = await fetch(API + '/combo/calc', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ phone_price, discount_pct })
+        });
+        const d = await res.json();
+        if (!res.ok) { toast(d.error || 'Ошибка', 'err'); return; }
+        document.getElementById('comboResult').innerHTML = `
+          <div class="stats-row">
+            <div class="stat-chip"><div class="n">${d.after_discount}</div><div class="l">После скидки</div></div>
+            <div class="stat-chip"><div class="n">${d.plus_28pct}</div><div class="l">+28%</div></div>
+            <div class="stat-chip"><div class="n">1900</div><div class="l">Фикс</div></div>
+          </div>
+          <div style="text-align:center;padding:16px 0 4px">
+            <div style="font-size:13px;color:var(--hint)">Итого комбо</div>
+            <div style="font-size:32px;font-weight:800;letter-spacing:-0.5px">${d.result}</div>
+          </div>`;
+      } catch {
+        // offline fallback
+        const after = phone_price - phone_price * (discount_pct / 100);
+        const p28 = phone_price * 0.28;
+        const result = Math.round((after + p28 + 1900) * 100) / 100;
+        document.getElementById('comboResult').innerHTML = `
+          <div style="text-align:center;padding:16px 0">
+            <div style="font-size:13px;color:var(--hint)">Итого комбо</div>
+            <div style="font-size:32px;font-weight:800">${result}</div>
+          </div>`;
+      }
+    }
+
+    // ===== CUSTOM METRICS =====
+    function openAddMetric() {
+      if (!canManage()) return;
+      document.getElementById('modalTitle').textContent = 'Новая метрика';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="field"><label>Название</label><input id="nm_label" placeholder="Например: eSIM"></div>
+        <div class="field"><label>Короткое</label><input id="nm_short" placeholder="eSIM"></div>
+        <div class="field"><label>Тип</label>
+          <select id="nm_unit">
+            <option value="count">Количество</option>
+            <option value="money">Деньги</option>
+          </select>
+        </div>
+        <button class="btn-main" onclick="saveMetric()">Создать</button>
+      `;
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    async function saveMetric() {
+      const label = document.getElementById('nm_label').value.trim();
+      if (!label) { toast('Укажи название', 'err'); return; }
+      const res = await fetch(API + '/metrics', {
+        method: 'POST',
+        headers: authHeaders(true),
+        body: JSON.stringify({
+          label,
+          short_label: document.getElementById('nm_short').value.trim() || label.slice(0, 8),
+          unit: document.getElementById('nm_unit').value
+        })
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast('Метрика добавлена', 'ok');
+      closeModal();
+    }
+
+    console.log('T2 Sales UI v7 ready');
   </script>
 </body>
 </html>
