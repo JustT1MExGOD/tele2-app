@@ -599,6 +599,48 @@
       color: #fff;
       border-color: var(--primary);
     }
+    .qty-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .qty-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .qty-row .qty-label {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .qty-row .qty-label small {
+      font-weight: 500;
+      opacity: 0.55;
+      margin-left: 4px;
+    }
+    .qty-row input {
+      width: 88px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 6px;
+      font-size: 16px;
+      font-weight: 700;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .qty-empty {
+      padding: 10px 2px;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
     .quick {
       display: flex;
       gap: 8px;
@@ -990,7 +1032,7 @@
     let page = 'home';
     let employees = [];
     let stores = [];
-    let selectedMetric = 'sim';
+    let saleSelection = {}; // { sim: 2, mnp: 1 } — мультивыбор метрик
     let scheduleMonth = todayMoscow().slice(0, 7);
     let me = null; // { employee_id, full_name, role, is_manager }
 
@@ -1022,18 +1064,21 @@
     }
 
     const METRICS = [
-      { id: 'sim', label: 'SIM' },
-      { id: 'mnp', label: 'MNP' },
-      { id: 'pa', label: 'ПА' },
-      { id: 'combo', label: 'Комбо' },
-      { id: 'phones', label: 'Телефон' },
-      { id: 'accessories', label: 'Аксы' },
-      { id: 'insurance', label: 'Страх' },
-      { id: 'wink', label: 'Wink' },
-      { id: 'shpd', label: 'ШПД' },
-      { id: 'focus', label: 'ФО' },
-      { id: 'plotter', label: 'Плоттер' },
-      { id: 'hb', label: 'HB' }
+      { id: 'sim',             label: 'SIM',            unit: 'шт' },
+      { id: 'mnp',             label: 'MNP',            unit: 'шт' },
+      { id: 'pa',              label: 'ПА',             unit: 'шт' },
+      { id: 'combo',           label: 'Комбо',          unit: 'шт' },
+      { id: 'settings',        label: 'Настройки',      unit: '₽' },
+      { id: 'accessories',     label: 'Аксы',           unit: '₽' },
+      { id: 'insurance',       label: 'Страх',          unit: '₽' },
+      { id: 'phones',          label: 'Телефон',        unit: '₽' },
+      { id: 'wink',            label: 'Wink',           unit: '₽' },
+      { id: 'shpd',            label: 'ШПД',            unit: 'шт' },
+      { id: 'focus',           label: 'ФО',             unit: '₽' },
+      { id: 'credit_request',  label: 'Кредит заявка',  unit: 'шт' },
+      { id: 'credit_issued',   label: 'Кредит выдан',   unit: '₽' },
+      { id: 'plotter',         label: 'Плоттер',        unit: 'шт' },
+      { id: 'hb',              label: 'НВ',             unit: 'шт' }
     ];
 
     // ===== Utils =====
@@ -2254,7 +2299,7 @@
         let defaultEmp = presetEmployeeId || me?.employee_id || (schedules[0] && schedules[0].employee_id) || employees[0]?.id;
         let defaultStore = schByEmp[defaultEmp] || stores[0]?.id;
 
-        selectedMetric = 'sim';
+        saleSelection = { sim: 1 };
         document.getElementById('modalTitle').textContent = 'Добавить продажу';
         document.getElementById('modalBody').innerHTML = `
           <div class="field">
@@ -2274,29 +2319,24 @@
             </select>
           </div>
           <div class="field">
-            <label>Тип</label>
-            <div class="metric-grid">
-              ${METRICS.map(m => `
-                <button type="button" class="mchip ${m.id === 'sim' ? 'on' : ''}" data-m="${m.id}"
-                  onclick="pickMetric('${m.id}')">${m.label}</button>
-              `).join('')}
-            </div>
+            <label>Тип <span style="font-weight:500;text-transform:none;color:var(--text-secondary)">(можно несколько)</span></label>
+            <div class="metric-grid" id="metricGrid"></div>
           </div>
           <div class="field">
             <label>Количество</label>
-            <input type="number" id="modalValue" inputmode="decimal" value="1" min="1">
+            <div id="saleQtyList" class="qty-list"></div>
             <div class="quick">
-              <button type="button" onclick="setVal(1)">1</button>
-              <button type="button" onclick="setVal(2)">2</button>
-              <button type="button" onclick="setVal(5)">5</button>
-              <button type="button" onclick="setVal(10)">10</button>
+              <button type="button" onclick="setAllQty(1)">1</button>
+              <button type="button" onclick="setAllQty(2)">2</button>
+              <button type="button" onclick="setAllQty(5)">5</button>
+              <button type="button" onclick="setAllQty(10)">10</button>
             </div>
           </div>
           <button class="btn-main" onclick="submitSale()">Добавить</button>
         `;
 
-        // store map for smart change
         window._schByEmp = schByEmp;
+        renderSaleMetrics();
         document.getElementById('overlay').classList.add('show');
       } catch (e) {
         console.error(e);
@@ -2313,13 +2353,49 @@
       }
     }
 
-    function pickMetric(id) {
-      selectedMetric = id;
-      document.querySelectorAll('.mchip').forEach(b => b.classList.toggle('on', b.dataset.m === id));
+    function renderSaleMetrics() {
+      const grid = document.getElementById('metricGrid');
+      if (!grid) return;
+      grid.innerHTML = METRICS.map(m => `
+        <button type="button" class="mchip ${saleSelection[m.id] != null ? 'on' : ''}" data-m="${m.id}"
+          onclick="toggleSaleMetric('${m.id}')">${m.label}</button>
+      `).join('');
+      renderSaleQtyList();
     }
 
-    function setVal(n) {
-      document.getElementById('modalValue').value = n;
+    function toggleSaleMetric(id) {
+      if (saleSelection[id] != null) {
+        delete saleSelection[id];
+      } else {
+        saleSelection[id] = 1;
+      }
+      renderSaleMetrics();
+    }
+
+    function renderSaleQtyList() {
+      const list = document.getElementById('saleQtyList');
+      if (!list) return;
+      const keys = Object.keys(saleSelection);
+      if (!keys.length) {
+        list.innerHTML = '<div class="qty-empty">Выбери одну или несколько метрик</div>';
+        return;
+      }
+      list.innerHTML = keys.map(key => {
+        const m = METRICS.find(x => x.id === key) || { label: key, unit: '' };
+        return `
+          <div class="qty-row">
+            <div class="qty-label">${m.label}<small>${m.unit || ''}</small></div>
+            <input type="number" min="0" step="1" inputmode="decimal"
+              value="${saleSelection[key]}"
+              oninput="saleSelection['${key}'] = Number(String(this.value).replace(',','.')) || 0" />
+          </div>
+        `;
+      }).join('');
+    }
+
+    function setAllQty(n) {
+      Object.keys(saleSelection).forEach(k => { saleSelection[k] = n; });
+      renderSaleQtyList();
     }
 
     function closeModal() {
@@ -2327,29 +2403,51 @@
     }
 
     async function submitSale() {
-      const employeeId = document.getElementById('modalEmployee').value;
-      const storeId = document.getElementById('modalStore').value;
-      const value = Number(String(document.getElementById('modalValue').value).replace(',', '.'));
-      if (!value || value <= 0) {
-        toast('Введите число', 'err');
+      const employeeId = document.getElementById('modalEmployee')?.value;
+      const storeId = document.getElementById('modalStore')?.value;
+      if (!employeeId || !storeId) {
+        toast('Укажи сотрудника и точку', 'err');
         return;
       }
+
+      const payload = {
+        employee_id: Number(employeeId),
+        store_id: storeId,
+        sale_date: todayMoscow()
+      };
+
+      let hasAny = false;
+      const parts = [];
+      for (const [k, v] of Object.entries(saleSelection)) {
+        const n = Number(v);
+        if (n > 0) {
+          payload[k] = n;
+          hasAny = true;
+          const m = METRICS.find(x => x.id === k);
+          parts.push((m ? m.label : k) + ' × ' + n);
+        }
+      }
+      if (!hasAny) {
+        toast('Выбери метрики и количество', 'err');
+        return;
+      }
+
       try {
         const res = await fetch(API + '/sales', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            employee_id: Number(employeeId),
-            store_id: storeId,
-            sale_date: todayMoscow(),
-            [selectedMetric]: value
-          })
+          headers: authHeaders(true),
+          body: JSON.stringify(payload)
         });
-        if (!res.ok) throw new Error('fail');
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || 'fail');
+        }
         closeModal();
-        toast('Добавлено: ' + value, 'ok');
+        toast('Добавлено: ' + parts.join(', '), 'ok');
+        saleSelection = {};
         loadPage(page);
-      } catch {
+      } catch (e) {
+        console.error(e);
         toast('Ошибка сохранения', 'err');
       }
     }
