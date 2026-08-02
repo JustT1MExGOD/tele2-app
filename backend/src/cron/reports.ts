@@ -1,16 +1,11 @@
 /**
- * Cron: микро-отчёты 10/12/14/16/18/20 МСК, итог 21:05, напоминания 20:00
+ * Cron: микро/итог → картинка в REPORT_CHAT_ID
  */
 import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
-import { notifyChat, notifyUser } from '../bot/index.js';
-import {
-  microReport,
-  finalReport,
-  shiftReminder,
-  microLines,
-  finalLines
-} from '../bot/messages.js';
+import { notifyChat, notifyChatPhoto, notifyUser } from '../bot/index.js';
+import { shiftReminder, microReport, finalReport, microLines, finalLines } from '../bot/messages.js';
+import { buildDailyReportPng, buildDailyReportSvg } from '../services/report-image.js';
 
 const FACT_SQL = `
   SELECT
@@ -27,50 +22,97 @@ const FACT_SQL = `
 `;
 
 async function loadStorePlans(date: string) {
-  // dated plans
-  let plans = await query(
-    `SELECT sp.*, st.name, st.code, st.id as store_id
-     FROM stores st
-     LEFT JOIN store_plans sp ON sp.store_id = st.id AND sp.plan_date::date = $1::date
-     ORDER BY st.name`,
-    [date]
-  ).catch(() => ({ rows: [] as any[] }));
-
-  // fill missing from template
+  const stores = await query(`SELECT id, name, code FROM stores ORDER BY name`);
   const out = [];
-  for (const row of plans.rows) {
-    let plan = row;
-    if (row.sim == null && row.mnp == null) {
-      const tpl = await query(
+  for (const st of stores.rows) {
+    let planRes = await query(
+      `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date::date = $2::date LIMIT 1`,
+      [st.id, date]
+    ).catch(() => ({ rows: [] as any[] }));
+    if (!planRes.rows[0]) {
+      planRes = await query(
         `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date IS NULL LIMIT 1`,
-        [row.store_id || row.id]
+        [st.id]
       ).catch(() => ({ rows: [] as any[] }));
-      plan = { ...row, ...(tpl.rows[0] || {}) };
     }
     out.push({
-      store_id: row.store_id || row.id,
-      name: row.name,
-      code: row.code,
-      plan
+      store_id: st.id,
+      name: st.name,
+      code: st.code,
+      plan: planRes.rows[0] || {}
     });
-  }
-  // if stores join empty — fallback stores list
-  if (!out.length) {
-    const stores = await query(`SELECT id, name, code FROM stores ORDER BY name`);
-    for (const st of stores.rows) {
-      const tpl = await query(
-        `SELECT * FROM store_plans WHERE store_id = $1 AND (plan_date::date = $2::date OR plan_date IS NULL)
-         ORDER BY plan_date NULLS LAST LIMIT 1`,
-        [st.id, date]
-      ).catch(() => ({ rows: [] as any[] }));
-      out.push({ store_id: st.id, name: st.name, code: st.code, plan: tpl.rows[0] || {} });
-    }
   }
   return out;
 }
 
+async function sendStoreReportImage(
+  st: { store_id: string; name: string; code: string; plan: any },
+  date: string,
+  kind: 'micro' | 'final',
+  hour?: number
+) {
+  const hourLabel =
+    kind === 'micro' && hour != null ? `${String(hour).padStart(2, '0')}:00` : undefined;
+  const caption =
+    kind === 'micro'
+      ? `📊 ${st.name} · ${date}${hourLabel ? ' · ' + hourLabel : ''}`
+      : `🏁 ${st.name} · ${date}`;
+
+  try {
+    const { png } = await buildDailyReportPng(st.store_id, date, {
+      kind,
+      hourLabel
+    });
+    const r = await notifyChatPhoto(png, {
+      caption,
+      filename: `${kind}_${st.store_id}_${date}.png`
+    });
+    if (r.ok) return r;
+    throw new Error(r.error || 'photo_failed');
+  } catch (e: any) {
+    console.warn('PNG send failed, try SVG document:', e?.message || e);
+    try {
+      const svg = await buildDailyReportSvg(st.store_id, date, { kind, hourLabel });
+      return await notifyChatPhoto(svg, {
+        caption,
+        filename: `${kind}_${st.store_id}_${date}.svg`,
+        asDocument: true
+      });
+    } catch (e2: any) {
+      // last resort: text
+      console.warn('SVG also failed, text fallback:', e2?.message || e2);
+      const staff = await query(
+        `SELECT e.full_name FROM schedules sch
+         JOIN employees e ON e.id = sch.employee_id
+         WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
+        [date, st.store_id]
+      );
+      const fact = await query(FACT_SQL, [date, st.store_id]).catch(() => ({ rows: [{}] }));
+      const f = fact.rows[0] || {};
+      const text =
+        kind === 'micro'
+          ? microReport({
+              storeName: st.name,
+              storeCode: st.code || st.store_id,
+              date: `${date}${hourLabel ? ' · ' + hourLabel : ''}`,
+              staff: staff.rows.map((x: any) => x.full_name),
+              lines: microLines(f, st.plan)
+            })
+          : finalReport({
+              storeName: st.name,
+              storeCode: st.code || st.store_id,
+              date,
+              staff: staff.rows.map((x: any) => x.full_name),
+              lines: finalLines(f, st.plan)
+            });
+      await notifyChat(text);
+      return { ok: true, type: 'text_fallback' };
+    }
+  }
+}
+
 export function startReportCron() {
-  console.log('📅 Cron T2: микро 10–20 · итог 21:05 · смены 20:00 (МСК)');
+  console.log('📅 Cron T2: микро/итог → PNG в чат (10–20 / 21:05 МСК)');
   setInterval(() => {
     tick().catch((e) => console.error('cron tick', e?.message || e));
   }, 60_000);
@@ -120,33 +162,19 @@ async function sendTomorrowReminders(today: string) {
 export async function sendMicroReports(date: string, hour?: number) {
   const chat = process.env.REPORT_CHAT_ID || process.env.CHAT_ID;
   if (!chat) {
-    console.error('Микро-отчёт: нет REPORT_CHAT_ID / CHAT_ID — некуда слать');
+    console.error('Микро: нет REPORT_CHAT_ID / CHAT_ID');
     return { ok: false, error: 'no_chat_id' };
   }
   try {
     const stores = await loadStorePlans(date);
+    const h = hour ?? new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' })
+    ).getHours();
     let sent = 0;
     for (const st of stores) {
-      const staff = await query(
-        `SELECT e.full_name FROM schedules sch
-         JOIN employees e ON e.id = sch.employee_id
-         WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
-        [date, st.store_id]
-      );
-      const fact = await query(FACT_SQL, [date, st.store_id]).catch(() => ({ rows: [{}] }));
-      const f = fact.rows[0] || {};
-      const p = st.plan || {};
-      const h = hour ?? new Date().getHours();
-      const text = microReport({
-        storeName: st.name,
-        storeCode: st.code || st.store_id,
-        date: `${date} · ${String(h).padStart(2, '0')}:00`,
-        staff: staff.rows.map((x: any) => x.full_name),
-        lines: microLines(f, p)
-      });
-      await notifyChat(text);
+      await sendStoreReportImage(st, date, 'micro', h);
       sent++;
-      console.log('Микро-отчёт отправлен:', st.name, h + ':00');
+      console.log('Микро-картинка:', st.name, h + ':00');
     }
     return { ok: true, sent };
   } catch (e: any) {
@@ -158,32 +186,16 @@ export async function sendMicroReports(date: string, hour?: number) {
 export async function sendFinalReports(date: string) {
   const chat = process.env.REPORT_CHAT_ID || process.env.CHAT_ID;
   if (!chat) {
-    console.error('Итог: нет REPORT_CHAT_ID / CHAT_ID — некуда слать');
+    console.error('Итог: нет REPORT_CHAT_ID / CHAT_ID');
     return { ok: false, error: 'no_chat_id' };
   }
   try {
     const stores = await loadStorePlans(date);
     let sent = 0;
     for (const st of stores) {
-      const staff = await query(
-        `SELECT e.full_name FROM schedules sch
-         JOIN employees e ON e.id = sch.employee_id
-         WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
-        [date, st.store_id]
-      );
-      const fact = await query(FACT_SQL, [date, st.store_id]).catch(() => ({ rows: [{}] }));
-      const f = fact.rows[0] || {};
-      const p = st.plan || {};
-      const text = finalReport({
-        storeName: st.name,
-        storeCode: st.code || st.store_id,
-        date,
-        staff: staff.rows.map((x: any) => x.full_name),
-        lines: finalLines(f, p)
-      });
-      await notifyChat(text);
+      await sendStoreReportImage(st, date, 'final');
       sent++;
-      console.log('Итоговый отчёт отправлен:', st.name);
+      console.log('Итог-картинка:', st.name);
     }
     return { ok: true, sent };
   } catch (e: any) {
