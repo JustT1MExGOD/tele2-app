@@ -1,7 +1,14 @@
 /**
- * SVG + PNG отчёт дня (тот же набор метрик, что в чате)
+ * SVG + PNG отчёт дня
+ * Текст рисуется шрифтом DejaVu Sans (кириллица) — assets/fonts/
  */
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { query } from '../db/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function esc(s: any) {
   return String(s ?? '')
@@ -13,6 +20,34 @@ function esc(s: any) {
 function num(v: any) {
   return Number(v) || 0;
 }
+
+/** Ищем TTF рядом с dist/src и в assets */
+function resolveFontFiles(): string[] {
+  const candidates = [
+    path.join(process.cwd(), 'assets/fonts'),
+    path.join(process.cwd(), 'backend/assets/fonts'),
+    path.join(__dirname, '../../assets/fonts'),
+    path.join(__dirname, '../assets/fonts'),
+    path.join(__dirname, '../../../assets/fonts')
+  ];
+  const files: string[] = [];
+  for (const dir of candidates) {
+    for (const name of ['DejaVuSans.ttf', 'DejaVuSans-Bold.ttf']) {
+      const fp = path.join(dir, name);
+      if (fs.existsSync(fp)) files.push(fp);
+    }
+    if (files.length) break;
+  }
+  if (!files.length) {
+    console.warn('⚠️ DejaVu fonts not found — текст на PNG может пропасть. Положи TTF в assets/fonts/');
+  } else {
+    console.log('Fonts for reports:', files.map((f) => path.basename(f)).join(', '));
+  }
+  return files;
+}
+
+const FONT_FILES = resolveFontFiles();
+const FONT = 'DejaVu Sans';
 
 export async function loadFactPlanStaff(storeId: string, date: string) {
   const storeRes = await query(`SELECT id, name, code FROM stores WHERE id = $1`, [storeId]).catch(
@@ -66,7 +101,6 @@ export async function buildDailyReportSvg(
   opts?: {
     kind?: ReportKind;
     hourLabel?: string;
-    /** white-label (старый API routes-v14) */
     name?: string;
     color?: string;
     brand?: { name?: string; color?: string };
@@ -147,66 +181,72 @@ export async function buildDailyReportSvg(
   const parts: string[] = [];
   for (const g of groups) {
     parts.push(
-      `<text x="40" y="${y}" fill="${esc(accent)}" font-size="13" font-family="Arial,sans-serif" font-weight="700">${esc(g.title)}</text>`
+      `<text x="40" y="${y}" fill="${esc(accent)}" font-size="14" font-family="${FONT}" font-weight="700">${esc(g.title)}</text>`
     );
-    y += 22;
+    y += 24;
     for (const [label, fact, plan] of g.rows) {
       const pct = plan > 0 ? Math.round((fact / plan) * 100) : fact > 0 ? 100 : 0;
-      const fill = Math.round((Math.min(100, pct) / 100) * 140);
+      const fill = Math.round((Math.min(100, Math.max(0, pct)) / 100) * 140);
       const color = pct >= 100 ? '#30D158' : pct >= 50 ? '#FF9F0A' : '#FF453A';
       parts.push(`
-        <text x="40" y="${y}" fill="#E5E7EB" font-size="13" font-family="Arial,sans-serif">${esc(label)}</text>
-        <text x="200" y="${y}" fill="#FFFFFF" font-size="13" font-family="Arial,sans-serif" font-weight="700">${fact}/${plan || '—'}</text>
-        <text x="300" y="${y}" fill="#A1A1AA" font-size="11" font-family="Arial,sans-serif">${pct}%</text>
-        <g transform="translate(340,${y - 8})">
-          <rect width="140" height="8" rx="4" fill="#2A2A2E"/>
-          <rect width="${fill}" height="8" rx="4" fill="${color}"/>
+        <text x="40" y="${y}" fill="#F3F4F6" font-size="14" font-family="${FONT}">${esc(label)}</text>
+        <text x="210" y="${y}" fill="#FFFFFF" font-size="14" font-family="${FONT}" font-weight="700">${fact}/${plan || '—'}</text>
+        <text x="310" y="${y}" fill="#A1A1AA" font-size="12" font-family="${FONT}">${pct}%</text>
+        <g transform="translate(360,${y - 9})">
+          <rect width="140" height="10" rx="5" fill="#2A2A2E"/>
+          <rect width="${fill}" height="10" rx="5" fill="${color}"/>
         </g>`);
-      y += 24;
+      y += 26;
     }
-    y += 10;
+    y += 12;
   }
 
   const staffText = staff.map(esc).join(' · ') || '—';
-  const height = Math.max(kind === 'micro' ? 420 : 560, y + 70);
+  const height = Math.max(kind === 'micro' ? 440 : 620, y + 80);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="540" height="${height}" viewBox="0 0 540 ${height}">
-  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0%" stop-color="#0A0A0B"/><stop offset="100%" stop-color="#14141A"/>
-  </linearGradient></defs>
-  <rect width="540" height="${height}" rx="24" fill="url(#bg)"/>
-  <rect width="540" height="6" fill="${esc(accent)}"/>
-  <text x="40" y="48" fill="${esc(accent)}" font-size="13" font-family="Arial,sans-serif" font-weight="700" letter-spacing="2">${esc(brandName).toUpperCase()}</text>
-  <text x="40" y="78" fill="#FFFFFF" font-size="22" font-family="Arial,sans-serif" font-weight="800">${esc(title)}</text>
-  <text x="40" y="100" fill="#A1A1AA" font-size="13" font-family="Arial,sans-serif">${sub}</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="${height}" viewBox="0 0 560 ${height}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0A0A0B"/>
+      <stop offset="100%" stop-color="#14141A"/>
+    </linearGradient>
+  </defs>
+  <rect width="560" height="${height}" rx="24" fill="url(#bg)"/>
+  <rect width="560" height="6" fill="${esc(accent)}"/>
+  <text x="40" y="48" fill="${esc(accent)}" font-size="13" font-family="${FONT}" font-weight="700" letter-spacing="1.5">${esc(brandName).toUpperCase()}</text>
+  <text x="40" y="78" fill="#FFFFFF" font-size="24" font-family="${FONT}" font-weight="700">${esc(title)}</text>
+  <text x="40" y="102" fill="#A1A1AA" font-size="13" font-family="${FONT}">${sub}</text>
   ${parts.join('\n')}
-  <text x="40" y="${y + 8}" fill="#6B7280" font-size="11" font-family="Arial,sans-serif">Смена: ${staffText}</text>
-  <text x="40" y="${y + 28}" fill="#4B5563" font-size="10" font-family="Arial,sans-serif">T2 Sales · Europe/Moscow</text>
+  <text x="40" y="${y + 10}" fill="#9CA3AF" font-size="12" font-family="${FONT}">Смена: ${staffText}</text>
+  <text x="40" y="${y + 32}" fill="#6B7280" font-size="11" font-family="${FONT}">T2 Sales · Europe/Moscow</text>
 </svg>`;
 }
 
-/** SVG → PNG (Telegram photo). Нужен пакет @resvg/resvg-js */
 export async function svgToPng(svg: string): Promise<Buffer> {
-  try {
-    const { Resvg } = await import('@resvg/resvg-js');
-    const resvg = new Resvg(svg, {
-      fitTo: { mode: 'width', value: 1080 },
-      font: { loadSystemFonts: false }
-    });
-    return Buffer.from(resvg.render().asPng());
-  } catch (e: any) {
-    console.error('svgToPng failed:', e?.message || e);
-    throw new Error(
-      'PNG conversion failed. Install: npm i @resvg/resvg-js — ' + (e?.message || e)
-    );
-  }
+  const { Resvg } = await import('@resvg/resvg-js');
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: 'width', value: 1120 },
+    font: {
+      fontFiles: FONT_FILES,
+      loadSystemFonts: true,
+      defaultFontFamily: FONT
+    }
+  });
+  const rendered = resvg.render();
+  return Buffer.from(rendered.asPng());
 }
 
 export async function buildDailyReportPng(
   storeId: string,
   date: string,
-  opts?: { kind?: ReportKind; hourLabel?: string }
+  opts?: {
+    kind?: ReportKind;
+    hourLabel?: string;
+    name?: string;
+    color?: string;
+    brand?: { name?: string; color?: string };
+  }
 ) {
   const svg = await buildDailyReportSvg(storeId, date, opts);
   const png = await svgToPng(svg);
