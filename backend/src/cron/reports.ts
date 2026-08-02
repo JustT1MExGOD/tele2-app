@@ -89,6 +89,10 @@ async function sendStoreReportImage(
       );
       const fact = await query(FACT_SQL, [date, st.store_id]).catch(() => ({ rows: [{}] }));
       const f = fact.rows[0] || {};
+      const lines =
+        kind === 'micro'
+          ? await microLines(f, st.plan)
+          : await finalLines(f, st.plan);
       const text =
         kind === 'micro'
           ? microReport({
@@ -96,14 +100,14 @@ async function sendStoreReportImage(
               storeCode: st.code || st.store_id,
               date: `${date}${hourLabel ? ' · ' + hourLabel : ''}`,
               staff: staff.rows.map((x: any) => x.full_name),
-              lines: microLines(f, st.plan)
+              lines
             })
           : finalReport({
               storeName: st.name,
               storeCode: st.code || st.store_id,
               date,
               staff: staff.rows.map((x: any) => x.full_name),
-              lines: finalLines(f, st.plan)
+              lines
             });
       await notifyChat(text);
       return { ok: true, type: 'text_fallback' };
