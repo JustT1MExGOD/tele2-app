@@ -1,5 +1,5 @@
 /**
- * Мультитенант + white-label branding
+ * Мультитенант + white-label branding (с fallback без таблицы organizations)
  */
 import { query } from '../db/index.js';
 
@@ -11,33 +11,49 @@ export type Org = {
   logo_url: string | null;
 };
 
+const DEFAULT: Org = {
+  id: 'default',
+  name: 'T2 Sales',
+  brand_name: 'T2',
+  primary_color: '#2AABEE',
+  logo_url: null
+};
+
 export async function getOrg(orgId = 'default'): Promise<Org> {
-  const res = await query(
-    `SELECT id, name, brand_name, primary_color, logo_url
-     FROM organizations WHERE id = $1 AND COALESCE(is_active,true) = true`,
-    [orgId]
-  );
-  if (res.rows[0]) return res.rows[0];
-  return {
-    id: 'default',
-    name: 'T2 Sales',
-    brand_name: 'T2',
-    primary_color: '#2AABEE',
-    logo_url: null
-  };
+  try {
+    const res = await query(
+      `SELECT id, name, brand_name, primary_color, logo_url
+       FROM organizations WHERE id = $1 AND COALESCE(is_active,true) = true`,
+      [orgId]
+    );
+    if (res.rows[0]) return res.rows[0];
+  } catch (_) {}
+  return { ...DEFAULT, id: orgId || 'default' };
 }
 
 export async function orgIdForEmployee(employeeId: number): Promise<string> {
-  const res = await query(`SELECT org_id FROM employees WHERE id = $1`, [employeeId]);
-  return res.rows[0]?.org_id || 'default';
+  try {
+    const res = await query(`SELECT org_id FROM employees WHERE id = $1`, [employeeId]);
+    return res.rows[0]?.org_id || 'default';
+  } catch (_) {
+    return 'default';
+  }
 }
 
 export async function listStoresForOrg(orgId: string) {
-  const res = await query(
-    `SELECT * FROM stores WHERE COALESCE(org_id,'default') = $1 ORDER BY name`,
-    [orgId]
-  );
-  return res.rows;
+  try {
+    const res = await query(
+      `SELECT * FROM stores WHERE COALESCE(org_id,'default') = $1 ORDER BY name`,
+      [orgId]
+    );
+    if (res.rows.length) return res.rows;
+  } catch (_) {}
+  try {
+    const res = await query(`SELECT * FROM stores ORDER BY name`);
+    return res.rows;
+  } catch (_) {
+    return [];
+  }
 }
 
 export async function upsertOrg(body: Partial<Org> & { id: string }) {

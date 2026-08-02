@@ -5630,14 +5630,33 @@
       const sid = document.getElementById('riStore')?.value;
       const date = document.getElementById('riDate')?.value || todayMoscow();
       const box = document.getElementById('riPreview');
-      if (!sid||!box) return;
+      if (!box) return;
+      if (!sid) {
+        box.innerHTML = '<div class="empty">Выбери точку</div>';
+        return;
+      }
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/reports/day/' + sid + '?date=' + date, { headers: authHeaders() });
-        const data = await res.json();
-        if (!res.ok) throw new Error('fail');
-        box.innerHTML = data.svg || '';
-      } catch { box.innerHTML = '<div class="empty">Не удалось сгенерировать</div>'; }
+        const res = await fetch(API + '/reports/day/' + encodeURIComponent(sid) + '?date=' + encodeURIComponent(date), {
+          headers: authHeaders()
+        });
+        const text = await res.text();
+        let data = {};
+        try { data = JSON.parse(text); } catch (_) {
+          throw new Error(res.ok ? 'Не JSON от сервера' : (text.slice(0, 120) || 'HTTP ' + res.status));
+        }
+        if (!res.ok) {
+          throw new Error(data.message || data.error || ('HTTP ' + res.status));
+        }
+        if (!data.svg) throw new Error('Пустой svg в ответе');
+        // SVG inline
+        box.innerHTML = '<div style="border-radius:16px;overflow:hidden;background:#0A0A0B">' + data.svg + '</div>';
+      } catch (e) {
+        console.error('loadReportSvg', e);
+        box.innerHTML = '<div class="empty">Не удалось сгенерировать<br><span style="font-size:12px;opacity:.75">' +
+          (e.message || e) +
+          '</span><br><span style="font-size:11px;opacity:.6">Проверь: V14 routes, X-Telegram-Id, точка</span></div>';
+      }
     }
 
     console.log('T2 Sales UI v14');
