@@ -14,10 +14,9 @@ import { registerPlansV5Routes } from './routes-plans-v5.js';
 import { registerV8Routes } from './routes-v8.js';
 import { registerSupportRoutes } from './routes-support.js';
 import { registerV13Routes } from './routes-v13.js';
-import { registerPromoRoutes } from './routes-promos.js';
-import { runSmartAlertsTick } from './services/alerts.js';
 import { registerV14Routes } from './routes-v14.js';
-import { logSaleEvents, hourMoscow } from './services/heatmap.js';
+import { logSaleEvents } from './services/heatmap.js';
+import { runSmartAlertsTick } from './services/alerts.js';
 
 dotenv.config();
 
@@ -200,6 +199,21 @@ app.post('/sales', async (request, reply) => {
       );
     }
   } catch (_) {}
+
+  // v14: час МСК → sales_events для heatmap
+  try {
+    const metrics: Record<string, number> = {};
+    for (const a of applied) metrics[a.metric] = a.value;
+    await logSaleEvents({
+      employee_id,
+      store_id,
+      sale_date,
+      metrics,
+      source: 'api'
+    });
+  } catch (e) {
+    console.warn('sales_events log failed:', (e as any)?.message || e);
+  }
 
   try {
     const info = await query(
@@ -498,6 +512,126 @@ app.get('/employee/progress/:id', async (request) => {
   return result;
 });
 
+
+// ===== REPORT SVG (встроено — работает даже без routes-v14.ts) =====
+function escSvg(s: any) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function buildDayReportSvgInline(storeId: string, date: string) {
+  const storeRes = await query(`SELECT id, name, code FROM stores WHERE id = $1`, [storeId]).catch(() => ({ rows: [] as any[] }));
+  const st = storeRes.rows[0] || { name: storeId, code: '' };
+
+  const salesRes = await query(
+    `SELECT COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp, COALESCE(SUM(pa),0) pa,
+            COALESCE(SUM(combo),0) combo, COALESCE(SUM(phones),0) phones,
+            COALESCE(SUM(accessories),0) accessories, COALESCE(SUM(wink),0) wink,
+            COALESCE(SUM(shpd),0) shpd
+     FROM sales WHERE store_id = $1 AND sale_date::date = $2::date`,
+    [storeId, date]
+  ).catch(() => ({ rows: [{}] }));
+  const f = salesRes.rows[0] || {};
+
+  let planRes = await query(
+    `SELECT sim, mnp, pa, combo, phones, accessories, wink, shpd
+     FROM store_plans WHERE store_id = $1 AND plan_date::date = $2::date LIMIT 1`,
+    [storeId, date]
+  ).catch(() => ({ rows: [] as any[] }));
+  if (!planRes.rows[0]) {
+    planRes = await query(
+      `SELECT sim, mnp, pa, combo, phones, accessories, wink, shpd
+       FROM store_plans WHERE store_id = $1 AND plan_date IS NULL LIMIT 1`,
+      [storeId]
+    ).catch(() => ({ rows: [] as any[] }));
+  }
+  const p = planRes.rows[0] || {};
+
+  const staffRes = await query(
+    `SELECT e.full_name FROM schedules sch
+     JOIN employees e ON e.id = sch.employee_id
+     WHERE sch.store_id = $1 AND sch.work_date::date = $2::date
+     ORDER BY e.full_name`,
+    [storeId, date]
+  ).catch(() => ({ rows: [] as any[] }));
+
+  const num = (v: any) => Number(v) || 0;
+  const lines = [
+    ['SIM', num(f.sim), num(p.sim)],
+    ['MNP', num(f.mnp), num(p.mnp)],
+    ['ПА', num(f.pa), num(p.pa)],
+    ['Комбо', num(f.combo), num(p.combo)],
+    ['Телефоны', num(f.phones), num(p.phones)],
+    ['Аксы', num(f.accessories), num(p.accessories)],
+    ['Wink', num(f.wink), num(p.wink)],
+    ['ШПД', num(f.shpd), num(p.shpd)],
+  ] as [string, number, number][];
+
+  let y = 120;
+  const rows: string[] = [];
+  for (const [label, fact, plan] of lines) {
+    const pct = plan > 0 ? Math.round((fact / plan) * 100) : fact > 0 ? 100 : 0;
+    const fill = Math.round((Math.min(100, pct) / 100) * 140);
+    const color = pct >= 100 ? '#30D158' : pct >= 50 ? '#FF9F0A' : '#FF453A';
+    rows.push(`
+      <text x="40" y="${y}" fill="#E5E7EB" font-size="14" font-family="Arial,sans-serif">${escSvg(label)}</text>
+      <text x="160" y="${y}" fill="#FFFFFF" font-size="14" font-family="Arial,sans-serif" font-weight="700">${fact}/${plan || '—'}</text>
+      <text x="280" y="${y}" fill="#A1A1AA" font-size="12" font-family="Arial,sans-serif">${pct}%</text>
+      <g transform="translate(330,${y - 8})">
+        <rect width="140" height="8" rx="4" fill="#2A2A2E"/>
+        <rect width="${fill}" height="8" rx="4" fill="${color}"/>
+      </g>`);
+    y += 28;
+  }
+  const staff = staffRes.rows.map((r: any) => escSvg(r.full_name)).join(' · ') || '—';
+  const height = Math.max(420, y + 80);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="${height}" viewBox="0 0 520 ${height}">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0A0A0B"/><stop offset="100%" stop-color="#14141A"/>
+  </linearGradient></defs>
+  <rect width="520" height="${height}" rx="24" fill="url(#bg)"/>
+  <rect width="520" height="6" fill="#2AABEE"/>
+  <text x="40" y="48" fill="#2AABEE" font-size="13" font-family="Arial,sans-serif" font-weight="700" letter-spacing="2">T2 SALES</text>
+  <text x="40" y="78" fill="#FFFFFF" font-size="22" font-family="Arial,sans-serif" font-weight="800">Итог дня</text>
+  <text x="40" y="100" fill="#A1A1AA" font-size="13" font-family="Arial,sans-serif">${escSvg(st.name)} · ${escSvg(st.code)} · ${escSvg(date)}</text>
+  ${rows.join('\n')}
+  <text x="40" y="${y + 24}" fill="#6B7280" font-size="11" font-family="Arial,sans-serif">Смена: ${staff}</text>
+  <text x="40" y="${y + 48}" fill="#4B5563" font-size="10" font-family="Arial,sans-serif">source: t2-sales · Europe/Moscow</text>
+</svg>`;
+}
+
+app.get('/reports/day/:storeId', async (request, reply) => {
+  const storeId = String((request.params as any).storeId || '');
+  const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
+  if (!storeId) return reply.code(400).send({ error: 'store_id_required' });
+  try {
+    const svg = await buildDayReportSvgInline(storeId, date);
+    return { ok: true, store_id: storeId, date, content_type: 'image/svg+xml', svg };
+  } catch (e: any) {
+    request.log.error(e);
+    return reply.code(500).send({ error: 'report_failed', message: e?.message || String(e) });
+  }
+});
+
+app.get('/reports/svg', async (request, reply) => {
+  const q = (request.query || {}) as any;
+  const storeId = String(q.store_id || '');
+  const date = String(q.date || todayMoscow()).slice(0, 10);
+  if (!storeId) return reply.code(400).send({ error: 'store_id_required' });
+  try {
+    const svg = await buildDayReportSvgInline(storeId, date);
+    reply.header('Content-Type', 'image/svg+xml; charset=utf-8');
+    return reply.send(svg);
+  } catch (e: any) {
+    return reply.code(500).send({ error: 'report_failed', message: e?.message || String(e) });
+  }
+});
+
+
 // ===== V3: /me, /bfq, bulk schedule, history, export =====
 // НЕ дублируй /me и /bfq здесь — они внутри registerV3Routes
 await registerV3Routes(app);
@@ -533,18 +667,13 @@ try {
   console.error('V13 routes failed:', e?.message || e);
 }
 
+
+// ===== V14: branding, precise heatmap, report SVG, tenant =====
 try {
   await registerV14Routes(app);
   console.log('✅ V14 routes registered');
 } catch (e: any) {
-  console.error('V14 failed:', e?.message || e);
-}
-
-try {
-  await registerPromoRoutes(app);
-  console.log('✅ Promo routes registered');
-} catch (e: any) {
-  console.error('Promo routes failed:', e?.message || e);
+  console.error('V14 routes failed:', e?.message || e);
 }
 
 // ===== START =====
