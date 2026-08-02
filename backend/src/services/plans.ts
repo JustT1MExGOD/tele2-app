@@ -93,31 +93,124 @@ function normalizePlanInput(data: Record<string, any>): Record<Metric, number> {
   return out;
 }
 
+/** Колонки sales, которые реально есть в БД (кэш) */
+let salesColumnsCache: Set<string> | null = null;
+
+async function getSalesColumns(): Promise<Set<string>> {
+  if (salesColumnsCache) return salesColumnsCache;
+  try {
+    const res = await query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'sales'`
+    );
+    salesColumnsCache = new Set(res.rows.map((r: any) => String(r.column_name)));
+  } catch {
+    salesColumnsCache = new Set([
+      ...METRICS,
+      'employee_id',
+      'store_id',
+      'sale_date'
+    ] as string[]);
+  }
+  return salesColumnsCache;
+}
+
 export async function getEmployeeMonthFacts(employeeId: number, month: string) {
   const start = monthStart(month);
   const end = monthEndExclusive(month);
-  const ids = await getMetricIds().catch(() => [...METRICS] as string[]);
-  const safeIds = ids.filter((id) => /^[a-z][a-z0-9_]{0,29}$/.test(id));
-  const selectParts = safeIds.map((id) => `COALESCE(SUM(${id}),0) as ${id}`);
-  // always include base METRICS
-  for (const m of METRICS) {
-    if (!safeIds.includes(m)) selectParts.push(`COALESCE(SUM(${m}),0) as ${m}`);
-  }
-  const allIds = [...new Set([...safeIds, ...METRICS])];
+
+  // 1) Базовый запрос — всегда, без «лишних» колонок
+  const BASE = [
+    'sim', 'mnp', 'pa', 'combo', 'phones', 'accessories',
+    'focus', 'settings', 'wink', 'shpd', 'insurance',
+    'credit_request', 'credit_issued', 'plotter', 'hb'
+  ] as const;
+
+  const out: Record<string, number> = {};
+  for (const m of METRICS) out[m] = 0;
+
   try {
+    const cols = await getSalesColumns();
+    const sumCols = BASE.filter((c) => cols.has(c));
+    if (!sumCols.length) {
+      // совсем старая схема
+      const res = await query(
+        `SELECT
+           COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
+           COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
+           COALESCE(SUM(phones),0) as phones
+         FROM sales
+         WHERE employee_id = $1 AND sale_date >= $2::date AND sale_date < $3::date`,
+        [employeeId, start, end]
+      );
+      const row = res.rows[0] || {};
+      for (const k of Object.keys(row)) out[k] = num(row[k]);
+      return out;
+    }
+
+    const selectParts = sumCols.map((c) => `COALESCE(SUM(${c}),0) as ${c}`);
     const res = await query(
       `SELECT ${selectParts.join(', ')}
        FROM sales
-       WHERE employee_id = $1 AND sale_date >= $2::date AND sale_date < $3::date`,
+       WHERE employee_id = $1
+         AND sale_date >= $2::date
+         AND sale_date < $3::date`,
       [employeeId, start, end]
     );
     const row = res.rows[0] || {};
-    const out: Record<string, number> = {};
-    for (const m of allIds) out[m] = num(row[m]);
+    for (const c of sumCols) out[c] = num(row[c]);
+
+    // 2) Кастомные метрики — только если колонка есть
+    const catalogIds = await getMetricIds().catch(() => [] as string[]);
+    const extra = catalogIds.filter(
+      (id) =>
+        /^[a-z][a-z0-9_]{0,29}$/.test(id) &&
+        cols.has(id) &&
+        !sumCols.includes(id as any)
+    );
+    if (extra.length) {
+      const parts = extra.map((c) => `COALESCE(SUM(${c}),0) as ${c}`);
+      try {
+        const r2 = await query(
+          `SELECT ${parts.join(', ')}
+           FROM sales
+           WHERE employee_id = $1
+             AND sale_date >= $2::date
+             AND sale_date < $3::date`,
+          [employeeId, start, end]
+        );
+        const row2 = r2.rows[0] || {};
+        for (const c of extra) out[c] = num(row2[c]);
+      } catch (e) {
+        console.warn('extra metric facts failed:', (e as any)?.message || e);
+      }
+    }
+
+    // legacy credit
+    if (out.credit_issued === 0 && (row as any).credit != null) {
+      out.credit_issued = num((row as any).credit);
+    }
     return out;
-  } catch {
-    const out: Record<string, number> = {};
-    for (const m of METRICS) out[m] = 0;
+  } catch (e) {
+    console.error('getEmployeeMonthFacts failed:', (e as any)?.message || e);
+    // 3) Последний шанс — минимальный набор
+    try {
+      const res = await query(
+        `SELECT
+           COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
+           COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
+           COALESCE(SUM(phones),0) as phones,
+           COALESCE(SUM(accessories),0) as accessories
+         FROM sales
+         WHERE employee_id = $1 AND sale_date >= $2::date AND sale_date < $3::date`,
+        [employeeId, start, end]
+      );
+      const row = res.rows[0] || {};
+      for (const k of Object.keys(row)) out[k] = num(row[k]);
+    } catch (e2) {
+      console.error('facts fallback failed:', (e2 as any)?.message || e2);
+    }
     return out;
   }
 }
