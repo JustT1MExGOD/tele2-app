@@ -1,75 +1,76 @@
+/**
+ * Cron: микро-отчёты 10/12/14/16/18/20 МСК, итог 21:05, напоминания 20:00
+ */
 import { query } from '../db/index.js';
-import { notifyChat, notifyUser } from '../bot/index.js';
-import { microReport, finalReport, shiftReminder } from '../bot/messages.js';
 import { todayMoscow } from '../utils/date.js';
-import { computeStoreDailyPlans } from '../services/plans.js';
+import { notifyChat, notifyUser } from '../bot/index.js';
+import {
+  microReport,
+  finalReport,
+  shiftReminder,
+  microLines,
+  finalLines
+} from '../bot/messages.js';
 
 const FACT_SQL = `
   SELECT
-    COALESCE(SUM(sim),0) as sim,
-    COALESCE(SUM(mnp),0) as mnp,
-    COALESCE(SUM(pa),0) as pa,
-    COALESCE(SUM(combo),0) as combo,
-    COALESCE(SUM(phones),0) as phones,
-    COALESCE(SUM(accessories),0) as accessories,
-    COALESCE(SUM(settings),0) as settings,
-    COALESCE(SUM(insurance),0) as insurance,
-    COALESCE(SUM(wink),0) as wink,
-    COALESCE(SUM(shpd),0) as shpd,
-    COALESCE(SUM(focus),0) as focus,
-    COALESCE(SUM(credit_request),0) as credit_request,
-    COALESCE(SUM(credit_issued),0) as credit_issued,
-    COALESCE(SUM(plotter),0) as plotter,
-    COALESCE(SUM(hb),0) as hb
+    COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp, COALESCE(SUM(pa),0) pa,
+    COALESCE(SUM(combo),0) combo, COALESCE(SUM(phones),0) phones,
+    COALESCE(SUM(accessories),0) accessories, COALESCE(SUM(settings),0) settings,
+    COALESCE(SUM(insurance),0) insurance, COALESCE(SUM(wink),0) wink,
+    COALESCE(SUM(shpd),0) shpd, COALESCE(SUM(focus),0) focus,
+    COALESCE(SUM(credit_request),0) credit_request,
+    COALESCE(SUM(credit_issued),0) credit_issued,
+    COALESCE(SUM(plotter),0) plotter, COALESCE(SUM(hb),0) hb
   FROM sales
   WHERE sale_date::date = $1::date AND store_id = $2
 `;
 
-function n(v: any) {
-  return Number(v) || 0;
-}
+async function loadStorePlans(date: string) {
+  // dated plans
+  let plans = await query(
+    `SELECT sp.*, st.name, st.code, st.id as store_id
+     FROM stores st
+     LEFT JOIN store_plans sp ON sp.store_id = st.id AND sp.plan_date::date = $1::date
+     ORDER BY st.name`,
+    [date]
+  ).catch(() => ({ rows: [] as any[] }));
 
-function planOf(p: any, key: string) {
-  if (key === 'credit_issued') return n(p.credit_issued ?? p.credit);
-  if (key === 'credit_request') return n(p.credit_request ?? 0);
-  return n(p[key]);
-}
-
-function microLines(f: any, p: any) {
-  return [
-    { label: 'SIM', fact: n(f.sim), plan: planOf(p, 'sim'), key: 'sim' },
-    { label: 'MNP', fact: n(f.mnp), plan: planOf(p, 'mnp'), key: 'mnp' },
-    { label: 'ПА', fact: n(f.pa), plan: planOf(p, 'pa'), key: 'pa' },
-    { label: 'Комбо', fact: n(f.combo), plan: planOf(p, 'combo'), key: 'combo' },
-    { label: 'Телефоны', fact: n(f.phones), plan: planOf(p, 'phones'), key: 'phones' },
-    { label: 'Аксы', fact: n(f.accessories), plan: planOf(p, 'accessories'), key: 'accessories' },
-    { label: 'Wink', fact: n(f.wink), plan: planOf(p, 'wink'), key: 'wink' },
-    { label: 'ШПД', fact: n(f.shpd), plan: planOf(p, 'shpd'), key: 'shpd' }
-  ];
-}
-
-function finalLines(f: any, p: any) {
-  return [
-    { label: 'Симкарты', fact: n(f.sim), plan: planOf(p, 'sim') },
-    { label: 'MNP', fact: n(f.mnp), plan: planOf(p, 'mnp') },
-    { label: 'Абики / золото', fact: n(f.pa), plan: planOf(p, 'pa') },
-    { label: 'Комбо', fact: n(f.combo), plan: planOf(p, 'combo') },
-    { label: 'Настройки', fact: n(f.settings), plan: planOf(p, 'settings') },
-    { label: 'Аксессуары', fact: n(f.accessories), plan: planOf(p, 'accessories') },
-    { label: 'Страховки', fact: n(f.insurance), plan: planOf(p, 'insurance') },
-    { label: 'Смартфоны', fact: n(f.phones), plan: planOf(p, 'phones') },
-    { label: 'WINK', fact: n(f.wink), plan: planOf(p, 'wink') },
-    { label: 'Заявка ШПД', fact: n(f.shpd), plan: planOf(p, 'shpd') },
-    { label: 'Фокусное об-ние', fact: n(f.focus), plan: planOf(p, 'focus') },
-    { label: 'Кредит · заявка', fact: n(f.credit_request), plan: planOf(p, 'credit_request') },
-    { label: 'Кредит · выдан', fact: n(f.credit_issued), plan: planOf(p, 'credit_issued') },
-    { label: 'Плоттер', fact: n(f.plotter), plan: planOf(p, 'plotter') },
-    { label: 'HB', fact: n(f.hb), plan: planOf(p, 'hb') }
-  ];
+  // fill missing from template
+  const out = [];
+  for (const row of plans.rows) {
+    let plan = row;
+    if (row.sim == null && row.mnp == null) {
+      const tpl = await query(
+        `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date IS NULL LIMIT 1`,
+        [row.store_id || row.id]
+      ).catch(() => ({ rows: [] as any[] }));
+      plan = { ...row, ...(tpl.rows[0] || {}) };
+    }
+    out.push({
+      store_id: row.store_id || row.id,
+      name: row.name,
+      code: row.code,
+      plan
+    });
+  }
+  // if stores join empty — fallback stores list
+  if (!out.length) {
+    const stores = await query(`SELECT id, name, code FROM stores ORDER BY name`);
+    for (const st of stores.rows) {
+      const tpl = await query(
+        `SELECT * FROM store_plans WHERE store_id = $1 AND (plan_date::date = $2::date OR plan_date IS NULL)
+         ORDER BY plan_date NULLS LAST LIMIT 1`,
+        [st.id, date]
+      ).catch(() => ({ rows: [] as any[] }));
+      out.push({ store_id: st.id, name: st.name, code: st.code, plan: tpl.rows[0] || {} });
+    }
+  }
+  return out;
 }
 
 export function startReportCron() {
-  console.log('📅 Cron T2: отчёты + напоминания смен');
+  console.log('📅 Cron T2: микро 10–20 · итог 21:05 · смены 20:00 (МСК)');
   setInterval(() => {
     tick().catch((e) => console.error('cron tick', e?.message || e));
   }, 60_000);
@@ -116,45 +117,61 @@ async function sendTomorrowReminders(today: string) {
   }
 }
 
-async function sendMicroReports(date: string, hour: number) {
+export async function sendMicroReports(date: string, hour?: number) {
+  const chat = process.env.REPORT_CHAT_ID || process.env.CHAT_ID;
+  if (!chat) {
+    console.error('Микро-отчёт: нет REPORT_CHAT_ID / CHAT_ID — некуда слать');
+    return { ok: false, error: 'no_chat_id' };
+  }
   try {
-    const plans = await computeStoreDailyPlans(date);
-    for (const st of plans.stores || []) {
+    const stores = await loadStorePlans(date);
+    let sent = 0;
+    for (const st of stores) {
       const staff = await query(
         `SELECT e.full_name FROM schedules sch
          JOIN employees e ON e.id = sch.employee_id
          WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
         [date, st.store_id]
       );
-      const fact = await query(FACT_SQL, [date, st.store_id]);
+      const fact = await query(FACT_SQL, [date, st.store_id]).catch(() => ({ rows: [{}] }));
       const f = fact.rows[0] || {};
       const p = st.plan || {};
+      const h = hour ?? new Date().getHours();
       const text = microReport({
         storeName: st.name,
         storeCode: st.code || st.store_id,
-        date: `${date} · ${String(hour).padStart(2, '0')}:00`,
+        date: `${date} · ${String(h).padStart(2, '0')}:00`,
         staff: staff.rows.map((x: any) => x.full_name),
         lines: microLines(f, p)
       });
       await notifyChat(text);
-      console.log('Микро-отчёт:', st.name, hour + ':00');
+      sent++;
+      console.log('Микро-отчёт отправлен:', st.name, h + ':00');
     }
+    return { ok: true, sent };
   } catch (e: any) {
     console.error('micro report', e?.message || e);
+    return { ok: false, error: e?.message || String(e) };
   }
 }
 
-async function sendFinalReports(date: string) {
+export async function sendFinalReports(date: string) {
+  const chat = process.env.REPORT_CHAT_ID || process.env.CHAT_ID;
+  if (!chat) {
+    console.error('Итог: нет REPORT_CHAT_ID / CHAT_ID — некуда слать');
+    return { ok: false, error: 'no_chat_id' };
+  }
   try {
-    const plans = await computeStoreDailyPlans(date);
-    for (const st of plans.stores || []) {
+    const stores = await loadStorePlans(date);
+    let sent = 0;
+    for (const st of stores) {
       const staff = await query(
         `SELECT e.full_name FROM schedules sch
          JOIN employees e ON e.id = sch.employee_id
          WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
         [date, st.store_id]
       );
-      const fact = await query(FACT_SQL, [date, st.store_id]);
+      const fact = await query(FACT_SQL, [date, st.store_id]).catch(() => ({ rows: [{}] }));
       const f = fact.rows[0] || {};
       const p = st.plan || {};
       const text = finalReport({
@@ -165,9 +182,12 @@ async function sendFinalReports(date: string) {
         lines: finalLines(f, p)
       });
       await notifyChat(text);
-      console.log('Итоговый отчёт:', st.name);
+      sent++;
+      console.log('Итоговый отчёт отправлен:', st.name);
     }
+    return { ok: true, sent };
   } catch (e: any) {
     console.error('final report', e?.message || e);
+    return { ok: false, error: e?.message || String(e) };
   }
 }

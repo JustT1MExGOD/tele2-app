@@ -1,5 +1,10 @@
 import { Bot } from 'grammy';
-import { saleNotificationMulti, microReport, finalReport, shiftReminder } from './messages.js';
+import {
+  saleNotificationMulti,
+  microReport,
+  finalReport,
+  shiftReminder
+} from './messages.js';
 
 const token = process.env.BOT_TOKEN || '';
 export const bot = token ? new Bot(token) : (null as any);
@@ -9,11 +14,21 @@ const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID || '
 
 export async function notifyChat(text: string, chatId?: string) {
   const id = chatId || CHAT_ID;
-  if (!bot || !id) return;
+  if (!bot) {
+    console.error('notifyChat: bot disabled (no BOT_TOKEN)');
+    return;
+  }
+  if (!id) {
+    console.error('notifyChat: no CHAT_ID / REPORT_CHAT_ID');
+    return;
+  }
   try {
-    await bot.api.sendMessage(id, text, { parse_mode: 'HTML' });
+    await bot.api.sendMessage(id, text, {
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: true }
+    } as any);
   } catch (e: any) {
-    console.error('notifyChat failed:', e?.message || e);
+    console.error('notifyChat failed:', e?.message || e, 'chat=', id);
   }
 }
 
@@ -36,42 +51,30 @@ export async function startBot() {
     console.warn('BOT_TOKEN missing — bot disabled');
     return;
   }
-
-  // выключить polling переменной на Railway
-  if (process.env.BOT_POLLING === 'false') {
-    console.log('🤖 Bot polling disabled (BOT_POLLING=false)');
-    return;
-  }
-
-  try {
-    // всегда снимаем webhook перед polling
-    await bot.api.deleteWebhook({ drop_pending_updates: true });
-  } catch (e: any) {
-    console.warn('deleteWebhook:', e?.message || e);
-  }
-
   bot.command('start', async (ctx) => {
     await ctx.reply(
       '👋 <b>T2 Sales</b>\nОткрой Mini App из меню бота.',
       { parse_mode: 'HTML' }
     );
   });
+  bot.catch((err) => console.error('Bot error:', err));
 
-  bot.catch((err) => {
-    const msg = err?.error?.description || err?.message || String(err);
-    console.error('Bot error:', msg);
-    // 409 не роняем процесс
-  });
+  // сброс webhook чтобы polling не конфликтовал
+  try {
+    await bot.api.deleteWebhook({ drop_pending_updates: false });
+  } catch (_) {}
 
+  if (process.env.BOT_POLLING === 'false') {
+    console.log('🤖 Bot API ready (polling off)');
+    return;
+  }
   try {
     await bot.start({
-      onStart: () => console.log('🤖 Bot polling started'),
-      drop_pending_updates: true
+      onStart: () => console.log('🤖 Bot polling started')
     });
   } catch (e: any) {
-    const msg = e?.message || String(e);
-    console.error('Ошибка бота:', msg);
-    if (String(msg).includes('409') || String(msg).includes('Conflict')) {
+    console.error('Ошибка бота:', e?.message || e);
+    if (String(e?.message || e).includes('409')) {
       console.error('→ Другой инстанс уже polling. Оставь один деплой / выключи локальный bot.');
     }
   }
