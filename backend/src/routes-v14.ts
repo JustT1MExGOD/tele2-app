@@ -1,10 +1,9 @@
 /**
- * v14 — branding, precise heatmap, report SVG, tenant
- * (без дублей путей v13)
+ * v14 — branding, precise heatmap, tenant
+ * Отчёты /reports/day — в index.ts (не дублировать)
  */
 import { FastifyInstance } from 'fastify';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
-import { buildDailyReportSvg } from './services/report-image.js';
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg } from './services/tenant.js';
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
 import { todayMoscow } from './utils/date.js';
@@ -56,8 +55,7 @@ export async function registerV14Routes(app: FastifyInstance) {
     try {
       const orgId = await orgIdForEmployee(request.user!.employee_id);
       return { org_id: orgId, stores: await listStoresForOrg(orgId) };
-    } catch (e: any) {
-      // fallback: all stores
+    } catch {
       const { query } = await import('./db/index.js');
       const res = await query(`SELECT * FROM stores ORDER BY name`);
       return { org_id: 'default', stores: res.rows };
@@ -83,62 +81,6 @@ export async function registerV14Routes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const storeId = (request.body as any)?.store_id;
     return rebuildHourProfiles(storeId);
-  });
-
-  async function resolveBrand(request: any) {
-    try {
-      if (request.user?.employee_id) {
-        const org = await getOrg(await orgIdForEmployee(request.user.employee_id));
-        return {
-          name: org.brand_name || org.name || 'T2 Sales',
-          color: org.primary_color || '#2AABEE'
-        };
-      }
-    } catch (_) {}
-    return { name: 'T2 Sales', color: '#2AABEE' };
-  }
-
-  // JSON { svg }
-  app.get('/reports/day/:storeId', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
-    const storeId = String((request.params as any).storeId || '');
-    const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
-    if (!storeId) return reply.code(400).send({ error: 'store_id_required' });
-    try {
-      const brand = await resolveBrand(request);
-      const svg = await buildDailyReportSvg(storeId, date, brand);
-      return {
-        ok: true,
-        store_id: storeId,
-        date,
-        content_type: 'image/svg+xml',
-        svg,
-        url: `/reports/svg?store_id=${encodeURIComponent(storeId)}&date=${date}`
-      };
-    } catch (e: any) {
-      console.error('report svg failed:', e);
-      return reply.code(500).send({
-        error: 'report_failed',
-        message: e?.message || String(e)
-      });
-    }
-  });
-
-  // raw SVG — отдельный path без :param.svg
-  app.get('/reports/svg', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
-    const q = (request.query || {}) as any;
-    const storeId = String(q.store_id || '');
-    const date = String(q.date || todayMoscow()).slice(0, 10);
-    if (!storeId) return reply.code(400).send({ error: 'store_id_required' });
-    try {
-      const brand = await resolveBrand(request);
-      const svg = await buildDailyReportSvg(storeId, date, brand);
-      reply.header('Content-Type', 'image/svg+xml; charset=utf-8');
-      return reply.send(svg);
-    } catch (e: any) {
-      return reply.code(500).send({ error: 'report_failed', message: e?.message || String(e) });
-    }
   });
 
   app.post('/internal/log-sale-events', async (request, reply) => {

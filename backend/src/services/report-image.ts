@@ -63,9 +63,18 @@ export type ReportKind = 'micro' | 'final';
 export async function buildDailyReportSvg(
   storeId: string,
   date: string,
-  opts?: { kind?: ReportKind; hourLabel?: string }
+  opts?: {
+    kind?: ReportKind;
+    hourLabel?: string;
+    /** white-label (старый API routes-v14) */
+    name?: string;
+    color?: string;
+    brand?: { name?: string; color?: string };
+  }
 ) {
   const kind = opts?.kind || 'final';
+  const brandName = opts?.brand?.name || opts?.name || 'T2 Sales';
+  const accent = opts?.brand?.color || opts?.color || '#2AABEE';
   const { st, f, p, staff } = await loadFactPlanStaff(storeId, date);
 
   const groups: { title: string; rows: [string, number, number][] }[] =
@@ -138,7 +147,7 @@ export async function buildDailyReportSvg(
   const parts: string[] = [];
   for (const g of groups) {
     parts.push(
-      `<text x="40" y="${y}" fill="#2AABEE" font-size="13" font-family="Arial,sans-serif" font-weight="700">${esc(g.title)}</text>`
+      `<text x="40" y="${y}" fill="${esc(accent)}" font-size="13" font-family="Arial,sans-serif" font-weight="700">${esc(g.title)}</text>`
     );
     y += 22;
     for (const [label, fact, plan] of g.rows) {
@@ -167,8 +176,8 @@ export async function buildDailyReportSvg(
     <stop offset="0%" stop-color="#0A0A0B"/><stop offset="100%" stop-color="#14141A"/>
   </linearGradient></defs>
   <rect width="540" height="${height}" rx="24" fill="url(#bg)"/>
-  <rect width="540" height="6" fill="#2AABEE"/>
-  <text x="40" y="48" fill="#2AABEE" font-size="13" font-family="Arial,sans-serif" font-weight="700" letter-spacing="2">T2 SALES</text>
+  <rect width="540" height="6" fill="${esc(accent)}"/>
+  <text x="40" y="48" fill="${esc(accent)}" font-size="13" font-family="Arial,sans-serif" font-weight="700" letter-spacing="2">${esc(brandName).toUpperCase()}</text>
   <text x="40" y="78" fill="#FFFFFF" font-size="22" font-family="Arial,sans-serif" font-weight="800">${esc(title)}</text>
   <text x="40" y="100" fill="#A1A1AA" font-size="13" font-family="Arial,sans-serif">${sub}</text>
   ${parts.join('\n')}
