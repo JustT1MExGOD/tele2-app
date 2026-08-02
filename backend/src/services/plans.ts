@@ -428,9 +428,9 @@ export async function getEmployeeDailyPlan(employeeId: number, date: string) {
 }
 
 const STORE_SHARES: { id: string; share: number }[] = [
-  { id: 'kosmonavtov', share: 0.5 },
-  { id: 'kalinina11', share: 0.3 },
-  { id: 'kalinina2', share: 0.2 }
+  { id: 'kosmonavtov', share: 0.55 },
+  { id: 'kalinina11', share: 0.20 },
+  { id: 'kalinina2', share: 0.25 }
 ];
 
 export async function computeStoreDailyPlans(date?: string) {
