@@ -16,6 +16,7 @@ import { registerSupportRoutes } from './routes-support.js';
 import { registerV13Routes } from './routes-v13.js';
 import { registerV14Routes } from './routes-v14.js';
 import { registerMetricsRoutes } from './routes-metrics.js';
+import { registerSupervisorRoutes } from './routes-supervisor.js';
 import { logSaleEvents } from './services/heatmap.js';
 import { buildDailyReportSvg } from './services/report-image.js';
 import { runSmartAlertsTick } from './services/alerts.js';
@@ -897,6 +898,14 @@ try {
 }
 
 
+
+
+try {
+  await registerSupervisorRoutes(app);
+  console.log('✅ Supervisor routes registered');
+} catch (e: any) {
+  console.error('Supervisor routes failed:', e?.message || e);
+}
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;
