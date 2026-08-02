@@ -16,6 +16,8 @@ import { registerSupportRoutes } from './routes-support.js';
 import { registerV13Routes } from './routes-v13.js';
 import { registerPromoRoutes } from './routes-promos.js';
 import { runSmartAlertsTick } from './services/alerts.js';
+import { registerV14Routes } from './routes-v14.js';
+import { logSaleEvents, hourMoscow } from './services/heatmap.js';
 
 dotenv.config();
 
@@ -529,6 +531,13 @@ try {
   console.log('✅ V13 routes registered');
 } catch (e: any) {
   console.error('V13 routes failed:', e?.message || e);
+}
+
+try {
+  await registerV14Routes(app);
+  console.log('✅ V14 routes registered');
+} catch (e: any) {
+  console.error('V14 failed:', e?.message || e);
 }
 
 try {
