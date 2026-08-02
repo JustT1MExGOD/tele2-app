@@ -197,11 +197,23 @@ export async function upsertEmployeeMonthPlan(
   const start = monthStart(month);
   const norm = normalizePlanInput(data);
 
+  // доп. кастомные метрики из body (id уже в колонках после POST /metrics)
+  const extraKeys = Object.keys(data || {}).filter(
+    (k) =>
+      /^[a-z][a-z0-9_]{0,29}$/.test(k) &&
+      !(METRICS as readonly string[]).includes(k) &&
+      !['month', 'employee_id', 'id', 'credit'].includes(k)
+  );
+  for (const k of extraKeys) {
+    (norm as any)[k] = num(data[k]);
+  }
+
   // динамический upsert по METRICS
-  const cols = ['employee_id', 'month', ...METRICS];
-  const vals: any[] = [employeeId, start, ...METRICS.map((m) => norm[m])];
+  const allCols = [...METRICS, ...extraKeys];
+  const cols = ['employee_id', 'month', ...allCols];
+  const vals: any[] = [employeeId, start, ...allCols.map((m) => num((norm as any)[m]))];
   const ph = cols.map((_, i) => `$${i + 1}`);
-  const updates = METRICS.map((m) => `${m} = EXCLUDED.${m}`).join(', ');
+  const updates = allCols.map((m) => `${m} = EXCLUDED.${m}`).join(', ');
 
   try {
     const res = await query(

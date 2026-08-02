@@ -2103,7 +2103,7 @@
       return h;
     }
 
-    const METRICS = [
+    let METRICS = [
       { id: 'sim',             label: 'SIM',            unit: 'шт' },
       { id: 'mnp',             label: 'MNP',            unit: 'шт' },
       { id: 'pa',              label: 'ПА',             unit: 'шт' },
@@ -2120,6 +2120,22 @@
       { id: 'plotter',         label: 'Плоттер',        unit: 'шт' },
       { id: 'hb',              label: 'НВ',             unit: 'шт' }
     ];
+
+    async function loadMetricsCatalog() {
+      try {
+        const res = await fetch(API + '/metrics', { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = data.items || [];
+        if (items.length) {
+          METRICS = items.map(m => ({
+            id: m.id,
+            label: m.label || m.id,
+            unit: m.unit || (m.unit_type === 'money' ? '₽' : 'шт')
+          }));
+        }
+      } catch (e) { console.warn('metrics', e); }
+    }
 
     // ===== Utils =====
     function todayMoscow() {
@@ -3547,59 +3563,48 @@
 
     async function editEmployeeMonthPlan(employeeId, name) {
       if (!canManage()) return;
+      await loadMetricsCatalog();
       const month = planMonth || scheduleMonth || todayMoscow().slice(0, 7);
-      const res = await fetch(API + '/plans/employees/' + employeeId + '/month?month=' + month);
+      const res = await fetch(API + '/plans/employees/' + employeeId + '/month?month=' + month, {
+        headers: authHeaders()
+      });
       const p = res.ok ? await res.json() : {};
       document.getElementById('modalTitle').textContent = 'План: ' + (name || employeeId);
-      document.getElementById('modalBody').innerHTML = `
-        <div class="empty" style="text-align:left;padding:0 0 12px">Месяц ${month}. Дневной план = месячный / число смен.</div>
-        <div class="field"><label>SIM</label><input type="number" id="mp_sim" value="${p.sim || 0}"></div>
-        <div class="field"><label>MNP</label><input type="number" id="mp_mnp" value="${p.mnp || 0}"></div>
-        <div class="field"><label>ПА</label><input type="number" id="mp_pa" value="${p.pa || 0}"></div>
-        <div class="field"><label>Комбо</label><input type="number" id="mp_combo" value="${p.combo || 0}"></div>
-        <div class="field"><label>Телефоны</label><input type="number" id="mp_phones" value="${p.phones || 0}"></div>
-        <div class="field"><label>Аксессуары</label><input type="number" id="mp_accessories" value="${p.accessories || 0}"></div>
-        <div class="field"><label>Настройки / Доп</label><input type="number" id="mp_settings" value="${p.settings || 0}"></div>
-        <div class="field"><label>ФО</label><input type="number" id="mp_focus" value="${p.focus || 0}"></div>
-        <div class="field"><label>Wink</label><input type="number" id="mp_wink" value="${p.wink || 0}"></div>
-        <div class="field"><label>ШПД</label><input type="number" id="mp_shpd" value="${p.shpd || 0}"></div>
-        <div class="field"><label>Страховки</label><input type="number" id="mp_insurance" value="${p.insurance || 0}"></div>
-        <div class="field"><label>Кредит</label><input type="number" id="mp_credit" value="${p.credit || p.credit_issued || 0}"></div>
-        <div class="field"><label>Плоттер</label><input type="number" id="mp_plotter" value="${p.plotter || 0}"></div>
-        <div class="field"><label>HB / НВ</label><input type="number" id="mp_hb" value="${p.hb || 0}"></div>
-        <button class="btn-main" onclick="saveEmployeeMonthPlan(${employeeId})">Сохранить план</button>
-      `;
+      const fields = METRICS.map(m => {
+        let val = p[m.id];
+        if (val == null && m.id === 'credit_issued') val = p.credit;
+        return '<div class="field"><label>' + m.label + (m.unit ? ' (' + m.unit + ')' : '') + '</label>' +
+          '<input type="number" id="mp_' + m.id + '" value="' + (Number(val) || 0) + '"></div>';
+      }).join('');
+      document.getElementById('modalBody').innerHTML =
+        '<div class="empty" style="text-align:left;padding:0 0 12px">Месяц ' + month + '. Дневной = остаток / смены.</div>' +
+        fields +
+        '<button class="btn-main" onclick="saveEmployeeMonthPlan(' + employeeId + ')">Сохранить</button>';
       document.getElementById('overlay').classList.add('show');
     }
 
     async function saveEmployeeMonthPlan(employeeId) {
-      const month = scheduleMonth || todayMoscow().slice(0, 7);
-      const body = {
-        month,
-        sim: Number(document.getElementById('mp_sim').value) || 0,
-        mnp: Number(document.getElementById('mp_mnp').value) || 0,
-        pa: Number(document.getElementById('mp_pa').value) || 0,
-        combo: Number(document.getElementById('mp_combo').value) || 0,
-        phones: Number(document.getElementById('mp_phones').value) || 0,
-        accessories: Number(document.getElementById('mp_accessories').value) || 0,
-        settings: Number(document.getElementById('mp_settings')?.value) || 0,
-        focus: Number(document.getElementById('mp_focus').value) || 0,
-        wink: Number(document.getElementById('mp_wink').value) || 0,
-        shpd: Number(document.getElementById('mp_shpd').value) || 0,
-        insurance: Number(document.getElementById('mp_insurance').value) || 0,
-        credit: Number(document.getElementById('mp_credit').value) || 0,
-        plotter: Number(document.getElementById('mp_plotter').value) || 0,
-        hb: Number(document.getElementById('mp_hb').value) || 0
-      };
+      const month = planMonth || scheduleMonth || todayMoscow().slice(0, 7);
+      const body = { month };
+      for (const m of METRICS) {
+        const el = document.getElementById('mp_' + m.id);
+        if (el) body[m.id] = Number(el.value) || 0;
+      }
+      if (body.credit_issued != null) body.credit = body.credit_issued;
       const res = await fetch(API + '/plans/employees/' + employeeId + '/month', {
         method: 'PUT',
         headers: authHeaders(true),
         body: JSON.stringify(body)
       });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      if (!res.ok) {
+        let msg = 'Ошибка';
+        try { const j = await res.json(); msg = j.message || j.error || msg; } catch (_) {}
+        toast(msg, 'err');
+        return;
+      }
       toast('План сохранён', 'ok');
       closeModal();
-      loadMonthPlans();
+      if (typeof loadMonthPlans === 'function') loadMonthPlans();
     }
 
         async function loadSupport() {
@@ -4575,9 +4580,16 @@
           unit: document.getElementById('nm_unit').value
         })
       });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
-      toast('Метрика добавлена', 'ok');
+      if (!res.ok) {
+        let msg = 'Ошибка';
+        try { const j = await res.json(); msg = j.message || j.error || msg; } catch (_) {}
+        toast(msg, 'err');
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      toast('Метрика «' + (data.item?.label || label) + '» добавлена', 'ok');
       closeModal();
+      await loadMetricsCatalog();
     }
 
     // ===== INTERACTIVE TUTORIAL v2 =====

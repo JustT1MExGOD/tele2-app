@@ -15,7 +15,9 @@ import { registerV8Routes } from './routes-v8.js';
 import { registerSupportRoutes } from './routes-support.js';
 import { registerV13Routes } from './routes-v13.js';
 import { registerV14Routes } from './routes-v14.js';
+import { registerMetricsRoutes } from './routes-metrics.js';
 import { logSaleEvents } from './services/heatmap.js';
+import { buildDailyReportSvg } from './services/report-image.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 
 dotenv.config();
@@ -785,10 +787,16 @@ async function buildDayReportSvgInline(storeId: string, date: string) {
 app.get('/reports/day/:storeId', async (request, reply) => {
   const storeId = String((request.params as any).storeId || '');
   const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
+  const kind = ((request.query as any)?.kind === 'micro' ? 'micro' : 'final') as 'micro' | 'final';
   if (!storeId) return reply.code(400).send({ error: 'store_id_required' });
   try {
-    const svg = await buildDayReportSvgInline(storeId, date);
-    return { ok: true, store_id: storeId, date, content_type: 'image/svg+xml', svg };
+    let svg: string;
+    try {
+      svg = await buildDailyReportSvg(storeId, date, { kind });
+    } catch {
+      svg = await buildDayReportSvgInline(storeId, date);
+    }
+    return { ok: true, store_id: storeId, date, kind, content_type: 'image/svg+xml', svg };
   } catch (e: any) {
     request.log.error(e);
     return reply.code(500).send({ error: 'report_failed', message: e?.message || String(e) });
@@ -880,6 +888,15 @@ try {
 } catch (e: any) {
   console.error('V14 routes failed:', e?.message || e);
 }
+
+try {
+  await registerMetricsRoutes(app);
+  console.log('✅ Metrics routes registered');
+} catch (e: any) {
+  console.error('Metrics routes failed:', e?.message || e);
+}
+
+
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;
