@@ -2521,7 +2521,7 @@
           const fact = statsMap[store.id] || {};
           const plan = planMap[store.id] || {};
           const staff = staffMap[store.id] || [];
-          const keys = ['sim', 'mnp', 'pa', 'combo', 'phones'];
+          const keys = METRICS.slice(0, 8).map(m => m.id);
           let sf = 0, sp = 0;
           keys.forEach(k => { sf += +fact[k] || 0; sp += +plan[k] || 0; });
           const overall = sp > 0 ? Math.round((sf / sp) * 100) : (sf > 0 ? 100 : 0);
@@ -3423,16 +3423,8 @@
           meta.innerHTML = `Сотрудников: <b>${rows.length}</b> · ост. дней: <b>${data.remaining_days ?? '—'}</b>`;
         }
 
-        const MAIN = [
-          { id: 'sim', label: 'SIM' }, { id: 'mnp', label: 'MNP' }, { id: 'pa', label: 'ПА' },
-          { id: 'combo', label: 'Комбо' }, { id: 'phones', label: 'Тел' }, { id: 'accessories', label: 'Аксы' }
-        ];
-        const EXTRA = [
-          { id: 'settings', label: 'Настр' }, { id: 'insurance', label: 'Страх' },
-          { id: 'wink', label: 'Wink' }, { id: 'shpd', label: 'ШПД' },
-          { id: 'focus', label: 'ФО' }, { id: 'credit', label: 'Кредит' },
-          { id: 'plotter', label: 'Плот' }, { id: 'hb', label: 'HB' }
-        ];
+        const MAIN = METRICS.slice(0, 6).map(x => ({ id: x.id, label: x.label }));
+        const EXTRA = METRICS.slice(6).map(x => ({ id: x.id, label: x.label }));
 
         function cell(m, fact, pct) {
           const f = Number(fact[m.id]) || 0;
@@ -3523,23 +3515,19 @@
         box.innerHTML = stores.map(st => {
           const col = storeColor(st.store_id, st);
           const p = st.plan || {};
+          const chips = METRICS.slice(0, 8).map(m =>
+            `<div class="stat-chip"><div class="n">${p[m.id] || 0}</div><div class="l">${m.label}</div></div>`
+          ).join('');
           return `
             <div class="store-card" style="border-left:4px solid ${col};margin:8px 12px">
               <div class="store-head" style="cursor:default">
-                <div class="store-badge" style="background:${col}33;color:${col}">${Math.round((st.plan_share || 0) * 100)}%</div>
+                <div class="store-badge" style="background:${col}33;color:${col}">${Math.round((st.share || st.plan_share || 0) * 100)}%</div>
                 <div class="store-meta">
                   <div class="store-name">${st.name}</div>
                   <div class="store-code">${st.code || ''} · дневной план</div>
                 </div>
               </div>
-              <div class="stats-row" style="padding:0 12px 12px">
-                <div class="stat-chip"><div class="n">${p.sim || 0}</div><div class="l">SIM</div></div>
-                <div class="stat-chip"><div class="n">${p.mnp || 0}</div><div class="l">MNP</div></div>
-                <div class="stat-chip"><div class="n">${p.pa || 0}</div><div class="l">ПА</div></div>
-                <div class="stat-chip"><div class="n">${p.combo || 0}</div><div class="l">Комбо</div></div>
-                <div class="stat-chip"><div class="n">${p.phones || 0}</div><div class="l">Тел</div></div>
-                <div class="stat-chip"><div class="n">${p.shpd || 0}</div><div class="l">ШПД</div></div>
-              </div>
+              <div class="stats-row" style="padding:0 12px 12px">${chips}</div>
             </div>`;
         }).join('') +
         (canManage()

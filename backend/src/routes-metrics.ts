@@ -7,6 +7,7 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
+import { invalidateMetricsCache } from './services/metrics-catalog.js';
 
 function slugify(label: string, short?: string) {
   const base = (short || label)
@@ -148,6 +149,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
       }
     }
 
+    invalidateMetricsCache();
     return {
       ok: true,
       item: {

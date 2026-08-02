@@ -3,6 +3,7 @@
  * Единый список метрик (как в sales / frontend)
  */
 import { query } from '../db/index.js';
+import { getMetricIds, getMetricDefs } from './metrics-catalog.js';
 
 /** Все метрики плана/факта — везде одинаково */
 export const METRICS = [
@@ -95,51 +96,30 @@ function normalizePlanInput(data: Record<string, any>): Record<Metric, number> {
 export async function getEmployeeMonthFacts(employeeId: number, month: string) {
   const start = monthStart(month);
   const end = monthEndExclusive(month);
-  const res = await query(
-    `SELECT
-       COALESCE(SUM(sim),0) as sim,
-       COALESCE(SUM(mnp),0) as mnp,
-       COALESCE(SUM(pa),0) as pa,
-       COALESCE(SUM(combo),0) as combo,
-       COALESCE(SUM(phones),0) as phones,
-       COALESCE(SUM(accessories),0) as accessories,
-       COALESCE(SUM(focus),0) as focus,
-       COALESCE(SUM(settings),0) as settings,
-       COALESCE(SUM(wink),0) as wink,
-       COALESCE(SUM(shpd),0) as shpd,
-       COALESCE(SUM(insurance),0) as insurance,
-       COALESCE(SUM(credit_request),0) as credit_request,
-       COALESCE(SUM(credit_issued),0) as credit_issued,
-       COALESCE(SUM(plotter),0) as plotter,
-       COALESCE(SUM(hb),0) as hb
-     FROM sales
-     WHERE employee_id = $1
-       AND sale_date >= $2::date
-       AND sale_date < $3::date`,
-    [employeeId, start, end]
-  ).catch(async () => {
-    // fallback без plotter/hb если колонок нет
-    const r = await query(
-      `SELECT
-         COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
-         COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
-         COALESCE(SUM(phones),0) as phones, COALESCE(SUM(accessories),0) as accessories,
-         COALESCE(SUM(focus),0) as focus, COALESCE(SUM(settings),0) as settings,
-         COALESCE(SUM(wink),0) as wink, COALESCE(SUM(shpd),0) as shpd,
-         COALESCE(SUM(insurance),0) as insurance,
-         COALESCE(SUM(credit_request),0) as credit_request,
-         COALESCE(SUM(credit_issued),0) as credit_issued
+  const ids = await getMetricIds().catch(() => [...METRICS] as string[]);
+  const safeIds = ids.filter((id) => /^[a-z][a-z0-9_]{0,29}$/.test(id));
+  const selectParts = safeIds.map((id) => `COALESCE(SUM(${id}),0) as ${id}`);
+  // always include base METRICS
+  for (const m of METRICS) {
+    if (!safeIds.includes(m)) selectParts.push(`COALESCE(SUM(${m}),0) as ${m}`);
+  }
+  const allIds = [...new Set([...safeIds, ...METRICS])];
+  try {
+    const res = await query(
+      `SELECT ${selectParts.join(', ')}
        FROM sales
        WHERE employee_id = $1 AND sale_date >= $2::date AND sale_date < $3::date`,
       [employeeId, start, end]
     );
-    return { rows: [{ ...r.rows[0], plotter: 0, hb: 0 }] };
-  });
-
-  const row = res.rows[0] || {};
-  const out: Record<string, number> = {};
-  for (const m of METRICS) out[m] = num(row[m]);
-  return out;
+    const row = res.rows[0] || {};
+    const out: Record<string, number> = {};
+    for (const m of allIds) out[m] = num(row[m]);
+    return out;
+  } catch {
+    const out: Record<string, number> = {};
+    for (const m of METRICS) out[m] = 0;
+    return out;
+  }
 }
 
 export async function getEmployeeShiftCount(employeeId: number, month: string) {

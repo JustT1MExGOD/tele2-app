@@ -226,7 +226,7 @@ app.post('/sales', async (request, reply) => {
     );
     if (info.rows[0] && applied.length) {
       const { saleNotificationMulti } = await import('./bot/messages.js');
-      const text = saleNotificationMulti({
+      const text = await saleNotificationMulti({
         employeeName: info.rows[0].full_name,
         storeName: info.rows[0].store_name,
         items: applied.map((a) => ({ metric: a.metric, value: a.value }))
