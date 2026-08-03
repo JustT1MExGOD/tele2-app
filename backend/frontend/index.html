@@ -1625,6 +1625,19 @@
 </style>
 </head>
 <body data-theme="light">
+  <!-- ACCESS GATE: вне .sheet, иначе visibility:hidden на sheet прячет и gate -->
+  <div id="accessGate" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg,#0a0a0b);overflow:auto;-webkit-overflow-scrolling:touch">
+    <div class="gate-shell">
+      <div class="gate-top">
+        <div class="gate-logo">🍉</div>
+        <div class="gate-brand">T2 Sales</div>
+        <div id="gateSubtitle" class="gate-sub">Доступ только для сотрудников сети</div>
+      </div>
+      <div id="gateBody"></div>
+    </div>
+  </div>
+
+
   <div id="toast" class="toast"></div>
 
   <!-- Interactive tutorial -->
@@ -2110,15 +2123,6 @@
         <div class="section-title">Сеть сейчас</div>
         <div id="liveMeta" class="empty" style="text-align:left;padding:8px 16px"></div>
         <div id="liveList"><div class="skeleton"></div></div>
-      </div>
-
-    <!-- ACCESS GATE (блокирует UI) -->
-  <div id="accessGate" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg);overflow:auto">
-    <div class="gate-shell">
-      <div class="gate-top">
-        <div class="gate-logo">🍉</div>
-        <div class="gate-brand">T2 Sales</div>
-        <div id="gateSubtitle" class="gate-sub">Доступ только для сотрудников сети</div>
       </div>
       <div id="gateBody"></div>
     </div>
@@ -4277,10 +4281,20 @@
       const gate = document.getElementById('accessGate');
       const body = document.getElementById('gateBody');
       const sub = document.getElementById('gateSubtitle');
-      gate.style.display = 'block';
-      document.querySelector('.sheet')?.style && (document.querySelector('.sheet').style.visibility = 'hidden');
-      document.querySelector('.bottom-nav')?.style && (document.querySelector('.bottom-nav').style.display = 'none');
-      document.querySelector('.fab')?.style && (document.querySelector('.fab').style.display = 'none');
+      if (!gate || !body) {
+        console.error('accessGate DOM missing');
+        return;
+      }
+      // Gate всегда fixed поверх всего (вне .sheet)
+      gate.style.cssText = 'display:block;position:fixed;inset:0;z-index:9999;background:var(--bg,#0a0a0b);overflow:auto;-webkit-overflow-scrolling:touch;visibility:visible;opacity:1;pointer-events:auto';
+      const sheet = document.querySelector('.sheet');
+      if (sheet) { sheet.style.visibility = 'hidden'; sheet.style.pointerEvents = 'none'; }
+      const hdr = document.querySelector('.app-header');
+      if (hdr) hdr.style.visibility = 'hidden';
+      const nav = document.querySelector('.bottom-nav');
+      if (nav) nav.style.display = 'none';
+      const fab = document.querySelector('.fab');
+      if (fab) fab.style.display = 'none';
 
       const status = st.status || st.user?.access_status || 'none';
       const tgName = [tgUser()?.first_name, tgUser()?.last_name].filter(Boolean).join(' ').trim();
@@ -4349,9 +4363,12 @@
     }
 
     function hideAccessGate() {
-      document.getElementById('accessGate').style.display = 'none';
+      const gate = document.getElementById('accessGate');
+      if (gate) gate.style.display = 'none';
       const sheet = document.querySelector('.sheet');
-      if (sheet) sheet.style.visibility = 'visible';
+      if (sheet) { sheet.style.visibility = 'visible'; sheet.style.pointerEvents = ''; }
+      const hdr = document.querySelector('.app-header');
+      if (hdr) hdr.style.visibility = '';
       const nav = document.querySelector('.bottom-nav');
       if (nav) nav.style.display = '';
       const fab = document.querySelector('.fab');
