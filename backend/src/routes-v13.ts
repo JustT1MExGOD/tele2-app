@@ -5,7 +5,6 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { authPlugin, requireAuth, requireManager, isManager } from './middleware-auth.js';
-import { todayMoscow } from './utils/date.js';
 import { parseSalePhrase } from './services/sales-nlp.js';
 import {
   buildShiftInsight,
@@ -21,6 +20,7 @@ import {
 import { getLiveNetworkMap } from './services/live-map.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { forecastStore, salesHeatmap, newbieCohorts } from './services/forecast.js';
+import { todayMoscow, toDateISO } from './utils/date.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -91,7 +91,7 @@ export async function registerV13Routes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'no open session' });
     }
     const sess = open.rows[0];
-    const date = String(sess.work_date).slice(0, 10);
+    const date = toDateISO(sess.work_date);
 
     // факт за день
     const sales = await query(
