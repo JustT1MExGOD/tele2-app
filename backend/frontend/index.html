@@ -2368,7 +2368,7 @@
       if (name === 'team') { loadTeam(); }
       if (name === 'history') { loadHistory(); }
       if (name === 'monthplan') { loadMonthPlans(); }
-      if (name === 'heatmap') loadHeatmap();
+      if (name === 'heatmap') { fillStoreSelects().then(() => loadHeatmap()); }
       if (name === 'forecast') { fillStoreSelects(); loadForecast(); const w=document.getElementById('wiDate'); if(w) w.value=todayMoscow(); }
       if (name === 'announce') loadAnnouncements();
       if (name === 'reportimg') { fillStoreSelects(); const d=document.getElementById('riDate'); if(d) d.value=todayMoscow(); }
@@ -5826,13 +5826,20 @@
         }
         window.__stores = list;
       }
-      ['hmStore','fcStore','wiFrom','wiTo','riStore'].forEach(id => {
+      if (!list.length) {
+        list = [
+          { id: 'kosmonavtov', name: 'Космонавтов 20А' },
+          { id: 'kalinina2', name: 'Калинина 2' },
+          { id: 'kalinina11', name: 'Калинина 11' }
+        ];
+        window.__stores = list;
+      }
+      ['hmStore','fcStore','wiFrom','wiTo','riStore','cashStore'].forEach(id => {
         const el = document.getElementById(id);
-        if (!el) return;
+        if (!el || el.tagName !== 'SELECT') return;
         const cur = el.value;
-        el.innerHTML = (list||[]).map(s => `<option value="${s.id}">${s.name||s.id}</option>`).join('')
-          || '<option value="kosmonavtov">Космонавтов</option>';
-        if (cur) el.value = cur;
+        el.innerHTML = list.map(s => `<option value="${s.id}">${s.name || s.id}</option>`).join('');
+        if (cur && list.some(s => s.id === cur)) el.value = cur;
       });
     }
     async function loadHeatmap() {
