@@ -20,6 +20,7 @@ import {
 import { getLiveNetworkMap } from './services/live-map.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { forecastStore, salesHeatmap, newbieCohorts } from './services/forecast.js';
+import { simulateScheduleMoves } from './services/what-if.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
 
 function num(v: any) {
@@ -432,83 +433,24 @@ export async function registerV13Routes(app: FastifyInstance) {
   app.post('/schedule/what-if', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const body = (request.body || {}) as any;
-    // body: { moves: [{ employee_id, from_store, to_store, work_date }] }
     const moves = Array.isArray(body.moves) ? body.moves : [];
-    const date = String(body.date || todayMoscow()).slice(0, 10);
-
-    // текущее покрытие: смены × per_shift план
-    const stores = await query(`SELECT id, name FROM stores WHERE COALESCE(is_active,true)=true`);
-    const coverage: Record<string, any> = {};
-
-    for (const st of stores.rows) {
-      const staff = await query(
-        `SELECT employee_id FROM schedules
-         WHERE store_id=$1 AND work_date::date=$2::date AND COALESCE(hours,0)>0`,
-        [st.id, date]
-      );
-      let sim = 0;
-      for (const s of staff.rows) {
-        // грубый per_shift из month plan
-        const month = date.slice(0, 7) + '-01';
-        const pr = await query(
-          `SELECT sim FROM employee_month_plans WHERE employee_id=$1 AND month::date=$2::date`,
-          [s.employee_id, month]
-        );
-        const rem = await query(
-          `SELECT COUNT(*)::int c FROM schedules
-           WHERE employee_id=$1 AND work_date::date >= $2::date
-             AND work_date::date < ($3::date + interval '1 month') AND COALESCE(hours,0)>0`,
-          [s.employee_id, date, month]
-        );
-        const div = Math.max(1, num(rem.rows[0]?.c));
-        sim += Math.ceil(num(pr.rows[0]?.sim) / div);
-      }
-      coverage[st.id] = {
-        store_id: st.id,
-        name: st.name,
-        staff_count: staff.rows.length,
-        expected_sim: sim,
-        after_sim: sim,
-        staff_ids: staff.rows.map((r: any) => Number(r.employee_id))
-      };
+    // одиночный шорткат
+    if (!moves.length && body.employee_id && body.to_store) {
+      moves.push({
+        employee_id: Number(body.employee_id),
+        from_store: body.from_store || null,
+        to_store: body.to_store,
+        work_date: body.date
+      });
     }
-
-    // apply moves virtually
-    for (const m of moves) {
-      const emp = Number(m.employee_id);
-      const to = m.to_store;
-      const from = m.from_store;
-      const month = date.slice(0, 7) + '-01';
-      const pr = await query(
-        `SELECT sim FROM employee_month_plans WHERE employee_id=$1 AND month::date=$2::date`,
-        [emp, month]
-      );
-      const rem = await query(
-        `SELECT COUNT(*)::int c FROM schedules
-         WHERE employee_id=$1 AND work_date::date >= $2::date
-           AND work_date::date < ($3::date + interval '1 month') AND COALESCE(hours,0)>0`,
-        [emp, date, month]
-      );
-      const add = Math.ceil(num(pr.rows[0]?.sim) / Math.max(1, num(rem.rows[0]?.c)));
-
-      if (from && coverage[from]) {
-        coverage[from].after_sim = Math.max(0, coverage[from].after_sim - add);
-        coverage[from].staff_count = Math.max(0, coverage[from].staff_count - 1);
-      }
-      if (to && coverage[to]) {
-        coverage[to].after_sim += add;
-        coverage[to].staff_count += 1;
-      }
+    try {
+      return await simulateScheduleMoves({ date: body.date, moves });
+    } catch (e: any) {
+      return reply.code(500).send({ error: 'what_if_failed', message: e?.message || String(e) });
     }
-
-    return {
-      date,
-      moves,
-      stores: Object.values(coverage)
-    };
   });
 
-  // ========== ANNOUNCEMENTS + CHANNELS ==========
+
   app.get('/announcements', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const empId = request.user!.employee_id!;

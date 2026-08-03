@@ -17,7 +17,39 @@ function requireAdmin(request: any, reply: any) {
   return true;
 }
 
+function slaMinutesForPriority(p: string) {
+  if (p === 'urgent') return 60;
+  if (p === 'high') return 120;
+  return 240; // normal — 4ч
+}
+
 export async function registerSupportRoutes(app: FastifyInstance) {
+  
+  /** Admin: тикеты + SLA */
+  app.get('/support/admin/tickets', async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    try {
+      const res = await query(
+        `SELECT t.*,
+           CASE
+             WHEN t.resolved_at IS NOT NULL THEN 'resolved'
+             WHEN t.sla_due_at IS NOT NULL AND now() > t.sla_due_at THEN 'breached'
+             WHEN t.first_response_at IS NOT NULL THEN 'responded'
+             ELSE 'waiting'
+           END AS sla_status,
+           EXTRACT(EPOCH FROM (COALESCE(t.sla_due_at, now()) - now())) / 60 AS minutes_left
+         FROM support_tickets t
+         ORDER BY
+           CASE WHEN t.resolved_at IS NULL AND t.sla_due_at < now() THEN 0 ELSE 1 END,
+           t.created_at DESC
+         LIMIT 100`
+      );
+      return { items: res.rows };
+    } catch (e: any) {
+      return reply.code(500).send({ error: e?.message || 'sla_query_failed', hint: 'sql/v8-0-roadmap.sql' });
+    }
+  });
+
   app.get('/support/faq', async () => {
     try {
       const res = await query(
@@ -157,10 +189,15 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       }
     } catch (_) {}
 
+    const priority = (body as any).priority === 'urgent' || (body as any).priority === 'high'
+      ? String((body as any).priority)
+      : 'normal';
+    const slaMin = slaMinutesForPriority(priority);
     const ins = await query(
       `INSERT INTO support_tickets
-         (employee_id, telegram_id, full_name, category, message, status, admin_reply, answered_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         (employee_id, telegram_id, full_name, category, message, status, admin_reply, answered_at,
+          priority, sla_minutes, sla_due_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now() + ($10 || 240) * interval '1 minute')
        RETURNING *`,
       [
         employee_id,
@@ -170,7 +207,9 @@ export async function registerSupportRoutes(app: FastifyInstance) {
         message,
         autoAnswer ? 'answered' : 'open',
         autoAnswer,
-        autoAnswer ? new Date() : null
+        autoAnswer ? new Date() : null,
+        priority,
+        slaMin
       ]
     );
     const ticket = ins.rows[0];

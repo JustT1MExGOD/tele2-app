@@ -1835,7 +1835,7 @@
           <div class="row-icon">ℹ️</div>
           <div class="row-body">
             <div class="row-title">О приложении</div>
-            <div class="row-sub">T2 Sales v14.1 · что нового</div>
+            <div class="row-sub">T2 Sales v15.0 · 8.0 roadmap</div>
           </div>
           <div class="row-chevron">›</div>
         </button>
@@ -2159,7 +2159,7 @@
     }
 
     // Клиентская версия (О приложении + бейдж на главной)
-    const APP_VERSION = '14.1';
+    const APP_VERSION = '15.0';
     const API = window.location.origin;
 
     function haptic(type = 'light') {
@@ -2372,7 +2372,7 @@
       if (name === 'forecast') { fillStoreSelects(); loadForecast(); const w=document.getElementById('wiDate'); if(w) w.value=todayMoscow(); }
       if (name === 'announce') loadAnnouncements();
       if (name === 'reportimg') { fillStoreSelects(); const d=document.getElementById('riDate'); if(d) d.value=todayMoscow(); }
-      if (name === 'support') { loadSupport(); }
+      if (name === 'support') { loadSupportSla(); loadSupport(); }
       if (name === 'cash') { loadCash(); }
       if (name === 'access') { loadAccessRequests(); }
       if (name === 'supervisor') { loadSupervisorDash(); }
@@ -4493,6 +4493,27 @@
     }
 
     // ===== ACCESS REQUESTS UI =====
+    async function loadSupportSla() {
+      if (!canAdmin()) return;
+      try {
+        const res = await fetch(API + '/support/admin/tickets', { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const box = document.getElementById('supportSlaBox');
+        if (!box) return;
+        const items = data.items || [];
+        if (!items.length) { box.innerHTML = ''; return; }
+        box.innerHTML = '<div class="section-title">SLA тикетов</div>' + items.slice(0, 15).map(t => {
+          const st = t.sla_status || '';
+          const col = st === 'breached' ? '#ff3b30' : st === 'waiting' ? '#ff9f0a' : '#34c759';
+          return `<div class="progress-block" style="margin:6px 12px;padding:10px;border-left:3px solid ${col}">
+            <div style="font-weight:600;font-size:13px">${t.full_name || t.category || 'Тикет #' + t.id}</div>
+            <div style="font-size:11px;color:var(--hint)">${st} · due ${String(t.sla_due_at || '').slice(0, 16)}</div>
+          </div>`;
+        }).join('');
+      } catch (_) {}
+    }
+
     async function loadAccessRequests() {
       const box = document.getElementById('accessList');
       if (!canAdmin() && !canApprove()) {
@@ -5815,28 +5836,58 @@
       });
     }
     async function loadHeatmap() {
-      await fillStoreSelects();
       const sid = document.getElementById('hmStore')?.value;
-      const box = document.getElementById('hmGrid');
       const meta = document.getElementById('hmMeta');
-      if (!sid||!box) return;
-      box.innerHTML = '<div class="skeleton"></div>';
+      const grid = document.getElementById('hmGrid');
+      if (!grid) return;
+      if (!sid) {
+        if (meta) meta.textContent = 'Выбери точку';
+        grid.innerHTML = '';
+        return;
+      }
+      grid.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/heatmap/precise/' + sid + '?weeks=4', { headers: authHeaders() });
+        const res = await fetch(API + '/heatmap/precise/' + encodeURIComponent(sid) + '?weeks=4', { headers: authHeaders() });
         const data = await res.json();
-        if (meta) meta.textContent = data.note || '';
-        const hours = (data.hours||[]).filter(h => h.hour >= 9 && h.hour <= 22);
-        box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">' +
-          hours.map(h => {
-            const alpha = 0.12 + (Number(h.intensity)||0)*0.88;
-            return `<div style="background:rgba(42,171,238,${alpha});border-radius:10px;padding:10px 4px;text-align:center">
-              <div style="font-weight:800;font-size:13px">${h.hour}:00</div>
-              <div style="font-size:11px;opacity:.85">SIM ${Math.round(h.sim||0)}</div>
-              <div style="font-size:10px;opacity:.7">MNP ${Math.round(h.mnp||0)}</div>
+        if (!res.ok) throw new Error(data.message || data.error || 'fail');
+        const hours = data.hours || data.by_hour || [];
+        // hours: [{hour, value}] or map
+        let cells = [];
+        if (Array.isArray(hours) && hours.length) {
+          cells = hours;
+        } else if (data.profile && typeof data.profile === 'object') {
+          cells = Object.keys(data.profile).map(h => ({ hour: Number(h), value: Number(data.profile[h]) || 0 }));
+        } else if (Array.isArray(data.rows)) {
+          cells = data.rows;
+        }
+        if (!cells.length) {
+          // empty 9..21
+          cells = [];
+          for (let h = 9; h <= 21; h++) cells.push({ hour: h, value: 0 });
+        }
+        const max = Math.max(1, ...cells.map(c => Number(c.value || c.count || c.total || 0)));
+        if (meta) {
+          meta.textContent = (data.note || 'Heatmap по часу продажи (МСК)') +
+            (data.weeks ? ` · ${data.weeks} нед.` : ' · 4 нед.');
+        }
+        grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px">
+          ${cells.map(c => {
+            const h = c.hour ?? c.sale_hour;
+            const v = Number(c.value || c.count || c.total || 0);
+            const intensity = v / max;
+            const bg = `rgba(42,171,238,${0.12 + intensity * 0.75})`;
+            return `<div style="background:${bg};border-radius:12px;padding:10px 6px;text-align:center">
+              <div style="font-size:11px;color:var(--hint)">${h}:00</div>
+              <div style="font-weight:800;font-size:16px">${v}</div>
             </div>`;
-          }).join('') + '</div>';
-      } catch { box.innerHTML = '<div class="empty">Heatmap недоступен</div>'; }
+          }).join('')}
+        </div>`;
+      } catch (e) {
+        if (meta) meta.textContent = '';
+        grid.innerHTML = `<div class="empty">${e.message || e}<br><span style="font-size:11px">Нужен sales_events (sql/v8-0-roadmap.sql)</span></div>`;
+      }
     }
+
     async function loadForecast() {
       await fillStoreSelects();
       const sid = document.getElementById('fcStore')?.value;
@@ -5858,25 +5909,46 @@
       } catch { box.innerHTML = '<div class="empty">Прогноз недоступен</div>'; }
     }
     async function runWhatIf() {
-      const body = {
-        date: document.getElementById('wiDate')?.value || todayMoscow(),
-        moves: [{
-          employee_id: Number(document.getElementById('wiEmp')?.value),
-          from_store: document.getElementById('wiFrom')?.value,
-          to_store: document.getElementById('wiTo')?.value,
-          hours: 11
-        }]
-      };
+      const emp = Number(document.getElementById('wiEmp')?.value);
+      const to = document.getElementById('wiTo')?.value;
+      const from = document.getElementById('wiFrom')?.value || null;
+      const date = document.getElementById('wiDate')?.value || todayMoscow();
       const box = document.getElementById('wiResult');
+      if (!box) return;
+      if (!emp || !to) { box.innerHTML = '<div class="empty">Укажи сотрудника и точку назначения</div>'; return; }
+      box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/schedule/what-if', { method:'POST', headers: authHeaders(true), body: JSON.stringify(body) });
+        const res = await fetch(API + '/schedule/what-if', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            date,
+            moves: [{ employee_id: emp, from_store: from || null, to_store: to }]
+          })
+        });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message||data.error||'fail');
-        box.innerHTML = (data.scenario||[]).map(s =>
-          `<div style="margin:4px 0"><b>${s.name}</b>: ${s.people} чел · ${s.hours}ч · cap ${s.capacity_score}</div>`
-        ).join('') + `<div class="empty" style="padding-top:8px">${data.note||''}</div>`;
-      } catch (e) { box.textContent = e.message||'Ошибка'; }
+        if (!res.ok) throw new Error(data.message || data.error || 'fail');
+        const rows = (data.stores || []).map(s => {
+          const d = Number(s.delta_sim) || 0;
+          const col = d > 0 ? '#34c759' : d < 0 ? '#ff3b30' : 'var(--hint)';
+          return `<div class="progress-block" style="margin:8px 0;padding:12px;border-left:4px solid ${s.color || '#2AABEE'}">
+            <div style="font-weight:700">${s.name}</div>
+            <div style="font-size:12px;color:var(--hint);margin:4px 0">Сотрудников: ${s.staff_before} → <b>${s.staff_after}</b></div>
+            <div style="font-size:13px">SIM ожид. <b>${s.expected?.sim ?? 0}</b> → <b>${s.after?.sim ?? 0}</b>
+              <span style="color:${col};font-weight:700"> (${d > 0 ? '+' : ''}${d})</span></div>
+            <div style="font-size:12px;color:var(--hint)">MNP ${s.expected?.mnp ?? 0}→${s.after?.mnp ?? 0} · ПА ${s.expected?.pa ?? 0}→${s.after?.pa ?? 0}</div>
+          </div>`;
+        }).join('');
+        const sum = data.summary || {};
+        box.innerHTML = `<div style="font-size:12px;color:var(--hint);margin-bottom:8px">Дата ${data.date || date}</div>
+          ${sum.stores_gained?.length ? `<div style="color:#34c759;font-size:13px;margin-bottom:6px">↑ ${sum.stores_gained.join(', ')}</div>` : ''}
+          ${sum.stores_lost?.length ? `<div style="color:#ff3b30;font-size:13px;margin-bottom:6px">↓ ${sum.stores_lost.join(', ')}</div>` : ''}
+          ${rows || '<div class="empty">Нет точек</div>'}`;
+      } catch (e) {
+        box.innerHTML = `<div class="empty">${e.message || e}</div>`;
+      }
     }
+
     async function loadAnnouncements() {
       const box = document.getElementById('anList');
       if (!box) return;
