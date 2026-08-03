@@ -1822,7 +1822,7 @@
           <div class="row-icon">ℹ️</div>
           <div class="row-body">
             <div class="row-title">О приложении</div>
-            <div class="row-sub">T2 Sales v10 · что нового</div>
+            <div class="row-sub">T2 Sales v14.1 · что нового</div>
           </div>
           <div class="row-chevron">›</div>
         </button>
@@ -2104,7 +2104,15 @@
       </div>
     </div>
 
-  <!-- ACCESS GATE (блокирует UI) -->
+
+    <div id="page-live" class="page">
+      <div class="section">
+        <div class="section-title">Сеть сейчас</div>
+        <div id="liveMeta" class="empty" style="text-align:left;padding:8px 16px"></div>
+        <div id="liveList"><div class="skeleton"></div></div>
+      </div>
+
+    <!-- ACCESS GATE (блокирует UI) -->
   <div id="accessGate" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg);overflow:auto">
     <div class="gate-shell">
       <div class="gate-top">
@@ -2117,14 +2125,6 @@
   </div>
 
   <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
-
-  
-    <div id="page-live" class="page">
-      <div class="section">
-        <div class="section-title">Сеть сейчас</div>
-        <div id="liveMeta" class="empty" style="text-align:left;padding:8px 16px"></div>
-        <div id="liveList"><div class="skeleton"></div></div>
-      </div>
     </div>
 
 <nav class="bottom-nav">
@@ -4007,6 +4007,7 @@
 
     // ===== ADD SALE (smart) =====
     async function openAddSale(presetEmployeeId) {
+      await loadMetricsCatalog();
       try {
         const [empRes, storeRes, schRes] = await Promise.all([
           fetch(API + '/employees'),
@@ -4226,8 +4227,10 @@
         loadPage(page);
       } catch (e) {
         console.error(e);
-        // офлайн-очередь
-        if (typeof OfflineQueue !== 'undefined') {
+        const msg = String(e?.message || e || '');
+        // В очередь только реальная сеть (TypeError/Failed to fetch), не 400/403
+        const isNetwork = /failed to fetch|network|load failed|offline/i.test(msg) || e?.name === 'TypeError';
+        if (isNetwork && typeof OfflineQueue !== 'undefined') {
           try {
             const metrics = {};
             for (const [k, v] of Object.entries(saleSelection)) {
@@ -4248,7 +4251,7 @@
             console.error(e2);
           }
         }
-        toast('Ошибка сохранения', 'err');
+        toast(msg && msg !== 'fail' ? msg : 'Ошибка сохранения', 'err');
       }
     }
 
@@ -4700,7 +4703,7 @@
     async function loadCash() {
       const box = document.getElementById('cashTable');
       const edit = document.getElementById('cashEditSection');
-      if (edit) edit.style.display = canManage() ? 'block' : 'none';
+      if (edit) edit.style.display = 'block';
       if (box) box.innerHTML = '<div class="skeleton"></div>';
       try {
         if (!stores.length) {
@@ -4733,9 +4736,7 @@
             const delta = c.delta != null ? Number(c.delta)
               : (fact != null && c1 != null ? Number(fact) - (Number(c1) + 2000) : null);
             const dClass = delta == null ? '' : (delta >= 0 ? 'delta-pos' : 'delta-neg');
-            const click = canManage()
-              ? `onclick="fillCashForm('${s.id}','${d}',${Number(fact)||0},${Number(c1)||0})"`
-              : '';
+            const click = `onclick="fillCashForm('${s.id}','${d}',${Number(fact)||0},${Number(c1)||0})"`;
             return `<div class="cash-row" ${click} style="${click ? 'cursor:pointer' : ''}">
               <div class="sn">${s.name || s.id}</div>
               <div>${fact != null && fact !== '' ? Number(fact).toLocaleString('ru-RU') : '—'}</div>
@@ -4765,7 +4766,8 @@
     }
 
     async function saveCash() {
-      if (!canManage()) return;
+      // кассу вносят все сотрудники на точке (не только manager)
+      if (!me?.employee_id && !me?.id) { toast('Нужна авторизация', 'err'); return; }
       const body = {
         store_id: document.getElementById('cashStore').value,
         cash_date: document.getElementById('cashDate').value || todayMoscow(),
@@ -5403,9 +5405,21 @@
     }
 
     async function closeShiftSession() {
-      const report = prompt('Краткий самоотчёт (что мешало / что зашло)?') || '';
-      const moodStr = prompt('Настроение 1–5 (Enter = 4)', '4');
-      const mood = Math.min(5, Math.max(1, Number(moodStr) || 4));
+      // prompt() в Telegram WebView часто не работает — своя модалка
+      document.getElementById('modalTitle').textContent = 'Закрыть смену';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="field"><label>Самоотчёт (что зашло / что мешало)</label>
+          <textarea id="closeReport" rows="3" placeholder="Кратко…"></textarea></div>
+        <div class="field"><label>Настроение 1–5</label>
+          <input type="number" id="closeMood" min="1" max="5" value="4"></div>
+        <button type="button" class="btn-main" style="background:#e74c3c" onclick="confirmCloseShift()">Закрыть смену</button>
+      `;
+      openModal();
+    }
+
+    async function confirmCloseShift() {
+      const report = document.getElementById('closeReport')?.value || '';
+      const mood = Math.min(5, Math.max(1, Number(document.getElementById('closeMood')?.value) || 4));
       try {
         const geo = await geoCoords();
         const res = await fetch(API + '/shifts/close', {
@@ -5414,7 +5428,8 @@
           body: JSON.stringify({ ...geo, self_report: report, mood })
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.message || 'fail');
+        if (!res.ok) throw new Error(data.message || data.error || 'fail');
+        closeModal();
         let msg = 'Смена закрыта';
         if (data.ideal_shift) msg += ' · ⭐ идеальная';
         if (data.plan_pct != null) msg += ' · ' + data.plan_pct + '% плана';
@@ -5423,9 +5438,9 @@
         if (data.ideal_shift || (data.plan_pct >= 100)) {
           try { confettiBurst && confettiBurst(); } catch (_) {}
         }
-        loadMyPlan();
+        if (typeof loadMyPlan === 'function') loadMyPlan();
       } catch (e) {
-        toast(e.message || 'Не закрыть смену', 'err');
+        toast(e.message || 'Не удалось закрыть смену', 'err');
       }
     }
 
@@ -5871,8 +5886,14 @@
       const title = document.getElementById('anTitle')?.value?.trim();
       const body = document.getElementById('anBody')?.value?.trim();
       const required = !!document.getElementById('anReq')?.checked;
+      if (!title || !body) { toast('Заполни заголовок и текст', 'err'); return; }
       const res = await fetch(API + '/announcements', { method:'POST', headers: authHeaders(true), body: JSON.stringify({ title, body, required }) });
-      if (!res.ok) { toast('Ошибка','err'); return; }
+      if (!res.ok) {
+        let msg = 'Ошибка';
+        try { const j = await res.json(); msg = j.message || j.error || msg; } catch(_){}
+        toast(msg + ' (нужна таблица announcements)', 'err');
+        return;
+      }
       toast('Опубликовано','ok');
       loadAnnouncements();
     }

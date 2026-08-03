@@ -76,12 +76,7 @@ export async function registerV14Routes(app: FastifyInstance) {
       });
     }
   });
-
-  app.post('/admin/rebuild-hour-profiles', async (request, reply) => {
-    if (!requireManager(request, reply)) return;
-    const storeId = (request.body as any)?.store_id;
-    return rebuildHourProfiles(storeId);
-  });
+  // POST /admin/rebuild-hour-profiles — уже в routes-v13.ts, не дублировать
 
   app.post('/internal/log-sale-events', async (request, reply) => {
     if (!requireAuth(request, reply)) return;

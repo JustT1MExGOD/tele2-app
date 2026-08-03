@@ -152,10 +152,19 @@ app.post('/sales', async (request, reply) => {
     }
   }
 
-  const fields = [
+  // Базовые + кастомные (import/imp/esim и любые ключи body a-z0-9_)
+  const baseFields = [
     'sim', 'mnp', 'pa', 'combo', 'settings', 'accessories', 'insurance',
-    'phones', 'wink', 'shpd', 'focus', 'credit_request', 'credit_issued', 'plotter', 'hb',
+    'phones', 'wink', 'shpd', 'focus', 'credit_request', 'credit_issued',
+    'plotter', 'hb', 'import', 'imp', 'esim'
   ];
+  const extraFromBody = Object.keys(body || {}).filter(
+    (k) =>
+      /^[a-z][a-z0-9_]{0,29}$/.test(k) &&
+      !baseFields.includes(k) &&
+      !['employee_id', 'store_id', 'sale_date', 'date', 'id'].includes(k)
+  );
+  const fields = [...baseFields, ...extraFromBody];
 
   const insertCols = ['employee_id', 'store_id', 'sale_date'];
   const insertVals: any[] = [employee_id, store_id, sale_date];
@@ -167,10 +176,10 @@ app.post('/sales', async (request, reply) => {
   for (const f of fields) {
     if (body[f] !== undefined && body[f] !== null && body[f] !== '') {
       const val = Number(body[f]) || 0;
+      if (!Number.isFinite(val)) continue;
       insertCols.push(f);
       insertVals.push(val);
       placeholders.push('$' + i);
-      // GREATEST чтобы не уйти в минус при корректировке
       setParts.push(`${f} = GREATEST(0, sales.${f} + EXCLUDED.${f})`);
       applied.push({ metric: f, value: val });
       i++;
@@ -178,7 +187,7 @@ app.post('/sales', async (request, reply) => {
   }
 
   if (setParts.length === 0) {
-    return reply.code(400).send({ error: 'no metrics' });
+    return reply.code(400).send({ error: 'no metrics', message: 'Не выбраны метрики или колонка отсутствует в sales' });
   }
   setParts.push('updated_at = now()');
 
