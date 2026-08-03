@@ -189,8 +189,8 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       }
     } catch (_) {}
 
-    const priority = (body as any).priority === 'urgent' || (body as any).priority === 'high'
-      ? String((body as any).priority)
+    const priority = b.priority === 'urgent' || b.priority === 'high'
+      ? String(b.priority)
       : 'normal';
     const slaMin = slaMinutesForPriority(priority);
     const ins = await query(
