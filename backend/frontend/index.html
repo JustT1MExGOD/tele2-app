@@ -5867,25 +5867,39 @@
         } else if (Array.isArray(data.rows)) {
           cells = data.rows;
         }
+        // только рабочие часы 9–21
+        cells = (cells || []).map(c => ({
+          hour: Number(c.hour ?? c.sale_hour),
+          value: Number(c.value || c.count || c.total || 0)
+        })).filter(c => c.hour >= 9 && c.hour <= 21);
         if (!cells.length) {
-          // empty 9..21
-          cells = [];
           for (let h = 9; h <= 21; h++) cells.push({ hour: h, value: 0 });
+        } else {
+          // заполнить пропуски нулями
+          const map = new Map(cells.map(c => [c.hour, c.value]));
+          cells = [];
+          for (let h = 9; h <= 21; h++) cells.push({ hour: h, value: map.get(h) || 0 });
         }
-        const max = Math.max(1, ...cells.map(c => Number(c.value || c.count || c.total || 0)));
+        const max = Math.max(1, ...cells.map(c => c.value));
+        let best = cells[0];
+        for (const c of cells) if (c.value > best.value) best = c;
         if (meta) {
-          meta.textContent = (data.note || 'Heatmap по часу продажи (МСК)') +
-            (data.weeks ? ` · ${data.weeks} нед.` : ' · 4 нед.');
+          meta.innerHTML = (data.note || 'Heatmap по часу продажи (МСК)') +
+            ' · 9:00–21:00' +
+            (best.value > 0
+              ? ` · <b style="color:var(--primary)">лучший час ${best.hour}:00</b> (${best.value})`
+              : ' · пока нет пиков');
         }
         grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px">
           ${cells.map(c => {
-            const h = c.hour ?? c.sale_hour;
-            const v = Number(c.value || c.count || c.total || 0);
-            const intensity = v / max;
-            const bg = `rgba(42,171,238,${0.12 + intensity * 0.75})`;
-            return `<div style="background:${bg};border-radius:12px;padding:10px 6px;text-align:center">
-              <div style="font-size:11px;color:var(--hint)">${h}:00</div>
-              <div style="font-weight:800;font-size:16px">${v}</div>
+            const intensity = c.value / max;
+            const isBest = best.value > 0 && c.hour === best.hour;
+            const bg = isBest
+              ? 'rgba(52,199,89,0.35)'
+              : `rgba(42,171,238,${0.12 + intensity * 0.75})`;
+            return `<div style="background:${bg};border-radius:12px;padding:10px 6px;text-align:center;${isBest ? 'outline:2px solid #34c759' : ''}">
+              <div style="font-size:11px;color:var(--hint)">${c.hour}:00</div>
+              <div style="font-weight:800;font-size:16px">${c.value}</div>
             </div>`;
           }).join('')}
         </div>`;
@@ -5947,12 +5961,38 @@
           </div>`;
         }).join('');
         const sum = data.summary || {};
+        window.__lastWhatIf = {
+          date: data.date || date,
+          moves: [{ employee_id: emp, from_store: from || null, to_store: to }]
+        };
+        const canApply = canManage() && (data.moves_applied || []).some(m => !m.skipped);
         box.innerHTML = `<div style="font-size:12px;color:var(--hint);margin-bottom:8px">Дата ${data.date || date}</div>
           ${sum.stores_gained?.length ? `<div style="color:#34c759;font-size:13px;margin-bottom:6px">↑ ${sum.stores_gained.join(', ')}</div>` : ''}
           ${sum.stores_lost?.length ? `<div style="color:#ff3b30;font-size:13px;margin-bottom:6px">↓ ${sum.stores_lost.join(', ')}</div>` : ''}
-          ${rows || '<div class="empty">Нет точек</div>'}`;
+          ${rows || '<div class="empty">Нет точек</div>'}
+          ${canApply ? `<button class="btn-main" style="margin-top:12px" onclick="applyWhatIf()">Записать сдвиг в график</button>
+            <div style="font-size:11px;color:var(--hint);margin-top:6px;text-align:center">Реально обновит schedules на эту дату</div>` : ''}`;
       } catch (e) {
         box.innerHTML = `<div class="empty">${e.message || e}</div>`;
+      }
+    }
+
+    async function applyWhatIf() {
+      const payload = window.__lastWhatIf;
+      if (!payload?.moves?.length) { toast('Сначала пересчитай what-if', 'err'); return; }
+      if (!canManage()) { toast('Только manager', 'err'); return; }
+      try {
+        const res = await fetch(API + '/schedule/what-if/apply', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || data.error || 'fail');
+        toast('График обновлён: ' + (data.count || 0) + ' смен', 'ok');
+        if (typeof loadMonthSchedule === 'function') loadMonthSchedule();
+      } catch (e) {
+        toast(e.message || 'Не удалось применить', 'err');
       }
     }
 

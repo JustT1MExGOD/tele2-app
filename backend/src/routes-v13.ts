@@ -451,6 +451,64 @@ export async function registerV13Routes(app: FastifyInstance) {
   });
 
 
+  /** Применить what-if сдвиги в schedules (реальная запись) */
+  app.post('/schedule/what-if/apply', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const body = (request.body || {}) as any;
+    const date = toDateISO(body.date || todayMoscow());
+    const moves = Array.isArray(body.moves) ? body.moves : [];
+    if (!moves.length && body.employee_id && body.to_store) {
+      moves.push({
+        employee_id: Number(body.employee_id),
+        from_store: body.from_store || null,
+        to_store: body.to_store
+      });
+    }
+    if (!moves.length) {
+      return reply.code(400).send({ error: 'moves required' });
+    }
+
+    // сначала симуляция — отсечь skipped
+    const sim = await simulateScheduleMoves({ date, moves });
+    const applied = [];
+    for (const m of sim.moves_applied || []) {
+      if (m.skipped) continue;
+      const emp = Number(m.employee_id);
+      const to = m.to_store || m.to;
+      if (!emp || !to) continue;
+
+      // сохранить shift_text/hours с текущей смены если есть
+      const cur = await query(
+        `SELECT shift_text, hours FROM schedules
+         WHERE employee_id = $1 AND work_date::date = $2::date LIMIT 1`,
+        [emp, date]
+      );
+      const shift_text = cur.rows[0]?.shift_text || '10-21';
+      const hours = Number(cur.rows[0]?.hours) || 11;
+
+      const res = await query(
+        `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours)
+         VALUES ($1,$2,$3::date,$4,$5)
+         ON CONFLICT (employee_id, work_date)
+         DO UPDATE SET store_id = EXCLUDED.store_id,
+                       shift_text = EXCLUDED.shift_text,
+                       hours = EXCLUDED.hours
+         RETURNING *`,
+        [emp, to, date, shift_text, hours]
+      );
+      applied.push(res.rows[0]);
+    }
+
+    return {
+      ok: true,
+      date,
+      count: applied.length,
+      items: applied,
+      simulation: sim
+    };
+  });
+
+
   app.get('/announcements', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const empId = request.user!.employee_id!;

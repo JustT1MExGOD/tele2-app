@@ -141,10 +141,26 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       return { ok: true, fallback: true };
     }
 
-    await query(
-      `UPDATE support_tickets SET status = $1, updated_at = now() WHERE id = $2`,
-      [isAdmin ? 'answered' : 'open', Number(id)]
-    );
+    if (isAdmin) {
+      await query(
+        `UPDATE support_tickets SET
+           status = 'answered',
+           updated_at = now(),
+           first_response_at = COALESCE(first_response_at, now()),
+           answered_at = COALESCE(answered_at, now()),
+           sla_breached = CASE
+             WHEN sla_due_at IS NOT NULL AND now() > sla_due_at THEN true
+             ELSE COALESCE(sla_breached, false)
+           END
+         WHERE id = $1`,
+        [Number(id)]
+      );
+    } else {
+      await query(
+        `UPDATE support_tickets SET status = 'open', updated_at = now() WHERE id = $1`,
+        [Number(id)]
+      );
+    }
 
     if (isAdmin && t.telegram_id) {
       await notifyUser(
@@ -267,7 +283,14 @@ export async function registerSupportRoutes(app: FastifyInstance) {
 
     const res = await query(
       `UPDATE support_tickets
-       SET admin_reply = $1, status = 'answered', answered_at = now()
+       SET admin_reply = $1,
+           status = 'answered',
+           answered_at = now(),
+           first_response_at = COALESCE(first_response_at, now()),
+           sla_breached = CASE
+             WHEN sla_due_at IS NOT NULL AND now() > sla_due_at THEN true
+             ELSE COALESCE(sla_breached, false)
+           END
        WHERE id = $2 RETURNING *`,
       [String(text), Number(id)]
     );
@@ -286,5 +309,22 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       await notifyUser(t.telegram_id, `💬 <b>Ответ поддержки</b>\n\n${text}`);
     }
     return t;
+  });
+
+  /** Закрыть тикет (admin) */
+  app.post('/support/tickets/:id/resolve', async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const res = await query(
+      `UPDATE support_tickets
+       SET status = 'resolved',
+           resolved_at = now(),
+           updated_at = now(),
+           first_response_at = COALESCE(first_response_at, now())
+       WHERE id = $1 RETURNING *`,
+      [Number(id)]
+    );
+    if (!res.rows[0]) return reply.code(404).send({ error: 'not found' });
+    return res.rows[0];
   });
 }
