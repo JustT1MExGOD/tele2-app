@@ -900,6 +900,7 @@ try {
 
 
 
+// Кабинет супервайзера — единственная регистрация /supervisor/dashboard
 try {
   await registerSupervisorRoutes(app);
   console.log('✅ Supervisor routes registered');

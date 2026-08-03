@@ -1,5 +1,7 @@
 /**
- * Аналитика для супервайзера / управляющего
+ * Аналитика кабинета супервайзера.
+ * Health score, темп дня vs план, просадки по точкам, тренд 14д, топ продавцов.
+ * scope === null → вся сеть (manager/admin); string[] → только эти store_id.
  */
 import { query } from '../db/index.js';
 import { todayMoscow, currentMonthMoscow } from '../utils/date.js';
@@ -70,8 +72,13 @@ export async function buildSupervisorDashboard(opts: {
       [opts.scope]
     );
   }
-  const stores = storesRes.rows;
-  const storeIds = stores.map((s: any) => s.id);
+  const stores = storesRes.rows || [];
+  const storeIds = stores.map((s: any) => String(s.id));
+
+  // Пустой список точек — не дергаем SQL с ANY([])
+  if (!storeIds.length) {
+    return emptyDash(from, date, month);
+  }
 
   // факт сегодня по точкам
   const todayFact = await query(

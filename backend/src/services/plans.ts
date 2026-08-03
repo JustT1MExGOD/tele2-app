@@ -427,6 +427,7 @@ export async function getEmployeeDailyPlan(employeeId: number, date: string) {
   };
 }
 
+/** Доли дневного пула: Космонавтов 55% · Калинина 2 25% · Калинина 11 20% (сумма 1.0) */
 const STORE_SHARES: { id: string; share: number }[] = [
   { id: 'kosmonavtov', share: 0.55 },
   { id: 'kalinina11', share: 0.20 },
