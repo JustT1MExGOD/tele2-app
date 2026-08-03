@@ -1,5 +1,11 @@
 /**
  * Cron: микро/итог → картинка в REPORT_CHAT_ID
+ * Расписание по точкам (МСК):
+ *
+ * Космонавтов 20А:  микро 12,14,16,18,20  | финал 21:00
+ * Калинина 2:       пн–сб микро 10,12,14,16,18,20 | финал 20:45
+ *                   вс     микро 10,12,14,16,18    | финал 19:45
+ * Калинина 11:      микро 10,12,14,16,18,20 | финал 22:00
  */
 import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
@@ -20,6 +26,62 @@ const FACT_SQL = `
   FROM sales
   WHERE sale_date::date = $1::date AND store_id = $2
 `;
+
+/** Расписание одной точки */
+type StoreSchedule = {
+  /** id в stores, либо несколько алиасов */
+  ids: string[];
+  /** микро-часы пн–сб */
+  micro: number[];
+  /** микро-часы вс (если не задано — как micro) */
+  microSun?: number[];
+  /** финал пн–сб: hour, minute */
+  final: { h: number; m: number };
+  /** финал вс (если не задано — как final) */
+  finalSun?: { h: number; m: number };
+};
+
+const SCHEDULES: StoreSchedule[] = [
+  {
+    ids: ['kosmonavtov'],
+    micro: [12, 14, 16, 18, 20],
+    final: { h: 21, m: 0 }
+  },
+  {
+    ids: ['kalinina2'],
+    micro: [10, 12, 14, 16, 18, 20],
+    microSun: [10, 12, 14, 16, 18],
+    final: { h: 20, m: 45 },
+    finalSun: { h: 19, m: 45 }
+  },
+  {
+    ids: ['kalinina11'],
+    micro: [10, 12, 14, 16, 18, 20],
+    final: { h: 22, m: 0 }
+  }
+];
+
+function isSundayMoscow(now: Date): boolean {
+  // getDay: 0 = Sunday
+  return now.getDay() === 0;
+}
+
+function scheduleForStore(storeId: string): StoreSchedule | null {
+  const id = String(storeId || '').toLowerCase();
+  return (
+    SCHEDULES.find((s) => s.ids.some((x) => x.toLowerCase() === id)) || null
+  );
+}
+
+function microHoursFor(sch: StoreSchedule, sunday: boolean): number[] {
+  if (sunday && sch.microSun) return sch.microSun;
+  return sch.micro;
+}
+
+function finalTimeFor(sch: StoreSchedule, sunday: boolean): { h: number; m: number } {
+  if (sunday && sch.finalSun) return sch.finalSun;
+  return sch.final;
+}
 
 async function loadStorePlans(date: string) {
   const stores = await query(`SELECT id, name, code FROM stores ORDER BY name`);
@@ -79,7 +141,6 @@ async function sendStoreReportImage(
         asDocument: true
       });
     } catch (e2: any) {
-      // last resort: text
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
       const staff = await query(
         `SELECT e.full_name FROM schedules sch
@@ -90,9 +151,7 @@ async function sendStoreReportImage(
       const fact = await query(FACT_SQL, [date, st.store_id]).catch(() => ({ rows: [{}] }));
       const f = fact.rows[0] || {};
       const lines =
-        kind === 'micro'
-          ? await microLines(f, st.plan)
-          : await finalLines(f, st.plan);
+        kind === 'micro' ? await microLines(f, st.plan) : await finalLines(f, st.plan);
       const text =
         kind === 'micro'
           ? microReport({
@@ -116,7 +175,9 @@ async function sendStoreReportImage(
 }
 
 export function startReportCron() {
-  console.log('📅 Cron T2: микро/итог → PNG в чат (10–20 / 21:05 МСК)');
+  console.log(
+    '📅 Cron T2: отчёты по точкам — kosmo 12–20/21:00, kal2 10–20/20:45 (вс 19:45), kal11 10–20/22:00'
+  );
   setInterval(() => {
     tick().catch((e) => console.error('cron tick', e?.message || e));
   }, 60_000);
@@ -129,13 +190,40 @@ async function tick() {
   const hh = now.getHours();
   const mm = now.getMinutes();
   const date = todayMoscow();
+  const sunday = isSundayMoscow(now);
 
+  // напоминания о завтрашней смене — как было
   if (hh === 20 && mm === 0) await sendTomorrowReminders(date);
 
-  const microHours = [10, 12, 14, 16, 18, 20];
-  if (mm === 0 && microHours.includes(hh)) await sendMicroReports(date, hh);
+  const stores = await loadStorePlans(date);
 
-  if (hh === 21 && mm === 5) await sendFinalReports(date);
+  for (const st of stores) {
+    const sch = scheduleForStore(st.store_id);
+    if (!sch) {
+      // неизвестная точка — дефолт: микро каждый чётный час 10–20, финал 21:00
+      if (mm === 0 && [10, 12, 14, 16, 18, 20].includes(hh)) {
+        await sendStoreReportImage(st, date, 'micro', hh);
+        console.log('Микро (default):', st.name, hh + ':00');
+      }
+      if (hh === 21 && mm === 0) {
+        await sendStoreReportImage(st, date, 'final');
+        console.log('Итог (default):', st.name);
+      }
+      continue;
+    }
+
+    const micros = microHoursFor(sch, sunday);
+    if (mm === 0 && micros.includes(hh)) {
+      await sendStoreReportImage(st, date, 'micro', hh);
+      console.log('Микро-картинка:', st.name, hh + ':00');
+    }
+
+    const fin = finalTimeFor(sch, sunday);
+    if (hh === fin.h && mm === fin.m) {
+      await sendStoreReportImage(st, date, 'final');
+      console.log('Итог-картинка:', st.name, `${fin.h}:${String(fin.m).padStart(2, '0')}`);
+    }
+  }
 }
 
 async function sendTomorrowReminders(today: string) {
@@ -163,6 +251,7 @@ async function sendTomorrowReminders(today: string) {
   }
 }
 
+/** Ручной запуск: все точки, микро за текущий час */
 export async function sendMicroReports(date: string, hour?: number) {
   const chat = process.env.REPORT_CHAT_ID || process.env.CHAT_ID;
   if (!chat) {
@@ -171,9 +260,9 @@ export async function sendMicroReports(date: string, hour?: number) {
   }
   try {
     const stores = await loadStorePlans(date);
-    const h = hour ?? new Date(
-      new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' })
-    ).getHours();
+    const h =
+      hour ??
+      new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' })).getHours();
     let sent = 0;
     for (const st of stores) {
       await sendStoreReportImage(st, date, 'micro', h);
@@ -187,6 +276,7 @@ export async function sendMicroReports(date: string, hour?: number) {
   }
 }
 
+/** Ручной запуск: итог по всем точкам */
 export async function sendFinalReports(date: string) {
   const chat = process.env.REPORT_CHAT_ID || process.env.CHAT_ID;
   if (!chat) {
