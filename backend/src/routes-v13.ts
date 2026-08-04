@@ -290,9 +290,10 @@ export async function registerV13Routes(app: FastifyInstance) {
               vals
             );
           }
-        } else if (op.type === 'shift_open' || op.type === 'shift_close') {
-          // payload already logged; full apply can be expanded
         }
+        // shift_open/shift_close никогда не ставятся в офлайн-очередь —
+        // open/close смены всегда бьют в /shifts/open|close напрямую
+        // (см. frontend/offline-queue.js: очередь умеет только sale).
 
         results.push({ client_id, status: 'applied' });
       } catch (e: any) {

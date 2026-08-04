@@ -16,7 +16,7 @@ import {
   getUserStoreIds,
   loadUser,
   authPlugin
-} from './middleware-auth-v8.js';   // ← НЕ middleware-auth.js
+} from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
 import { bot } from './bot/index.js';
 

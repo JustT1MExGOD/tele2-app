@@ -1,9 +1,0 @@
-
-import { registerSupervisorRoutes } from './routes-supervisor.js';
-
-try {
-  await registerSupervisorRoutes(app);
-  console.log('✅ Supervisor routes registered');
-} catch (e: any) {
-  console.error('Supervisor routes failed:', e?.message || e);
-}
