@@ -5,4 +5,5 @@ dist/
 ".env"
 "*.log"
 "node_modules/"
-sql/all_databases.sql 
+sql/all_databases.sql
+*.pdf

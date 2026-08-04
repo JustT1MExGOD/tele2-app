@@ -3,10 +3,18 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-> Не «таблица + бот в чате».  
-> Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли и отчёты — в одном касании.
+![version](https://img.shields.io/badge/version-15.0.0-2AABEE?style=flat-square)
+![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
+![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
+![postgres](https://img.shields.io/badge/PostgreSQL-Railway-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![ai](https://img.shields.io/badge/AI%20Copilot-Groq%20%C2%B7%20free-34B37E?style=flat-square)
+![status](https://img.shields.io/badge/status-в%20проде%20%C2%B7%203%20точки-success?style=flat-square)
 
-**Актуальная версия клиента:** `15.0`  
+> Не «таблица + бот в чате».  
+> Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
+
+**Актуальная версия клиента:** `15.0.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -100,6 +108,7 @@ Google Sheets + переписка в Telegram живут на одной точ
 | БД | PostgreSQL (Railway) | источник истины |
 | Бот | Grammy | отчёты, напоминания, notify |
 | Cron | setInterval, логика МСК | микро/итог, алерты |
+| AI | Groq API (`llama-3.3-70b-versatile`) | итог смены + гипотеза при просадке — бесплатно, без vendor lock-in |
 | Хостинг | Railway / Nixpacks | API + фронт |
 
 Клиент **не** ходит в БД: Mini App → `X-Telegram-Id` → API → Postgres.
@@ -108,20 +117,35 @@ Google Sheets + переписка в Telegram живут на одной точ
 
 ## 4. Архитектура
 
-```text
-Telegram (Mini App + Bot chats)
-        │                │
-        ▼                ▼
-   Fastify backend  ←→  Grammy bot
-   static frontend
-   routes v3/v5/v8/v13/promos/support
-   auth middleware · services · cron
-        │
-        ▼
-   PostgreSQL
+```mermaid
+flowchart TB
+    subgraph TG["Telegram"]
+        MA["Mini App<br/>(frontend/*)"]
+        CH["Bot chats"]
+    end
+
+    subgraph BE["Fastify backend (backend/src)"]
+        AUTH["middleware-auth.ts<br/>initData HMAC"]
+        ROUTES["routes-core / sales / schedules /<br/>stats / cash / promos / reports /<br/>v3 / v8 / v13 / v14 / metrics / supervisor"]
+        SVC["services/<br/>plans · bfq · nlp · insights ·<br/>gamification · live-map · alerts ·<br/>forecast · ai.ts"]
+        CRON["cron/<br/>reports.ts · alerts.ts"]
+        BOT["bot/ (Grammy)"]
+    end
+
+    PG[("PostgreSQL<br/>(Railway)")]
+    GROQ["Groq API<br/>llama-3.3-70b-versatile"]
+
+    MA -- "X-Telegram-Id /<br/>X-Telegram-Init-Data" --> AUTH
+    AUTH --> ROUTES --> SVC
+    CRON --> SVC
+    SVC --> PG
+    SVC -- "shift summary /<br/>dip hypothesis" --> GROQ
+    BOT <--> CH
+    ROUTES --> BOT
+    CRON --> BOT
 ```
 
-«Сегодня» всегда через `todayMoscow()` (`Europe/Moscow`), не UTC контейнера.
+Клиент **не** ходит в БД напрямую — только через API. «Сегодня» всегда через `todayMoscow()` (`Europe/Moscow`), не UTC контейнера. AI Copilot (`services/ai.ts`) не в горячем пути запросов — вызывается только при закрытии смены и в cron итоговых отчётов, no-op без `GROQ_API_KEY`.
 
 ---
 
@@ -131,6 +155,7 @@ Telegram (Mini App + Bot chats)
 tele2-app/
 ├── README.md
 ├── docs/INTEGRATION-V13.md
+├── sql/                      (ручные миграции: railway-schema-data.sql, ai-copilot.sql, promos.sql)
 └── backend/                 ← Root Directory на Railway
     ├── package.json
     ├── tsconfig.json
@@ -155,7 +180,8 @@ tele2-app/
     │   ├── routes-v14.ts
     │   ├── routes-metrics.ts
     │   ├── routes-supervisor.ts
-    │   ├── services/   (plans, bfq, nlp, insights, gamification, live-map, alerts, forecast, metrics-catalog)
+    │   ├── services/   (plans, bfq, nlp, insights, gamification, live-map, alerts, forecast, metrics-catalog,
+    │   │                supervisor-analytics, report-image, tenant, release-announce, ai.ts ← AI Copilot)
     │   ├── bot/        (index.ts, messages.ts)
     │   ├── cron/       (reports.ts)
     │   ├── db/
@@ -184,6 +210,7 @@ tele2-app/
 | `rtk_promocodes` | пул промокодов |
 | `support_*` | тикеты, FAQ |
 | `sales_audit` | аудит правок |
+| `ai_audit` | лог AI Copilot: kind (`shift_summary`/`dip_comment`), employee/store, prompt, response, model |
 
 Критичные UNIQUE: `schedules(employee_id, work_date)`, `store_cash(store_id, cash_date)`, upsert-ключ sales.
 
@@ -219,8 +246,8 @@ WHERE telegram_id = <TG_ID>;
 
 ## 8. Функциональность по модулям
 
-- **Главное** — навигация, инструменты, FAB  
-- **Мой** — кабинет, смена, план, инсайт, XP/стрик  
+- **Главное** — навигация, инструменты, FAB, Command Center (health-score сети + просадки с AI-гипотезой)  
+- **Мой** — кабинет, смена, план, инсайт, XP/стрик, разбор смены с AI-summary при закрытии  
 - **Продажи** — мульти-метрики, дельты, offline queue, notify  
 - **График** — месяц, цвета точек, bulk  
 - **Планы** — месяц с архивом ‹›, 6+«ещё» метрик, materialize точек  
@@ -274,6 +301,8 @@ WHERE telegram_id = <TG_ID>;
 
 Итог: блоки GI · Товарка · Ростелеком · Кредиты · Прочее.
 
+**AI Copilot в итоговом отчёте** (`cron/reports.ts` → `generateDipComment`): если факт дня по точке < 85% от плана — в подпись к финальному кадру отчёта и в `ai_audit` уходит гипотеза от модели; если план закрыт — заготовленная фраза-похвала без вызова модели. Тот же комментарий подтягивается в Command Center через `/supervisor/health` (`drops[].ai_comment`).
+
 **409 Conflict** = два polling на одном токене → 1 реплика Railway, без локального бота, `deleteWebhook`, опционально `BOT_POLLING=false`.
 
 ---
@@ -323,6 +352,8 @@ Header: `X-Telegram-Id`
 | `REPORT_CHAT_ID` | желательно | чат отчётов |
 | `BOT_POLLING` | нет | `false` отключает getUpdates |
 | `ALLOW_INSECURE_AUTH` | нет | `true` включает dev-фоллбэк на голый `X-Telegram-Id` без проверки initData (**не включать в проде**) |
+| `GROQ_API_KEY` | нет | ключ Groq (console.groq.com, free tier, без карты) — включает AI Copilot; без ключа обе функции no-op'ают |
+| `GROQ_MODEL` | нет | override модели, дефолт `llama-3.3-70b-versatile` |
 
 ---
 
@@ -420,11 +451,17 @@ Invoke-RestMethod "$base/me" -Headers $h
 
 ## 22. Дорожная карта
 
-- Точный heatmap по часу продажи  
-- What-if / forecast в UI  
-- Объявления «прочитал»  
-- Мультитенант и white-label  
-- Картинка-отчёт (отдельный worker)  
+| Статус | Пункт |
+|--------|-------|
+| ✅ готово (15.0.0) | AI Copilot v1 — разбор смены + гипотеза при просадке, бесплатно через Groq |
+| ✅ готово (14.8.0) | What-if со сравнением сценариев A/B |
+| ✅ готово (13.x) | Точный heatmap по часу продажи (`sales_events`) |
+| 🔜 ближайшее | Действие из просадки прямо в кабинете супервайзера, а не только сигнал |
+| 🔜 ближайшее | Единообразие метрик — одинаковые подписи/расчёты везде, где они показываются |
+| 🗺️ дальше | Объявления «прочитал» |
+| 🗺️ дальше | Более точные прогнозы на завтра, подсказки «кого куда поставить» |
+| 🏗️ эпик 17.0 | Мультитенант и white-label — `services/tenant.ts` сейчас только branding, изоляция данных сознательно отложена |
+| 🏗️ дальше | Картинка-отчёт на отдельном worker — сейчас resvg рендерится в основном процессе |  
 
 ---
 
@@ -469,5 +506,5 @@ Invoke-RestMethod "$base/me" -Headers $h
 
 ---
 
-**T2 Sales** — смена, цифры и сеть в одном приложении.  
-*README · продуктовая линия v13.4 · 2026*
+**T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
+*README · актуально на v15.0.0 · август 2026*
