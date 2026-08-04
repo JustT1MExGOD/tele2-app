@@ -1595,6 +1595,22 @@
 .sv-badge.good { background: #30D15822; color: #30D158; }
 .sv-badge.mid { background: #FF9F0A22; color: #FF9F0A; }
 .sv-badge.bad { background: #FF453A22; color: #FF453A; }
+
+/* ===== Command Center (14.5) — виджет "Сеть за минуту" на главной ===== */
+.cc-row { display: flex; align-items: center; gap: 14px; }
+.cc-health {
+  width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 18px; border: 2px solid transparent;
+}
+.cc-health.good { background: #30D15822; color: #30D158; border-color: #30D15844; }
+.cc-health.mid { background: #FF9F0A22; color: #FF9F0A; border-color: #FF9F0A44; }
+.cc-health.bad { background: #FF453A22; color: #FF453A; border-color: #FF453A44; }
+.cc-meta { flex: 1; min-width: 0; }
+.cc-line { font-size: 13px; color: var(--text); line-height: 1.5; }
+.cc-line b { font-size: 15px; }
+.cc-line.cc-up { color: var(--success); }
+.cc-line.cc-down { color: var(--danger); }
 .sv-bars { margin-top: 10px; display: grid; gap: 6px; }
 .sv-bar-row { display: grid; grid-template-columns: 42px 1fr 48px; gap: 8px; align-items: center; font-size: 11px; }
 .sv-bar-track { height: 6px; border-radius: 99px; background: #1f2937; overflow: hidden; }

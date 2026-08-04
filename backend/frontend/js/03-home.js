@@ -45,6 +45,61 @@
       }
     }
 
+    // ===== COMMAND CENTER (14.5) =====
+    // Health + просадки в одном виджете на главной — вместо того чтобы
+    // управляющий сам собирал это из /supervisor и /live по отдельности.
+    // /supervisor/health для того и заведён ("короткий срез для виджетов"),
+    // просто раньше не был подключён ни к одному экрану.
+    function commandCenterTone(health) {
+      if (health >= 75) return 'good';
+      if (health >= 45) return 'mid';
+      return 'bad';
+    }
+
+    async function loadCommandCenter() {
+      const section = document.getElementById('commandCenterSection');
+      const box = document.getElementById('commandCenterBody');
+      if (!section || !box) return;
+      if (!canManage() && !isSupervisor()) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = '';
+      try {
+        const res = await fetch(API + '/supervisor/health', { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const d = await res.json();
+        const health = Number(d.health) || 0;
+        const tone = commandCenterTone(health);
+        const pace = Number(d.pace_delta) || 0;
+        const paceText = (pace >= 0 ? '+' : '') + pace + '% к темпу дня';
+        const drops = Array.isArray(d.drops) ? d.drops : [];
+
+        box.innerHTML = `
+          <div class="cc-row">
+            <div class="cc-health ${tone}">${health}</div>
+            <div class="cc-meta">
+              <div class="cc-line"><b>${d.overall_pct || 0}%</b> план дня</div>
+              <div class="cc-line cc-${pace >= 0 ? 'up' : 'down'}">${paceText}</div>
+            </div>
+            <button class="row-chevron" style="background:none;border:none;font-size:20px;color:var(--hint)" onclick="switchPage('supervisor')">›</button>
+          </div>
+          ${drops.length
+            ? drops.slice(0, 3).map(x => `
+              <div class="sv-drop ${x.severity === 'critical' ? '' : 'warn'}" style="margin:8px 0 0">
+                <div class="ico">${x.severity === 'critical' ? '🚨' : '⚠️'}</div>
+                <div>
+                  <div class="t">${esc(x.store_name || 'Точка')}</div>
+                  <div class="s">${esc(x.message || '')}</div>
+                </div>
+              </div>`).join('')
+            : '<div class="empty" style="padding:10px 0 0">Критических просадок нет — сеть в ритме</div>'
+          }`;
+      } catch (e) {
+        section.style.display = 'none';
+      }
+    }
+
     async function loadHome() {
       document.getElementById('headerDate').textContent = formatDateRu(todayMoscow());
 
@@ -73,6 +128,7 @@
       }
 
       loadMyDay();
+      loadCommandCenter();
       try {
         const [statsRes, dashRes] = await Promise.all([
           fetch(API + '/stats/daily?date=' + today, { headers: authHeaders() }).catch(() => null),

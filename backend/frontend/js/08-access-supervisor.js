@@ -332,6 +332,21 @@
       </svg>`;
     }
 
+    async function ackAlert(id) {
+      try {
+        const res = await fetch(API + '/alerts/' + id + '/ack', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: '{}'
+        });
+        if (!res.ok) { toast('Не удалось подтвердить', 'err'); return; }
+        toast('Отмечено', 'ok');
+        loadSupervisorDash();
+      } catch (e) {
+        toast('Ошибка', 'err');
+      }
+    }
+
     async function loadSupervisorDash() {
       const box = document.getElementById('supervisorBody');
       if (!box) return;
@@ -385,6 +400,28 @@
         } else {
           html += `<div class="empty" style="padding:12px 16px">Критических просадок нет — сеть в ритме</div>`;
         }
+
+        // alerts — персистентные, из cron (smart_alerts), в отличие от drops
+        // выше (это live-расчёт при каждом открытии). Manager/admin only —
+        // supervisor получит 403 от /alerts, тогда просто не показываем блок.
+        try {
+          const aRes = await fetch(API + '/alerts', { headers: authHeaders() });
+          if (aRes.ok) {
+            const alerts = await aRes.json();
+            html += `<div class="sv-section">Алерты <span>· требуют подтверждения</span></div>`;
+            html += (Array.isArray(alerts) && alerts.length)
+              ? alerts.map(a => `
+                <div class="sv-drop ${a.severity === 'critical' ? '' : 'warn'}">
+                  <div class="ico">${a.severity === 'critical' ? '🚨' : '⚠️'}</div>
+                  <div style="flex:1">
+                    <div class="t">${esc(a.title || '')}</div>
+                    <div class="s">${esc(a.body || '')}</div>
+                  </div>
+                  <button class="mchip" style="padding:6px 10px;flex:none" onclick="ackAlert(${a.id})">✓</button>
+                </div>`).join('')
+              : '<div class="empty" style="padding:12px 16px">Открытых алертов нет</div>';
+          }
+        } catch (_) {}
 
         // trend chart
         html += `
