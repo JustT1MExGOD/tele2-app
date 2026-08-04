@@ -13,6 +13,7 @@ import { getSalesSumColumns } from '../services/metrics-catalog.js';
 import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '../bot/index.js';
 import { shiftReminder, microReport, finalReport, microLines, finalLines } from '../bot/messages.js';
 import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../services/report-image.js';
+import { generateDipComment } from '../services/ai.js';
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)
@@ -163,9 +164,20 @@ async function sendStoreStoryReport(
 ) {
   try {
     const { plan, fact, tomorrow } = await buildStoryReportPngs(st.store_id, date);
+
+    const dayFact = await query(await factSql(), [date, st.store_id]).catch(() => ({ rows: [{}] }));
+    const df = dayFact.rows[0] || {};
+    const comment = await generateDipComment({
+      storeId: st.store_id,
+      storeName: st.name,
+      date,
+      fact: { sim: df.sim, mnp: df.mnp, pa: df.pa, combo: df.combo },
+      dayPlan: { sim: st.plan.sim, mnp: st.plan.mnp, pa: st.plan.pa, combo: st.plan.combo }
+    });
+
     const r = await notifyChatMediaGroup([
       { buffer: plan, filename: `plan_${st.store_id}_${date}.png`, caption: `📋 ${st.name} · план дня · ${date}` },
-      { buffer: fact, filename: `fact_${st.store_id}_${date}.png`, caption: `🏁 ${st.name} · факт дня` },
+      { buffer: fact, filename: `fact_${st.store_id}_${date}.png`, caption: `🏁 ${st.name} · факт дня\n\n${comment.text}` },
       { buffer: tomorrow, filename: `tomorrow_${st.store_id}_${date}.png`, caption: `🔮 ${st.name} · фокус на завтра` }
     ]);
     if (r.ok) return r;

@@ -138,6 +138,10 @@
           <div class="empty" style="text-align:left;padding:10px 0 0;font-size:12px">
             До идеальной смены: ${esc(missing.join(', '))}
           </div>` : ''}
+        ${data.ai_summary ? `
+          <div class="progress-block" style="margin-top:14px;text-align:left;font-size:13px;line-height:1.5">
+            ${esc(data.ai_summary).replace(/\n/g, '<br>')}
+          </div>` : ''}
         <div class="progress-block" style="margin-top:14px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
             <div>

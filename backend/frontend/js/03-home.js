@@ -91,6 +91,7 @@
                 <div>
                   <div class="t">${esc(x.store_name || 'Точка')}</div>
                   <div class="s">${esc(x.message || '')}</div>
+                  ${x.ai_comment ? `<div class="s" style="margin-top:4px;font-style:italic">🤖 ${esc(x.ai_comment)}</div>` : ''}
                 </div>
               </div>`).join('')
             : '<div class="empty" style="padding:10px 0 0">Критических просадок нет — сеть в ритме</div>'

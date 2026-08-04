@@ -277,6 +277,24 @@ export async function buildSupervisorDashboard(opts: {
   const dropPenalty = Math.min(40, drops.filter((d) => d.severity === 'critical').length * 12 + drops.length * 4);
   const health = Math.max(0, Math.min(100, Math.round(networkOverall * 0.7 + (100 - dropPenalty) * 0.3)));
 
+  // AI-комментарий к просадке — генерируется раз в день в cron/reports.ts
+  // при отправке итогового отчёта; здесь только подтягиваем готовый текст.
+  if (drops.length) {
+    const dropStoreIds = [...new Set(drops.map((d) => d.store_id))];
+    const aiRes = await query(
+      `SELECT DISTINCT ON (store_id) store_id, response
+       FROM ai_audit
+       WHERE kind = 'dip_comment' AND ref_date = $1::date AND store_id = ANY($2)
+       ORDER BY store_id, created_at DESC`,
+      [date, dropStoreIds]
+    ).catch(() => ({ rows: [] as any[] }));
+    const aiByStore = new Map(aiRes.rows.map((r: any) => [r.store_id, r.response]));
+    for (const d of drops) {
+      const c = aiByStore.get(d.store_id);
+      if (c) d.ai_comment = c;
+    }
+  }
+
   return {
     date,
     from,

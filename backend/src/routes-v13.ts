@@ -17,6 +17,7 @@ import {
   evaluateAfterSale,
   evaluateShiftClose
 } from './services/gamification.js';
+import { generateShiftSummary } from './services/ai.js';
 import { getLiveNetworkMap } from './services/live-map.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { forecastStore, salesHeatmap, newbieCohorts } from './services/forecast.js';
@@ -165,6 +166,20 @@ export async function registerV13Routes(app: FastifyInstance) {
       planPct
     });
 
+    const factOut = { sim: num(fact.sim), mnp: num(fact.mnp), pa: num(fact.pa), combo: num(fact.combo) };
+    const empRow = await query(`SELECT full_name FROM employees WHERE id = $1`, [employee_id]);
+    const aiSummary = await generateShiftSummary({
+      employeeId: employee_id,
+      employeeName: empRow.rows[0]?.full_name || 'Сотрудник',
+      planPct,
+      idealShift: ideal,
+      fact: factOut,
+      dayPlan,
+      xpGained: gam?.xp_gained || 0,
+      leveledUp: !!gam?.leveled_up,
+      streakDays: gam?.streak_days || 0
+    });
+
     return {
       ok: true,
       session: res.rows[0],
@@ -172,9 +187,10 @@ export async function registerV13Routes(app: FastifyInstance) {
       ideal_shift: ideal,
       ideal_missing: idealMissing,
       score,
-      fact: { sim: num(fact.sim), mnp: num(fact.mnp), pa: num(fact.pa), combo: num(fact.combo) },
+      fact: factOut,
       day_plan: dayPlan,
-      gamification: gam
+      gamification: gam,
+      ai_summary: aiSummary
     };
   });
 
