@@ -473,14 +473,20 @@
         <div id="fcList"><div class="skeleton"></div></div>
       </div>
       <div class="section">
-        <div class="section-title">What-if: сдвиг смены</div>
+        <div class="section-title">What-if: сценарий переносов</div>
         <div class="progress-block">
           <div class="field"><label>Сотрудник id</label><input id="wiEmp" type="number" placeholder="2"></div>
           <div class="field"><label>С точки</label><select id="wiFrom"></select></div>
           <div class="field"><label>На точку</label><select id="wiTo"></select></div>
           <div class="field"><label>Дата</label><input id="wiDate" type="date"></div>
-          <button class="btn-main" onclick="runWhatIf()">Пересчитать покрытие</button>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn-ghost" style="flex:1" onclick="addWiMove()">+ Добавить перенос</button>
+            <button type="button" class="btn-ghost" style="flex:1" onclick="clearWiMoves()">Очистить сценарий</button>
+          </div>
+          <div id="wiMovesList" style="margin-top:8px"></div>
+          <button class="btn-main" style="margin-top:10px" onclick="runWhatIf()">Пересчитать покрытие</button>
           <div id="wiResult" class="empty" style="padding-top:12px"></div>
+          <div id="wiCompareBox"></div>
         </div>
       </div>
     </div>

@@ -129,52 +129,162 @@
         }).join('') || '<div class="empty">Нет данных</div>';
       } catch { box.innerHTML = '<div class="empty">Прогноз недоступен</div>'; }
     }
-    async function runWhatIf() {
+    // ===== WHAT-IF v2 (14.8) =====
+    // Сценарий — накапливаемый список переносов вместо одного за раз, плюс
+    // сравнение двух посчитанных сценариев (A/B) side-by-side. Симуляция
+    // (simulateScheduleMoves) уже принимала массив moves — это чисто
+    // фронтенд-надстройка над тем, что бэкенд умел давно.
+    window.__wiMoves = window.__wiMoves || [];
+
+    function renderWiMovesList() {
+      const box = document.getElementById('wiMovesList');
+      if (!box) return;
+      const moves = window.__wiMoves;
+      if (!moves.length) { box.innerHTML = ''; return; }
+      box.innerHTML = moves.map((m, i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border-radius:10px;margin-bottom:6px;font-size:12px">
+          <div style="flex:1">#${m.employee_id}: ${m.from_store || 'авто'} → ${m.to_store}</div>
+          <button type="button" style="background:none;border:none;color:var(--danger,#ff3b30);font-size:16px;line-height:1;cursor:pointer" onclick="removeWiMove(${i})">×</button>
+        </div>`).join('');
+    }
+
+    function addWiMove() {
       const emp = Number(document.getElementById('wiEmp')?.value);
       const to = document.getElementById('wiTo')?.value;
       const from = document.getElementById('wiFrom')?.value || null;
+      if (!emp || !to) { toast('Укажи сотрудника и точку назначения', 'err'); return; }
+      window.__wiMoves.push({ employee_id: emp, from_store: from, to_store: to });
+      renderWiMovesList();
+      const empInput = document.getElementById('wiEmp');
+      if (empInput) empInput.value = '';
+    }
+
+    function removeWiMove(idx) {
+      window.__wiMoves.splice(idx, 1);
+      renderWiMovesList();
+    }
+
+    function clearWiMoves() {
+      window.__wiMoves = [];
+      renderWiMovesList();
+    }
+
+    function renderWiScenario(data, date) {
+      const rows = (data.stores || []).map(s => {
+        const d = Number(s.delta_sim) || 0;
+        const col = d > 0 ? '#34c759' : d < 0 ? '#ff3b30' : 'var(--hint)';
+        return `<div class="progress-block" style="margin:8px 0;padding:12px;border-left:4px solid ${s.color || '#2AABEE'}">
+          <div style="font-weight:700">${s.name}</div>
+          <div style="font-size:12px;color:var(--hint);margin:4px 0">Сотрудников: ${s.staff_before} → <b>${s.staff_after}</b></div>
+          <div style="font-size:13px">SIM ожид. <b>${s.expected?.sim ?? 0}</b> → <b>${s.after?.sim ?? 0}</b>
+            <span style="color:${col};font-weight:700"> (${d > 0 ? '+' : ''}${d})</span></div>
+          <div style="font-size:12px;color:var(--hint)">MNP ${s.expected?.mnp ?? 0}→${s.after?.mnp ?? 0} · ПА ${s.expected?.pa ?? 0}→${s.after?.pa ?? 0}</div>
+        </div>`;
+      }).join('');
+      const sum = data.summary || {};
+      const canApply = canManage() && (data.moves_applied || []).some(m => !m.skipped);
+      // Сумма delta_sim по сети — игра с нулевой суммой (кто-то теряет
+      // ровно столько, сколько получает другая точка), сравнивать сценарии
+      // по ней бессмысленно. Сравниваем по худшей точке: у какого сценария
+      // просадка в самом слабом месте меньше.
+      const deltas = (data.stores || []).map((x) => Number(x.delta_sim) || 0);
+      const worstDelta = deltas.length ? Math.min(...deltas) : 0;
+      const lostCount = (sum.stores_lost || []).length;
+      return {
+        worstDelta,
+        lostCount,
+        html: `<div style="font-size:12px;color:var(--hint);margin-bottom:8px">Дата ${data.date || date} · ${(data.moves_applied || []).filter(m => !m.skipped).length} перенос(ов) применено</div>
+          ${sum.stores_gained?.length ? `<div style="color:#34c759;font-size:13px;margin-bottom:6px">↑ ${sum.stores_gained.join(', ')}</div>` : ''}
+          ${sum.stores_lost?.length ? `<div style="color:#ff3b30;font-size:13px;margin-bottom:6px">↓ ${sum.stores_lost.join(', ')}</div>` : ''}
+          ${rows || '<div class="empty">Нет точек</div>'}
+          <div style="display:flex;gap:8px;margin-top:12px">
+            ${canApply ? `<button class="btn-main" style="flex:1" onclick="applyWhatIf()">Записать в график</button>` : ''}
+            <button type="button" class="btn-ghost" style="flex:1" onclick="saveWiScenarioA()">Сохранить как сценарий A</button>
+          </div>
+          ${canApply ? `<div style="font-size:11px;color:var(--hint);margin-top:6px;text-align:center">Запись в график обновит schedules на эту дату</div>` : ''}`
+      };
+    }
+
+    async function runWhatIf() {
       const date = document.getElementById('wiDate')?.value || todayMoscow();
       const box = document.getElementById('wiResult');
       if (!box) return;
-      if (!emp || !to) { box.innerHTML = '<div class="empty">Укажи сотрудника и точку назначения</div>'; return; }
+
+      let moves = window.__wiMoves.slice();
+      // удобство: если сценарий пуст, но поля заполнены — считаем это одним
+      // быстрым переносом, не заставляя жать "Добавить" ради единственного шага
+      if (!moves.length) {
+        const emp = Number(document.getElementById('wiEmp')?.value);
+        const to = document.getElementById('wiTo')?.value;
+        const from = document.getElementById('wiFrom')?.value || null;
+        if (emp && to) moves = [{ employee_id: emp, from_store: from, to_store: to }];
+      }
+      if (!moves.length) { box.innerHTML = '<div class="empty">Добавь хотя бы один перенос в сценарий</div>'; return; }
+
       box.innerHTML = '<div class="skeleton"></div>';
       try {
         const res = await fetch(API + '/schedule/what-if', {
           method: 'POST',
           headers: authHeaders(true),
-          body: JSON.stringify({
-            date,
-            moves: [{ employee_id: emp, from_store: from || null, to_store: to }]
-          })
+          body: JSON.stringify({ date, moves })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || data.error || 'fail');
-        const rows = (data.stores || []).map(s => {
-          const d = Number(s.delta_sim) || 0;
-          const col = d > 0 ? '#34c759' : d < 0 ? '#ff3b30' : 'var(--hint)';
-          return `<div class="progress-block" style="margin:8px 0;padding:12px;border-left:4px solid ${s.color || '#2AABEE'}">
-            <div style="font-weight:700">${s.name}</div>
-            <div style="font-size:12px;color:var(--hint);margin:4px 0">Сотрудников: ${s.staff_before} → <b>${s.staff_after}</b></div>
-            <div style="font-size:13px">SIM ожид. <b>${s.expected?.sim ?? 0}</b> → <b>${s.after?.sim ?? 0}</b>
-              <span style="color:${col};font-weight:700"> (${d > 0 ? '+' : ''}${d})</span></div>
-            <div style="font-size:12px;color:var(--hint)">MNP ${s.expected?.mnp ?? 0}→${s.after?.mnp ?? 0} · ПА ${s.expected?.pa ?? 0}→${s.after?.pa ?? 0}</div>
-          </div>`;
-        }).join('');
-        const sum = data.summary || {};
-        window.__lastWhatIf = {
-          date: data.date || date,
-          moves: [{ employee_id: emp, from_store: from || null, to_store: to }]
-        };
-        const canApply = canManage() && (data.moves_applied || []).some(m => !m.skipped);
-        box.innerHTML = `<div style="font-size:12px;color:var(--hint);margin-bottom:8px">Дата ${data.date || date}</div>
-          ${sum.stores_gained?.length ? `<div style="color:#34c759;font-size:13px;margin-bottom:6px">↑ ${sum.stores_gained.join(', ')}</div>` : ''}
-          ${sum.stores_lost?.length ? `<div style="color:#ff3b30;font-size:13px;margin-bottom:6px">↓ ${sum.stores_lost.join(', ')}</div>` : ''}
-          ${rows || '<div class="empty">Нет точек</div>'}
-          ${canApply ? `<button class="btn-main" style="margin-top:12px" onclick="applyWhatIf()">Записать сдвиг в график</button>
-            <div style="font-size:11px;color:var(--hint);margin-top:6px;text-align:center">Реально обновит schedules на эту дату</div>` : ''}`;
+        window.__lastWhatIf = { date: data.date || date, moves };
+        window.__wiLastResult = { data, date: data.date || date, moves };
+        const scenario = renderWiScenario(data, date);
+        box.innerHTML = scenario.html;
+        if (window.__wiScenarioA) compareWiScenarios();
       } catch (e) {
         box.innerHTML = `<div class="empty">${e.message || e}</div>`;
       }
+    }
+
+    function saveWiScenarioA() {
+      if (!window.__wiLastResult) { toast('Сначала пересчитай сценарий', 'err'); return; }
+      window.__wiScenarioA = window.__wiLastResult;
+      document.getElementById('wiCompareBox').innerHTML = `
+        <div class="empty" style="text-align:left;padding:10px 0 0;font-size:12px">
+          Сценарий A сохранён (${window.__wiScenarioA.moves.length} перенос(ов)). Собери другой набор переносов и пересчитай — появится сравнение с B.
+        </div>`;
+      toast('Сценарий A сохранён', 'ok');
+    }
+
+    function compareWiScenarios() {
+      const a = window.__wiScenarioA;
+      const b = window.__wiLastResult;
+      const box = document.getElementById('wiCompareBox');
+      if (!box || !a || !b) return;
+      // Перенос внутри сети — игра с нулевой суммой, сравнивать по сумме
+      // дельт по всей сети бессмысленно (она ≈0 всегда). Сравниваем по
+      // худшей просевшей точке и по числу точек "в минусе".
+      const worst = (res) => {
+        const deltas = (res.data.stores || []).map((x) => Number(x.delta_sim) || 0);
+        return deltas.length ? Math.min(...deltas) : 0;
+      };
+      const aWorst = worst(a);
+      const bWorst = worst(b);
+      const aLost = (a.data.summary?.stores_lost || []).length;
+      const bLost = (b.data.summary?.stores_lost || []).length;
+      const better = bWorst > aWorst ? 'B' : bWorst < aWorst ? 'A' : null;
+      box.innerHTML = `
+        <div class="section-title" style="margin-top:16px">Сравнение сценариев</div>
+        <div style="display:flex;gap:10px">
+          <div class="progress-block" style="flex:1;${better === 'A' ? 'border:1px solid #34c759' : ''}">
+            <div style="font-weight:700">Сценарий A</div>
+            <div style="font-size:12px;color:var(--hint)">${a.moves.length} перенос(ов)</div>
+            <div style="font-size:20px;font-weight:800;margin-top:6px">${aWorst > 0 ? '+' : ''}${aWorst}</div>
+            <div style="font-size:11px;color:var(--hint)">худшая точка (Δ SIM) · ${aLost} в минусе</div>
+          </div>
+          <div class="progress-block" style="flex:1;${better === 'B' ? 'border:1px solid #34c759' : ''}">
+            <div style="font-weight:700">Сценарий B (текущий)</div>
+            <div style="font-size:12px;color:var(--hint)">${b.moves.length} перенос(ов)</div>
+            <div style="font-size:20px;font-weight:800;margin-top:6px">${bWorst > 0 ? '+' : ''}${bWorst}</div>
+            <div style="font-size:11px;color:var(--hint)">худшая точка (Δ SIM) · ${bLost} в минусе</div>
+          </div>
+        </div>
+        ${better ? `<div class="empty" style="text-align:left;padding:8px 0 0;font-size:12px">Сценарий ${better} меньше проседает в своей самой слабой точке</div>` : '<div class="empty" style="text-align:left;padding:8px 0 0;font-size:12px">Сценарии одинаково влияют на самую слабую точку</div>'}
+        <button type="button" class="btn-ghost" style="width:100%;margin-top:8px" onclick="window.__wiScenarioA=null;document.getElementById('wiCompareBox').innerHTML=''">Очистить сравнение</button>`;
     }
 
     async function applyWhatIf() {
