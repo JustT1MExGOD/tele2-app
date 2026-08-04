@@ -175,13 +175,18 @@ async function sendStoreStoryReport(
       dayPlan: { sim: st.plan.sim, mnp: st.plan.mnp, pa: st.plan.pa, combo: st.plan.combo }
     });
 
+    // Каждый кадр уже подписан заголовком внутри самой картинки (План дня /
+    // Итоговый отчёт / Фокус на завтра) — не дублируем это в caption каждого
+    // фото. Вместо трёх отдельных подписей — одно сообщение под всем альбомом.
     const r = await notifyChatMediaGroup([
-      { buffer: plan, filename: `plan_${st.store_id}_${date}.png`, caption: `📋 ${st.name} · план дня · ${date}` },
-      { buffer: fact, filename: `fact_${st.store_id}_${date}.png`, caption: `🏁 ${st.name} · факт дня\n\n${comment.text}` },
-      { buffer: tomorrow, filename: `tomorrow_${st.store_id}_${date}.png`, caption: `🔮 ${st.name} · фокус на завтра` }
+      { buffer: plan, filename: `plan_${st.store_id}_${date}.png` },
+      { buffer: fact, filename: `fact_${st.store_id}_${date}.png` },
+      { buffer: tomorrow, filename: `tomorrow_${st.store_id}_${date}.png` }
     ]);
-    if (r.ok) return r;
-    throw new Error(r.error || 'media_group_failed');
+    if (!r.ok) throw new Error(r.error || 'media_group_failed');
+
+    await notifyChat(`🏁 <b>${st.name}</b> · итог дня · ${date}\n\n${comment.text}`);
+    return r;
   } catch (e: any) {
     console.warn('Story report failed, fallback to single final image:', e?.message || e);
     return sendSingleFinalImage(st, date);
