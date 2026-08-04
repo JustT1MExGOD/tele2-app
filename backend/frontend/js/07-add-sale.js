@@ -204,6 +204,16 @@
         return;
       }
 
+      // Тренировочный режим обучения: форма настоящая, но запись в БД и в чат
+      // не уходит — 10-tutorial.js ставит этот флаг перед openAddSale().
+      if (window.__tutorialDryRun) {
+        closeModal();
+        toast('Тренировка: ' + parts.join(', ') + ' — по-настоящему это уйдёт в базу и в чат', 'ok');
+        saleSelection = {};
+        window.__tutorialDryRunCallback?.();
+        return;
+      }
+
       try {
         const res = await fetch(API + '/sales', {
           method: 'POST',

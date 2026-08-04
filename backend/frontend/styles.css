@@ -1471,13 +1471,36 @@
     #tutorialOverlay.show {
       display: flex;
       flex-direction: column;
-      background: rgba(0,0,0,0.28) !important;
+      background: rgba(0,0,0,0.6) !important;
       backdrop-filter: none !important;
       -webkit-backdrop-filter: none !important;
       pointer-events: none;
       align-items: stretch;
       justify-content: flex-start;
       padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    }
+    /* Арбузыч в coach-карточке — аватар + speech-bubble вместо голого текста */
+    .tut-char-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 4px;
+    }
+    .tut-char-avatar {
+      flex: none;
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      background: var(--primary-soft, rgba(42,171,238,.15));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      animation: tutCharBob 2.4s ease-in-out infinite;
+    }
+    .tut-char-bubble { flex: 1; min-width: 0; }
+    .tut-char-bubble .tut-title { margin-bottom: 4px; }
+    .tut-char-bubble .tut-text { margin-bottom: 12px; }
+    @keyframes tutCharBob {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-3px) rotate(-4deg); }
     }
     #tutorialOverlay.show.tut-dock-bottom {
       justify-content: flex-end;
@@ -1512,6 +1535,114 @@
     .fab.tut-highlight {
       z-index: 520 !important;
     }
+
+    /* ===== Tutorial: cutscene-режим — полноэкранный Арбузыч ===== */
+    /* вступление / переход между главами / квиз / финал — без реального UI под низом */
+    #tutorialScreen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 600;
+      background: radial-gradient(120% 100% at 50% 0%, #163150 0%, #0a0e1a 65%);
+      color: #fff;
+      align-items: center;
+      justify-content: center;
+      padding: calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+      overflow-y: auto;
+    }
+    #tutorialScreen.show { display: flex; }
+    .ts-inner {
+      width: 100%;
+      max-width: 420px;
+      margin: auto;
+      text-align: center;
+      animation: tsIn .4s ease;
+    }
+    @keyframes tsIn {
+      from { opacity: 0; transform: translateY(18px) scale(.97); }
+      to { opacity: 1; transform: none; }
+    }
+    .ts-chapter {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--primary, #3bb8f5);
+      margin-bottom: 18px;
+    }
+    .ts-avatar {
+      font-size: 72px;
+      line-height: 1;
+      margin-bottom: 18px;
+      animation: tsAvatarBob 2.6s ease-in-out infinite;
+      filter: drop-shadow(0 12px 24px rgba(59,184,245,.25));
+    }
+    @keyframes tsAvatarBob {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-8px) rotate(-6deg); }
+    }
+    .ts-title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -.4px;
+      margin-bottom: 14px;
+      line-height: 1.25;
+    }
+    .ts-bubble {
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 18px;
+      padding: 16px 18px;
+      margin-bottom: 18px;
+      text-align: left;
+    }
+    .ts-text {
+      font-size: 15.5px;
+      line-height: 1.5;
+      color: #d7dbe6;
+      white-space: pre-line;
+    }
+    .ts-reward {
+      background: rgba(52,199,89,.14);
+      border: 1px solid rgba(52,199,89,.4);
+      border-radius: 14px;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+      font-weight: 700;
+      font-size: 15px;
+      color: #7fe0b4;
+    }
+    .ts-practice {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-bottom: 18px;
+    }
+    .ts-practice button {
+      padding: 14px; border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.15);
+      background: rgba(255,255,255,.05); color: #fff;
+      font-weight: 600; font-size: 14.5px; cursor: pointer;
+      text-align: left;
+    }
+    .ts-practice button:active { transform: scale(.98); }
+    .ts-practice button.ok {
+      background: rgba(52,199,89,.18); border-color: #34c759; color: #7fe0b4;
+    }
+    .ts-dots {
+      display: flex; gap: 6px; justify-content: center; margin-bottom: 18px;
+    }
+    .ts-dots .tut-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.2); }
+    .ts-dots .tut-dot.on { background: var(--primary, #3bb8f5); width: 18px; border-radius: 4px; }
+    .ts-actions { display: flex; gap: 8px; }
+    .ts-actions button {
+      flex: 1; padding: 14px 12px; border-radius: 14px; border: none;
+      font-weight: 700; font-size: 15px; cursor: pointer;
+    }
+    .ts-actions .tut-btn-skip { background: rgba(255,255,255,.08); color: #b9c0cf; }
+    .ts-actions .tut-btn-next { background: var(--primary, #3bb8f5); color: #071018; flex: 1.4; }
+    .ts-actions .tut-btn-next:disabled { opacity: .35; pointer-events: none; }
+    /* финальный экран — крупнее аватар, без чаптер-лейбла */
+    .ts-inner.finale .ts-avatar { font-size: 88px; }
+    .ts-inner.finale .ts-chapter { display: none; }
 
   
 /* ===== SUPERVISOR CABINET ===== */

@@ -15,7 +15,9 @@ import {
 import {
   getGamificationProfile,
   evaluateAfterSale,
-  evaluateShiftClose
+  evaluateShiftClose,
+  addXp,
+  grantBadge
 } from './services/gamification.js';
 import { generateShiftSummary } from './services/ai.js';
 import { getLiveNetworkMap } from './services/live-map.js';
@@ -388,6 +390,28 @@ export async function registerV13Routes(app: FastifyInstance) {
     const stats = await selfComparison(request.user!.employee_id!);
     const gam = await getGamificationProfile(request.user!.employee_id!);
     return { ...stats, gamification: gam };
+  });
+
+  // Обучение v3 (10-tutorial.js) даёт XP+бейдж за прохождение курса.
+  // Идемпотентно: повторный вызов (например, перезапуск курса вручную)
+  // не начисляет XP снова — grantBadge сам по себе ON CONFLICT DO NOTHING,
+  // но addXp нет, поэтому проверяем бейдж заранее.
+  app.post('/me/tutorial-complete', async (request, reply) => {
+    if (!requireAuth(request, reply)) return;
+    const employeeId = request.user!.employee_id!;
+    const isManagerMode = (request.body as any)?.mode === 'manager';
+    const code = isManagerMode ? 'tutorial_mgr_done' : 'tutorial_done';
+    const title = isManagerMode ? 'Обучение управляющего пройдено' : 'Обучение пройдено';
+
+    const existing = await query(
+      `SELECT 1 FROM employee_badges WHERE employee_id = $1 AND badge_code = $2`,
+      [employeeId, code]
+    );
+    if (!existing.rows.length) {
+      await addXp(employeeId, 50, code);
+      await grantBadge(employeeId, code, title);
+    }
+    return { ok: true };
   });
 
   app.get('/me/day-plan-split', async (request, reply) => {

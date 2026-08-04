@@ -23,20 +23,44 @@
 
   <div id="toast" class="toast"></div>
 
-  <!-- Interactive tutorial -->
+  <!-- Interactive tutorial: coach-режим (карточка поверх реального UI, «нажми сюда») -->
   <div id="tutorialOverlay">
     <div class="tut-card">
       <div class="tut-progress"><div class="tut-progress-bar" id="tutProgressBar"></div></div>
       <div class="tut-badge" id="tutBadge">Сотрудник</div>
       <div class="tut-step" id="tutStepLabel">Шаг 1</div>
-      <div class="tut-title" id="tutTitle">Добро пожаловать</div>
-      <div class="tut-text" id="tutText"></div>
+      <div class="tut-char-row">
+        <div class="tut-char-avatar">🍉</div>
+        <div class="tut-char-bubble">
+          <div class="tut-title" id="tutTitle">Добро пожаловать</div>
+          <div class="tut-text" id="tutText"></div>
+        </div>
+      </div>
       <div class="tut-practice" id="tutPractice" style="display:none"></div>
       <div class="tut-task" id="tutTask" style="display:none"></div>
       <div class="tut-dots" id="tutDots"></div>
       <div class="tut-actions">
         <button class="tut-btn-skip" id="tutSkipBtn" type="button" onclick="skipTutorial()">Пропустить</button>
         <button class="tut-btn-next" id="tutNextBtn" type="button" onclick="nextTutorialStep()">Далее</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive tutorial: cutscene-режим (полноэкранный Арбузыч — вступление/главы/финал/квиз) -->
+  <div id="tutorialScreen">
+    <div class="ts-inner">
+      <div class="ts-chapter" id="tsChapterLabel">Глава 1 из 5</div>
+      <div class="ts-avatar" id="tsAvatar">🍉</div>
+      <div class="ts-title" id="tsTitle"></div>
+      <div class="ts-bubble">
+        <div class="ts-text" id="tsText"></div>
+      </div>
+      <div class="ts-reward" id="tsReward" style="display:none"></div>
+      <div class="ts-practice" id="tsPractice" style="display:none"></div>
+      <div class="ts-dots" id="tsDots"></div>
+      <div class="ts-actions">
+        <button class="tut-btn-skip" id="tsSkipBtn" type="button" onclick="skipTutorial()">Пропустить</button>
+        <button class="tut-btn-next" id="tsNextBtn" type="button" onclick="nextTutorialStep()">Далее</button>
       </div>
     </div>
   </div>
