@@ -167,12 +167,14 @@ async function sendStoreStoryReport(
 
     const dayFact = await query(await factSql(), [date, st.store_id]).catch(() => ({ rows: [{}] }));
     const df = dayFact.rows[0] || {};
+    // Полный факт/план точки (все ~18 метрик), а не только SIM/MNP/ПА/Комбо —
+    // иначе просадка по остальным показателям для ИИ невидима.
     const comment = await generateDipComment({
       storeId: st.store_id,
       storeName: st.name,
       date,
-      fact: { sim: df.sim, mnp: df.mnp, pa: df.pa, combo: df.combo },
-      dayPlan: { sim: st.plan.sim, mnp: st.plan.mnp, pa: st.plan.pa, combo: st.plan.combo }
+      fact: df,
+      dayPlan: st.plan
     });
 
     // Каждый кадр уже подписан заголовком внутри самой картинки (План дня /

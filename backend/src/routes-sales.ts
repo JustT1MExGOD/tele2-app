@@ -7,7 +7,8 @@ import { query } from './db/index.js';
 import { notifyChat } from './bot/index.js';
 import { todayMoscow } from './utils/date.js';
 import { logSaleEvents } from './services/heatmap.js';
-import { requireActive } from './middleware-auth.js';
+import { requireActive, requireManager } from './middleware-auth.js';
+import { getSalesSumColumns } from './services/metrics-catalog.js';
 
 export async function registerSalesRoutes(app: FastifyInstance) {
   app.get('/sales', async (request) => {
@@ -143,5 +144,51 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     } catch (_) {}
 
     return row;
+  });
+
+  // Отменить ошибочно внесённую метрику за день (manager/admin).
+  // sales — одна строка на employee+store+day, метрики аддитивные, поэтому
+  // "удаление" — это обнуление конкретной колонки в этой строке, а не удаление
+  // всей строки (другие метрики за этот день могли быть внесены верно).
+  app.put('/sales/:id/zero', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const { metric } = (request.body || {}) as { metric?: string };
+    if (!metric) return reply.code(400).send({ error: 'metric required' });
+
+    const validCols = await getSalesSumColumns();
+    if (!validCols.includes(metric)) {
+      return reply.code(400).send({ error: 'unknown metric' });
+    }
+
+    const before = await query(
+      `SELECT ${metric} as val, employee_id, store_id, sale_date FROM sales WHERE id = $1`,
+      [id]
+    );
+    if (!before.rows[0]) return reply.code(404).send({ error: 'not found' });
+    const prevVal = Number(before.rows[0].val) || 0;
+
+    const res = await query(
+      `UPDATE sales SET ${metric} = 0, updated_at = now() WHERE id = $1 RETURNING *`,
+      [id]
+    );
+
+    if (prevVal !== 0) {
+      const user = request.user!;
+      await query(
+        `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source, created_by)
+         VALUES ($1,$2,$3,$4,$5,'correction',$6)`,
+        [
+          before.rows[0].employee_id,
+          before.rows[0].store_id,
+          before.rows[0].sale_date,
+          metric,
+          -prevVal,
+          user.telegram_id ? Number(user.telegram_id) : null
+        ]
+      ).catch(() => {});
+    }
+
+    return res.rows[0];
   });
 }

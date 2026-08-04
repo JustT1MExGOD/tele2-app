@@ -87,10 +87,33 @@ const GOOD_PHRASES = [
   'Показатели в порядке, план выполнен. Так держать.'
 ];
 
+const METRIC_LABELS: Record<string, string> = {
+  sim: 'SIM', mnp: 'MNP', pa: 'ПА', combo: 'Комбо',
+  settings: 'Настройки', accessories: 'Аксессуары', insurance: 'Страховки',
+  phones: 'Телефоны', wink: 'Wink', shpd: 'ШПД', focus: 'ФО',
+  credit_request: 'Кредит заявка', credit_issued: 'Кредит выдан',
+  plotter: 'Плоттер', hb: 'НВ', imp: 'Импорт', import: 'Импорт', esim: 'eSIM'
+};
+
+function metricLabel(key: string): string {
+  return METRIC_LABELS[key] || key;
+}
+
+/** Факт/план по всем показателям точки, у которых план > 0 (не только SIM/MNP/ПА/Комбо). */
+function planBreakdown(fact: Record<string, number>, dayPlan: Record<string, number>): string {
+  return Object.keys(dayPlan)
+    .filter((k) => num(dayPlan[k]) > 0)
+    .map((k) => `${metricLabel(k)} ${num(fact[k])}/${num(dayPlan[k])}`)
+    .join(', ');
+}
+
 /**
  * Комментарий к дню точки для итогового отчёта. Если факт >= 85% от плана —
  * без вызова модели, просто заготовленная фраза-похвала. Ниже порога —
  * короткая гипотеза от модели, почему просели, на основе факта/плана дня.
+ * Учитывает ВСЕ показатели точки с ненулевым планом (store_plans — 18 колонок,
+ * не только SIM/MNP/ПА/Комбо), иначе просадка по, например, страховкам или
+ * аксессуарам модель никогда не увидит.
  */
 export async function generateDipComment(opts: {
   storeId: string;
@@ -99,8 +122,9 @@ export async function generateDipComment(opts: {
   fact: Record<string, number>;
   dayPlan: Record<string, number>;
 }): Promise<{ text: string; isAi: boolean; actualPct: number }> {
-  const factUnits = num(opts.fact.sim) + num(opts.fact.mnp) + num(opts.fact.pa) + num(opts.fact.combo);
-  const planUnits = num(opts.dayPlan.sim) + num(opts.dayPlan.mnp) + num(opts.dayPlan.pa) + num(opts.dayPlan.combo);
+  const plannedKeys = Object.keys(opts.dayPlan).filter((k) => num(opts.dayPlan[k]) > 0);
+  const factUnits = plannedKeys.reduce((s, k) => s + num(opts.fact[k]), 0);
+  const planUnits = plannedKeys.reduce((s, k) => s + num(opts.dayPlan[k]), 0);
   const actualPct = planUnits > 0 ? Math.round((factUnits / planUnits) * 100) : 100;
 
   if (actualPct >= DIP_THRESHOLD_PCT) {
@@ -108,13 +132,13 @@ export async function generateDipComment(opts: {
   }
 
   const fallback = `План дня закрыт на ${actualPct}% — есть отставание от плана.`;
-  const prompt = `Ты — аналитик сети салонов связи Т2. По точке за день просел план продаж. Дай короткую гипотезу (1-2 предложения, без markdown, на русском), почему могло случиться отставание, и что стоит проверить завтра. Пиши по делу, без общих фраз вроде "нужно больше стараться".
+  const breakdown = planBreakdown(opts.fact, opts.dayPlan);
+  const prompt = `Ты — аналитик сети салонов связи Т2. По точке за день просел план продаж. Дай короткую гипотезу (1-2 предложения, без markdown, на русском), почему могло случиться отставание — обязательно опирайся на то, какие именно показатели просели сильнее остальных (не только SIM), и что стоит проверить завтра. Пиши по делу, без общих фраз вроде "нужно больше стараться".
 
 Точка: ${opts.storeName}
 Дата: ${opts.date}
 План дня закрыт на ${actualPct}%
-Факт: SIM ${opts.fact.sim || 0}, MNP ${opts.fact.mnp || 0}, ПА ${opts.fact.pa || 0}, комбо ${opts.fact.combo || 0}
-План: SIM ${opts.dayPlan.sim || 0}, MNP ${opts.dayPlan.mnp || 0}, ПА ${opts.dayPlan.pa || 0}, комбо ${opts.dayPlan.combo || 0}`;
+Факт/план по каждому показателю с ненулевым планом: ${breakdown}`;
 
   const text = await callGroq(prompt, 250);
   if (!text) return { text: fallback, isAi: false, actualPct };

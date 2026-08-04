@@ -68,6 +68,25 @@
         const sale = (sales || []).find(s => String(s.employee_id) === String(id));
         const sch = (schedules || []).find(s => String(s.employee_id) === String(id));
 
+        const saleMetrics = [
+          ['sim', 'SIM'], ['mnp', 'MNP'], ['pa', 'ПА'], ['combo', 'Комбо'],
+          ['phones', 'Телефоны'], ['accessories', 'Аксессуары'], ['wink', 'Wink'], ['shpd', 'ШПД']
+        ];
+        // manager/admin может отменить ошибочно внесённую метрику за сегодня —
+        // sales аддитивные, отдельной "продажи" для удаления нет, поэтому это
+        // обнуление конкретного показателя, не всей записи за день.
+        const nonZero = sale ? saleMetrics.filter(([key]) => Number(sale[key]) > 0) : [];
+        const correctionBlock = (canManage() && sale && nonZero.length)
+          ? `<div class="block-label">Исправить ошибочный ввод</div>
+             <div class="progress-block" style="display:flex;flex-direction:column;gap:8px">
+               ${nonZero.map(([key, label]) => `
+                 <div style="display:flex;justify-content:space-between;align-items:center">
+                   <span style="font-size:14px">${label}: <b>${Number(sale[key])}</b></span>
+                   <button class="mchip" style="color:var(--danger)" onclick="zeroSaleMetric(${sale.id},'${key}','${label}',${id})">Удалить</button>
+                 </div>`).join('')}
+             </div>`
+          : '';
+
         document.getElementById('modalTitle').textContent = emp?.full_name || 'Сотрудник';
         document.getElementById('modalBody').innerHTML = `
           <div class="field">
@@ -78,15 +97,9 @@
           </div>
           <div class="block-label">Продажи сегодня</div>
           <div class="progress-block">
-            ${progressHTML('SIM', sale?.sim, 0)}
-            ${progressHTML('MNP', sale?.mnp, 0)}
-            ${progressHTML('ПА', sale?.pa, 0)}
-            ${progressHTML('Комбо', sale?.combo, 0)}
-            ${progressHTML('Телефоны', sale?.phones, 0)}
-            ${progressHTML('Аксессуары', sale?.accessories, 0)}
-            ${progressHTML('Wink', sale?.wink, 0)}
-            ${progressHTML('ШПД', sale?.shpd, 0)}
+            ${saleMetrics.map(([key, label]) => progressHTML(label, sale?.[key], 0)).join('')}
           </div>
+          ${correctionBlock}
           <button class="btn-main" onclick="openAddSale(${id})">Добавить продажу</button>
         `;
       } catch (e) {
@@ -593,6 +606,23 @@
       if (!res.ok) { toast('Ошибка', 'err'); return; }
       toast('Удалён', 'ok');
       loadTeam();
+    }
+
+    async function zeroSaleMetric(saleId, metric, label, employeeId) {
+      if (!canManage()) return;
+      if (!confirm(`Убрать «${label}» из продаж сегодня?`)) return;
+      try {
+        const res = await fetch(API + '/sales/' + saleId + '/zero', {
+          method: 'PUT',
+          headers: authHeaders(true),
+          body: JSON.stringify({ metric })
+        });
+        if (!res.ok) { toast('Ошибка', 'err'); return; }
+        toast('Исправлено', 'ok');
+        openEmployeeCard(employeeId);
+      } catch (e) {
+        toast('Ошибка', 'err');
+      }
     }
 
     function mondayOf(d) {
