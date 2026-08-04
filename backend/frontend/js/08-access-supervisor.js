@@ -150,7 +150,7 @@
       if (!user?.id) {
         // вне Telegram — для отладки пускаем, но в проде лучше gate
         hideAccessGate();
-        applyBranding();
+        if (typeof applyBranding === 'function') applyBranding();
         loadHome();
         return;
       }

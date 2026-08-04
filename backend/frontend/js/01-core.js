@@ -11,6 +11,15 @@
     const APP_VERSION = '15.0';
     const API = window.location.origin;
 
+    // Нужна уже ниже (scheduleMonth/planMonth) — держим здесь, а не в
+    // 02-nav-utils.js, иначе первый же <script> падает ReferenceError'ом.
+    function todayMoscow() {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Moscow',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).format(new Date());
+    }
+
     function haptic(type = 'light') {
       try {
         if (!tg?.HapticFeedback) return;

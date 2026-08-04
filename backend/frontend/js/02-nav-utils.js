@@ -1,13 +1,8 @@
 /* 02-nav-utils.js — часть T2 Sales Mini App (см. index.html).
    Классический скрипт, общая глобальная область со всеми /js/*.js — порядок подключения важен. */
     // ===== Utils =====
-    function todayMoscow() {
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Europe/Moscow',
-        year: 'numeric', month: '2-digit', day: '2-digit'
-      }).format(new Date());
-    }
-
+    // todayMoscow() живёт в 01-core.js — она нужна там уже на верхнем уровне
+    // (scheduleMonth/planMonth), а порядок подключения скриптов этого не ждёт.
     function formatDateRu(iso) {
       try {
         const [y, m, d] = iso.split('-');
