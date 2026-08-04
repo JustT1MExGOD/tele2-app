@@ -77,6 +77,9 @@ export async function evaluateShiftClose(opts: {
   ideal: boolean;
   planPct: number;
 }) {
+  const before = await query(`SELECT xp FROM employees WHERE id = $1`, [opts.employeeId]);
+  const levelBefore = levelFromXp(num(before.rows[0]?.xp)).level;
+
   let xp = 20;
   if (opts.planPct >= 100) xp += 50;
   if (opts.ideal) xp += 80;
@@ -103,7 +106,13 @@ export async function evaluateShiftClose(opts: {
   if (streak === 7) await grantBadge(opts.employeeId, 'streak_7', '7 дней подряд');
   if (streak === 30) await grantBadge(opts.employeeId, 'streak_30', '30 дней огня');
 
-  return levelFromXp(num(st.rows[0]?.xp));
+  const info = levelFromXp(num(st.rows[0]?.xp));
+  return {
+    ...info,
+    xp_gained: xp,
+    leveled_up: info.level > levelBefore,
+    streak_days: streak
+  };
 }
 
 export async function getGamificationProfile(employeeId: number) {

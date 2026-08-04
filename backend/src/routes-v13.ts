@@ -117,14 +117,21 @@ export async function registerV13Routes(app: FastifyInstance) {
     );
     const div = Math.max(1, num(rem.rows[0]?.c));
     const mp = planRow.rows[0] || {};
-    const dayPlanUnits =
-      Math.ceil(num(mp.sim) / div) +
-      Math.ceil(num(mp.mnp) / div) +
-      Math.ceil(num(mp.pa) / div) +
-      Math.ceil(num(mp.combo) / div);
+    const dayPlan = {
+      sim: Math.ceil(num(mp.sim) / div),
+      mnp: Math.ceil(num(mp.mnp) / div),
+      pa: Math.ceil(num(mp.pa) / div),
+      combo: Math.ceil(num(mp.combo) / div)
+    };
+    const dayPlanUnits = dayPlan.sim + dayPlan.mnp + dayPlan.pa + dayPlan.combo;
     const factUnits = num(fact.sim) + num(fact.mnp) + num(fact.pa) + num(fact.combo);
     const planPct = dayPlanUnits > 0 ? Math.round((factUnits / dayPlanUnits) * 100) : 0;
     const ideal = planPct >= 100 && num(fact.mnp) > 0;
+
+    // почему смена не идеальная — для разбора, а не голой галочки
+    const idealMissing: string[] = [];
+    if (planPct < 100) idealMissing.push(`план дня не закрыт (${planPct}%)`);
+    if (num(fact.mnp) === 0) idealMissing.push('нет MNP');
 
     const res = await query(
       `UPDATE shift_sessions SET
@@ -163,7 +170,10 @@ export async function registerV13Routes(app: FastifyInstance) {
       session: res.rows[0],
       plan_pct: planPct,
       ideal_shift: ideal,
+      ideal_missing: idealMissing,
       score,
+      fact: { sim: num(fact.sim), mnp: num(fact.mnp), pa: num(fact.pa), combo: num(fact.combo) },
+      day_plan: dayPlan,
       gamification: gam
     };
   });

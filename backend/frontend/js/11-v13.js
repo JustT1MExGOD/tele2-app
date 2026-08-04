@@ -104,19 +104,56 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || data.error || 'fail');
-        closeModal();
-        let msg = 'Смена закрыта';
-        if (data.ideal_shift) msg += ' · ⭐ идеальная';
-        if (data.plan_pct != null) msg += ' · ' + data.plan_pct + '% плана';
-        toast(msg, 'ok');
         try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
         if (data.ideal_shift || (data.plan_pct >= 100)) {
           try { confettiBurst && confettiBurst(); } catch (_) {}
         }
+        showShiftResult(data);
         if (typeof loadMyPlan === 'function') loadMyPlan();
       } catch (e) {
         toast(e.message || 'Не удалось закрыть смену', 'err');
       }
+    }
+
+    // ===== SHIFT RESULT (14.6) =====
+    // Разбор смены вместо голой галочки "идеальная / не идеальная":
+    // факт/план по метрикам, чего не хватило, XP и уровень за эту смену.
+    function showShiftResult(data) {
+      const fact = data.fact || {};
+      const plan = data.day_plan || {};
+      const gam = data.gamification || {};
+      const missing = data.ideal_missing || [];
+
+      document.getElementById('modalTitle').textContent = data.ideal_shift ? '⭐ Идеальная смена' : 'Смена закрыта';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="text-align:center;padding:4px 0 16px">
+          <div style="font-size:36px;font-weight:800;line-height:1">${data.score ?? 0}</div>
+          <div style="font-size:12px;color:var(--hint);margin-top:2px">итоговый score</div>
+        </div>
+        ${['sim', 'mnp', 'pa', 'combo'].map(m => {
+          const labels = { sim: 'SIM', mnp: 'MNP', pa: 'ПА', combo: 'Комбо' };
+          return progressHTML(labels[m], fact[m], plan[m]);
+        }).join('')}
+        ${!data.ideal_shift && missing.length ? `
+          <div class="empty" style="text-align:left;padding:10px 0 0;font-size:12px">
+            До идеальной смены: ${esc(missing.join(', '))}
+          </div>` : ''}
+        <div class="progress-block" style="margin-top:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+            <div>
+              <div style="font-weight:700">${esc(gam.title || '')} · ур. ${gam.level || 1}</div>
+              <div style="font-size:12px;color:var(--hint)">${gam.xp || 0} XP${gam.next_level_xp != null ? ' / ' + gam.next_level_xp : ''}${gam.leveled_up ? ' · 🎉 новый уровень!' : ''}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-weight:700;color:var(--success)">+${gam.xp_gained || 0} XP</div>
+              ${gam.streak_days ? `<div style="font-size:12px;color:var(--hint)">🔥 ${gam.streak_days} дн.</div>` : ''}
+            </div>
+          </div>
+        </div>
+        <button class="btn-main" style="margin-top:14px" onclick="closeModal()">Понятно</button>
+      `;
+      if (typeof openModal === 'function') openModal();
+      else document.getElementById('overlay')?.classList.add('show');
     }
 
     async function loadShiftAndInsight(empId) {
