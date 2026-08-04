@@ -136,13 +136,20 @@ tele2-app/
     ├── tsconfig.json
     ├── railway.json
     ├── src/
-    │   ├── index.ts
+    │   ├── index.ts                    (bootstrap: Fastify, cors, static, регистрация модулей, start)
     │   ├── middleware-auth.ts
     │   ├── services/telegram-auth.ts   (проверка initData HMAC)
+    │   ├── routes-core.ts              (/stores, /plans)
+    │   ├── routes-employees.ts         (CRUD сотрудников/точек)
+    │   ├── routes-sales.ts             (/sales)
+    │   ├── routes-schedules.ts         (/schedules)
+    │   ├── routes-stats.ts             (/stats, /dashboard, прогресс)
+    │   ├── routes-cash.ts              (/cash)
+    │   ├── routes-promos.ts            (промокоды RTK)
+    │   ├── routes-reports.ts           (SVG-отчёты по точке)
     │   ├── routes-v3.ts
     │   ├── routes-plans-v5.ts
     │   ├── routes-v8.ts
-    │   ├── routes-employees.ts         (CRUD сотрудников/точек)
     │   ├── routes-support.ts
     │   ├── routes-v13.ts
     │   ├── routes-v14.ts
@@ -154,7 +161,9 @@ tele2-app/
     │   ├── db/
     │   └── utils/date.ts
     └── frontend/
-        ├── index.html
+        ├── index.html   (разметка + подключение styles.css и js/*.js по порядку)
+        ├── styles.css
+        ├── js/          (01-core → 13-v14, классические <script>, общая глобальная область)
         └── offline-queue.js
 ```
 
@@ -395,6 +404,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **13.4** | tutorial employee + manager |
 | **14.0–14.1** | Кабинет супервайзера, PNG-отчёты, кастомные метрики |
 | **14.2** | initData HMAC-проверка, закрыты открытые роуты, убрана SQL-инъекция в offline sync, XSS-фиксы во фронтенде, отчёты/дашборд считают метрики динамически (кастомные больше не пропадают), убран мёртвый код (routes-v4/v6/v7/promos → routes-employees.ts) |
+| **14.3** | Рефакторинг: index.ts (963 строки) разбит на routes-core/sales/schedules/stats/cash/promos/reports.ts; index.html (6091 строка) разбит на styles.css + 13 файлов в frontend/js/. Заодно найден и исправлен баг: `replyTicket` была объявлена дважды (кнопка «Ответить» в разделе «Поддержка» не работала) |
 
 ---
 

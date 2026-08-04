@@ -8,9 +8,22 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireManager } from './middleware-auth.js';
+import { requireActive, requireManager } from './middleware-auth.js';
 
 export async function registerEmployeesRoutes(app: FastifyInstance) {
+  app.get('/employees', async (request, reply) => {
+    if (!requireActive(request, reply)) return;
+    // telegram_id отдаём только manager/admin — рядовым сотрудникам он не нужен
+    const canSeeTelegramId = request.user!.role === 'manager' || request.user!.role === 'admin';
+    const res = await query(
+      `SELECT id, full_name, short_name, ${canSeeTelegramId ? 'telegram_id,' : ''} is_active, role
+       FROM employees
+       WHERE is_active = true
+       ORDER BY id`
+    );
+    return res.rows;
+  });
+
   // ===== EMPLOYEES CRUD =====
   app.post('/employees', async (request, reply) => {
     if (!requireManager(request, reply)) return;
