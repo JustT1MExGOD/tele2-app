@@ -31,7 +31,7 @@
         const cells = data.cells || {};
 
         if (!dates.length) {
-          box.innerHTML = '<div class="empty">Нет данных кассы — внеси первую строку</div>';
+          box.innerHTML = '<div class="empty">🍉 Пока нет ни одной записи кассы — внеси первую строку ниже</div>';
           return;
         }
 
@@ -53,13 +53,13 @@
           }).join('');
           const label = String(d).slice(8,10) + '.' + String(d).slice(5,7) + '.' + String(d).slice(2,4);
           return `<div class="cash-day">
-            <div class="cash-day-h">${label}
-              <span style="float:right;font-weight:500;color:var(--hint);font-size:11px">Факт · 1С · Δ (−2000)</span>
-            </div>${rows}</div>`;
+            <div class="cash-day-h"><span>${label}</span></div>
+            <div class="cash-cols"><div>Точка</div><div>Факт</div><div>1С</div><div>Δ (−2000)</div></div>
+            ${rows}</div>`;
         }).join('');
       } catch (e) {
         console.error(e);
-        if (box) box.innerHTML = '<div class="empty">Касса недоступна</div>';
+        if (box) box.innerHTML = '<div class="empty">🍉 Касса сейчас недоступна, зайди чуть позже</div>';
       }
     }
 

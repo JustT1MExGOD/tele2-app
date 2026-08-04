@@ -1270,8 +1270,9 @@
     .mt-name { font-weight: 700; font-size: 15px; }
     .mt-meta { font-size: 11px; color: var(--hint); }
     .mt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .mt-grid-4 { grid-template-columns: repeat(4, 1fr); }
     .mt-cell {
-      background: rgba(255,255,255,0.04); border-radius: 12px;
+      background: var(--surface-2); border-radius: 12px;
       padding: 10px 8px; text-align: center;
     }
     .mt-cell .v { font-weight: 800; font-size: 15px; letter-spacing: -0.02em; }
@@ -1279,19 +1280,48 @@
     .mt-cell.good .v { color: var(--success); }
     .mt-cell.warn .v { color: var(--warning); }
     .mt-cell.bad .v { color: var(--danger); }
+    /* Heatmap по часу продажи — раньше сплошной инлайн-style, теперь класс +
+       только интенсивность цвета остаётся динамической (JS ставит background-color inline) */
+    .hm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
+    .hm-cell {
+      border-radius: 12px; padding: 10px 6px; text-align: center;
+      transition: transform var(--dur-fast) var(--ease);
+    }
+    .hm-cell:active { transform: scale(.96); }
+    .hm-cell .h { font-size: 11px; color: var(--hint); }
+    .hm-cell .v { font-weight: 800; font-size: 16px; color: var(--text); }
+    .hm-cell.best { background: var(--success-soft) !important; outline: 2px solid var(--success); }
+    /* Команда: кружок-инициал вместо статичной иконки 👤 — цвет сигналит,
+       есть ли у сотрудника продажи сегодня (как cc-health, но по человеку) */
+    .team-avatar {
+      width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 16px;
+      background: var(--surface-3); color: var(--hint);
+    }
+    .team-avatar.active { background: var(--primary-soft); color: var(--primary); }
     .cash-day {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 16px; margin: 0 12px 12px; overflow: hidden;
     }
     .cash-day-h {
+      display: flex; justify-content: space-between; align-items: baseline;
       padding: 12px 14px; font-weight: 700; font-size: 13px;
-      border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border); background: var(--surface-2);
+    }
+    .cash-cols {
+      display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.9fr; gap: 4px;
+      padding: 6px 12px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em; color: var(--hint);
+      border-bottom: 1px solid var(--border);
     }
     .cash-row {
       display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.9fr; gap: 4px;
       padding: 10px 12px; font-size: 12px; align-items: center;
       border-bottom: 1px solid var(--border);
+      transition: transform var(--dur-fast) var(--ease);
     }
+    .cash-row[onclick]:active { transform: scale(.98); }
     .cash-row:last-child { border-bottom: none; }
     .cash-row .sn { font-weight: 600; font-size: 12px; }
     .cash-row .delta-pos { color: var(--success); font-weight: 700; }
@@ -1671,7 +1701,7 @@
   color: #7dd3fc; font-weight: 700; margin-bottom: 6px;
 }
 .sv-title { font-size: 22px; font-weight: 800; letter-spacing: -.3px; }
-.sv-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.sv-sub { font-size: 13px; color: var(--hint); margin-top: 4px; }
 .sv-health-row {
   display: flex; align-items: center; gap: 16px; margin-top: 16px;
 }
@@ -1694,7 +1724,7 @@
   border: 1px solid rgba(255,255,255,.05);
 }
 .sv-metric .n { font-size: 16px; font-weight: 800; }
-.sv-metric .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.sv-metric .l { font-size: 10px; color: var(--hint); text-transform: uppercase; letter-spacing: .4px; }
 .sv-pace {
   margin-top: 12px; font-size: 12px; color: #a1a1aa;
   display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
@@ -1703,7 +1733,7 @@
 .sv-pace b.behind { color: #FF453A; }
 
 .sv-section { margin: 8px 16px 4px; font-size: 13px; font-weight: 700; letter-spacing: .3px; color: #e5e7eb; }
-.sv-section span { color: var(--muted); font-weight: 500; }
+.sv-section span { color: var(--hint); font-weight: 500; }
 
 .sv-drop {
   margin: 8px 16px; padding: 12px 14px; border-radius: 16px;
@@ -1717,7 +1747,7 @@
 }
 .sv-drop .ico { font-size: 18px; line-height: 1; }
 .sv-drop .t { font-weight: 700; font-size: 13px; }
-.sv-drop .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.sv-drop .s { font-size: 12px; color: var(--hint); margin-top: 2px; }
 
 .sv-chart {
   margin: 8px 16px 12px; padding: 14px; border-radius: 20px;
@@ -1725,7 +1755,7 @@
 }
 .sv-chart svg { width: 100%; height: 120px; display: block; }
 .sv-chart-legend {
-  display: flex; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 8px;
+  display: flex; gap: 12px; font-size: 11px; color: var(--hint); margin-top: 8px;
 }
 .sv-chart-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
 
@@ -1736,7 +1766,7 @@
 }
 .sv-store-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .sv-store-name { font-weight: 800; font-size: 15px; }
-.sv-store-code { font-size: 11px; color: var(--muted); }
+.sv-store-code { font-size: 11px; color: var(--hint); }
 .sv-badge {
   font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px;
 }
@@ -1763,7 +1793,7 @@
 .sv-bar-row { display: grid; grid-template-columns: 42px 1fr 48px; gap: 8px; align-items: center; font-size: 11px; }
 .sv-bar-track { height: 6px; border-radius: 99px; background: #1f2937; overflow: hidden; }
 .sv-bar-fill { height: 100%; border-radius: 99px; }
-.sv-staff { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.sv-staff { margin-top: 8px; font-size: 12px; color: var(--hint); }
 .sv-rank {
   margin: 6px 16px; padding: 12px 14px; border-radius: 16px;
   background: var(--surface); border: 1px solid var(--border);
@@ -1776,5 +1806,25 @@
 .sv-rank .pos.gold { background: #FFD96633; color: #FFD966; }
 .sv-rank .body { flex: 1; min-width: 0; }
 .sv-rank .name { font-weight: 700; font-size: 13px; }
-.sv-rank .sub { font-size: 11px; color: var(--muted); }
+.sv-rank .sub { font-size: 11px; color: var(--hint); }
+
+/* Единый тактильный tap-фидбек там, где его раньше не было */
+.row:active,
+.mchip:active {
+  transform: scale(0.98);
+}
+.row, .mchip {
+  transition: transform var(--dur-fast, 0.12s) var(--ease, ease);
+}
+
+/* prefers-reduced-motion — раньше нигде не учитывался, а есть бесконечные
+   анимации (пульс подсветки обучения, покачивание Арбузыча) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 

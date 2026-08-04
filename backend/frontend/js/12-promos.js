@@ -38,7 +38,7 @@
         `).join('');
       } catch (e) {
         console.error(e);
-        box.innerHTML = '<div class="empty">Нужен API /promos (накати SQL + routes)</div>';
+        box.innerHTML = '<div class="empty">🍉 Промокоды сейчас недоступны, зайди чуть позже</div>';
       }
     }
 

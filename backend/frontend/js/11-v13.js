@@ -336,7 +336,7 @@
         }).join('');
       } catch (e) {
         console.error(e);
-        if (box) box.innerHTML = '<div class="empty">Нужен API /network/live (V13)</div>';
+        if (box) box.innerHTML = '<div class="empty">🍉 Живая карта сети сейчас недоступна, зайди чуть позже</div>';
       }
     }
 

@@ -15,15 +15,17 @@
         const sales = await salesRes.json();
         const map = {};
         (Array.isArray(sales) ? sales : []).forEach(s => {
-          if (!map[s.employee_id]) map[s.employee_id] = { sim: 0, phones: 0, combo: 0 };
+          if (!map[s.employee_id]) map[s.employee_id] = { sim: 0, phones: 0, combo: 0, active: false };
           map[s.employee_id].sim += +s.sim || 0;
           map[s.employee_id].phones += +s.phones || 0;
           map[s.employee_id].combo += +s.combo || 0;
+          map[s.employee_id].active = true;
         });
         const list = Array.isArray(employees) ? employees : [];
         box.innerHTML = list.map(e => {
-          const st = map[e.id] || { sim: 0, phones: 0, combo: 0 };
+          const st = map[e.id] || { sim: 0, phones: 0, combo: 0, active: false };
           const roleBadge = e.role === 'manager' || e.role === 'admin' ? ' · ⭐' : '';
+          const initial = (e.full_name || '?').trim().charAt(0).toUpperCase();
           const adminBtns = canManage()
             ? `<div style="display:flex;gap:6px;padding:0 16px 10px">
                 <button class="mchip" style="flex:1" onclick="event.stopPropagation();setRole(${e.id},'manager')">Manager</button>
@@ -34,7 +36,7 @@
           return `
             <div>
               <button class="row" onclick="openEmployeeCard(${e.id})">
-                <div class="row-icon">👤</div>
+                <div class="team-avatar${st.active ? ' active' : ''}">${initial}</div>
                 <div class="row-body">
                   <div class="row-title">${esc(e.full_name)}${roleBadge}</div>
                   <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones} · ${e.role || 'employee'}</div>
@@ -43,9 +45,9 @@
               </button>
               ${adminBtns}
             </div>`;
-        }).join('') || '<div class="empty">Нет сотрудников</div>';
+        }).join('') || '<div class="empty">🍉 В команде пока никого нет</div>';
       } catch {
-        box.innerHTML = '<div class="empty">Ошибка</div>';
+        box.innerHTML = '<div class="empty">🍉 Не получилось загрузить команду, зайди чуть позже</div>';
       }
     }
 

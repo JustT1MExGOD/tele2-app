@@ -90,22 +90,20 @@
               ? ` · <b style="color:var(--primary)">лучший час ${best.hour}:00</b> (${best.value})`
               : ' · пока нет пиков');
         }
-        grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px">
+        grid.innerHTML = `<div class="hm-grid">
           ${cells.map(c => {
             const intensity = c.value / max;
             const isBest = best.value > 0 && c.hour === best.hour;
-            const bg = isBest
-              ? 'rgba(52,199,89,0.35)'
-              : `rgba(42,171,238,${0.12 + intensity * 0.75})`;
-            return `<div style="background:${bg};border-radius:12px;padding:10px 6px;text-align:center;${isBest ? 'outline:2px solid #34c759' : ''}">
-              <div style="font-size:11px;color:var(--hint)">${c.hour}:00</div>
-              <div style="font-weight:800;font-size:16px">${c.value}</div>
+            const bg = isBest ? '' : `background:rgba(42,171,238,${0.12 + intensity * 0.75})`;
+            return `<div class="hm-cell${isBest ? ' best' : ''}" style="${bg}">
+              <div class="h">${c.hour}:00</div>
+              <div class="v">${c.value}</div>
             </div>`;
           }).join('')}
         </div>`;
       } catch (e) {
         if (meta) meta.textContent = '';
-        grid.innerHTML = `<div class="empty">${e.message || e}<br><span style="font-size:11px">Нужен sales_events (sql/v8-0-roadmap.sql)</span></div>`;
+        grid.innerHTML = `<div class="empty">🍉 Пока нечего показать — как только по точке пойдут продажи, здесь появится картина по часам</div>`;
       }
     }
 
@@ -120,14 +118,15 @@
         const data = await res.json();
         box.innerHTML = (data.items||[]).map(it => {
           const p = it.predicted||{};
-          return `<div class="mt-card"><div class="mt-name">${it.date}</div><div class="mt-grid">
-            <div class="mt-cell"><div class="v">${p.sim}</div><div class="l">SIM</div></div>
-            <div class="mt-cell"><div class="v">${p.mnp}</div><div class="l">MNP</div></div>
-            <div class="mt-cell"><div class="v">${p.pa}</div><div class="l">ПА</div></div>
-            <div class="mt-cell"><div class="v">${p.combo}</div><div class="l">Комбо</div></div>
+          const n = (v) => Math.round(Number(v) || 0);
+          return `<div class="mt-card"><div class="mt-name">${it.date}</div><div class="mt-grid mt-grid-4">
+            <div class="mt-cell"><div class="v">${n(p.sim)}</div><div class="l">SIM</div></div>
+            <div class="mt-cell"><div class="v">${n(p.mnp)}</div><div class="l">MNP</div></div>
+            <div class="mt-cell"><div class="v">${n(p.pa)}</div><div class="l">ПА</div></div>
+            <div class="mt-cell"><div class="v">${n(p.combo)}</div><div class="l">Комбо</div></div>
           </div></div>`;
-        }).join('') || '<div class="empty">Нет данных</div>';
-      } catch { box.innerHTML = '<div class="empty">Прогноз недоступен</div>'; }
+        }).join('') || '<div class="empty">🍉 Пока нет истории для прогноза по этой точке</div>';
+      } catch { box.innerHTML = '<div class="empty">🍉 Прогноз сейчас недоступен, зайди чуть позже</div>'; }
     }
     // ===== WHAT-IF v2 (14.8) =====
     // Сценарий — накапливаемый список переносов вместо одного за раз, плюс
