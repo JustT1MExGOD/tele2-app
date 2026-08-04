@@ -5,11 +5,14 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
-import { requireManager } from './middleware-auth.js';
+import { requireManager, requireActive } from './middleware-auth.js';
 
 export async function registerCashRoutes(app: FastifyInstance) {
+  // Кассу смотрят и вносят все активные сотрудники на точке, не только
+  // manager — фронтенд (09-cash-metrics.js) всегда показывал форму всем,
+  // но эти два роута ошибочно остались за requireManager (403 для employee).
   app.get('/cash/table', async (request, reply) => {
-    if (!requireManager(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const q = request.query as { from?: string; to?: string };
     const from = (q.from || todayMoscow().slice(0, 8) + '01').slice(0, 10);
     const to = (q.to || todayMoscow()).slice(0, 10);
@@ -67,7 +70,7 @@ export async function registerCashRoutes(app: FastifyInstance) {
   });
 
   app.put('/cash', async (request, reply) => {
-    if (!requireManager(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const body = request.body as any;
     const store_id = body.store_id;
     const cash_date = String(body.cash_date || todayMoscow()).slice(0, 10);
