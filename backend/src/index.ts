@@ -1,7 +1,7 @@
+import './env.js'; // должен быть первым — см. комментарий в env.ts
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
-import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -28,8 +28,6 @@ import { registerV13Routes } from './routes-v13.js';
 import { registerV14Routes } from './routes-v14.js';
 import { registerMetricsRoutes } from './routes-metrics.js';
 import { registerSupervisorRoutes } from './routes-supervisor.js';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
