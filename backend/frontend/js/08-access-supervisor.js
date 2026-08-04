@@ -101,7 +101,7 @@
 
     async function loadGateDirectory() {
       try {
-        const res = await fetch(API + '/access/employees-directory');
+        const res = await fetch(API + '/access/employees-directory', { headers: authHeaders() });
         if (!res.ok) return;
         const list = await res.json();
         const sel = document.getElementById('gateClaim');

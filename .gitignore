@@ -1,7 +1,8 @@
-node_modules/ 
-dist/ 
-.env 
-*.log 
-".env" 
-"*.log" 
-"node_modules/" 
+node_modules/
+dist/
+.env
+*.log
+".env"
+"*.log"
+"node_modules/"
+sql/all_databases.sql 

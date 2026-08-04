@@ -75,8 +75,8 @@
       loadMyDay();
       try {
         const [statsRes, dashRes] = await Promise.all([
-          fetch(API + '/stats/daily?date=' + today).catch(() => null),
-          fetch(API + '/dashboard').catch(() => null)
+          fetch(API + '/stats/daily?date=' + today, { headers: authHeaders() }).catch(() => null),
+          fetch(API + '/dashboard', { headers: authHeaders() }).catch(() => null)
         ]);
         const stats = (statsRes && statsRes.ok) ? await statsRes.json() : [];
         const list = Array.isArray(stats) ? stats : [];

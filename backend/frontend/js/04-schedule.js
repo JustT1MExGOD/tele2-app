@@ -9,11 +9,11 @@
         // 1) факт + график + шаблон/день из /plans?date=
         // 2) параллельно computed из /plans/stores/daily (из месячных планов сотрудников)
         const [stRes, statsRes, schRes, plansRes, dailyRes] = await Promise.all([
-          fetch(API + '/stores'),
-          fetch(API + '/stats/daily?date=' + date),
-          fetch(API + '/schedules?date=' + date),
-          fetch(API + '/plans?date=' + date),
-          fetch(API + '/plans/stores/daily?date=' + date)
+          fetch(API + '/stores', { headers: authHeaders() }),
+          fetch(API + '/stats/daily?date=' + date, { headers: authHeaders() }),
+          fetch(API + '/schedules?date=' + date, { headers: authHeaders() }),
+          fetch(API + '/plans?date=' + date, { headers: authHeaders() }),
+          fetch(API + '/plans/stores/daily?date=' + date, { headers: authHeaders() })
         ]);
         stores = await stRes.json();
         const stats = await statsRes.json();
@@ -130,8 +130,8 @@
       try {
         const date = todayMoscow();
         const [schRes, stRes] = await Promise.all([
-          fetch(API + '/schedules?date=' + date),
-          fetch(API + '/stores')
+          fetch(API + '/schedules?date=' + date, { headers: authHeaders() }),
+          fetch(API + '/stores', { headers: authHeaders() })
         ]);
         const schedules = await schRes.json();
         stores = await stRes.json();
@@ -196,7 +196,7 @@
       const box = document.getElementById('monthBoard');
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/schedules/month?month=' + scheduleMonth);
+        const res = await fetch(API + '/schedules/month?month=' + scheduleMonth, { headers: authHeaders() });
         let data;
         if (res.ok) {
           data = await res.json();
@@ -207,12 +207,12 @@
         const items = data.items || [];
 
         if (!stores.length) {
-          const stRes = await fetch(API + '/stores');
+          const stRes = await fetch(API + '/stores', { headers: authHeaders() });
           stores = await stRes.json();
         }
 
         // Всегда полный список сотрудников, смены накладываем поверх
-        const empRes = await fetch(API + '/employees');
+        const empRes = await fetch(API + '/employees', { headers: authHeaders() });
         const emps = await empRes.json();
         const byEmp = {};
         (emps || []).forEach(e => {
@@ -271,7 +271,7 @@
     async function editDay(employeeId, dateStr, currentStoreId, currentHours) {
       if (!canManage()) return;
       if (!stores.length) {
-        const stRes = await fetch(API + '/stores');
+        const stRes = await fetch(API + '/stores', { headers: authHeaders() });
         stores = await stRes.json();
       }
       document.getElementById('modalTitle').textContent = 'Смена ' + dateStr;

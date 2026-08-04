@@ -5,9 +5,9 @@
       await loadMetricsCatalog();
       try {
         const [empRes, storeRes, schRes] = await Promise.all([
-          fetch(API + '/employees'),
-          fetch(API + '/stores'),
-          fetch(API + '/schedules?date=' + todayMoscow())
+          fetch(API + '/employees', { headers: authHeaders() }),
+          fetch(API + '/stores', { headers: authHeaders() }),
+          fetch(API + '/schedules?date=' + todayMoscow(), { headers: authHeaders() })
         ]);
         employees = await empRes.json();
         stores = await storeRes.json();

@@ -8,8 +8,8 @@
       if (tools) tools.style.display = canManage() ? 'block' : 'none';
       try {
         const [empRes, salesRes] = await Promise.all([
-          fetch(API + '/employees'),
-          fetch(API + '/sales?date=' + todayMoscow())
+          fetch(API + '/employees', { headers: authHeaders() }),
+          fetch(API + '/sales?date=' + todayMoscow(), { headers: authHeaders() })
         ]);
         employees = await empRes.json();
         const sales = await salesRes.json();
@@ -57,9 +57,9 @@
 
       try {
         const [empRes, salesRes, schRes] = await Promise.all([
-          fetch(API + '/employees'),
-          fetch(API + '/sales?date=' + todayMoscow()),
-          fetch(API + '/schedules?date=' + todayMoscow())
+          fetch(API + '/employees', { headers: authHeaders() }),
+          fetch(API + '/sales?date=' + todayMoscow(), { headers: authHeaders() }),
+          fetch(API + '/schedules?date=' + todayMoscow(), { headers: authHeaders() })
         ]);
         const emps = await empRes.json();
         const sales = await salesRes.json();
@@ -100,7 +100,7 @@
       box.innerHTML = '<div class="skeleton"></div>';
       try {
         const month = scheduleMonth || todayMoscow().slice(0, 7);
-        const res = await fetch(API + '/bfq?month=' + month);
+        const res = await fetch(API + '/bfq?month=' + month, { headers: authHeaders() });
         if (!res.ok) throw new Error('no bfq');
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.items || []);
@@ -130,7 +130,7 @@
       document.getElementById('overlay').classList.add('show');
       try {
         const month = todayMoscow().slice(0, 7);
-        const res = await fetch(API + '/bfq/' + id + '?month=' + month);
+        const res = await fetch(API + '/bfq/' + id + '?month=' + month, { headers: authHeaders() });
         const d = await res.json();
         const f = d.fact || {};
         const fc = d.forecast || {};
@@ -315,7 +315,7 @@
       const box = document.getElementById('storeDailyPlans');
       if (!box) return;
       try {
-        const res = await fetch(API + '/plans/stores/daily');
+        const res = await fetch(API + '/plans/stores/daily', { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const stores = data.stores || [];
@@ -409,7 +409,7 @@
         async function loadSupport() {
       const box = document.getElementById('faqList');
       try {
-        const res = await fetch(API + '/support/faq');
+        const res = await fetch(API + '/support/faq', { headers: authHeaders() });
         const list = res.ok ? await res.json() : [];
         if (!list.length) {
           box.innerHTML = '<div class="empty">FAQ пока пуст</div>';

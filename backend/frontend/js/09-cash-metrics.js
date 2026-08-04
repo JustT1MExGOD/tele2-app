@@ -14,7 +14,7 @@
       if (box) box.innerHTML = '<div class="skeleton"></div>';
       try {
         if (!stores.length) {
-          const stRes = await fetch(API + '/stores');
+          const stRes = await fetch(API + '/stores', { headers: authHeaders() });
           stores = await stRes.json();
         }
         const sel = document.getElementById('cashStore');
@@ -23,7 +23,7 @@
         if (dateInp && !dateInp.value) dateInp.value = todayMoscow();
 
         const from = todayMoscow().slice(0, 8) + '01';
-        const res = await fetch(API + '/cash/table?from=' + from + '&to=' + todayMoscow());
+        const res = await fetch(API + '/cash/table?from=' + from + '&to=' + todayMoscow(), { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const stList = data.stores || stores;

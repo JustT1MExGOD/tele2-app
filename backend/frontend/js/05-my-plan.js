@@ -74,7 +74,7 @@
         if (root) root.style.display = 'none';
         if (bindSec) bindSec.style.display = 'block';
         try {
-          const empRes = await fetch(API + '/employees');
+          const empRes = await fetch(API + '/employees', { headers: authHeaders() });
           employees = await empRes.json();
           const unbound = (employees || []).filter(e => !e.telegram_id || Number(e.telegram_id) === 0);
           const list = unbound.length ? unbound : (employees || []);
@@ -93,11 +93,11 @@
       // Параллельная загрузка
       const [dayRes, progRes, monthSchRes, salesRes, bfqRes, monthPlanRes] = await Promise.allSettled([
         fetch(API + '/me/day', { headers: authHeaders() }),
-        fetch(API + '/employee/progress/' + empId + '?date=' + today),
-        fetch(API + '/schedules/month?month=' + month),
-        fetch(API + '/sales?date=' + today),
-        fetch(API + '/bfq?month=' + month),
-        fetch(API + '/plans/employees/month?month=' + month)
+        fetch(API + '/employee/progress/' + empId + '?date=' + today, { headers: authHeaders() }),
+        fetch(API + '/schedules/month?month=' + month, { headers: authHeaders() }),
+        fetch(API + '/sales?date=' + today, { headers: authHeaders() }),
+        fetch(API + '/bfq?month=' + month, { headers: authHeaders() }),
+        fetch(API + '/plans/employees/month?month=' + month, { headers: authHeaders() })
       ]);
 
       async function jsonOk(settled) {
