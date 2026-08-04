@@ -10,6 +10,7 @@ import { startReportCron } from './cron/reports.js';
 import { todayMoscow } from './utils/date.js';
 import { authPlugin } from './middleware-auth.js';
 import { runSmartAlertsTick } from './services/alerts.js';
+import { announceReleaseIfNeeded } from './services/release-announce.js';
 
 import { registerCoreRoutes } from './routes-core.js';
 import { registerEmployeesRoutes } from './routes-employees.js';
@@ -110,6 +111,7 @@ try {
 
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
   startReportCron();
+  announceReleaseIfNeeded().catch((e) => console.error('release announce:', e?.message || e));
 
   // умные алерты каждые 30 мин (внутри — только 11–21 МСК)
   setInterval(() => {

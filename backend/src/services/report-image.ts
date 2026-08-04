@@ -280,6 +280,71 @@ export async function buildStoryReportPngs(
   return { svgs, plan, fact, tomorrow };
 }
 
+/** Карточка-анонс версии в чат — тот же resvg-пайплайн, что и у отчётов. */
+export async function buildReleaseCardSvg(
+  entry: { version: string; title: string; bullets: string[] },
+  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string } }
+) {
+  const brandName = opts?.brand?.name || opts?.name || 'T2 Sales';
+  const accent = opts?.brand?.color || opts?.color || '#2AABEE';
+
+  // SVG не переносит текст сам — режем длинные буллеты на строки вручную,
+  // иначе они вылезают за карточку (560px)
+  const MAX_CHARS_PER_LINE = 46;
+  function wrapText(text: string): string[] {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (next.length > MAX_CHARS_PER_LINE && cur) {
+        lines.push(cur);
+        cur = w;
+      } else {
+        cur = next;
+      }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  let y = 150;
+  const parts: string[] = [];
+  for (const b of entry.bullets) {
+    const lines = wrapText(b);
+    lines.forEach((line, i) => {
+      const x = i === 0 ? 40 : 58;
+      const text = i === 0 ? `•  ${esc(line)}` : esc(line);
+      parts.push(`<text x="${x}" y="${y}" fill="#F3F4F6" font-size="16" font-family="${FONT}">${text}</text>`);
+      y += 26;
+    });
+    y += 6;
+  }
+  const height = Math.max(360, y + 60);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="${height}" viewBox="0 0 560 ${height}">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0A0A0B"/><stop offset="100%" stop-color="#14141A"/>
+  </linearGradient></defs>
+  <rect width="560" height="${height}" rx="24" fill="url(#bg)"/>
+  <rect width="560" height="6" fill="${esc(accent)}"/>
+  <text x="40" y="48" fill="${esc(accent)}" font-size="13" font-family="${FONT}" font-weight="700">${esc(brandName).toUpperCase()} · ОБНОВЛЕНИЕ</text>
+  <text x="40" y="84" fill="#FFFFFF" font-size="26" font-family="${FONT}" font-weight="700">${esc(entry.title)}</text>
+  <text x="40" y="112" fill="#A1A1AA" font-size="14" font-family="${FONT}">версия ${esc(entry.version)}</text>
+  ${parts.join('\n')}
+  <text x="40" y="${height - 24}" fill="#6B7280" font-size="11" font-family="${FONT}">T2 Sales · Europe/Moscow</text>
+</svg>`;
+}
+
+export async function buildReleaseCardPng(
+  entry: { version: string; title: string; bullets: string[] },
+  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string } }
+) {
+  const svg = await buildReleaseCardSvg(entry, opts);
+  return { svg, png: await svgToPng(svg) };
+}
+
 export async function svgToPng(svg: string): Promise<Buffer> {
   const { Resvg } = await import('@resvg/resvg-js');
   const resvg = new Resvg(svg, {
