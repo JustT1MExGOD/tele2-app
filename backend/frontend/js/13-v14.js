@@ -255,6 +255,20 @@
         if (!res.ok) {
           throw new Error(data.message || data.error || ('HTTP ' + res.status));
         }
+        if (data.svgs) {
+          // story: 3 кадра — план → факт → фокус на завтра, как реально уйдёт в чат
+          const frames = [
+            ['План', data.svgs.plan],
+            ['Факт', data.svgs.fact],
+            ['Завтра', data.svgs.tomorrow]
+          ];
+          box.innerHTML = frames.map(([label, svg]) => `
+            <div style="margin-bottom:12px">
+              <div style="font-size:12px;color:var(--hint);margin-bottom:6px;padding-left:2px">${label}</div>
+              <div style="border-radius:16px;overflow:hidden;background:#0A0A0B">${svg}</div>
+            </div>`).join('');
+          return;
+        }
         if (!data.svg) throw new Error('Пустой svg в ответе');
         // SVG inline
         box.innerHTML = '<div style="border-radius:16px;overflow:hidden;background:#0A0A0B">' + data.svg + '</div>';

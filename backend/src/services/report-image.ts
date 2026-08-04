@@ -6,6 +6,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { query } from '../db/index.js';
 import { getMetricDefs, MICRO_KEYS, groupForMetric } from './metrics-catalog.js';
+import { getStoreHourWeights } from './insights.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -166,6 +167,117 @@ export async function buildDailyReportSvg(
   <text x="40" y="${y + 10}" fill="#9CA3AF" font-size="12" font-family="${FONT}">Смена: ${staffText}</text>
   <text x="40" y="${y + 32}" fill="#6B7280" font-size="11" font-family="${FONT}">T2 Sales · Europe/Moscow</text>
 </svg>`;
+}
+
+function addDays(iso: string, delta: number): string {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Кадр «план» (сегодня) или «фокус завтра» — та же карточка, без факта:
+ * список целей по метрикам + кто в графике + (для завтра) подсказка по
+ * пиковому часу точки из store_hour_profile.
+ */
+async function buildPlanFrameSvg(
+  storeId: string,
+  date: string,
+  opts: { title: string; brandName: string; accent: string; tip?: string }
+) {
+  const { st, p, staff, defs } = await loadFactPlanStaff(storeId, date);
+
+  const rows = defs
+    .map((d) => [d.label, num(p[d.id])] as [string, number])
+    .filter(([, plan]) => plan > 0);
+
+  let y = 120;
+  const parts: string[] = [`<text x="40" y="${y}" fill="${esc(opts.accent)}" font-size="14" font-family="${FONT}" font-weight="700">Цели на день</text>`];
+  y += 24;
+  for (const [label, plan] of rows) {
+    parts.push(`
+      <text x="40" y="${y}" fill="#F3F4F6" font-size="14" font-family="${FONT}">${esc(label)}</text>
+      <text x="480" y="${y}" fill="#FFFFFF" font-size="14" font-family="${FONT}" font-weight="700" text-anchor="end">${plan}</text>`);
+    y += 26;
+  }
+  y += 12;
+
+  const staffText = staff.map(esc).join(' · ') || '—';
+  let footY = y + 10;
+  parts.push(`<text x="40" y="${footY}" fill="#9CA3AF" font-size="12" font-family="${FONT}">В графике: ${staffText}</text>`);
+  footY += 22;
+  if (opts.tip) {
+    parts.push(`<text x="40" y="${footY}" fill="${esc(opts.accent)}" font-size="12" font-family="${FONT}">💡 ${esc(opts.tip)}</text>`);
+    footY += 22;
+  }
+
+  const height = Math.max(440, footY + 40);
+  const sub = `${esc(st.name)} · ${esc(st.code)} · ${esc(date)}`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="${height}" viewBox="0 0 560 ${height}">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0A0A0B"/><stop offset="100%" stop-color="#14141A"/>
+  </linearGradient></defs>
+  <rect width="560" height="${height}" rx="24" fill="url(#bg)"/>
+  <rect width="560" height="6" fill="${esc(opts.accent)}"/>
+  <text x="40" y="48" fill="${esc(opts.accent)}" font-size="13" font-family="${FONT}" font-weight="700">${esc(opts.brandName).toUpperCase()}</text>
+  <text x="40" y="78" fill="#FFFFFF" font-size="24" font-family="${FONT}" font-weight="700">${esc(opts.title)}</text>
+  <text x="40" y="102" fill="#A1A1AA" font-size="13" font-family="${FONT}">${sub}</text>
+  ${parts.join('\n')}
+  <text x="40" y="${height - 24}" fill="#6B7280" font-size="11" font-family="${FONT}">T2 Sales · Europe/Moscow</text>
+</svg>`;
+}
+
+async function peakHourTip(storeId: string, date: string): Promise<string | undefined> {
+  try {
+    const dow = new Date(date + 'T12:00:00').getDay();
+    const weights = await getStoreHourWeights(storeId, dow);
+    const peak = weights.slice().sort((a, b) => b.weight - a.weight)[0];
+    if (!peak) return undefined;
+    return `Обычно пик около ${peak.hour}:00 — держите там сильного продавца`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Story дня: 3 кадра — план → факт → фокус на завтра, тем же рендерером */
+export async function buildStoryReportSvgs(
+  storeId: string,
+  date: string,
+  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string } }
+) {
+  const brandName = opts?.brand?.name || opts?.name || 'T2 Sales';
+  const accent = opts?.brand?.color || opts?.color || '#2AABEE';
+  const tomorrow = addDays(date, 1);
+
+  const [plan, fact, tomorrowTip] = await Promise.all([
+    buildPlanFrameSvg(storeId, date, { title: 'План дня', brandName, accent }),
+    buildDailyReportSvg(storeId, date, { kind: 'final', name: brandName, color: accent }),
+    peakHourTip(storeId, tomorrow)
+  ]);
+  const tomorrowFrame = await buildPlanFrameSvg(storeId, tomorrow, {
+    title: 'Фокус на завтра',
+    brandName,
+    accent,
+    tip: tomorrowTip
+  });
+
+  return { plan, fact, tomorrow: tomorrowFrame };
+}
+
+export async function buildStoryReportPngs(
+  storeId: string,
+  date: string,
+  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string } }
+) {
+  const svgs = await buildStoryReportSvgs(storeId, date, opts);
+  const [plan, fact, tomorrow] = await Promise.all([
+    svgToPng(svgs.plan),
+    svgToPng(svgs.fact),
+    svgToPng(svgs.tomorrow)
+  ]);
+  return { svgs, plan, fact, tomorrow };
 }
 
 export async function svgToPng(svg: string): Promise<Buffer> {

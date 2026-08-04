@@ -8,7 +8,7 @@ import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
 import { requireActive, requireManager } from './middleware-auth.js';
 import { getSalesSumColumns, metricLabelMap } from './services/metrics-catalog.js';
-import { buildDailyReportSvg } from './services/report-image.js';
+import { buildDailyReportSvg, buildStoryReportSvgs } from './services/report-image.js';
 
 function escSvg(s: any) {
   return String(s ?? '')
@@ -172,6 +172,17 @@ export async function registerReportsRoutes(app: FastifyInstance) {
     const kind = ((request.query as any)?.kind === 'micro' ? 'micro' : 'final') as 'micro' | 'final';
     if (!storeId) return reply.code(400).send({ error: 'store_id_required' });
     try {
+      // 'final' в проде уходит в чат как story из 3 кадров (14.7.0) — превью
+      // должно показывать то же самое, а не одиночную старую картинку.
+      if (kind === 'final') {
+        try {
+          const svgs = await buildStoryReportSvgs(storeId, date);
+          return { ok: true, store_id: storeId, date, kind: 'story', content_type: 'image/svg+xml', svgs };
+        } catch {
+          const svg = await buildDayReportSvgInline(storeId, date);
+          return { ok: true, store_id: storeId, date, kind, content_type: 'image/svg+xml', svg };
+        }
+      }
       let svg: string;
       try {
         svg = await buildDailyReportSvg(storeId, date, { kind });

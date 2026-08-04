@@ -10,9 +10,9 @@
 import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
 import { getSalesSumColumns } from '../services/metrics-catalog.js';
-import { notifyChat, notifyChatPhoto, notifyUser } from '../bot/index.js';
+import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '../bot/index.js';
 import { shiftReminder, microReport, finalReport, microLines, finalLines } from '../bot/messages.js';
-import { buildDailyReportPng, buildDailyReportSvg } from '../services/report-image.js';
+import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../services/report-image.js';
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)
@@ -110,31 +110,26 @@ async function sendStoreReportImage(
   kind: 'micro' | 'final',
   hour?: number
 ) {
-  const hourLabel =
-    kind === 'micro' && hour != null ? `${String(hour).padStart(2, '0')}:00` : undefined;
-  const caption =
-    kind === 'micro'
-      ? `📊 ${st.name} · ${date}${hourLabel ? ' · ' + hourLabel : ''}`
-      : `🏁 ${st.name} · ${date}`;
+  if (kind === 'final') return sendStoreStoryReport(st, date);
+
+  const hourLabel = hour != null ? `${String(hour).padStart(2, '0')}:00` : undefined;
+  const caption = `📊 ${st.name} · ${date}${hourLabel ? ' · ' + hourLabel : ''}`;
 
   try {
-    const { png } = await buildDailyReportPng(st.store_id, date, {
-      kind,
-      hourLabel
-    });
+    const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'micro', hourLabel });
     const r = await notifyChatPhoto(png, {
       caption,
-      filename: `${kind}_${st.store_id}_${date}.png`
+      filename: `micro_${st.store_id}_${date}.png`
     });
     if (r.ok) return r;
     throw new Error(r.error || 'photo_failed');
   } catch (e: any) {
     console.warn('PNG send failed, try SVG document:', e?.message || e);
     try {
-      const svg = await buildDailyReportSvg(st.store_id, date, { kind, hourLabel });
+      const svg = await buildDailyReportSvg(st.store_id, date, { kind: 'micro', hourLabel });
       return await notifyChatPhoto(svg, {
         caption,
-        filename: `${kind}_${st.store_id}_${date}.svg`,
+        filename: `micro_${st.store_id}_${date}.svg`,
         asDocument: true
       });
     } catch (e2: any) {
@@ -147,24 +142,78 @@ async function sendStoreReportImage(
       );
       const fact = await query(await factSql(), [date, st.store_id]).catch(() => ({ rows: [{}] }));
       const f = fact.rows[0] || {};
-      const lines =
-        kind === 'micro' ? await microLines(f, st.plan) : await finalLines(f, st.plan);
-      const text =
-        kind === 'micro'
-          ? microReport({
-              storeName: st.name,
-              storeCode: st.code || st.store_id,
-              date: `${date}${hourLabel ? ' · ' + hourLabel : ''}`,
-              staff: staff.rows.map((x: any) => x.full_name),
-              lines
-            })
-          : finalReport({
-              storeName: st.name,
-              storeCode: st.code || st.store_id,
-              date,
-              staff: staff.rows.map((x: any) => x.full_name),
-              lines
-            });
+      const lines = await microLines(f, st.plan);
+      const text = microReport({
+        storeName: st.name,
+        storeCode: st.code || st.store_id,
+        date: `${date}${hourLabel ? ' · ' + hourLabel : ''}`,
+        staff: staff.rows.map((x: any) => x.full_name),
+        lines
+      });
+      await notifyChat(text);
+      return { ok: true, type: 'text_fallback' };
+    }
+  }
+}
+
+/** Итог дня — story-отчёт из 3 кадров (план → факт → фокус на завтра). */
+async function sendStoreStoryReport(
+  st: { store_id: string; name: string; code: string; plan: any },
+  date: string
+) {
+  try {
+    const { plan, fact, tomorrow } = await buildStoryReportPngs(st.store_id, date);
+    const r = await notifyChatMediaGroup([
+      { buffer: plan, filename: `plan_${st.store_id}_${date}.png`, caption: `📋 ${st.name} · план дня · ${date}` },
+      { buffer: fact, filename: `fact_${st.store_id}_${date}.png`, caption: `🏁 ${st.name} · факт дня` },
+      { buffer: tomorrow, filename: `tomorrow_${st.store_id}_${date}.png`, caption: `🔮 ${st.name} · фокус на завтра` }
+    ]);
+    if (r.ok) return r;
+    throw new Error(r.error || 'media_group_failed');
+  } catch (e: any) {
+    console.warn('Story report failed, fallback to single final image:', e?.message || e);
+    return sendSingleFinalImage(st, date);
+  }
+}
+
+/** Старое поведение kind='final' — фолбэк, если story (media group) не отправился. */
+async function sendSingleFinalImage(
+  st: { store_id: string; name: string; code: string; plan: any },
+  date: string
+) {
+  const caption = `🏁 ${st.name} · ${date}`;
+  try {
+    const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'final' });
+    const r = await notifyChatPhoto(png, { caption, filename: `final_${st.store_id}_${date}.png` });
+    if (r.ok) return r;
+    throw new Error(r.error || 'photo_failed');
+  } catch (e: any) {
+    console.warn('Final PNG send failed, try SVG document:', e?.message || e);
+    try {
+      const svg = await buildDailyReportSvg(st.store_id, date, { kind: 'final' });
+      return await notifyChatPhoto(svg, {
+        caption,
+        filename: `final_${st.store_id}_${date}.svg`,
+        asDocument: true
+      });
+    } catch (e2: any) {
+      console.warn('SVG also failed, text fallback:', e2?.message || e2);
+      const staff = await query(
+        `SELECT e.full_name FROM schedules sch
+         JOIN employees e ON e.id = sch.employee_id
+         WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
+        [date, st.store_id]
+      );
+      const fact = await query(await factSql(), [date, st.store_id]).catch(() => ({ rows: [{}] }));
+      const f = fact.rows[0] || {};
+      const lines = await finalLines(f, st.plan);
+      const text = finalReport({
+        storeName: st.name,
+        storeCode: st.code || st.store_id,
+        date,
+        staff: staff.rows.map((x: any) => x.full_name),
+        lines
+      });
       await notifyChat(text);
       return { ok: true, type: 'text_fallback' };
     }

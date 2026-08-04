@@ -74,6 +74,35 @@ export async function notifyChatPhoto(
   }
 }
 
+/** Несколько фото одним альбомом (Telegram media group) — для story-отчётов */
+export async function notifyChatMediaGroup(
+  items: { buffer: Buffer; filename: string; caption?: string }[],
+  opts: { chatId?: string } = {}
+) {
+  const id = opts.chatId || CHAT_ID;
+  if (!bot) {
+    console.error('notifyChatMediaGroup: no bot');
+    return { ok: false, error: 'no_bot' };
+  }
+  if (!id) {
+    console.error('notifyChatMediaGroup: no CHAT_ID');
+    return { ok: false, error: 'no_chat_id' };
+  }
+  if (!items.length) return { ok: false, error: 'no_items' };
+  try {
+    const media = items.map((it) => ({
+      type: 'photo' as const,
+      media: new InputFile(it.buffer, it.filename),
+      caption: it.caption?.slice(0, 1024)
+    }));
+    await bot.api.sendMediaGroup(id, media);
+    return { ok: true, type: 'media_group' };
+  } catch (e: any) {
+    console.error('notifyChatMediaGroup failed:', e?.message || e);
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 export async function notifyAdmin(text: string) {
   if (!ADMIN_ID) return notifyChat(text);
   return notifyChat(text, ADMIN_ID);
