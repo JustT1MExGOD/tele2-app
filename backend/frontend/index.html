@@ -2172,6 +2172,18 @@
       } catch (_) {}
     }
 
+    // Экранирование пользовательского текста перед вставкой в innerHTML.
+    // full_name/comment/message приходят от других пользователей (заявки
+    // на доступ, тикеты, продажи) и не должны интерпретироваться как HTML.
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function greetingByHour() {
       const h = Number(new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Europe/Moscow', hour: '2-digit', hour12: false
@@ -2220,7 +2232,13 @@
     }
 
     function authHeaders(json = false) {
-      const h = { 'X-Telegram-Id': String(tgUser()?.id || '') };
+      const h = {
+        'X-Telegram-Id': String(tgUser()?.id || ''),
+        // Сырой initData — бэкенд проверяет его подпись (HMAC), только так
+        // telegram_id можно доверять. Голый X-Telegram-Id легко подделать
+        // с любого сайта (используется лишь как dev-фоллбэк на сервере).
+        'X-Telegram-Init-Data': tg?.initData || ''
+      };
       if (json) h['Content-Type'] = 'application/json';
       return h;
     }
@@ -2519,7 +2537,7 @@
                 <button class="row" onclick="openEmployeeCard(${e.id || e.employee_id})">
                   <div class="row-icon">${medal}</div>
                   <div class="row-body">
-                    <div class="row-title">${e.full_name}</div>
+                    <div class="row-title">${esc(e.full_name)}</div>
                     <div class="row-sub">SIM ${e.sim || 0} · MNP ${e.mnp || 0} · ПА ${e.pa || 0}</div>
                   </div>
                   <div class="row-value">${total}</div>
@@ -2683,7 +2701,7 @@
               </div>
               <div class="store-body">
                 ${staff.length ? `<div class="chips">${staff.map(s =>
-                  `<span class="chip">${s.full_name}${s.shift_text ? ' · ' + s.shift_text : ''}</span>`
+                  `<span class="chip">${esc(s.full_name)}${s.shift_text ? ' · ' + esc(s.shift_text) : ''}</span>`
                 ).join('')}</div>` : '<div class="empty" style="padding:12px 0">Нет на смене</div>'}
 
                 <div class="block-label">Блок GI</div>
@@ -2754,8 +2772,8 @@
                 <button class="row" onclick="openEmployeeCard(${s.employee_id})">
                   <div class="row-icon">👤</div>
                   <div class="row-body">
-                    <div class="row-title">${s.full_name}</div>
-                    <div class="row-sub">${s.shift_text || ''} · ${s.hours || ''}ч</div>
+                    <div class="row-title">${esc(s.full_name)}</div>
+                    <div class="row-sub">${esc(s.shift_text || '')} · ${s.hours || ''}ч</div>
                   </div>
                   <div class="row-chevron">›</div>
                 </button>
@@ -2996,7 +3014,7 @@
           const unbound = (employees || []).filter(e => !e.telegram_id || Number(e.telegram_id) === 0);
           const list = unbound.length ? unbound : (employees || []);
           document.getElementById('bindEmployee').innerHTML =
-            list.map(e => `<option value="${e.id}">${e.full_name}</option>`).join('');
+            list.map(e => `<option value="${e.id}">${esc(e.full_name)}</option>`).join('');
         } catch (_) {}
         return;
       }
@@ -3370,7 +3388,7 @@
               <button class="row" onclick="openEmployeeCard(${e.id})">
                 <div class="row-icon">👤</div>
                 <div class="row-body">
-                  <div class="row-title">${e.full_name}${roleBadge}</div>
+                  <div class="row-title">${esc(e.full_name)}${roleBadge}</div>
                   <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones} · ${e.role || 'employee'}</div>
                 </div>
                 <div class="row-chevron">›</div>
@@ -3446,7 +3464,7 @@
           <button class="row" onclick="openBFQCard(${e.employee_id})">
             <div class="row-icon">${i + 1}</div>
             <div class="row-body">
-              <div class="row-title">${e.full_name || e.name}</div>
+              <div class="row-title">${esc(e.full_name || e.name)}</div>
               <div class="row-sub">Кач. ${e.quality ?? '—'} · Приб. ${e.profit ?? '—'} · VMR ${e.vmr ?? 0}</div>
             </div>
             <div class="row-value">${e.total ?? e.bfq ?? '—'}</div>
@@ -3534,8 +3552,8 @@
         box.innerHTML = items.map(s => `
           <div class="row">
             <div class="row-body">
-              <div class="row-title">${s.full_name}</div>
-              <div class="row-sub">${String(s.sale_date).slice(0, 10)} · ${s.store_name}
+              <div class="row-title">${esc(s.full_name)}</div>
+              <div class="row-sub">${String(s.sale_date).slice(0, 10)} · ${esc(s.store_name)}
                 · SIM ${s.sim || 0} · MNP ${s.mnp || 0} · ПА ${s.pa || 0}</div>
             </div>
           </div>
@@ -3597,7 +3615,7 @@
           return `<div class="mt-card">
             <div class="mt-card-head" ${nameClick} style="${nameClick ? 'cursor:pointer' : ''}">
               <div>
-                <div class="mt-name">${r.full_name || ''}</div>
+                <div class="mt-name">${esc(r.full_name || '')}</div>
                 <div class="mt-meta">${r.role || ''} · смен ${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</div>
               </div>
             </div>
@@ -3773,8 +3791,8 @@
               chat.innerHTML = tickets.slice(0, 8).map(tk => `
                 <div class="progress-block" style="margin-bottom:8px;padding:10px 12px">
                   <div style="font-size:12px;color:var(--hint)">#${tk.id} · ${tk.status || ''}</div>
-                  <div style="font-size:14px;margin:4px 0">${tk.message || ''}</div>
-                  ${tk.admin_reply ? `<div style="font-size:13px;color:var(--primary);margin-top:6px">↩ ${tk.admin_reply}</div>` : ''}
+                  <div style="font-size:14px;margin:4px 0">${esc(tk.message || '')}</div>
+                  ${tk.admin_reply ? `<div style="font-size:13px;color:var(--primary);margin-top:6px">↩ ${esc(tk.admin_reply)}</div>` : ''}
                 </div>
               `).join('');
             }
@@ -3792,8 +3810,8 @@
           if (!list.length) box2.innerHTML = '<div class="empty">Нет тикетов</div>';
           else box2.innerHTML = list.map(tk => `
             <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">
-              <div class="row-title">#${tk.id} ${tk.full_name || ''}</div>
-              <div class="row-sub">${tk.message || ''}</div>
+              <div class="row-title">#${tk.id} ${esc(tk.full_name || '')}</div>
+              <div class="row-sub">${esc(tk.message || '')}</div>
               <button class="btn-main" style="margin-top:4px" onclick="replyTicket(${tk.id})">Ответить</button>
             </div>
           `).join('');
@@ -3962,9 +3980,9 @@
         box.innerHTML = `<div class="section"><div class="section-title">Тикеты (${open.length})</div>` +
           (open.length ? open.map(t => `
             <div class="progress-block" style="margin:8px 12px">
-              <div class="row-title">#${t.id} · ${t.full_name || 'Гость'} · ${t.status}</div>
-              <div class="row-sub" style="margin:6px 0">${t.message}</div>
-              ${t.admin_reply ? `<div class="empty" style="text-align:left">Ответ: ${t.admin_reply}</div>` : `
+              <div class="row-title">#${t.id} · ${esc(t.full_name || 'Гость')} · ${t.status}</div>
+              <div class="row-sub" style="margin:6px 0">${esc(t.message)}</div>
+              ${t.admin_reply ? `<div class="empty" style="text-align:left">Ответ: ${esc(t.admin_reply)}</div>` : `
               <div class="field"><input id="treply_${t.id}" placeholder="Ответ сотруднику"></div>
               <button class="btn-main" onclick="replyTicket(${t.id})">Ответить в личку</button>`}
             </div>`).join('') : '<div class="empty">Нет открытых</div>') + '</div>';
@@ -4045,7 +4063,7 @@
             <label>Сотрудник</label>
             <select id="modalEmployee" onchange="onEmpChange()" ${isMgr ? '' : 'disabled'}>
               ${empList.map(e =>
-                `<option value="${e.id}" ${String(e.id) === String(defaultEmp) ? 'selected' : ''}>${e.full_name}</option>`
+                `<option value="${e.id}" ${String(e.id) === String(defaultEmp) ? 'selected' : ''}>${esc(e.full_name)}</option>`
               ).join('')}
             </select>
             ${isMgr ? '' : '<div style="font-size:12px;color:var(--hint);margin-top:4px">Можно вносить только свои продажи</div>'}
@@ -4507,7 +4525,7 @@
           const st = t.sla_status || '';
           const col = st === 'breached' ? '#ff3b30' : st === 'waiting' ? '#ff9f0a' : '#34c759';
           return `<div class="progress-block" style="margin:6px 12px;padding:10px;border-left:3px solid ${col}">
-            <div style="font-weight:600;font-size:13px">${t.full_name || t.category || 'Тикет #' + t.id}</div>
+            <div style="font-weight:600;font-size:13px">${esc(t.full_name || t.category || 'Тикет #' + t.id)}</div>
             <div style="font-size:11px;color:var(--hint)">${st} · due ${String(t.sla_due_at || '').slice(0, 16)}</div>
           </div>`;
         }).join('');
@@ -4531,8 +4549,8 @@
         }
         box.innerHTML = list.map(r => `
           <div class="progress-block" style="margin:8px 12px">
-            <div class="row-title">${r.full_name}</div>
-            <div class="row-sub">TG ${r.telegram_id}${r.message ? ' · ' + r.message : ''}</div>
+            <div class="row-title">${esc(r.full_name)}</div>
+            <div class="row-sub">TG ${r.telegram_id}${r.message ? ' · ' + esc(r.message) : ''}</div>
             <div style="display:flex;gap:8px;margin-top:12px">
               <button class="btn-main" style="flex:1" onclick="approveAccess(${r.id})">Подтвердить</button>
               <button class="btn-main" style="flex:1;background:#ff3b30" onclick="rejectAccess(${r.id})">Отклонить</button>
@@ -4714,7 +4732,7 @@
           <div class="sv-rank">
             <div class="pos ${i < 3 ? 'gold' : ''}">${e.rank || i + 1}</div>
             <div class="body">
-              <div class="name">${e.full_name}</div>
+              <div class="name">${esc(e.full_name)}</div>
               <div class="sub">SIM ${e.sim} · MNP ${e.mnp} · ПА ${e.pa} · score ${e.score}</div>
             </div>
           </div>`).join('') || '<div class="empty">Нет продаж за период</div>';

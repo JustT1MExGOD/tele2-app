@@ -6,7 +6,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли и отчёты — в одном касании.
 
-**Актуальная версия клиента:** `14.1`  
+**Актуальная версия клиента:** `15.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -138,13 +138,17 @@ tele2-app/
     ├── src/
     │   ├── index.ts
     │   ├── middleware-auth.ts
+    │   ├── services/telegram-auth.ts   (проверка initData HMAC)
     │   ├── routes-v3.ts
     │   ├── routes-plans-v5.ts
     │   ├── routes-v8.ts
+    │   ├── routes-employees.ts         (CRUD сотрудников/точек)
     │   ├── routes-support.ts
     │   ├── routes-v13.ts
-    │   ├── routes-promos.ts
-    │   ├── services/   (plans, bfq, nlp, insights, gamification, live-map, alerts, forecast)
+    │   ├── routes-v14.ts
+    │   ├── routes-metrics.ts
+    │   ├── routes-supervisor.ts
+    │   ├── services/   (plans, bfq, nlp, insights, gamification, live-map, alerts, forecast, metrics-catalog)
     │   ├── bot/        (index.ts, messages.ts)
     │   ├── cron/       (reports.ts)
     │   ├── db/
@@ -309,6 +313,7 @@ Header: `X-Telegram-Id`
 | `ADMIN_TELEGRAM_ID` | желательно | admin |
 | `REPORT_CHAT_ID` | желательно | чат отчётов |
 | `BOT_POLLING` | нет | `false` отключает getUpdates |
+| `ALLOW_INSECURE_AUTH` | нет | `true` включает dev-фоллбэк на голый `X-Telegram-Id` без проверки initData (**не включать в проде**) |
 
 ---
 
@@ -389,6 +394,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **13.3** | месяц+архив, промо, gate UI |
 | **13.4** | tutorial employee + manager |
 | **14.0–14.1** | Кабинет супервайзера, PNG-отчёты, кастомные метрики |
+| **14.2** | initData HMAC-проверка, закрыты открытые роуты, убрана SQL-инъекция в offline sync, XSS-фиксы во фронтенде, отчёты/дашборд считают метрики динамически (кастомные больше не пропадают), убран мёртвый код (routes-v4/v6/v7/promos → routes-employees.ts) |
 
 ---
 
@@ -415,10 +421,18 @@ Invoke-RestMethod "$base/me" -Headers $h
 
 ## 24. Безопасность
 
-- Роли на сервере, не только в UI  
-- Employee ≠ чужие продажи  
-- Admin id в env  
-- Для публичного API вне Telegram — проверять WebApp `initData` HMAC  
+- Роли на сервере, не только в UI
+- Employee ≠ чужие продажи
+- Admin id в env
+- **initData проверяется на сервере.** Mini App шлёт сырой `tg.WebApp.initData`
+  в заголовке `X-Telegram-Init-Data`; бэкенд пересчитывает HMAC по
+  `BOT_TOKEN` (`src/services/telegram-auth.ts`) и доверяет `telegram_id`
+  только если подпись сходится. Голый `X-Telegram-Id` без initData
+  принимается ТОЛЬКО если `BOT_TOKEN` не задан (локальная разработка)
+  либо явно включён `ALLOW_INSECURE_AUTH=true` — в проде так быть не должно.
+- CORS открыт (`origin: true`) намеренно — Mini App грузится внутри
+  Telegram WebView, откуда Origin не всегда предсказуем. Реальная защита —
+  проверка initData выше, а не CORS.
 
 ---
 

@@ -38,8 +38,6 @@ async function ensureColumn(table: string, col: string) {
 }
 
 export async function registerMetricsRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', authPlugin);
-
   app.get('/metrics', async (_request, reply) => {
     try {
       const res = await query(

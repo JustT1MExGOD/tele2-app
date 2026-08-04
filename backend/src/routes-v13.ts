@@ -29,8 +29,6 @@ function num(v: any) {
 
 export async function registerV13Routes(app: FastifyInstance) {
   // user на каждый запрос (на случай если v3/v8 не повесили hook)
-  app.addHook('preHandler', authPlugin);
-
   // ========== SHIFT SESSIONS ==========
   app.post('/shifts/open', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
@@ -273,7 +271,12 @@ export async function registerV13Routes(app: FastifyInstance) {
           const employee_id = Number(op.employee_id || request.user!.employee_id);
           const store_id = op.store_id;
           const sale_date = String(op.sale_date || todayMoscow()).slice(0, 10);
-          const fields = Object.keys(metrics).filter((k) => num(metrics[k]) !== 0);
+          // имена колонок идут прямо в SQL (не как параметры) — обязательна
+          // белая проверка формата, иначе это SQL-инъекция через ключи JSON
+          const SAFE_COLUMN = /^[a-z][a-z0-9_]{0,29}$/;
+          const fields = Object.keys(metrics).filter(
+            (k) => SAFE_COLUMN.test(k) && num(metrics[k]) !== 0
+          );
           if (store_id && fields.length) {
             const insertCols = ['employee_id', 'store_id', 'sale_date', ...fields];
             const vals: any[] = [employee_id, store_id, sale_date, ...fields.map((f) => num(metrics[f]))];

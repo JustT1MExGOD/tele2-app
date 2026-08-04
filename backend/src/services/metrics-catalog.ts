@@ -85,4 +85,51 @@ export function groupForMetric(id: string, label: string): 'gi' | 'top' | 'rt' |
 export function invalidateMetricsCache() {
   cache = null;
   cacheAt = 0;
+  colCache = null;
+  colCacheAt = 0;
+}
+
+/**
+ * Реальные числовые колонки таблицы sales — источник истины для сумм в
+ * отчётах/дашборде. В отличие от getMetricIds() (список из plan_metrics,
+ * которая не всегда синхронизирована с реальными столбцами — например,
+ * колонки могли быть добавлены вручную миграцией) это гарантирует, что
+ * ни одна метрика с продажами не пропадёт из отчётов молча.
+ */
+const NON_METRIC_COLUMNS = new Set([
+  'id', 'employee_id', 'store_id', 'sale_date', 'created_at', 'updated_at'
+]);
+
+let colCache: string[] | null = null;
+let colCacheAt = 0;
+
+export async function getSalesSumColumns(force = false): Promise<string[]> {
+  if (!force && colCache && Date.now() - colCacheAt < TTL) return colCache;
+  try {
+    const res = await query(
+      `SELECT column_name, data_type
+       FROM information_schema.columns
+       WHERE table_name = 'sales'
+         AND data_type IN ('numeric', 'integer', 'bigint', 'double precision', 'real', 'smallint')
+       ORDER BY ordinal_position`
+    );
+    const cols = res.rows
+      .map((r: any) => String(r.column_name))
+      .filter((c: string) => !NON_METRIC_COLUMNS.has(c));
+    if (cols.length) {
+      colCache = cols;
+      colCacheAt = Date.now();
+      return colCache;
+    }
+  } catch (_) {}
+  // fallback — старый жёсткий список, чтобы приложение не падало,
+  // если information_schema почему-то недоступна
+  colCache = FALLBACK.map((m) => m.id);
+  colCacheAt = Date.now();
+  return colCache;
+}
+
+/** SQL-фрагмент "COALESCE(SUM(col),0) as col, ..." по всем колонкам sales. */
+export function buildSumSelect(columns: string[]): string {
+  return columns.map((c) => `COALESCE(SUM(${c}),0) as ${c}`).join(', ');
 }

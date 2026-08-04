@@ -4,6 +4,7 @@
  */
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
+import { verifyTelegramInitData } from './services/telegram-auth.js';
 
 export type Role = 'employee' | 'manager' | 'admin' | 'supervisor' | 'guest';
 export type AccessStatus = 'pending' | 'active' | 'rejected' | 'blocked' | 'none';
@@ -66,16 +67,50 @@ export async function loadUser(telegramId: number): Promise<AuthUser> {
   };
 }
 
-export async function resolveUser(request: FastifyRequest): Promise<AuthUser | null> {
-  const telegramId =
-    (request.headers['x-telegram-id'] as string) ||
-    (request.headers['x-telegram-user-id'] as string) ||
+/**
+ * telegram_id доверяем ТОЛЬКО если он подтверждён подписью Telegram
+ * (initData). Голый заголовок X-Telegram-Id легко подделать, поэтому
+ * он используется лишь как dev-фоллбэк, когда BOT_TOKEN не настроен
+ * (локальная разработка) или явно включён ALLOW_INSECURE_AUTH=true.
+ */
+function resolveTelegramId(request: FastifyRequest): number | null {
+  const botToken = process.env.BOT_TOKEN || '';
+  const insecureDev = process.env.ALLOW_INSECURE_AUTH === 'true';
+  const initData =
+    (request.headers['x-telegram-init-data'] as string) ||
+    (request.headers['x-telegram-initdata'] as string) ||
     '';
+
+  if (initData && botToken) {
+    const verified = verifyTelegramInitData(initData, botToken);
+    if (verified.ok && verified.user?.id) {
+      return verified.user.id;
+    }
+    // initData присутствует, но не проходит проверку — не откатываемся
+    // на голый заголовок, иначе проверка теряет смысл.
+    return null;
+  }
+
+  if (!botToken || insecureDev) {
+    const raw =
+      (request.headers['x-telegram-id'] as string) ||
+      (request.headers['x-telegram-user-id'] as string) ||
+      '';
+    if (raw) return Number(raw);
+  }
+
+  return null;
+}
+
+export async function resolveUser(request: FastifyRequest): Promise<AuthUser | null> {
+  const telegramId = resolveTelegramId(request);
   if (!telegramId) return null;
-  return loadUser(Number(telegramId));
+  return loadUser(telegramId);
 }
 
 export async function authPlugin(request: FastifyRequest, _reply: FastifyReply) {
+  // Хук вешается в нескольких route-модулях; выполняем резолв один раз.
+  if (request.user !== undefined) return;
   request.user = await resolveUser(request);
 }
 

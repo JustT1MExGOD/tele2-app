@@ -9,23 +9,20 @@
  */
 import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
+import { getSalesSumColumns } from '../services/metrics-catalog.js';
 import { notifyChat, notifyChatPhoto, notifyUser } from '../bot/index.js';
 import { shiftReminder, microReport, finalReport, microLines, finalLines } from '../bot/messages.js';
 import { buildDailyReportPng, buildDailyReportSvg } from '../services/report-image.js';
 
-const FACT_SQL = `
-  SELECT
-    COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp, COALESCE(SUM(pa),0) pa,
-    COALESCE(SUM(combo),0) combo, COALESCE(SUM(phones),0) phones,
-    COALESCE(SUM(accessories),0) accessories, COALESCE(SUM(settings),0) settings,
-    COALESCE(SUM(insurance),0) insurance, COALESCE(SUM(wink),0) wink,
-    COALESCE(SUM(shpd),0) shpd, COALESCE(SUM(focus),0) focus,
-    COALESCE(SUM(credit_request),0) credit_request,
-    COALESCE(SUM(credit_issued),0) credit_issued,
-    COALESCE(SUM(plotter),0) plotter, COALESCE(SUM(hb),0) hb
-  FROM sales
-  WHERE sale_date::date = $1::date AND store_id = $2
-`;
+// Раньше это была строка с жёстким списком из 15 колонок — любая
+// кастомная метрика (заведённая через POST /metrics или руками в БД)
+// молча пропадала из микро/итоговых отчётов в чат. Теперь список
+// колонок берётся из реальной схемы таблицы sales.
+async function factSql(): Promise<string> {
+  const cols = await getSalesSumColumns();
+  const select = cols.map((c) => `COALESCE(SUM(${c}),0) ${c}`).join(', ');
+  return `SELECT ${select} FROM sales WHERE sale_date::date = $1::date AND store_id = $2`;
+}
 
 /** Расписание одной точки */
 type StoreSchedule = {
@@ -148,7 +145,7 @@ async function sendStoreReportImage(
          WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
         [date, st.store_id]
       );
-      const fact = await query(FACT_SQL, [date, st.store_id]).catch(() => ({ rows: [{}] }));
+      const fact = await query(await factSql(), [date, st.store_id]).catch(() => ({ rows: [{}] }));
       const f = fact.rows[0] || {};
       const lines =
         kind === 'micro' ? await microLines(f, st.plan) : await finalLines(f, st.plan);

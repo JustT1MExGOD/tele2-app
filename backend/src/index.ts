@@ -17,9 +17,12 @@ import { registerV13Routes } from './routes-v13.js';
 import { registerV14Routes } from './routes-v14.js';
 import { registerMetricsRoutes } from './routes-metrics.js';
 import { registerSupervisorRoutes } from './routes-supervisor.js';
+import { registerEmployeesRoutes } from './routes-employees.js';
 import { logSaleEvents } from './services/heatmap.js';
 import { buildDailyReportSvg } from './services/report-image.js';
 import { runSmartAlertsTick } from './services/alerts.js';
+import { authPlugin, requireAuth, requireActive, requireManager } from './middleware-auth.js';
+import { getSalesSumColumns, metricLabelMap } from './services/metrics-catalog.js';
 
 dotenv.config();
 
@@ -28,6 +31,10 @@ const __dirname = path.dirname(__filename);
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
+
+// Единая точка резолва пользователя (telegram_id проверяется по подписи
+// Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.
+app.addHook('preHandler', authPlugin);
 
 function findFrontendDir(): string | null {
   const candidates = [
@@ -93,9 +100,12 @@ app.get('/plans', async (request) => {
 });
 
 // ===== EMPLOYEES =====
-app.get('/employees', async () => {
+app.get('/employees', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
+  // telegram_id отдаём только manager/admin — рядовым сотрудникам он не нужен
+  const canSeeTelegramId = request.user!.role === 'manager' || request.user!.role === 'admin';
   const res = await query(
-    `SELECT id, full_name, short_name, telegram_id, is_active, role
+    `SELECT id, full_name, short_name, ${canSeeTelegramId ? 'telegram_id,' : ''} is_active, role
      FROM employees
      WHERE is_active = true
      ORDER BY id`
@@ -122,6 +132,8 @@ app.get('/sales', async (request) => {
 
 // Прибавление метрик (+ правка через delta отрицательный)
 app.post('/sales', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
+  const user = request.user!;
   const body = request.body as any;
   const employee_id = Number(body.employee_id);
   const store_id = body.store_id;
@@ -132,25 +144,14 @@ app.post('/sales', async (request, reply) => {
   }
 
   // employee может писать только за себя; manager/admin — за всех
-  const tg =
-    (request.headers['x-telegram-id'] as string) ||
-    (request.headers['x-telegram-user-id'] as string);
-  if (tg) {
-    const me = await query(
-      `SELECT id, role FROM employees WHERE telegram_id = $1::bigint LIMIT 1`,
-      [Number(tg)]
-    );
-    const u = me.rows[0];
-    if (u) {
-      const role = u.role || 'employee';
-      if (role !== 'manager' && role !== 'admin' && Number(u.id) !== employee_id) {
-        return reply.code(403).send({
-          error: 'forbidden',
-          message: 'Можно вносить продажи только за себя'
-        });
-      }
-    }
+  const isManagerRole = user.role === 'manager' || user.role === 'admin';
+  if (!isManagerRole && Number(user.employee_id) !== employee_id) {
+    return reply.code(403).send({
+      error: 'forbidden',
+      message: 'Можно вносить продажи только за себя'
+    });
   }
+  const tg = String(user.telegram_id || '');
 
   // Базовые + кастомные (import/imp/esim и любые ключи body a-z0-9_)
   const baseFields = [
@@ -251,7 +252,8 @@ app.post('/sales', async (request, reply) => {
 
 
 // ===== SCHEDULES =====
-app.get('/schedules', async (request) => {
+app.get('/schedules', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
   const { date } = request.query as { date?: string };
   const workDate = date || todayMoscow();
 
@@ -267,7 +269,8 @@ app.get('/schedules', async (request) => {
   return res.rows;
 });
 
-app.post('/schedules', async (request) => {
+app.post('/schedules', async (request, reply) => {
+  if (!requireManager(request, reply)) return;
   const body = request.body as any;
   const { employee_id, store_id, work_date, shift_text, hours } = body;
 
@@ -285,7 +288,8 @@ app.post('/schedules', async (request) => {
   return res.rows[0];
 });
 
-app.get('/schedules/month', async (request) => {
+app.get('/schedules/month', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
   const { month } = request.query as { month?: string };
   const m = month || currentMonthMoscow();
   const start = `${m}-01`;
@@ -309,28 +313,23 @@ app.get('/schedules/month', async (request) => {
 });
 
 // ===== STATS =====
-app.get('/stats/daily', async (request) => {
+app.get('/stats/daily', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
   const { date } = request.query as { date?: string };
   const d = date || todayMoscow();
+
+  // Динамический список метрик — иначе кастомные метрики (заведённые
+  // через POST /metrics или добавленные вручную колонки типа import/esim)
+  // молча пропадали бы из отчёта.
+  const cols = await getSalesSumColumns();
+  const sumSelect = cols.map((c) => `COALESCE(SUM(s.${c}),0) as ${c}`).join(', ');
 
   const res = await query(
     `SELECT
        st.id as store_id,
        st.name,
        st.code,
-       COALESCE(SUM(s.sim),0) as sim,
-       COALESCE(SUM(s.mnp),0) as mnp,
-       COALESCE(SUM(s.pa),0) as pa,
-       COALESCE(SUM(s.combo),0) as combo,
-       COALESCE(SUM(s.settings),0) as settings,
-       COALESCE(SUM(s.accessories),0) as accessories,
-       COALESCE(SUM(s.insurance),0) as insurance,
-       COALESCE(SUM(s.phones),0) as phones,
-       COALESCE(SUM(s.wink),0) as wink,
-       COALESCE(SUM(s.shpd),0) as shpd,
-       COALESCE(SUM(s.focus),0) as focus,
-       COALESCE(SUM(s.credit_request),0) as credit_request,
-       COALESCE(SUM(s.credit_issued),0) as credit_issued
+       ${sumSelect}
      FROM stores st
      LEFT JOIN sales s ON s.store_id = st.id AND s.sale_date = $1
      GROUP BY st.id, st.name, st.code, st.hours
@@ -340,7 +339,8 @@ app.get('/stats/daily', async (request) => {
   return res.rows;
 });
 
-app.get('/dashboard', async () => {
+app.get('/dashboard', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
   const today = todayMoscow();
   const res = await query(
     `SELECT e.id as employee_id, e.full_name,
@@ -368,7 +368,8 @@ app.get('/dashboard', async () => {
 });
 
 // ===== CASH =====
-app.get('/cash/table', async (request) => {
+app.get('/cash/table', async (request, reply) => {
+  if (!requireManager(request, reply)) return;
   const q = request.query as { from?: string; to?: string };
   const from = (q.from || todayMoscow().slice(0, 8) + '01').slice(0, 10);
   const to = (q.to || todayMoscow()).slice(0, 10);
@@ -426,6 +427,7 @@ app.get('/cash/table', async (request) => {
 });
 
 app.put('/cash', async (request, reply) => {
+  if (!requireManager(request, reply)) return;
   const body = request.body as any;
   const store_id = body.store_id;
   const cash_date = String(body.cash_date || todayMoscow()).slice(0, 10);
@@ -452,7 +454,8 @@ app.put('/cash', async (request, reply) => {
   return res.rows[0];
 });
 
-app.get('/cash', async (request) => {
+app.get('/cash', async (request, reply) => {
+  if (!requireManager(request, reply)) return;
   const q = request.query as { from?: string; to?: string; store_id?: string };
   const from = q.from || todayMoscow().slice(0, 8) + '01';
   const to = q.to || todayMoscow();
@@ -472,8 +475,13 @@ app.get('/cash', async (request) => {
 });
 
 // ===== EMPLOYEE PROGRESS =====
-app.get('/employee/progress/:id', async (request) => {
+app.get('/employee/progress/:id', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
   const { id } = request.params as { id: string };
+  const isManagerRole = request.user!.role === 'manager' || request.user!.role === 'admin';
+  if (!isManagerRole && String(request.user!.employee_id) !== String(id)) {
+    return reply.code(403).send({ error: 'forbidden', message: 'Можно смотреть только свой прогресс' });
+  }
   const { date } = request.query as { date?: string };
   const d = date || todayMoscow();
 
@@ -492,27 +500,31 @@ app.get('/employee/progress/:id', async (request) => {
     plan = planRes.rows[0] || {};
   }
 
+  // Все метрики (не только "витринные" 5) — чтобы кастомные метрики были
+  // видны в ответе, даже если в общий процент прогресса не идут.
+  const allCols = await getSalesSumColumns();
   const factRes = await query(
-    `SELECT
-       COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
-       COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
-       COALESCE(SUM(phones),0) as phones, COALESCE(SUM(accessories),0) as accessories
+    `SELECT ${allCols.map((c) => `COALESCE(SUM(${c}),0) as ${c}`).join(', ')}
      FROM sales WHERE employee_id = $1 AND sale_date = $2`,
     [id, d]
   );
   const fact = factRes.rows[0] || {};
 
-  const keys = ['sim', 'mnp', 'pa', 'combo', 'phones'] as const;
+  // Основной прогресс-ринг считается по ключевым метрикам (как и раньше);
+  // остальные метрики попадают в result как есть, без учёта в total.
+  const primaryKeys = ['sim', 'mnp', 'pa', 'combo', 'phones'] as const;
   const result: any = {};
   let totalFact = 0;
   let totalPlan = 0;
 
-  for (const k of keys) {
+  for (const k of allCols) {
     const f = Number(fact[k]) || 0;
     const p = Number(plan[k]) || 0;
     result[k] = { fact: f, plan: p };
-    totalFact += f;
-    totalPlan += p;
+    if ((primaryKeys as readonly string[]).includes(k)) {
+      totalFact += f;
+      totalPlan += p;
+    }
   }
 
   result.total = {
@@ -527,31 +539,21 @@ app.get('/employee/progress/:id', async (request) => {
 
 // ===== REPORT SVG (встроено — работает даже без routes-v14.ts) =====
 
-// ===== PROMOCODES RTK (встроено — не зависит от routes-promos.ts) =====
+// ===== PROMOCODES RTK =====
 function maskPromoCode(code: string) {
   const s = String(code || '');
   if (s.length <= 4) return '••••';
   return s.slice(0, 2) + '•'.repeat(Math.min(8, s.length - 4)) + s.slice(-2);
 }
 
-async function resolveEmployeeFromRequest(request: any): Promise<{
+function resolveEmployeeFromRequest(request: any): {
   employee_id: number;
   full_name: string;
   role: string;
-} | null> {
-  const tg =
-    (request.headers['x-telegram-id'] as string) ||
-    (request.headers['x-telegram-user-id'] as string) ||
-    '';
-  if (!tg) return null;
-  const res = await query(
-    `SELECT id as employee_id, full_name, role
-     FROM employees
-     WHERE telegram_id = $1::bigint AND COALESCE(is_active, true) = true
-     LIMIT 1`,
-    [Number(tg)]
-  ).catch(() => ({ rows: [] as any[] }));
-  return res.rows[0] || null;
+} | null {
+  const u = request.user;
+  if (!u || !u.employee_id || u.access_status !== 'active') return null;
+  return { employee_id: u.employee_id, full_name: u.full_name || '', role: u.role };
 }
 
 app.get('/promos', async (request, reply) => {
@@ -665,16 +667,11 @@ async function loadFactPlanStaff(storeId: string, date: string) {
   );
   const st = storeRes.rows[0] || { name: storeId, code: '' };
 
+  // Динамический список — чтобы кастомные метрики не пропадали из отчёта
+  // (раньше был жёсткий список из 15 полей, всё остальное молча терялось).
+  const salesCols = await getSalesSumColumns();
   const salesRes = await query(
-    `SELECT
-        COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp, COALESCE(SUM(pa),0) pa,
-        COALESCE(SUM(combo),0) combo, COALESCE(SUM(phones),0) phones,
-        COALESCE(SUM(accessories),0) accessories, COALESCE(SUM(settings),0) settings,
-        COALESCE(SUM(insurance),0) insurance, COALESCE(SUM(wink),0) wink,
-        COALESCE(SUM(shpd),0) shpd, COALESCE(SUM(focus),0) focus,
-        COALESCE(SUM(credit_request),0) credit_request,
-        COALESCE(SUM(credit_issued),0) credit_issued,
-        COALESCE(SUM(plotter),0) plotter, COALESCE(SUM(hb),0) hb
+    `SELECT ${salesCols.map((c) => `COALESCE(SUM(${c}),0) ${c}`).join(', ')}
      FROM sales WHERE store_id = $1 AND sale_date::date = $2::date`,
     [storeId, date]
   ).catch(() => ({ rows: [{}] }));
@@ -751,6 +748,22 @@ async function buildDayReportSvgInline(storeId: string, date: string) {
     }
   ];
 
+  // Любые метрики (кастомные или добавленные вручную колонки), которых нет
+  // в группах выше, — чтобы данные не "терялись" из отчёта молча.
+  const knownIds = new Set([
+    'sim', 'mnp', 'pa', 'combo', 'settings', 'accessories', 'insurance',
+    'phones', 'wink', 'shpd', 'focus', 'credit_request', 'credit_issued',
+    'plotter', 'hb'
+  ]);
+  const extraIds = Object.keys(f).filter((k) => !knownIds.has(k));
+  if (extraIds.length) {
+    const labels = await metricLabelMap();
+    groups.push({
+      title: 'Доп. метрики',
+      rows: extraIds.map((k) => [labels[k] || k, num(f[k]), num(p[k])] as [string, number, number])
+    });
+  }
+
   let y = 120;
   const parts: string[] = [];
   for (const g of groups) {
@@ -795,6 +808,7 @@ async function buildDayReportSvgInline(storeId: string, date: string) {
 }
 
 app.get('/reports/day/:storeId', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
   const storeId = String((request.params as any).storeId || '');
   const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
   const kind = ((request.query as any)?.kind === 'micro' ? 'micro' : 'final') as 'micro' | 'final';
@@ -814,6 +828,7 @@ app.get('/reports/day/:storeId', async (request, reply) => {
 });
 
 app.get('/reports/svg', async (request, reply) => {
+  if (!requireActive(request, reply)) return;
   const q = (request.query || {}) as any;
   const storeId = String(q.store_id || '');
   const date = String(q.date || todayMoscow()).slice(0, 10);
@@ -829,6 +844,7 @@ app.get('/reports/svg', async (request, reply) => {
 
 /** Ручная отправка микро/итога в REPORT_CHAT_ID (для теста) */
 app.post('/reports/send-micro', async (request, reply) => {
+  if (!requireManager(request, reply)) return;
   try {
     const { sendMicroReports } = await import('./cron/reports.js');
     const body = (request.body || {}) as any;
@@ -844,6 +860,7 @@ app.post('/reports/send-micro', async (request, reply) => {
 });
 
 app.post('/reports/send-final', async (request, reply) => {
+  if (!requireManager(request, reply)) return;
   try {
     const { sendFinalReports } = await import('./cron/reports.js');
     const body = (request.body || {}) as any;
@@ -915,6 +932,14 @@ try {
   console.log('✅ Supervisor routes registered');
 } catch (e: any) {
   console.error('Supervisor routes failed:', e?.message || e);
+}
+
+// ===== CRUD сотрудников и точек (manager/admin) =====
+try {
+  await registerEmployeesRoutes(app);
+  console.log('✅ Employees/stores CRUD routes registered');
+} catch (e: any) {
+  console.error('Employees routes failed:', e?.message || e);
 }
 
 // ===== START =====

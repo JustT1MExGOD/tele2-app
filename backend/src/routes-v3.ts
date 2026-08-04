@@ -29,8 +29,6 @@ function csvEscape(v: any) {
 
 export async function registerV3Routes(app: FastifyInstance) {
   // user на каждый запрос
-  app.addHook('preHandler', authPlugin);
-
   // ========== ME / ROLE ==========
   app.get('/me', async (request, reply) => {
     // не 404 — фронту удобнее: bound:false → показать «Привязать»

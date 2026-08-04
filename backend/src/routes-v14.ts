@@ -9,8 +9,6 @@ import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './
 import { todayMoscow } from './utils/date.js';
 
 export async function registerV14Routes(app: FastifyInstance) {
-  app.addHook('preHandler', authPlugin);
-
   app.get('/branding', async (request) => {
     let orgId = 'default';
     if (request.user?.employee_id) {

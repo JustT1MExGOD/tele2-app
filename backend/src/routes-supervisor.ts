@@ -29,8 +29,6 @@ function canViewSupervisor(user: { role?: string } | null | undefined): boolean 
 
 export async function registerSupervisorRoutes(app: FastifyInstance) {
   // Подставляем request.user из X-Telegram-Id на каждый запрос модуля
-  app.addHook('preHandler', authPlugin);
-
   app.get('/supervisor/dashboard', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     if (!canViewSupervisor(request.user)) {

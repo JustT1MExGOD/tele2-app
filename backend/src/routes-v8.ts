@@ -29,8 +29,6 @@ function esc(s: any) {
 
 export async function registerV8Routes(app: FastifyInstance) {
   // подтянуть user на каждый запрос
-  app.addHook('preHandler', authPlugin);
-
   // ===== ACCESS STATUS (гость может) =====
   app.get('/access/status', async (request) => {
     const raw = request.headers['x-telegram-id'] as string;
