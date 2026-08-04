@@ -98,10 +98,32 @@
     
 
     // ===== CUSTOM METRICS =====
-    function openAddMetric() {
+    // Базовые метрики защищены от удаления и на бэкенде (DELETE /metrics/:id);
+    // список здесь только чтобы не показывать бесполезную кнопку «Удалить».
+    const LOCKED_METRICS = new Set([
+      'sim', 'mnp', 'pa', 'combo', 'phones', 'accessories', 'settings',
+      'insurance', 'wink', 'shpd', 'focus', 'credit_request', 'credit_issued',
+      'plotter', 'hb', 'credit'
+    ]);
+
+    async function openAddMetric() {
       if (!canManage()) return;
-      document.getElementById('modalTitle').textContent = 'Новая метрика';
+      await loadMetricsCatalog();
+      document.getElementById('modalTitle').textContent = 'Метрики плана';
+      const custom = (METRICS || []).filter(m => !LOCKED_METRICS.has(m.id));
+      const listHtml = custom.length
+        ? `<div class="block-label">Свои метрики</div>
+           <div class="progress-block" style="display:flex;flex-direction:column;gap:8px">
+             ${custom.map(m => `
+               <div style="display:flex;justify-content:space-between;align-items:center">
+                 <span style="font-size:14px">${esc(m.label)} <span style="color:var(--hint)">(${esc(m.id)})</span></span>
+                 <button class="mchip" style="color:var(--danger)" onclick="deleteMetric('${m.id}',${JSON.stringify(m.label)})">Удалить</button>
+               </div>`).join('')}
+           </div>`
+        : '';
       document.getElementById('modalBody').innerHTML = `
+        ${listHtml}
+        <div class="block-label">Новая метрика</div>
         <div class="field"><label>Название</label><input id="nm_label" placeholder="Например: eSIM"></div>
         <div class="field"><label>Короткое</label><input id="nm_short" placeholder="eSIM"></div>
         <div class="field"><label>Тип</label>
@@ -113,6 +135,23 @@
         <button class="btn-main" onclick="saveMetric()">Создать</button>
       `;
       document.getElementById('overlay').classList.add('show');
+    }
+
+    async function deleteMetric(id, label) {
+      if (!canManage()) return;
+      if (!confirm(`Удалить метрику «${label}»? Она перестанет показываться в формах — уже внесённые по ней данные останутся в базе.`)) return;
+      const res = await fetch(API + '/metrics/' + id, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      if (!res.ok) {
+        let msg = 'Ошибка';
+        try { const j = await res.json(); msg = j.message || j.error || msg; } catch (_) {}
+        toast(msg, 'err');
+        return;
+      }
+      toast('Метрика удалена', 'ok');
+      await openAddMetric();
     }
 
     async function saveMetric() {
