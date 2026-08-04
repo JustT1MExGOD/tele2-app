@@ -14,6 +14,7 @@ import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '.
 import { shiftReminder, microReport, finalReport, microLines, finalLines } from '../bot/messages.js';
 import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../services/report-image.js';
 import { generateDipComment } from '../services/ai.js';
+import { materializeStoreDailyPlans } from '../services/plans.js';
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)
@@ -259,6 +260,18 @@ async function tick() {
 
   // напоминания о завтрашней смене — как было
   if (hh === 20 && mm === 0) await sendTomorrowReminders(date);
+
+  // Дневные планы точек раньше материализовались только вручную кнопкой
+  // «Записать дневные планы в БД» — если никто не нажал, store_plans на
+  // сегодня/завтра просто нет, и отчёты/«Фокус на завтра» рендерятся
+  // пустыми (факт 0, план «—»). Автоматически считаем оба дня рано утром.
+  if (hh === 6 && mm === 0) {
+    const tomorrow = new Date(date + 'T12:00:00');
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    await materializeStoreDailyPlans(date).catch((e) => console.error('auto-materialize today', e?.message || e));
+    await materializeStoreDailyPlans(tomorrowStr).catch((e) => console.error('auto-materialize tomorrow', e?.message || e));
+  }
 
   const stores = await loadStorePlans(date);
 
