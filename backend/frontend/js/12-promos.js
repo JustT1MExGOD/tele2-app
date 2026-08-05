@@ -5,7 +5,7 @@
       document.getElementById('modalTitle').textContent = 'Промокоды РТК';
       document.getElementById('modalBody').innerHTML = `
         <div class="empty" style="text-align:left;padding:0 0 12px;line-height:1.4">
-          Общий пул. Коды скрыты — открой карточку, чтобы увидеть. Если использовал — отметь, код исчезнет у всех.
+          Общий пул твоей сети. Коды скрыты — открой карточку, чтобы увидеть. Если использовал — отметь, код исчезнет у всех.
         </div>
         <button class="btn-main" onclick="openAddPromo()">+ Добавить промокод</button>
         <div id="promoList" style="margin-top:14px"><div class="skeleton"></div></div>
@@ -19,7 +19,8 @@
       const box = document.getElementById('promoList');
       if (!box) return;
       try {
-        const res = await fetch(API + '/promos', { headers: authHeaders() });
+        const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
+        const res = await fetch(API + '/promos' + orgParam, { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const items = data.items || [];
@@ -60,9 +61,11 @@
       const note = document.getElementById('promoNote')?.value?.trim() || '';
       if (!code) { toast('Введи код', 'err'); return; }
       try {
+        const body = { code, note };
+        if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
         const res = await fetch(API + '/promos', {
           method: 'POST', headers: authHeaders(true),
-          body: JSON.stringify({ code, note })
+          body: JSON.stringify(body)
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'fail');

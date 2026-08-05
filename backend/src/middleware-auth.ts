@@ -209,6 +209,15 @@ export function requireSupervisor(request: FastifyRequest, reply: FastifyReply) 
   return true;
 }
 
+/**
+ * Сеть, в разрезе которой сейчас смотрим данные (Команда/График/Касса/Промокоды):
+ * своя по умолчанию; admin может явно затребовать другую сеть (переключатель
+ * сети в UI шлёт org_id параметром/полем тела) — все остальные роли override игнорируют.
+ */
+export function resolveViewOrgId(user: AuthUser, override?: string | null): string {
+  return user.role === 'admin' && override ? override : user.org_id;
+}
+
 export function isManager(user?: AuthUser | null) {
   return user?.role === 'manager' || user?.role === 'admin' || user?.role === 'senior';
 }

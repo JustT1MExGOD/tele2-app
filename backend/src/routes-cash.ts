@@ -5,33 +5,37 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
-import { requireManager, requireActive } from './middleware-auth.js';
+import { requireManager, requireActive, resolveViewOrgId } from './middleware-auth.js';
 
 export async function registerCashRoutes(app: FastifyInstance) {
   // Кассу смотрят и вносят все активные сотрудники на точке, не только
   // manager — фронтенд (09-cash-metrics.js) всегда показывал форму всем,
   // но эти два роута ошибочно остались за requireManager (403 для employee).
+  // Таблица — по точкам своей сети, не всех сетей вперемешку.
   app.get('/cash/table', async (request, reply) => {
     if (!requireActive(request, reply)) return;
-    const q = request.query as { from?: string; to?: string };
+    const q = request.query as { from?: string; to?: string; org_id?: string };
     const from = (q.from || todayMoscow().slice(0, 8) + '01').slice(0, 10);
     const to = (q.to || todayMoscow()).slice(0, 10);
+    const orgId = resolveViewOrgId(request.user!, q.org_id);
 
     const storesRes = await query(
       `SELECT id, name, code FROM stores
-       WHERE COALESCE(is_active, true) = true
-       ORDER BY hours NULLS LAST, name`
+       WHERE COALESCE(is_active, true) = true AND COALESCE(org_id, 'default') = $1
+       ORDER BY hours NULLS LAST, name`,
+      [orgId]
     );
     const stList = storesRes.rows;
 
     const cashRes = await query(
-      `SELECT store_id, cash_date::text as cash_date,
-              cash_fact, cash_1c,
-              (cash_fact - (cash_1c + 2000)) as delta, comment
-       FROM store_cash
-       WHERE cash_date >= $1::date AND cash_date <= $2::date
-       ORDER BY cash_date`,
-      [from, to]
+      `SELECT c.store_id, c.cash_date::text as cash_date,
+              c.cash_fact, c.cash_1c,
+              (c.cash_fact - (c.cash_1c + 2000)) as delta, c.comment
+       FROM store_cash c
+       JOIN stores st ON st.id = c.store_id
+       WHERE c.cash_date >= $1::date AND c.cash_date <= $2::date AND COALESCE(st.org_id, 'default') = $3
+       ORDER BY c.cash_date`,
+      [from, to, orgId]
     );
 
     // даты: все дни периода, где есть касса + сегодня
@@ -99,15 +103,16 @@ export async function registerCashRoutes(app: FastifyInstance) {
 
   app.get('/cash', async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const q = request.query as { from?: string; to?: string; store_id?: string };
+    const q = request.query as { from?: string; to?: string; store_id?: string; org_id?: string };
     const from = q.from || todayMoscow().slice(0, 8) + '01';
     const to = q.to || todayMoscow();
-    const params: any[] = [from, to];
+    const orgId = resolveViewOrgId(request.user!, q.org_id);
+    const params: any[] = [from, to, orgId];
     let sql = `
       SELECT c.*, st.name as store_name
       FROM store_cash c
       LEFT JOIN stores st ON st.id = c.store_id
-      WHERE c.cash_date >= $1::date AND c.cash_date <= $2::date`;
+      WHERE c.cash_date >= $1::date AND c.cash_date <= $2::date AND COALESCE(st.org_id, 'default') = $3`;
     if (q.store_id) {
       params.push(q.store_id);
       sql += ` AND c.store_id = $${params.length}`;

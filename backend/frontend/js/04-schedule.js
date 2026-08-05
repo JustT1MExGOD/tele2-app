@@ -129,8 +129,9 @@
       box.innerHTML = '<div class="skeleton"></div>';
       try {
         const date = todayMoscow();
+        const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
         const [schRes, stRes] = await Promise.all([
-          fetch(API + '/schedules?date=' + date, { headers: authHeaders() }),
+          fetch(API + '/schedules?date=' + date + orgParam, { headers: authHeaders() }),
           fetch(API + '/stores', { headers: authHeaders() })
         ]);
         const schedules = await schRes.json();
@@ -196,7 +197,8 @@
       const box = document.getElementById('monthBoard');
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/schedules/month?month=' + scheduleMonth, { headers: authHeaders() });
+        const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
+        const res = await fetch(API + '/schedules/month?month=' + scheduleMonth + orgParam, { headers: authHeaders() });
         let data;
         if (res.ok) {
           data = await res.json();

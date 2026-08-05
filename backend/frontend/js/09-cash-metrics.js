@@ -23,7 +23,8 @@
         if (dateInp && !dateInp.value) dateInp.value = todayMoscow();
 
         const from = todayMoscow().slice(0, 8) + '01';
-        const res = await fetch(API + '/cash/table?from=' + from + '&to=' + todayMoscow(), { headers: authHeaders() });
+        const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
+        const res = await fetch(API + '/cash/table?from=' + from + '&to=' + todayMoscow() + orgParam, { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const stList = data.stores || stores;

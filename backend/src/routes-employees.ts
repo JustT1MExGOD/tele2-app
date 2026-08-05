@@ -8,7 +8,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireActive, requireManager, canAssignRole, Role } from './middleware-auth.js';
+import { requireActive, requireManager, canAssignRole, resolveViewOrgId, Role } from './middleware-auth.js';
 
 export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.get('/employees', async (request, reply) => {
@@ -20,7 +20,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // admin по умолчанию тоже видит только свою (рабочую) сеть; чтобы
     // заглянуть в другую — ?org_id=, доступно только admin (переключатель сети в UI).
     const q = request.query as { org_id?: string };
-    const orgId = request.user!.role === 'admin' && q.org_id ? q.org_id : request.user!.org_id;
+    const orgId = resolveViewOrgId(request.user!, q.org_id);
     const res = await query(
       `SELECT id, full_name, short_name, ${canSeeTelegramId ? 'telegram_id,' : ''} is_active, role
        FROM employees
@@ -45,7 +45,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
 
     // Новый сотрудник попадает в сеть создающего его менеджера; admin может
     // явно указать другую сеть (переключатель сети в UI шлёт org_id).
-    const org_id = request.user!.role === 'admin' && b.org_id ? b.org_id : request.user!.org_id;
+    const org_id = resolveViewOrgId(request.user!, b.org_id);
     const res = await query(
       `INSERT INTO employees (full_name, short_name, role, is_active, org_id)
        VALUES ($1, $2, $3, true, $4)
