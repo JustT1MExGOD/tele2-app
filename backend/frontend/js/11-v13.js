@@ -185,7 +185,7 @@
               <div class="progress-block" style="margin-bottom:12px">
                 <div class="section-title" style="margin-bottom:8px">Смена открыта</div>
                 <div style="font-size:13px;color:var(--hint);margin-bottom:10px">
-                  ${sess.store_name || sess.store_id} · с ${String(sess.opened_at || '').slice(11, 16) || '—'} МСК
+                  ${sess.store_name || sess.store_id} · с ${timeMoscow(sess.opened_at) || '—'} МСК
                 </div>
                 <button class="btn-main" style="background:#e74c3c" onclick="closeShiftSession()">Закрыть смену</button>
               </div>`;

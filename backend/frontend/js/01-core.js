@@ -20,6 +20,18 @@
       }).format(new Date());
     }
 
+    // Бэкенд отдаёт timestamptz как UTC ISO-строку (например открытие смены
+    // в 9:55 МСК приходит как ...T06:55:00Z) — .slice(11,16) на сырой строке
+    // печатал бы UTC-время как есть. Форматируем явно в Europe/Moscow.
+    function timeMoscow(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      return new Intl.DateTimeFormat('ru-RU', {
+        timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', hour12: false
+      }).format(d);
+    }
+
     function haptic(type = 'light') {
       try {
         if (!tg?.HapticFeedback) return;
