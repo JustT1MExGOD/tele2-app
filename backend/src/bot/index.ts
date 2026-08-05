@@ -127,6 +127,17 @@ export async function startBot() {
       parse_mode: 'HTML'
     });
   });
+  // /chatid — узнать chat_id группы и message_thread_id текущей темы (для
+  // подключения новой сети: свой чат/тема "продажи"/тема "отчёты" в organizations).
+  bot.command('chatid', async (ctx) => {
+    const chatId = ctx.chat?.id;
+    const threadId = (ctx.message as any)?.message_thread_id;
+    const lines = [
+      `chat_id: <code>${chatId}</code>`,
+      threadId ? `message_thread_id (эта тема): <code>${threadId}</code>` : 'Это не тема форума (или тема "General")'
+    ];
+    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
+  });
   bot.catch((err) => console.error('Bot error:', err));
   try {
     await bot.api.deleteWebhook({ drop_pending_updates: false });
