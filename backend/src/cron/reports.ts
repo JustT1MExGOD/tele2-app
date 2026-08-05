@@ -13,7 +13,7 @@ import { shiftReminder, microReport, finalReport, microLines, finalLines } from 
 import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../services/report-image.js';
 import { generateDipComment } from '../services/ai.js';
 import { materializeStoreDailyPlans } from '../services/plans.js';
-import { getStoreChatId } from '../services/tenant.js';
+import { getStoreNotifyTarget } from '../services/tenant.js';
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)
@@ -107,7 +107,7 @@ async function sendStoreReportImage(
 ) {
   if (kind === 'final') return sendStoreStoryReport(st, date);
 
-  const chatId = await getStoreChatId(st.store_id);
+  const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
   const hourLabel = hour != null ? `${String(hour).padStart(2, '0')}:00` : undefined;
   const caption = `📊 ${st.name} · ${date}${hourLabel ? ' · ' + hourLabel : ''}`;
 
@@ -116,7 +116,8 @@ async function sendStoreReportImage(
     const r = await notifyChatPhoto(png, {
       caption,
       filename: `micro_${st.store_id}_${date}.png`,
-      chatId
+      chatId,
+      threadId
     });
     if (r.ok) return r;
     throw new Error(r.error || 'photo_failed');
@@ -128,7 +129,8 @@ async function sendStoreReportImage(
         caption,
         filename: `micro_${st.store_id}_${date}.svg`,
         asDocument: true,
-        chatId
+        chatId,
+        threadId
       });
     } catch (e2: any) {
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
@@ -148,7 +150,7 @@ async function sendStoreReportImage(
         staff: staff.rows.map((x: any) => x.full_name),
         lines
       });
-      await notifyChat(text, chatId);
+      await notifyChat(text, chatId, threadId);
       return { ok: true, type: 'text_fallback' };
     }
   }
@@ -159,7 +161,7 @@ async function sendStoreStoryReport(
   st: { store_id: string; name: string; code: string; plan: any },
   date: string
 ) {
-  const chatId = await getStoreChatId(st.store_id);
+  const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
   try {
     const { plan, fact, tomorrow } = await buildStoryReportPngs(st.store_id, date);
 
@@ -184,11 +186,11 @@ async function sendStoreStoryReport(
         { buffer: fact, filename: `fact_${st.store_id}_${date}.png` },
         { buffer: tomorrow, filename: `tomorrow_${st.store_id}_${date}.png` }
       ],
-      { chatId }
+      { chatId, threadId }
     );
     if (!r.ok) throw new Error(r.error || 'media_group_failed');
 
-    await notifyChat(`🏁 <b>${st.name}</b> · итог дня · ${date}\n\n${comment.text}`, chatId);
+    await notifyChat(`🏁 <b>${st.name}</b> · итог дня · ${date}\n\n${comment.text}`, chatId, threadId);
     return r;
   } catch (e: any) {
     console.warn('Story report failed, fallback to single final image:', e?.message || e);
@@ -201,11 +203,11 @@ async function sendSingleFinalImage(
   st: { store_id: string; name: string; code: string; plan: any },
   date: string
 ) {
-  const chatId = await getStoreChatId(st.store_id);
+  const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
   const caption = `🏁 ${st.name} · ${date}`;
   try {
     const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'final' });
-    const r = await notifyChatPhoto(png, { caption, filename: `final_${st.store_id}_${date}.png`, chatId });
+    const r = await notifyChatPhoto(png, { caption, filename: `final_${st.store_id}_${date}.png`, chatId, threadId });
     if (r.ok) return r;
     throw new Error(r.error || 'photo_failed');
   } catch (e: any) {
@@ -216,7 +218,8 @@ async function sendSingleFinalImage(
         caption,
         filename: `final_${st.store_id}_${date}.svg`,
         asDocument: true,
-        chatId
+        chatId,
+        threadId
       });
     } catch (e2: any) {
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
@@ -236,7 +239,7 @@ async function sendSingleFinalImage(
         staff: staff.rows.map((x: any) => x.full_name),
         lines
       });
-      await notifyChat(text, chatId);
+      await notifyChat(text, chatId, threadId);
       return { ok: true, type: 'text_fallback' };
     }
   }

@@ -12,7 +12,7 @@ export const bot = token ? new Bot(token) : (null as any);
 const CHAT_ID = process.env.CHAT_ID || process.env.REPORT_CHAT_ID || '';
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID || '';
 
-export async function notifyChat(text: string, chatId?: string) {
+export async function notifyChat(text: string, chatId?: string, threadId?: string) {
   const id = chatId || CHAT_ID;
   if (!bot) {
     console.error('notifyChat: bot disabled (no BOT_TOKEN)');
@@ -25,7 +25,8 @@ export async function notifyChat(text: string, chatId?: string) {
   try {
     await bot.api.sendMessage(id, text, {
       parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true }
+      link_preview_options: { is_disabled: true },
+      ...(threadId ? { message_thread_id: Number(threadId) } : {})
     } as any);
   } catch (e: any) {
     console.error('notifyChat failed:', e?.message || e, 'chat=', id);
@@ -39,6 +40,7 @@ export async function notifyChatPhoto(
     caption?: string;
     filename?: string;
     chatId?: string;
+    threadId?: string;
     asDocument?: boolean;
   } = {}
 ) {
@@ -53,12 +55,14 @@ export async function notifyChatPhoto(
   }
 
   const caption = (opts.caption || 'T2 Sales').slice(0, 1024);
+  const threadOpt = opts.threadId ? { message_thread_id: Number(opts.threadId) } : {};
 
   try {
     if (Buffer.isBuffer(pngOrSvg) && !opts.asDocument) {
       await bot.api.sendPhoto(id, new InputFile(pngOrSvg, opts.filename || 'report.png'), {
-        caption
-      });
+        caption,
+        ...threadOpt
+      } as any);
       return { ok: true, type: 'photo' };
     }
     // SVG / document fallback
@@ -66,7 +70,7 @@ export async function notifyChatPhoto(
       ? pngOrSvg
       : Buffer.from(String(pngOrSvg), 'utf8');
     const name = opts.filename || (Buffer.isBuffer(pngOrSvg) ? 'report.png' : 'report.svg');
-    await bot.api.sendDocument(id, new InputFile(buf, name), { caption });
+    await bot.api.sendDocument(id, new InputFile(buf, name), { caption, ...threadOpt } as any);
     return { ok: true, type: 'document' };
   } catch (e: any) {
     console.error('notifyChatPhoto failed:', e?.message || e);
@@ -77,7 +81,7 @@ export async function notifyChatPhoto(
 /** Несколько фото одним альбомом (Telegram media group) — для story-отчётов */
 export async function notifyChatMediaGroup(
   items: { buffer: Buffer; filename: string; caption?: string }[],
-  opts: { chatId?: string } = {}
+  opts: { chatId?: string; threadId?: string } = {}
 ) {
   const id = opts.chatId || CHAT_ID;
   if (!bot) {
@@ -95,7 +99,7 @@ export async function notifyChatMediaGroup(
       media: new InputFile(it.buffer, it.filename),
       caption: it.caption?.slice(0, 1024)
     }));
-    await bot.api.sendMediaGroup(id, media);
+    await bot.api.sendMediaGroup(id, media, opts.threadId ? { message_thread_id: Number(opts.threadId) } as any : undefined);
     return { ok: true, type: 'media_group' };
   } catch (e: any) {
     console.error('notifyChatMediaGroup failed:', e?.message || e);

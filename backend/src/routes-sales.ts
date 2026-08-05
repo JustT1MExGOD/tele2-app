@@ -9,7 +9,7 @@ import { todayMoscow } from './utils/date.js';
 import { logSaleEvents } from './services/heatmap.js';
 import { requireActive, requireManager } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
-import { getStoreChatId } from './services/tenant.js';
+import { getStoreNotifyTarget } from './services/tenant.js';
 
 export async function registerSalesRoutes(app: FastifyInstance) {
   app.get('/sales', async (request) => {
@@ -140,7 +140,8 @@ export async function registerSalesRoutes(app: FastifyInstance) {
           storeName: info.rows[0].store_name,
           items: applied.map((a) => ({ metric: a.metric, value: a.value }))
         });
-        await notifyChat(text, await getStoreChatId(store_id));
+        const target = await getStoreNotifyTarget(store_id, 'sales');
+        await notifyChat(text, target.chatId, target.threadId);
       }
     } catch (_) {}
 

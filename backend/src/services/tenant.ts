@@ -91,6 +91,46 @@ export async function getOrgChatId(orgId: string): Promise<string | undefined> {
   }
 }
 
+export type NotifyTarget = { chatId?: string; threadId?: string };
+
+/**
+ * Чат + тема (Telegram message_thread_id) сети для конкретного назначения.
+ * Группа сети может быть форумом с отдельными темами "продажи"/"отчёты"
+ * (sales_thread_id/reports_thread_id на organizations) — если тема не
+ * настроена, threadId просто не передаётся, сообщение уходит в General.
+ */
+export async function getOrgNotifyTarget(
+  orgId: string,
+  purpose: 'sales' | 'reports'
+): Promise<NotifyTarget> {
+  const col = purpose === 'sales' ? 'sales_thread_id' : 'reports_thread_id';
+  try {
+    const res = await query(`SELECT chat_id, ${col} as thread_id FROM organizations WHERE id = $1`, [orgId]);
+    return { chatId: res.rows[0]?.chat_id || undefined, threadId: res.rows[0]?.thread_id || undefined };
+  } catch (_) {
+    return {};
+  }
+}
+
+/** То же самое, но по точке — резолвит сеть точки и её чат/тему. */
+export async function getStoreNotifyTarget(
+  storeId: string,
+  purpose: 'sales' | 'reports'
+): Promise<NotifyTarget> {
+  const col = purpose === 'sales' ? 'sales_thread_id' : 'reports_thread_id';
+  try {
+    const res = await query(
+      `SELECT o.chat_id, o.${col} as thread_id FROM stores s
+       LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
+       WHERE s.id = $1`,
+      [storeId]
+    );
+    return { chatId: res.rows[0]?.chat_id || undefined, threadId: res.rows[0]?.thread_id || undefined };
+  } catch (_) {
+    return {};
+  }
+}
+
 /** Все сети (id + chat_id), у которых явно настроен свой чат. */
 export async function listOrgsWithChat(): Promise<{ id: string; chat_id: string }[]> {
   try {

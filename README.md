@@ -3,18 +3,18 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-15.13.1-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-15.14.0-2AABEE?style=flat-square)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
 ![postgres](https://img.shields.io/badge/PostgreSQL-Railway-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![ai](https://img.shields.io/badge/AI%20Copilot-Groq%20%C2%B7%20free-34B37E?style=flat-square)
-![status](https://img.shields.io/badge/status-в%20проде%20%C2%B7%203%20точки-success?style=flat-square)
+![status](https://img.shields.io/badge/status-в%20проде%20%C2%B7%202%20сети%20%C2%B7%207%20точек-success?style=flat-square)
 
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `15.13.1`  
+**Актуальная версия клиента:** `15.14.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -466,6 +466,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **15.12.0** | Проверка на реальной второй сети (`test_network`) вскрыла, что фаза B в 15.11.0 закрыла не все дыры. Дополнительно scoped: `GET /stats/daily` («Сеть сегодня»), `GET /dashboard` («Топ за 7 дней», по точке продажи — не по «домашней» сети сотрудника, как и весь эпик 17.0), `GET /plans/employees/month` («Планы и факт за месяц»), `GET /plans/stores/daily` («План дня по точкам»). Самое широкое: `resolveSupervisorStores()` для manager/admin отдавал `scope = null` («вся БД без фильтра») — Command Center на главной и весь кабинет супервайзера показывали буквально все сети сразу; теперь для manager/admin scope — список точек своей сети (или явно выбранной admin'ом). Заодно исправлена вёрстка `computeStoreDailyPlans()`: хардкоженная `STORE_SHARES` на 3 точки заменена на чтение `stores.plan_share` — колонка была в схеме и даже отредактирована в БД вручную, но код её не читал (тот же паттерн, что `micro_report_times` в 15.8.0). Найдена и исправлена регрессия, которую сама эта фаза едва не внесла: `GET /schedules`/`/schedules/month`, отфильтрованные по сети точки, переставали показывать сотруднику его СОБСТВЕННУЮ смену, если сегодня он подменяет в чужой сети — добавлено исключение «своя запись видна всегда» |
 | **15.13.0** | План точки — из «доли от суммы планов сотрудников» в независимый ручной ввод. Новая таблица `store_month_plans` (зеркалит `employee_month_plans`, только на точку) + `GET/PUT /plans/stores/:id/month`, гейт — точка должна принадлежать своей сети (как и `POST /schedules`). `computeStoreDailyPlans()` переписан: вместо суммирования остатков планов всех сотрудников сети и деления по `plan_share` — просто `(план точки на месяц − факт точки с начала месяца) / оставшиеся дни`, ровно та же формула, что уже была для сотрудника (`getEmployeeDailyPlan`), только на уровне точки. Старый шаблон `store_plans` с `plan_date IS NULL` (ручная цифра-фолбэк на день) убран из приоритета в `04-schedule.js` — план точки его полностью заменяет. Планы сотрудников как отдельная сущность (личная статистика/BFQ) не тронуты. У точек, заведённых до этой версии, план на месяц пуст — «План дня по точкам» покажет 0, пока управляющий не введёт план вручную (тап по точке в «Управление») |
 | **15.13.1** | Хотфикс: команда `/chatid` боту — прямо в группе/теме отвечает `chat.id` и `message_thread_id` текущей темы. Нужно было для подключения РТТ Гуреева (их группа с темами — отдельная тема «продажи», отдельная «отчёты»), пригодится для любой следующей сети |
+| **15.14.0** | Подключена вторая реальная сеть — **РТТ Гуреева** (4 точки: Хорошевская 27, Кожевническая 4, Новослободская 10, Комсомольская пл. 3 — круглосуточная, «итог дня» на 21:00; 8 сотрудников). Основная сеть переименована в **РТТ Бижонов**. Их группа в Telegram — форум с темами (отдельная тема «продажи», отдельная «отчёты»), которого раньше в приложении не было вообще — на сеть был только один `chat_id`. Добавлены `sales_thread_id`/`reports_thread_id` на `organizations`, `notifyChat*` в `bot/index.ts` научились передавать `message_thread_id`, новые `getOrgNotifyTarget()`/`getStoreNotifyTarget()` в `tenant.ts` резолвят чат+тему по назначению (продажа → тема продаж, отчёты/алерты → тема отчётов). Заодно найден и исправлен баг: `checkStoreLagAlert()` (алерт отставания 16:00) считал дневные планы только для сети `default` — вторая сеть вообще не получала бы этот алерт |
 
 ---
 
