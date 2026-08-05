@@ -103,6 +103,16 @@ export async function listOrgsWithChat(): Promise<{ id: string; chat_id: string 
   }
 }
 
+/** Все сети — для переключателя сети в UI (admin). */
+export async function listOrgs(): Promise<{ id: string; name: string }[]> {
+  try {
+    const res = await query(`SELECT id, name FROM organizations ORDER BY name`);
+    return res.rows;
+  } catch (_) {
+    return [];
+  }
+}
+
 export async function upsertOrg(body: Partial<Org> & { id: string }) {
   await query(
     `INSERT INTO organizations (id, name, brand_name, primary_color, logo_url)

@@ -16,11 +16,17 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // telegram_id отдаём только manager-tier (manager/senior/admin) — рядовым сотрудникам он не нужен
     const canSeeTelegramId =
       request.user!.role === 'manager' || request.user!.role === 'admin' || request.user!.role === 'senior';
+    // «Команда» — это сотрудники СВОЕЙ сети, а не всех сетей вперемешку.
+    // admin по умолчанию тоже видит только свою (рабочую) сеть; чтобы
+    // заглянуть в другую — ?org_id=, доступно только admin (переключатель сети в UI).
+    const q = request.query as { org_id?: string };
+    const orgId = request.user!.role === 'admin' && q.org_id ? q.org_id : request.user!.org_id;
     const res = await query(
       `SELECT id, full_name, short_name, ${canSeeTelegramId ? 'telegram_id,' : ''} is_active, role
        FROM employees
-       WHERE is_active = true
-       ORDER BY id`
+       WHERE is_active = true AND COALESCE(org_id, 'default') = $1
+       ORDER BY id`,
+      [orgId]
     );
     return res.rows;
   });
@@ -37,12 +43,14 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // Каскад: можно завести сотрудника только с ролью строго ниже своей (admin — без ограничений).
     const role: Role = canAssignRole(request.user!.role, requested) ? requested : 'employee';
 
-    // Новый сотрудник попадает в сеть создающего его менеджера.
+    // Новый сотрудник попадает в сеть создающего его менеджера; admin может
+    // явно указать другую сеть (переключатель сети в UI шлёт org_id).
+    const org_id = request.user!.role === 'admin' && b.org_id ? b.org_id : request.user!.org_id;
     const res = await query(
       `INSERT INTO employees (full_name, short_name, role, is_active, org_id)
        VALUES ($1, $2, $3, true, $4)
        RETURNING id, full_name, short_name, role, is_active, telegram_id, org_id`,
-      [full_name, short_name, role, request.user!.org_id]
+      [full_name, short_name, role, org_id]
     );
     return res.rows[0];
   });

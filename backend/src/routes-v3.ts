@@ -48,7 +48,8 @@ export async function registerV3Routes(app: FastifyInstance) {
       full_name: request.user.full_name,
       role: request.user.role,
       telegram_id: request.user.telegram_id,
-      is_manager: isManager(request.user)
+      is_manager: isManager(request.user),
+      org_id: request.user.org_id
     };
   });
 

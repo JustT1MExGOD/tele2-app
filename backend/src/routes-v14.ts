@@ -4,7 +4,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
-import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg } from './services/tenant.js';
+import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from './services/tenant.js';
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
 import { todayMoscow } from './utils/date.js';
 
@@ -36,6 +36,15 @@ export async function registerV14Routes(app: FastifyInstance) {
         app_title: 'T2 Sales'
       };
     }
+  });
+
+  // Список сетей — для переключателя сети в UI у admin (см. GET/POST /employees ?org_id=).
+  app.get('/orgs', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    if (request.user?.role !== 'admin') {
+      return reply.code(403).send({ error: 'admin only' });
+    }
+    return listOrgs();
   });
 
   app.put('/admin/org/:id', async (request, reply) => {

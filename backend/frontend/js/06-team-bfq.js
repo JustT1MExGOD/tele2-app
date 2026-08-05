@@ -1,14 +1,42 @@
 /* 06-team-bfq.js — часть T2 Sales Mini App (см. index.html).
    Классический скрипт, общая глобальная область со всеми /js/*.js — порядок подключения важен. */
     // ===== TEAM =====
+    // Переключатель сети — только у admin (видит по умолчанию свою рабочую
+    // сеть, «Команда» больше не мешает всех сотрудников всех сетей в кучу).
+    async function renderOrgSwitcher() {
+      const sw = document.getElementById('orgSwitcher');
+      if (!sw) return;
+      if (me?.role !== 'admin') { sw.style.display = 'none'; return; }
+      sw.style.display = 'block';
+      if (sw.dataset.loaded) return;
+      try {
+        const res = await fetch(API + '/orgs', { headers: authHeaders() });
+        const orgs = await res.json();
+        const current = adminViewOrgId || me.org_id;
+        sw.innerHTML = `<div class="field"><label>Сеть</label>
+          <select onchange="switchAdminOrg(this.value)">
+            ${(Array.isArray(orgs) ? orgs : []).map((o) => `<option value="${o.id}"${o.id === current ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}
+          </select>
+        </div>`;
+        sw.dataset.loaded = '1';
+      } catch (_) {}
+    }
+
+    function switchAdminOrg(orgId) {
+      adminViewOrgId = orgId;
+      loadTeam();
+    }
+
     async function loadTeam() {
       const box = document.getElementById('teamList');
       box.innerHTML = '<div class="skeleton"></div>';
       const tools = document.getElementById('managerTools');
       if (tools) tools.style.display = canManage() ? 'block' : 'none';
+      renderOrgSwitcher();
       try {
+        const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
         const [empRes, salesRes] = await Promise.all([
-          fetch(API + '/employees', { headers: authHeaders() }),
+          fetch(API + '/employees' + orgParam, { headers: authHeaders() }),
           fetch(API + '/sales?date=' + todayMoscow(), { headers: authHeaders() })
         ]);
         employees = await empRes.json();
@@ -545,10 +573,12 @@
       const full_name = document.getElementById('ne_name').value.trim();
       const role = document.getElementById('ne_role').value;
       if (!full_name) { toast('Укажите ФИО', 'err'); return; }
+      const body = { full_name, role };
+      if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
       const res = await fetch(API + '/employees', {
         method: 'POST',
         headers: authHeaders(true),
-        body: JSON.stringify({ full_name, role })
+        body: JSON.stringify(body)
       });
       if (!res.ok) { toast('Ошибка', 'err'); return; }
       toast('Сотрудник добавлен', 'ok');

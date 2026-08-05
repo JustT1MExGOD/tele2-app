@@ -70,6 +70,8 @@
     let scheduleMonth = todayMoscow().slice(0, 7);
     let planMonth = todayMoscow().slice(0, 7);
     let me = null; // { employee_id, full_name, role, is_manager }
+    // Какую сеть сейчас просматривает admin в «Команде» (null = своя сеть по умолчанию).
+    let adminViewOrgId = null;
 
     function canAdmin() {
       const r = (me && me.role) || '';
