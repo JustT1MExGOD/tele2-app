@@ -392,9 +392,11 @@
           html += d.drops.map(x => `
             <div class="sv-drop ${x.severity === 'critical' ? '' : 'warn'}">
               <div class="ico">${x.severity === 'critical' ? '🚨' : '⚠️'}</div>
-              <div>
+              <div style="flex:1">
                 <div class="t">${x.store_name || 'Точка'}</div>
                 <div class="s">${x.message}${x.overall != null ? ' · ' + x.overall + '% плана' : ''}</div>
+                ${x.ai_comment ? `<div class="s" style="margin-top:4px;font-style:italic">🤖 ${esc(x.ai_comment)}</div>` : ''}
+                ${x.store_id ? `<button class="mchip" style="margin-top:6px" onclick="event.stopPropagation();proposeMoveForStore('${x.store_id}')">Предложить перенос</button>` : ''}
               </div>
             </div>`).join('');
         } else {

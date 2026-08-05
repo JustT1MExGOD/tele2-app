@@ -140,6 +140,25 @@
     // фронтенд-надстройка над тем, что бэкенд умел давно.
     window.__wiMoves = window.__wiMoves || [];
 
+    // «Действие из просадки»: кнопка на карточке просадки (Command Center /
+    // кабинет супервайзера) ведёт прямо в What-if с уже выбранной точкой-
+    // получателем — не нужно с нуля собирать сценарий, только выбрать
+    // сотрудника и «откуда».
+    async function proposeMoveForStore(storeId) {
+      switchPage('forecast');
+      await fillStoreSelects();
+      const wiTo = document.getElementById('wiTo');
+      if (wiTo) wiTo.value = storeId;
+      const wiDate = document.getElementById('wiDate');
+      if (wiDate && !wiDate.value) wiDate.value = todayMoscow();
+      const storeName = (window.__stores || stores || []).find(s => s.id === storeId)?.name || storeId;
+      toast(`Точка выбрана: ${storeName} — укажи сотрудника и «с точки»`, 'ok');
+      setTimeout(() => {
+        document.getElementById('wiEmp')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+    window.proposeMoveForStore = proposeMoveForStore;
+
     function renderWiMovesList() {
       const box = document.getElementById('wiMovesList');
       if (!box) return;
