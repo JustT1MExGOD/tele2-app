@@ -337,15 +337,45 @@
       try {
         const res = await fetch(API + '/announcements', { headers: authHeaders() });
         const data = await res.json();
-        const items = data.items||[];
-        if (!items.length) { box.innerHTML = '<div class="empty">Нет объявлений</div>'; return; }
+        // бэкенд отдаёт голый массив (как /sales, /employees и т.д.), а не {items:[...]} —
+        // раньше тут был data.items||[], который на массиве всегда давал [] и объявления
+        // никогда не показывались, сколько бы их ни было в базе
+        const items = Array.isArray(data) ? data : (data.items || []);
+        if (!items.length) { box.innerHTML = '<div class="empty">🍉 Нет объявлений</div>'; return; }
         box.innerHTML = items.map(a => `<div class="mt-card">
-          <div class="mt-name">${a.title||''} ${a.required?'· обязательно':''}</div>
+          <div class="mt-name">${esc(a.title||'')} ${a.required?'· обязательно':''}</div>
           <div class="mt-meta">${a.is_read?'✓ прочитано':'не прочитано'} · ${String(a.created_at||'').slice(0,10)}</div>
-          <div style="padding:8px 0;font-size:14px;line-height:1.45">${a.body||''}</div>
+          <div style="padding:8px 0;font-size:14px;line-height:1.45">${esc(a.body||'')}</div>
           ${a.is_read?'':`<button class="btn-main" onclick="markAnnouncementRead(${a.id})">Прочитал</button>`}
+          ${canManage() ? `<button class="mchip" style="margin-top:8px" onclick="showAnnouncementReads(${a.id})">Кто прочитал</button>` : ''}
         </div>`).join('');
-      } catch { box.innerHTML = '<div class="empty">Нужен v14 SQL + routes</div>'; }
+      } catch { box.innerHTML = '<div class="empty">🍉 Не удалось загрузить объявления</div>'; }
+    }
+
+    async function showAnnouncementReads(id) {
+      document.getElementById('modalTitle').textContent = 'Кто прочитал';
+      document.getElementById('modalBody').innerHTML = '<div class="empty">Загрузка…</div>';
+      document.getElementById('overlay')?.classList.add('show');
+      try {
+        const res = await fetch(API + '/announcements/' + id + '/reads', { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const d = await res.json();
+        const read = d.read || [];
+        const unread = d.unread || [];
+        document.getElementById('modalBody').innerHTML = `
+          <div class="section-title" style="margin-bottom:8px">Прочитали (${read.length}/${read.length + unread.length})</div>
+          <div class="progress-block" style="margin-bottom:12px">
+            ${read.length ? read.map(e => `<div style="font-size:13px;padding:4px 0">✓ ${esc(e.full_name)}</div>`).join('') : '<div class="empty" style="padding:4px 0">Пока никто</div>'}
+          </div>
+          ${unread.length ? `
+            <div class="section-title" style="margin-bottom:8px">Ещё не прочитали</div>
+            <div class="progress-block">
+              ${unread.map(e => `<div style="font-size:13px;padding:4px 0;color:var(--hint)">${esc(e.full_name)}</div>`).join('')}
+            </div>` : ''}
+        `;
+      } catch (e) {
+        document.getElementById('modalBody').innerHTML = '<div class="empty">Не удалось загрузить</div>';
+      }
     }
     async function markAnnouncementRead(id) {
       await fetch(API + '/announcements/' + id + '/read', { method:'POST', headers: authHeaders(true), body:'{}' });

@@ -603,6 +603,34 @@ export async function registerV13Routes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // Кто прочитал объявление — раньше read-статус был виден только самому
+  // сотруднику (is_read у себя), manager не мог понять, кто из команды ещё
+  // не в курсе обязательного объявления.
+  app.get('/announcements/:id/reads', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const read = await query(
+      `SELECT e.id, e.full_name, r.read_at
+       FROM announcement_reads r
+       JOIN employees e ON e.id = r.employee_id
+       WHERE r.announcement_id = $1
+       ORDER BY r.read_at`,
+      [id]
+    );
+    const unread = await query(
+      `SELECT e.id, e.full_name
+       FROM employees e
+       WHERE COALESCE(e.is_active, true) = true AND e.access_status = 'active'
+         AND NOT EXISTS (
+           SELECT 1 FROM announcement_reads r
+           WHERE r.announcement_id = $1 AND r.employee_id = e.id
+         )
+       ORDER BY e.full_name`,
+      [id]
+    );
+    return { read: read.rows, unread: unread.rows };
+  });
+
   app.get('/channels/:id/messages', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
