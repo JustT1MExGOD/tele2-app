@@ -7,7 +7,7 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
-import { invalidateMetricsCache } from './services/metrics-catalog.js';
+import { invalidateMetricsCache, getMetricDefs } from './services/metrics-catalog.js';
 
 function slugify(label: string, short?: string) {
   const base = (short || label)
@@ -38,47 +38,20 @@ async function ensureColumn(table: string, col: string) {
 }
 
 export async function registerMetricsRoutes(app: FastifyInstance) {
+  // Раньше тут был отдельный захардкоженный список меток-фолбэков,
+  // который дублировал (и потихоньку разошёлся по деталям с) FALLBACK в
+  // services/metrics-catalog.ts. Теперь один источник правды: getMetricDefs()
+  // сам решает БД/кеш/фолбэк, роут только приводит форму ответа под фронтенд.
   app.get('/metrics', async (_request, reply) => {
-    try {
-      const res = await query(
-        `SELECT id, label, short_label, unit, is_active, sort_order
-         FROM plan_metrics
-         WHERE COALESCE(is_active, true) = true
-         ORDER BY sort_order NULLS LAST, id`
-      );
-      if (res.rows.length) {
-        return {
-          items: res.rows.map((r: any) => ({
-            id: r.id,
-            label: r.label,
-            short_label: r.short_label || r.label,
-            unit: r.unit === 'money' ? '₽' : 'шт',
-            unit_type: r.unit || 'count'
-          }))
-        };
-      }
-    } catch (e: any) {
-      console.warn('plan_metrics missing:', e?.message || e);
-    }
-    // fallback hardcoded
+    const defs = await getMetricDefs();
     return {
-      items: [
-        { id: 'sim', label: 'SIM', short_label: 'SIM', unit: 'шт', unit_type: 'count' },
-        { id: 'mnp', label: 'MNP', short_label: 'MNP', unit: 'шт', unit_type: 'count' },
-        { id: 'pa', label: 'ПА', short_label: 'ПА', unit: 'шт', unit_type: 'count' },
-        { id: 'combo', label: 'Комбо', short_label: 'Комбо', unit: 'шт', unit_type: 'count' },
-        { id: 'phones', label: 'Телефоны', short_label: 'Тел', unit: '₽', unit_type: 'money' },
-        { id: 'accessories', label: 'Аксессуары', short_label: 'Аксы', unit: '₽', unit_type: 'money' },
-        { id: 'settings', label: 'Настройки', short_label: 'Доп', unit: '₽', unit_type: 'money' },
-        { id: 'insurance', label: 'Страховки', short_label: 'Страх', unit: '₽', unit_type: 'money' },
-        { id: 'wink', label: 'Wink', short_label: 'Wink', unit: '₽', unit_type: 'money' },
-        { id: 'shpd', label: 'ШПД', short_label: 'ШПД', unit: 'шт', unit_type: 'count' },
-        { id: 'focus', label: 'ФО', short_label: 'ФО', unit: '₽', unit_type: 'money' },
-        { id: 'credit_request', label: 'Кредит заявка', short_label: 'Кр.з', unit: 'шт', unit_type: 'count' },
-        { id: 'credit_issued', label: 'Кредит выдан', short_label: 'Кр.в', unit: '₽', unit_type: 'money' },
-        { id: 'plotter', label: 'Плоттер', short_label: 'Плот', unit: 'шт', unit_type: 'count' },
-        { id: 'hb', label: 'НВ', short_label: 'НВ', unit: 'шт', unit_type: 'count' }
-      ]
+      items: defs.map((m) => ({
+        id: m.id,
+        label: m.label,
+        short_label: m.short_label,
+        unit: m.unit === 'money' ? '₽' : 'шт',
+        unit_type: m.unit
+      }))
     };
   });
 

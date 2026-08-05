@@ -70,21 +70,18 @@
         const sale = (sales || []).find(s => String(s.employee_id) === String(id));
         const sch = (schedules || []).find(s => String(s.employee_id) === String(id));
 
-        const saleMetrics = [
-          ['sim', 'SIM'], ['mnp', 'MNP'], ['pa', 'ПА'], ['combo', 'Комбо'],
-          ['phones', 'Телефоны'], ['accessories', 'Аксессуары'], ['wink', 'Wink'], ['shpd', 'ШПД']
-        ];
+        const saleMetrics = ['sim', 'mnp', 'pa', 'combo', 'phones', 'accessories', 'wink', 'shpd'];
         // manager/admin может отменить ошибочно внесённую метрику за сегодня —
         // sales аддитивные, отдельной "продажи" для удаления нет, поэтому это
         // обнуление конкретного показателя, не всей записи за день.
-        const nonZero = sale ? saleMetrics.filter(([key]) => Number(sale[key]) > 0) : [];
+        const nonZero = sale ? saleMetrics.filter(key => Number(sale[key]) > 0) : [];
         const correctionBlock = (canManage() && sale && nonZero.length)
           ? `<div class="block-label">Исправить ошибочный ввод</div>
              <div class="progress-block" style="display:flex;flex-direction:column;gap:8px">
-               ${nonZero.map(([key, label]) => `
+               ${nonZero.map(key => `
                  <div style="display:flex;justify-content:space-between;align-items:center">
-                   <span style="font-size:14px">${label}: <b>${Number(sale[key])}</b></span>
-                   <button class="mchip" style="color:var(--danger)" onclick="zeroSaleMetric(${sale.id},'${key}','${label}',${id})">Удалить</button>
+                   <span style="font-size:14px">${metricLabel(key)}: <b>${Number(sale[key])}</b></span>
+                   <button class="mchip" style="color:var(--danger)" onclick="zeroSaleMetric(${sale.id},'${key}',${id})">Удалить</button>
                  </div>`).join('')}
              </div>`
           : '';
@@ -99,7 +96,7 @@
           </div>
           <div class="block-label">Продажи сегодня</div>
           <div class="progress-block">
-            ${saleMetrics.map(([key, label]) => progressHTML(label, sale?.[key], 0)).join('')}
+            ${saleMetrics.map(key => progressHTML(metricLabel(key), sale?.[key], 0)).join('')}
           </div>
           ${correctionBlock}
           <button class="btn-main" onclick="openAddSale(${id})">Добавить продажу</button>
@@ -610,9 +607,9 @@
       loadTeam();
     }
 
-    async function zeroSaleMetric(saleId, metric, label, employeeId) {
+    async function zeroSaleMetric(saleId, metric, employeeId) {
       if (!canManage()) return;
-      if (!confirm(`Убрать «${label}» из продаж сегодня?`)) return;
+      if (!confirm(`Убрать «${metricLabel(metric)}» из продаж сегодня?`)) return;
       try {
         const res = await fetch(API + '/sales/' + saleId + '/zero', {
           method: 'PUT',

@@ -113,22 +113,29 @@
       return h;
     }
 
+    // Единственный список меток метрик на фронтенде — держим в точности как
+    // FALLBACK в backend/src/services/metrics-catalog.ts (бэкенд отдаёт то же
+    // самое через /metrics, если plan_metrics в БД пусто). Раньше почти
+    // каждый экран (главная, график, план, команда) держал свою копию с
+    // мелкими расхождениями — «Аксы» vs «Аксессуары», «Тел» vs «Телефоны» —
+    // и они расходились по мере правок. Теперь все экраны читают отсюда
+    // через metricLabel()/metricShort(), а не хранят свои строки.
     let METRICS = [
-      { id: 'sim',             label: 'SIM',            unit: 'шт' },
-      { id: 'mnp',             label: 'MNP',            unit: 'шт' },
-      { id: 'pa',              label: 'ПА',             unit: 'шт' },
-      { id: 'combo',           label: 'Комбо',          unit: 'шт' },
-      { id: 'settings',        label: 'Настройки',      unit: '₽' },
-      { id: 'accessories',     label: 'Аксы',           unit: '₽' },
-      { id: 'insurance',       label: 'Страх',          unit: '₽' },
-      { id: 'phones',          label: 'Телефон',        unit: '₽' },
-      { id: 'wink',            label: 'Wink',           unit: '₽' },
-      { id: 'shpd',            label: 'ШПД',            unit: 'шт' },
-      { id: 'focus',           label: 'ФО',             unit: '₽' },
-      { id: 'credit_request',  label: 'Кредит заявка',  unit: 'шт' },
-      { id: 'credit_issued',   label: 'Кредит выдан',   unit: '₽' },
-      { id: 'plotter',         label: 'Плоттер',        unit: 'шт' },
-      { id: 'hb',              label: 'НВ',             unit: 'шт' }
+      { id: 'sim',             label: 'SIM',            short_label: 'SIM',     unit: 'шт' },
+      { id: 'mnp',             label: 'MNP',            short_label: 'MNP',     unit: 'шт' },
+      { id: 'pa',              label: 'ПА',             short_label: 'ПА',      unit: 'шт' },
+      { id: 'combo',           label: 'Комбо',          short_label: 'Комбо',   unit: 'шт' },
+      { id: 'phones',          label: 'Телефоны',       short_label: 'Тел',     unit: '₽' },
+      { id: 'accessories',     label: 'Аксессуары',     short_label: 'Аксы',    unit: '₽' },
+      { id: 'settings',        label: 'Настройки',      short_label: 'Доп',     unit: '₽' },
+      { id: 'insurance',       label: 'Страховки',      short_label: 'Страх',   unit: '₽' },
+      { id: 'wink',            label: 'Wink',           short_label: 'Wink',    unit: '₽' },
+      { id: 'shpd',            label: 'ШПД',            short_label: 'ШПД',     unit: 'шт' },
+      { id: 'focus',           label: 'ФО',             short_label: 'ФО',      unit: '₽' },
+      { id: 'credit_request',  label: 'Кредит заявка',  short_label: 'Кр.з',    unit: 'шт' },
+      { id: 'credit_issued',   label: 'Кредит выдан',   short_label: 'Кр.в',    unit: '₽' },
+      { id: 'plotter',         label: 'Плоттер',        short_label: 'Плот',    unit: 'шт' },
+      { id: 'hb',              label: 'НВ',             short_label: 'НВ',      unit: 'шт' }
     ];
 
     async function loadMetricsCatalog() {
@@ -141,9 +148,18 @@
           METRICS = items.map(m => ({
             id: m.id,
             label: m.label || m.id,
+            short_label: m.short_label || m.label || m.id,
             unit: m.unit || (m.unit_type === 'money' ? '₽' : 'шт')
           }));
         }
       } catch (e) { console.warn('metrics', e); }
+    }
+
+    // Единая точка чтения метки метрики — вместо своей копии на каждом экране.
+    function metricLabel(id) {
+      return METRICS.find(m => m.id === id)?.label || id;
+    }
+    function metricShort(id) {
+      return METRICS.find(m => m.id === id)?.short_label || metricLabel(id);
     }
 

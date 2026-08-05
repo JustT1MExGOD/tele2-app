@@ -170,22 +170,15 @@
 
       // --- Метрики дня ---
       const pr = dayData?.progress || progData || {};
-      const dayKeys = [
-        { key: 'sim', label: 'SIM' },
-        { key: 'mnp', label: 'MNP' },
-        { key: 'pa', label: 'ПА' },
-        { key: 'combo', label: 'Комбо' },
-        { key: 'phones', label: 'Телефоны' },
-        { key: 'accessories', label: 'Аксы' }
-      ];
+      const dayKeys = ['sim', 'mnp', 'pa', 'combo', 'phones', 'accessories'];
       document.getElementById('lkDayMetrics').innerHTML = `
         <div class="section-title" style="margin-bottom:8px">Факт / план дня</div>
         <div class="lk-metrics-grid">
-          ${dayKeys.map(m => {
-            const x = pr[m.key] || {};
+          ${dayKeys.map(key => {
+            const x = pr[key] || {};
             const fact = x.fact != null ? x.fact : (x.value != null ? x.value : (typeof x === 'number' ? x : 0));
             const plan = x.plan != null ? x.plan : 0;
-            return metricCard(m.label, fact, plan);
+            return metricCard(metricShort(key), fact, plan);
           }).join('')}
         </div>`;
 
@@ -198,23 +191,14 @@
       if (myMonth) {
         const plan = myMonth.plan || {};
         const fact = myMonth.fact || {};
-        const mm = [
-          { key: 'sim', label: 'SIM' },
-          { key: 'mnp', label: 'MNP' },
-          { key: 'pa', label: 'ПА' },
-          { key: 'combo', label: 'Комбо' },
-          { key: 'phones', label: 'Тел' },
-          { key: 'accessories', label: 'Аксы' },
-          { key: 'settings', label: 'Настр' },
-          { key: 'focus', label: 'ФО' }
-        ];
+        const mm = ['sim', 'mnp', 'pa', 'combo', 'phones', 'accessories', 'settings', 'focus'];
         monthHtml = `
           <div class="section-title" style="margin-bottom:8px">Месяц ${month}</div>
           <div class="progress-block" style="margin-bottom:12px">
-            ${mm.map(m => progressHTML(
-              m.label,
-              Number(fact[m.key]) || 0,
-              Number(plan[m.key]) || 0
+            ${mm.map(key => progressHTML(
+              metricShort(key),
+              Number(fact[key]) || 0,
+              Number(plan[key]) || 0
             )).join('')}
             <div class="empty" style="padding:8px 0 0;text-align:left;font-size:12px">
               Смен: ${myMonth.shifts || 0} · осталось: ${myMonth.remaining_shifts || 0}
@@ -286,24 +270,20 @@
       // --- Продажи сегодня (личные) ---
       const allSales = Array.isArray(salesData) ? salesData : (salesData?.items || []);
       const mySales = allSales.filter(s => String(s.employee_id) === String(empId));
-      const metricLabels = {
-        sim: 'SIM', mnp: 'MNP', pa: 'ПА', combo: 'Комбо', phones: 'Тел',
-        accessories: 'Аксы', insurance: 'Страх', wink: 'Wink', shpd: 'ШПД',
-        focus: 'ФО', settings: 'Настр', plotter: 'Плот', hb: 'НВ',
-        credit_request: 'Кр.заявка', credit_issued: 'Кр.выдан'
-      };
 
       let salesHtml = '';
       if (mySales.length) {
-        // агрегируем одну строку на сегодня
+        // агрегируем одну строку на сегодня; METRICS вместо захардкоженного
+        // списка — заодно кастомные метрики (не только базовые 15) теперь
+        // тоже попадают в «Мои продажи сегодня», если по ним что-то внесли
         const agg = {};
         mySales.forEach(s => {
-          Object.keys(metricLabels).forEach(k => {
-            const v = Number(s[k]) || 0;
-            if (v) agg[k] = (agg[k] || 0) + v;
+          METRICS.forEach(m => {
+            const v = Number(s[m.id]) || 0;
+            if (v) agg[m.id] = (agg[m.id] || 0) + v;
           });
         });
-        const parts = Object.entries(agg).map(([k, v]) => `${metricLabels[k]} ${v}`);
+        const parts = Object.entries(agg).map(([k, v]) => `${metricShort(k)} ${v}`);
         salesHtml = `
           <div class="section-title" style="margin-bottom:8px">Мои продажи сегодня</div>
           <div class="progress-block" style="margin-bottom:12px">

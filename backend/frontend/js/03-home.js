@@ -35,8 +35,7 @@
               <div class="empty" style="text-align:left;padding:0 0 10px">Сегодня выходной / нет в графике</div>`}
             ${['sim','mnp','pa','combo','phones'].map(m => {
               const x = pr[m] || { fact: 0, plan: 0, pct: 0 };
-              const labels = { sim:'SIM', mnp:'MNP', pa:'ПА', combo:'Комбо', phones:'Тел' };
-              return progressHTML(labels[m], x.fact, x.plan);
+              return progressHTML(metricShort(m), x.fact, x.plan);
             }).join('')}
             <button class="btn-main" style="margin-top:8px" onclick="openAddSale()">+ Продажа</button>
           </div>`;
@@ -167,11 +166,11 @@
                 <div class="pc-v">${units}</div>
               </div>
               <div class="pulse-chip">
-                <div class="pc-l">Телефоны ₽</div>
+                <div class="pc-l">${metricShort('phones')} ₽</div>
                 <div class="pc-v">${Number(t.phones || 0).toLocaleString('ru-RU')}</div>
               </div>
               <div class="pulse-chip">
-                <div class="pc-l">Аксы ₽</div>
+                <div class="pc-l">${metricShort('accessories')} ₽</div>
                 <div class="pc-v">${Number(t.accessories || 0).toLocaleString('ru-RU')}</div>
               </div>
             </div>`;

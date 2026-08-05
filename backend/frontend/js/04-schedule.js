@@ -92,20 +92,20 @@
                 ).join('')}</div>` : '<div class="empty" style="padding:12px 0">Нет на смене</div>'}
 
                 <div class="block-label">Блок GI</div>
-                ${progressHTML('Симкарты', fact.sim, plan.sim)}
-                ${progressHTML('MNP', fact.mnp, plan.mnp)}
-                ${progressHTML('Абики / золото', fact.pa, plan.pa)}
+                ${progressHTML(metricLabel('sim'), fact.sim, plan.sim)}
+                ${progressHTML(metricLabel('mnp'), fact.mnp, plan.mnp)}
+                ${progressHTML(metricLabel('pa'), fact.pa, plan.pa)}
 
                 <div class="block-label">Товарка</div>
-                ${progressHTML('Комбо', fact.combo, plan.combo)}
-                ${progressHTML('Телефоны', fact.phones, plan.phones)}
-                ${progressHTML('Аксессуары', fact.accessories, plan.accessories)}
-                ${progressHTML('Страховки', fact.insurance, plan.insurance)}
+                ${progressHTML(metricLabel('combo'), fact.combo, plan.combo)}
+                ${progressHTML(metricLabel('phones'), fact.phones, plan.phones)}
+                ${progressHTML(metricLabel('accessories'), fact.accessories, plan.accessories)}
+                ${progressHTML(metricLabel('insurance'), fact.insurance, plan.insurance)}
 
                 <div class="block-label">Ростелеком</div>
-                ${progressHTML('WINK', fact.wink, plan.wink)}
-                ${progressHTML('ШПД', fact.shpd, plan.shpd)}
-                ${progressHTML('ФО', fact.focus, plan.focus)}
+                ${progressHTML(metricLabel('wink'), fact.wink, plan.wink)}
+                ${progressHTML(metricLabel('shpd'), fact.shpd, plan.shpd)}
+                ${progressHTML(metricLabel('focus'), fact.focus, plan.focus)}
 
                 <div class="block-label">Кредиты</div>
                 ${progressHTML('Заявка', fact.credit_request, plan.credit_request)}

@@ -130,10 +130,7 @@
           <div style="font-size:36px;font-weight:800;line-height:1">${data.score ?? 0}</div>
           <div style="font-size:12px;color:var(--hint);margin-top:2px">итоговый score</div>
         </div>
-        ${['sim', 'mnp', 'pa', 'combo'].map(m => {
-          const labels = { sim: 'SIM', mnp: 'MNP', pa: 'ПА', combo: 'Комбо' };
-          return progressHTML(labels[m], fact[m], plan[m]);
-        }).join('')}
+        ${['sim', 'mnp', 'pa', 'combo'].map(m => progressHTML(metricLabel(m), fact[m], plan[m])).join('')}
         ${!data.ideal_shift && missing.length ? `
           <div class="empty" style="text-align:left;padding:10px 0 0;font-size:12px">
             До идеальной смены: ${esc(missing.join(', '))}
