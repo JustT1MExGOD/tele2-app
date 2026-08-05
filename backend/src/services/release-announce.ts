@@ -11,6 +11,7 @@ import { query } from '../db/index.js';
 import { getChangelogEntry } from '../changelog.js';
 import { buildReleaseCardPng } from './report-image.js';
 import { notifyChatPhoto } from '../bot/index.js';
+import { listOrgsWithChat } from './tenant.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,12 +40,21 @@ export async function announceReleaseIfNeeded() {
 
     const { png } = await buildReleaseCardPng(entry);
     const caption = `🚀 T2 Sales обновился до ${version}: ${entry.title}`;
-    const sent = await notifyChatPhoto(png, {
-      caption,
-      filename: `release_${version}.png`
-    });
-    if (!sent.ok) {
-      console.warn('announceReleaseIfNeeded: send failed, not marking as announced:', sent.error);
+    const filename = `release_${version}.png`;
+
+    // Анонс релиза платформенный — шлём во все сети с настроенным чатом.
+    // Пока сетей с явным chat_id нет (сейчас так), notifyChatPhoto сам
+    // фолбэчится на глобальный CHAT_ID — поведение не меняется.
+    const orgs = await listOrgsWithChat();
+    const targets = orgs.length ? orgs.map((o) => o.chat_id) : [undefined];
+    let anySent = false;
+    for (const chatId of targets) {
+      const sent = await notifyChatPhoto(png, { caption, filename, chatId });
+      if (sent.ok) anySent = true;
+      else console.warn('announceReleaseIfNeeded: send failed for chat', chatId, sent.error);
+    }
+    if (!anySent) {
+      console.warn('announceReleaseIfNeeded: no send succeeded, not marking as announced');
       return;
     }
 

@@ -9,6 +9,17 @@ import { query } from '../db/index.js';
 import { bot, notifyChat } from '../bot/index.js';
 import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
 import { computeStoreDailyPlans } from '../services/plans.js';
+import { getOrgChatId } from '../services/tenant.js';
+
+/** Группировка произвольных строк с полем org_id по сети — каждая сеть получает своё сообщение в свой чат. */
+function groupByOrg<T extends { org_id: string }>(rows: T[]): Map<string, T[]> {
+  const byOrg = new Map<string, T[]>();
+  for (const r of rows) {
+    if (!byOrg.has(r.org_id)) byOrg.set(r.org_id, []);
+    byOrg.get(r.org_id)!.push(r);
+  }
+  return byOrg;
+}
 
 async function wasSent(key: string) {
   const r = await query('SELECT 1 FROM alert_flags WHERE id = $1', [key]);
@@ -26,7 +37,8 @@ export async function checkZeroSalesAlert() {
   if (await wasSent(key)) return;
 
   const res = await query(
-    `SELECT e.full_name, e.telegram_id, st.name as store_name, sch.shift_text
+    `SELECT e.full_name, e.telegram_id, st.name as store_name, sch.shift_text,
+            COALESCE(st.org_id, 'default') as org_id
      FROM schedules sch
      JOIN employees e ON e.id = sch.employee_id
      JOIN stores st ON st.id = sch.store_id
@@ -44,10 +56,14 @@ export async function checkZeroSalesAlert() {
     return;
   }
 
-  const lines = res.rows.map((r: any) => `• ${r.full_name} — ${r.store_name}`).join('\n');
-  await notifyChat(
-    `⚡ <b>Контроль 14:00</b>\nНа смене без продаж:\n${lines}\n\n<i>T2 Sales</i>`
-  );
+  // Одна сеть — одно сообщение в её чат, а не всё скопом в общий чат.
+  for (const [orgId, rows] of groupByOrg(res.rows)) {
+    const lines = rows.map((r: any) => `• ${r.full_name} — ${r.store_name}`).join('\n');
+    await notifyChat(
+      `⚡ <b>Контроль 14:00</b>\nНа смене без продаж:\n${lines}\n\n<i>T2 Sales</i>`,
+      await getOrgChatId(orgId)
+    );
+  }
 
   for (const r of res.rows) {
     if (bot && r.telegram_id) {
@@ -79,7 +95,11 @@ export async function checkStoreLagAlert() {
     return;
   }
 
-  const lagging: string[] = [];
+  const orgByStore = new Map<string, string>();
+  const storesRes = await query(`SELECT id, COALESCE(org_id, 'default') as org_id FROM stores`);
+  for (const r of storesRes.rows) orgByStore.set(r.id, r.org_id);
+
+  const lagging: { org_id: string; line: string }[] = [];
   for (const st of plans.stores || []) {
     const fact = await query(
       `SELECT COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
@@ -91,15 +111,18 @@ export async function checkStoreLagAlert() {
     const planSim = Number(st.plan?.sim) || 0;
     const factSim = Number(f.sim) || 0;
     if (planSim > 0 && factSim / planSim < 0.4) {
-      lagging.push(
-        `• ${st.name}: SIM ${factSim}/${planSim} (${Math.round((factSim / planSim) * 100)}%)`
-      );
+      lagging.push({
+        org_id: orgByStore.get(st.store_id) || 'default',
+        line: `• ${st.name}: SIM ${factSim}/${planSim} (${Math.round((factSim / planSim) * 100)}%)`
+      });
     }
   }
 
-  if (lagging.length) {
+  // Одна сеть — одно сообщение в её чат.
+  for (const [orgId, rows] of groupByOrg(lagging)) {
     await notifyChat(
-      `📉 <b>Отставание точек 16:00</b>\n${lagging.join('\n')}\n\n<i>T2 Sales</i>`
+      `📉 <b>Отставание точек 16:00</b>\n${rows.map((r) => r.line).join('\n')}\n\n<i>T2 Sales</i>`,
+      await getOrgChatId(orgId)
     );
   }
   await mark(key);

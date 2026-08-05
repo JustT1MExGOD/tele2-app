@@ -198,7 +198,7 @@
         const btnAcc = document.getElementById('btnAccessRequests');
         const btnSv = document.getElementById('btnSupervisor');
         if (btnAcc) btnAcc.style.display = canApprove() ? '' : 'none';
-        if (btnSv) btnSv.style.display = (canManage() || isSupervisor()) ? '' : 'none';
+        if (btnSv) btnSv.style.display = canViewAnalytics() ? '' : 'none';
         const btnMgrTut = document.getElementById('btnMgrTutorial');
         if (btnMgrTut) btnMgrTut.style.display = canManage() ? '' : 'none';
 
@@ -253,10 +253,15 @@
           box.innerHTML = '<div class="empty">Нет заявок</div>';
           return;
         }
+        const myAssignable = assignableRoles(me?.role);
+        const roleOptions = (myAssignable.length ? myAssignable : ['employee'])
+          .map((r) => `<option value="${r}"${r === 'employee' ? ' selected' : ''}>${roleLabel(r)}</option>`)
+          .join('');
         box.innerHTML = list.map(r => `
           <div class="progress-block" style="margin:8px 12px">
             <div class="row-title">${esc(r.full_name)}</div>
             <div class="row-sub">TG ${r.telegram_id}${r.message ? ' · ' + esc(r.message) : ''}</div>
+            <select id="role_req_${r.id}" style="margin-top:8px;width:100%">${roleOptions}</select>
             <div style="display:flex;gap:8px;margin-top:12px">
               <button class="btn-main" style="flex:1" onclick="approveAccess(${r.id})">Подтвердить</button>
               <button class="btn-main" style="flex:1;background:#ff3b30" onclick="rejectAccess(${r.id})">Отклонить</button>
@@ -268,10 +273,12 @@
     }
 
     async function approveAccess(id) {
+      const roleSel = document.getElementById('role_req_' + id);
+      const role = roleSel ? roleSel.value : 'employee';
       const res = await fetch(API + '/access/requests/' + id + '/approve', {
         method: 'POST',
         headers: authHeaders(true),
-        body: JSON.stringify({ role: 'employee' })
+        body: JSON.stringify({ role })
       });
       if (!res.ok) { toast('Ошибка', 'err'); return; }
       toast('Доступ открыт', 'ok');

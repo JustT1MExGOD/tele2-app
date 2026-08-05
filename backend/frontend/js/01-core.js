@@ -90,6 +90,34 @@
       return canManage() || isSupervisor();
     }
 
+    // Иерархия ролей — зеркало backend/src/middleware-auth.ts ROLE_LEVEL.
+    // senior входит в canManage() (через is_manager с /me), но НЕ должен
+    // видеть Command Center/кабинет супервайзера — для этого отдельная
+    // canViewAnalytics(), не связанная с is_manager.
+    const ROLE_LEVEL = { guest: -1, trainee: 0, employee: 1, senior: 2, manager: 3, supervisor: 4, admin: 5 };
+    const ROLE_ORDER = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
+    const ROLE_LABELS = {
+      trainee: 'Стажёр',
+      employee: 'Продавец',
+      senior: 'Старший продавец',
+      manager: 'Руководитель',
+      supervisor: 'Супервайзер',
+      admin: 'Администратор'
+    };
+    function roleLabel(role) {
+      return ROLE_LABELS[role] || role || 'Продавец';
+    }
+    /** Command Center и кабинет супервайзера — намеренно без senior. */
+    function canViewAnalytics() {
+      return me?.role === 'manager' || me?.role === 'admin' || me?.role === 'supervisor';
+    }
+    /** Роли, которые текущий пользователь может назначить (строго ниже своей; admin — все). */
+    function assignableRoles(myRole) {
+      if (myRole === 'admin') return ROLE_ORDER;
+      const myLevel = ROLE_LEVEL[myRole] ?? -1;
+      return ROLE_ORDER.filter((r) => ROLE_LEVEL[r] < myLevel);
+    }
+
     const STORE_COLORS = {
       kosmonavtov: '#6d9eeb',
       kalinina2: '#ff6d01',

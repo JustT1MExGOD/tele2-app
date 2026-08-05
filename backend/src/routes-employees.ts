@@ -8,13 +8,14 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireActive, requireManager } from './middleware-auth.js';
+import { requireActive, requireManager, canAssignRole, Role } from './middleware-auth.js';
 
 export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.get('/employees', async (request, reply) => {
     if (!requireActive(request, reply)) return;
-    // telegram_id отдаём только manager/admin — рядовым сотрудникам он не нужен
-    const canSeeTelegramId = request.user!.role === 'manager' || request.user!.role === 'admin';
+    // telegram_id отдаём только manager-tier (manager/senior/admin) — рядовым сотрудникам он не нужен
+    const canSeeTelegramId =
+      request.user!.role === 'manager' || request.user!.role === 'admin' || request.user!.role === 'senior';
     const res = await query(
       `SELECT id, full_name, short_name, ${canSeeTelegramId ? 'telegram_id,' : ''} is_active, role
        FROM employees
@@ -31,13 +32,17 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     const full_name = String(b.full_name || '').trim();
     if (!full_name) return reply.code(400).send({ error: 'full_name required' });
     const short_name = b.short_name || full_name.split(/\s+/)[1] || full_name;
-    const role = ['employee', 'manager', 'admin', 'supervisor'].includes(b.role) ? b.role : 'employee';
+    const ALL_ROLES: Role[] = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
+    const requested = ALL_ROLES.includes(b.role) ? (b.role as Role) : 'employee';
+    // Каскад: можно завести сотрудника только с ролью строго ниже своей (admin — без ограничений).
+    const role: Role = canAssignRole(request.user!.role, requested) ? requested : 'employee';
 
+    // Новый сотрудник попадает в сеть создающего его менеджера.
     const res = await query(
-      `INSERT INTO employees (full_name, short_name, role, is_active)
-       VALUES ($1, $2, $3, true)
-       RETURNING id, full_name, short_name, role, is_active, telegram_id`,
-      [full_name, short_name, role]
+      `INSERT INTO employees (full_name, short_name, role, is_active, org_id)
+       VALUES ($1, $2, $3, true, $4)
+       RETURNING id, full_name, short_name, role, is_active, telegram_id, org_id`,
+      [full_name, short_name, role, request.user!.org_id]
     );
     return res.rows[0];
   });
@@ -99,9 +104,15 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     const code = String(b.code || '').trim();
     if (!id || !name) return reply.code(400).send({ error: 'id and name required' });
 
+    // Новая точка попадает в сеть создающего её менеджера. Расписание отчётов
+    // (micro_report_times/close_time_*) — с дефолтами, если не задано явно, чтобы
+    // точка сразу подхватилась cron-ом без ручной правки кода (см. cron/reports.ts).
     const res = await query(
-      `INSERT INTO stores (id, code, name, short_name, work_time, hours, color, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+      `INSERT INTO stores (
+         id, code, name, short_name, work_time, hours, color, is_active, org_id,
+         micro_report_times, skip_sunday_micro_times, close_time_weekday, close_time_sunday
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         id,
@@ -110,7 +121,12 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
         b.short_name || name.slice(0, 8),
         b.work_time || '10-21',
         Number(b.hours) || 11,
-        b.color || '#6d9eeb'
+        b.color || '#6d9eeb',
+        request.user!.org_id,
+        b.micro_report_times || ['10:00', '12:00', '14:00', '16:00', '18:00', '20:00'],
+        b.skip_sunday_micro_times || null,
+        b.close_time_weekday || '21:00',
+        b.close_time_sunday || b.close_time_weekday || '21:00'
       ]
     );
 
@@ -128,7 +144,19 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const b = request.body as any;
-    const allowed = ['name', 'code', 'short_name', 'work_time', 'hours', 'color', 'is_active'];
+    const allowed = [
+      'name',
+      'code',
+      'short_name',
+      'work_time',
+      'hours',
+      'color',
+      'is_active',
+      'micro_report_times',
+      'skip_sunday_micro_times',
+      'close_time_weekday',
+      'close_time_sunday'
+    ];
     const sets: string[] = [];
     const vals: any[] = [];
     let i = 1;

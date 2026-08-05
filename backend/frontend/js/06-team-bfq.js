@@ -22,15 +22,17 @@
           map[s.employee_id].active = true;
         });
         const list = Array.isArray(employees) ? employees : [];
+        const myAssignable = canManage() ? assignableRoles(me?.role) : [];
         box.innerHTML = list.map(e => {
           const st = map[e.id] || { sim: 0, phones: 0, combo: 0, active: false };
-          const roleBadge = e.role === 'manager' || e.role === 'admin' ? ' · ⭐' : '';
+          const roleBadge = e.role && e.role !== 'employee' && e.role !== 'trainee' ? ' · ⭐' : '';
           const initial = (e.full_name || '?').trim().charAt(0).toUpperCase();
+          // Роли ниже моей и отличные от текущей роли сотрудника — нет смысла предлагать ту же самую.
+          const roleBtns = myAssignable.filter((r) => r !== e.role);
           const adminBtns = canManage()
-            ? `<div style="display:flex;gap:6px;padding:0 16px 10px">
-                <button class="mchip" style="flex:1" onclick="event.stopPropagation();setRole(${e.id},'manager')">Manager</button>
-                <button class="mchip" style="flex:1" onclick="event.stopPropagation();setRole(${e.id},'employee')">Employee</button>
-                <button class="mchip" style="flex:1;color:var(--danger)" onclick="event.stopPropagation();removeEmployee(${e.id})">Удалить</button>
+            ? `<div style="display:flex;gap:6px;padding:0 16px 10px;flex-wrap:wrap">
+                ${roleBtns.map((r) => `<button class="mchip" onclick="event.stopPropagation();setRole(${e.id},'${r}')">${roleLabel(r)}</button>`).join('')}
+                <button class="mchip" style="color:var(--danger)" onclick="event.stopPropagation();removeEmployee(${e.id})">Удалить</button>
               </div>`
             : '';
           return `
@@ -39,7 +41,7 @@
                 <div class="team-avatar${st.active ? ' active' : ''}">${initial}</div>
                 <div class="row-body">
                   <div class="row-title">${esc(e.full_name)}${roleBadge}</div>
-                  <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones} · ${e.role || 'employee'}</div>
+                  <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones} · ${roleLabel(e.role)}</div>
                 </div>
                 <div class="row-chevron">›</div>
               </button>
@@ -524,14 +526,15 @@
 
     function openAddEmployee() {
       if (!canManage()) return;
+      const roles = assignableRoles(me?.role);
+      const options = (roles.length ? roles : ['employee'])
+        .map((r) => `<option value="${r}"${r === 'employee' ? ' selected' : ''}>${roleLabel(r)}</option>`)
+        .join('');
       document.getElementById('modalTitle').textContent = 'Новый сотрудник';
       document.getElementById('modalBody').innerHTML = `
         <div class="field"><label>ФИО</label><input id="ne_name" placeholder="Иванов Иван Иванович"></div>
         <div class="field"><label>Роль</label>
-          <select id="ne_role">
-            <option value="employee">employee</option>
-            <option value="manager">manager</option>
-          </select>
+          <select id="ne_role">${options}</select>
         </div>
         <button class="btn-main" onclick="saveNewEmployee()">Создать</button>
       `;
@@ -585,13 +588,13 @@
 
     async function setRole(id, role) {
       if (!canManage()) return;
-      const res = await fetch(API + '/employees/' + id, {
+      const res = await fetch(API + '/employees/' + id + '/role', {
         method: 'PATCH',
         headers: authHeaders(true),
         body: JSON.stringify({ role })
       });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
-      toast('Роль: ' + role, 'ok');
+      if (!res.ok) { toast(res.status === 403 ? 'Можно назначать только роли ниже своей' : 'Ошибка', 'err'); return; }
+      toast('Роль: ' + roleLabel(role), 'ok');
       loadTeam();
     }
 

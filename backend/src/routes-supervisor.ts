@@ -5,7 +5,8 @@
  * GET /supervisor/health     — короткий срез для виджетов
  *
  * Доступ: supervisor | manager | admin
- * Supervisor видит только точки из supervisor_stores;
+ * Supervisor = руководитель сектора, видит все точки всех сетей своего
+ * сектора (supervisor_sectors → organizations → stores);
  * manager/admin — всю сеть (scope = null).
  *
  * ВАЖНО: маршрут /supervisor/dashboard регистрируется ТОЛЬКО здесь.

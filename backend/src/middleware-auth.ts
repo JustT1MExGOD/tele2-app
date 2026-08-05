@@ -6,8 +6,31 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
 import { verifyTelegramInitData } from './services/telegram-auth.js';
 
-export type Role = 'employee' | 'manager' | 'admin' | 'supervisor' | 'guest';
+export type Role = 'trainee' | 'employee' | 'senior' | 'manager' | 'supervisor' | 'admin' | 'guest';
 export type AccessStatus = 'pending' | 'active' | 'rejected' | 'blocked' | 'none';
+
+/**
+ * Иерархия ролей: trainee < employee < senior < manager < supervisor < admin.
+ * senior — операционно то же самое, что manager (проходит requireManager),
+ * но не видит Command Center и кабинет супервайзера (см. canViewSupervisor
+ * в routes-supervisor.ts и canViewAnalytics() на фронте — туда senior
+ * намеренно не добавлен).
+ */
+export const ROLE_LEVEL: Record<Role, number> = {
+  guest: -1,
+  trainee: 0,
+  employee: 1,
+  senior: 2,
+  manager: 3,
+  supervisor: 4,
+  admin: 5
+};
+
+/** Можно назначать только роли строго ниже своей; admin — без ограничений. */
+export function canAssignRole(actorRole: Role, targetRole: Role): boolean {
+  if (actorRole === 'admin') return true;
+  return ROLE_LEVEL[targetRole] < ROLE_LEVEL[actorRole];
+}
 
 export interface AuthUser {
   telegram_id: string | number;
@@ -15,6 +38,8 @@ export interface AuthUser {
   full_name: string | null;
   role: Role;
   access_status: AccessStatus;
+  /** Сеть точек (organizations.id) сотрудника — 'default', пока у него не задана. */
+  org_id: string;
 }
 
 
@@ -34,12 +59,13 @@ export async function loadUser(telegramId: number): Promise<AuthUser> {
       employee_id: null,
       full_name: null,
       role: 'guest',
-      access_status: 'none'
+      access_status: 'none',
+      org_id: 'default'
     };
   }
 
   const res = await query(
-    `SELECT id as employee_id, full_name, role, telegram_id, access_status, is_active
+    `SELECT id as employee_id, full_name, role, telegram_id, access_status, is_active, org_id
      FROM employees
      WHERE telegram_id = $1::bigint
      LIMIT 1`,
@@ -52,7 +78,8 @@ export async function loadUser(telegramId: number): Promise<AuthUser> {
       employee_id: null,
       full_name: null,
       role: 'guest',
-      access_status: 'none'
+      access_status: 'none',
+      org_id: 'default'
     };
   }
 
@@ -63,7 +90,8 @@ export async function loadUser(telegramId: number): Promise<AuthUser> {
     employee_id: active ? Number(e.employee_id) : null,
     full_name: e.full_name,
     role: (e.role || 'employee') as Role,
-    access_status: (e.access_status || (active ? 'active' : 'none')) as AccessStatus
+    access_status: (e.access_status || (active ? 'active' : 'none')) as AccessStatus,
+    org_id: e.org_id || 'default'
   };
 }
 
@@ -154,7 +182,7 @@ export function requireActive(request: FastifyRequest, reply: FastifyReply) {
 export function requireManager(request: FastifyRequest, reply: FastifyReply) {
   if (!requireActive(request, reply)) return false;
   const role = request.user!.role;
-  if (role !== 'manager' && role !== 'admin') {
+  if (role !== 'manager' && role !== 'admin' && role !== 'senior') {
     reply.code(403).send({ error: 'forbidden', message: 'Только для управляющего' });
     return false;
   }
@@ -164,7 +192,7 @@ export function requireManager(request: FastifyRequest, reply: FastifyReply) {
 export function requireManagerOrSupervisor(request: FastifyRequest, reply: FastifyReply) {
   if (!requireActive(request, reply)) return false;
   const role = request.user!.role;
-  if (role !== 'manager' && role !== 'admin' && role !== 'supervisor') {
+  if (role !== 'manager' && role !== 'admin' && role !== 'supervisor' && role !== 'senior') {
     reply.code(403).send({ error: 'manager or supervisor only' });
     return false;
   }
@@ -174,7 +202,7 @@ export function requireManagerOrSupervisor(request: FastifyRequest, reply: Fasti
 export function requireSupervisor(request: FastifyRequest, reply: FastifyReply) {
   if (!requireActive(request, reply)) return false;
   const role = request.user!.role;
-  if (role !== 'supervisor' && role !== 'admin' && role !== 'manager') {
+  if (role !== 'supervisor' && role !== 'admin' && role !== 'manager' && role !== 'senior') {
     reply.code(403).send({ error: 'supervisor only' });
     return false;
   }
@@ -182,16 +210,26 @@ export function requireSupervisor(request: FastifyRequest, reply: FastifyReply) 
 }
 
 export function isManager(user?: AuthUser | null) {
-  return user?.role === 'manager' || user?.role === 'admin';
+  return user?.role === 'manager' || user?.role === 'admin' || user?.role === 'senior';
 }
 
+/**
+ * Точки, видимые пользователю. manager/admin — без ограничений (null).
+ * supervisor — руководитель сектора: видит все точки всех сетей своего
+ * сектора (supervisor_sectors → organizations → stores), а не список
+ * отдельных точек — назначение теперь на уровне сектора целиком.
+ */
 export async function getUserStoreIds(user: AuthUser): Promise<string[] | null> {
   if (!user.employee_id) return [];
-  if (user.role === 'manager' || user.role === 'admin') return null;
+  if (user.role === 'manager' || user.role === 'admin' || user.role === 'senior') return null;
   if (user.role === 'supervisor') {
     try {
       const res = await query(
-        `SELECT store_id FROM supervisor_stores WHERE supervisor_id = $1`,
+        `SELECT s.id as store_id
+         FROM supervisor_sectors ss
+         JOIN organizations o ON o.sector_id = ss.sector_id
+         JOIN stores s ON COALESCE(s.org_id, 'default') = o.id
+         WHERE ss.supervisor_id = $1`,
         [user.employee_id]
       );
       return res.rows.map((r: any) => r.store_id);

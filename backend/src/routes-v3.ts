@@ -18,7 +18,7 @@ import {
   upsertBFQManual,
   addVMRQuestionnaire
 } from './services/bfq.js';
-import { authPlugin, requireAuth, requireManager, isManager } from './middleware-auth.js';
+import { authPlugin, requireAuth, requireManager, isManager, canAssignRole, Role } from './middleware-auth.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 
 function csvEscape(v: any) {
@@ -218,13 +218,17 @@ export async function registerV3Routes(app: FastifyInstance) {
     };
   });
 
-  // Назначить роль (только manager/admin)
+  // Назначить роль (каскад: только строго ниже своей, admin — без ограничений)
   app.post('/employees/:id/role', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const { role } = request.body as { role?: string };
-    if (!['employee', 'manager', 'admin'].includes(String(role))) {
+    const ALL_ROLES: Role[] = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
+    if (!ALL_ROLES.includes(role as Role)) {
       return reply.code(400).send({ error: 'invalid role' });
+    }
+    if (!canAssignRole(request.user!.role, role as Role)) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
     }
     const res = await query(
       `UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`,

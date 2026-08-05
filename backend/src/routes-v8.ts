@@ -15,7 +15,9 @@ import {
   requireManagerOrSupervisor,
   getUserStoreIds,
   loadUser,
-  authPlugin
+  authPlugin,
+  canAssignRole,
+  Role
 } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
 import { bot } from './bot/index.js';
@@ -148,7 +150,10 @@ export async function registerV8Routes(app: FastifyInstance) {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { id } = request.params as { id: string };
     const b = (request.body as any) || {};
-    const role = b.role === 'supervisor' ? 'supervisor' : b.role === 'manager' ? 'manager' : 'employee';
+    const ALL_ROLES: Role[] = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
+    const requestedRole: Role = ALL_ROLES.includes(b.role) ? b.role : 'employee';
+    // Каскад: одобряющий может выдать только роль строго ниже своей (admin — без ограничений).
+    const role: Role = canAssignRole(request.user!.role, requestedRole) ? requestedRole : 'employee';
 
     const reqRes = await query(`SELECT * FROM access_requests WHERE id = $1`, [Number(id)]);
     const req = reqRes.rows[0];
@@ -171,12 +176,12 @@ export async function registerV8Routes(app: FastifyInstance) {
         [req.telegram_id, role === 'employee' ? null : role, request.user!.employee_id, req.full_name, employeeId]
       );
     } else {
-      // создать нового
+      // создать нового — попадает в сеть одобряющего менеджера
       const ins = await query(
-        `INSERT INTO employees (full_name, telegram_id, role, access_status, is_active, verified_by, verified_at)
-         VALUES ($1,$2,$3,'active',true,$4,now())
+        `INSERT INTO employees (full_name, telegram_id, role, access_status, is_active, verified_by, verified_at, org_id)
+         VALUES ($1,$2,$3,'active',true,$4,now(),$5)
          RETURNING id`,
-        [req.full_name, req.telegram_id, role, request.user!.employee_id]
+        [req.full_name, req.telegram_id, role, request.user!.employee_id, request.user!.org_id]
       );
       // если нет serial — может понадобиться ручной id; предполагаем serial/identity
       employeeId = ins.rows[0]?.id;
@@ -228,6 +233,8 @@ export async function registerV8Routes(app: FastifyInstance) {
   });
 
   // ===== SUPERVISOR: точки =====
+  // Супервайзер = руководитель сектора: видит все точки всех сетей своего
+  // сектора целиком, назначается на сектор, а не на отдельные точки вручную.
   app.get('/supervisor/stores', async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const user = request.user!;
@@ -240,8 +247,9 @@ export async function registerV8Routes(app: FastifyInstance) {
     }
     const res = await query(
       `SELECT st.id, st.name, st.code, st.color, st.plan_share
-       FROM supervisor_stores ss
-       JOIN stores st ON st.id = ss.store_id
+       FROM supervisor_sectors ss
+       JOIN organizations o ON o.sector_id = ss.sector_id
+       JOIN stores st ON COALESCE(st.org_id, 'default') = o.id
        WHERE ss.supervisor_id = $1
        ORDER BY st.name`,
       [user.employee_id]
@@ -249,42 +257,44 @@ export async function registerV8Routes(app: FastifyInstance) {
     return res.rows;
   });
 
-  app.put('/supervisor/:id/stores', async (request, reply) => {
+  app.put('/supervisor/:id/sector', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    const { store_ids } = request.body as { store_ids: string[] };
-    await query(`DELETE FROM supervisor_stores WHERE supervisor_id = $1`, [Number(id)]);
-    for (const sid of store_ids || []) {
-      await query(
-        `INSERT INTO supervisor_stores (supervisor_id, store_id) VALUES ($1,$2)
-         ON CONFLICT DO NOTHING`,
-        [Number(id), sid]
-      );
-    }
-    return { ok: true, count: (store_ids || []).length };
+    const { sector_id } = request.body as { sector_id: string };
+    if (!sector_id) return reply.code(400).send({ error: 'sector_id required' });
+    await query(`DELETE FROM supervisor_sectors WHERE supervisor_id = $1`, [Number(id)]);
+    await query(
+      `INSERT INTO supervisor_sectors (supervisor_id, sector_id) VALUES ($1,$2)
+       ON CONFLICT DO NOTHING`,
+      [Number(id), sector_id]
+    );
+    return { ok: true, sector_id };
   });
 
-  // Назначить роль supervisor + точки
+  // Назначить роль (+ сектор, если роль — supervisor)
   app.patch('/employees/:id/role', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const b = request.body as any;
     const role = b.role;
-    if (!['employee', 'manager', 'supervisor', 'admin'].includes(role)) {
+    const ALL_ROLES: Role[] = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
+    if (!ALL_ROLES.includes(role)) {
       return reply.code(400).send({ error: 'bad role' });
+    }
+    // Каскад: можно назначить только роль строго ниже своей (admin — без ограничений).
+    if (!canAssignRole(request.user!.role, role)) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
     }
     const res = await query(
       `UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`,
       [role, Number(id)]
     );
-    if (role === 'supervisor' && Array.isArray(b.store_ids)) {
-      await query(`DELETE FROM supervisor_stores WHERE supervisor_id = $1`, [Number(id)]);
-      for (const sid of b.store_ids) {
-        await query(
-          `INSERT INTO supervisor_stores (supervisor_id, store_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-          [Number(id), sid]
-        );
-      }
+    if (role === 'supervisor' && b.sector_id) {
+      await query(`DELETE FROM supervisor_sectors WHERE supervisor_id = $1`, [Number(id)]);
+      await query(
+        `INSERT INTO supervisor_sectors (supervisor_id, sector_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+        [Number(id), b.sector_id]
+      );
     }
     return res.rows[0];
   });

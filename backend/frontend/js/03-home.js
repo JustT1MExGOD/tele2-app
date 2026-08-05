@@ -59,7 +59,7 @@
       const section = document.getElementById('commandCenterSection');
       const box = document.getElementById('commandCenterBody');
       if (!section || !box) return;
-      if (!canManage() && !isSupervisor()) {
+      if (!canViewAnalytics()) {
         section.style.display = 'none';
         return;
       }
@@ -123,7 +123,7 @@
             <div class="greet-badges">
               <span class="greet-badge">T2 Sales v${APP_VERSION}</span>
               ${showStreak > 0 ? `<span class="greet-badge fire">🔥 ${showStreak} дн. подряд</span>` : `<span class="greet-badge">Внеси продажу — начни стрик</span>`}
-              ${me?.role === 'manager' || me?.role === 'admin' ? `<span class="greet-badge">Управляющий</span>` : ''}
+              ${me?.role ? `<span class="greet-badge">${esc(roleLabel(me.role))}</span>` : ''}
             </div>
           </div>`;
       }

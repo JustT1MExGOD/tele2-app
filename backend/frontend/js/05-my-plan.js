@@ -32,11 +32,7 @@
         </div>`;
     }
 
-    function roleLabel(role) {
-      if (role === 'manager' || role === 'admin') return 'Управляющий';
-      if (role === 'supervisor') return 'Супервайзер';
-      return 'Сотрудник';
-    }
+    // roleLabel() — общий хелпер из 01-core.js
 
     async function loadMyPlan() {
       const bindSec = document.getElementById('myBindSection');

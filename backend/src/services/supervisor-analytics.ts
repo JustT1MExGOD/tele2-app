@@ -21,9 +21,15 @@ export async function resolveSupervisorStores(
   role: string
 ): Promise<StoreScope> {
   if (role === 'admin' || role === 'manager') return null;
+  // supervisor = руководитель сектора: видит все точки всех сетей своего
+  // сектора (назначение — на сектор целиком, не по отдельным точкам).
   try {
     const res = await query(
-      `SELECT store_id FROM supervisor_stores WHERE supervisor_id = $1`,
+      `SELECT s.id as store_id
+       FROM supervisor_sectors ss
+       JOIN organizations o ON o.sector_id = ss.sector_id
+       JOIN stores s ON COALESCE(s.org_id, 'default') = o.id
+       WHERE ss.supervisor_id = $1`,
       [employeeId]
     );
     return res.rows.map((r: any) => String(r.store_id));
@@ -351,7 +357,7 @@ function emptyDash(from: string, date: string, month: string) {
       drops_count: 0
     },
     stores: [],
-    drops: [{ severity: 'warn', message: 'Нет привязанных точек. Admin: назначь supervisor_stores', store_name: '—' }],
+    drops: [{ severity: 'warn', message: 'Нет привязанного сектора. Manager: назначь сектор через PUT /supervisor/:id/sector', store_name: '—' }],
     trend: [],
     top_employees: [],
     generated_at: new Date().toISOString()

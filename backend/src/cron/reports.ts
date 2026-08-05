@@ -1,11 +1,9 @@
 /**
- * Cron: микро/итог → картинка в REPORT_CHAT_ID
- * Расписание по точкам (МСК):
- *
- * Космонавтов 20А:  микро 12,14,16,18,20  | финал 21:00
- * Калинина 2:       пн–сб микро 10,12,14,16,18,20 | финал 20:45
- *                   вс     микро 10,12,14,16,18    | финал 19:45
- * Калинина 11:      микро 10,12,14,16,18,20 | финал 22:00
+ * Cron: микро/итог → картинка в чат сети точки.
+ * Расписание отчётов (микро-часы, часы закрытия для финала) берётся из
+ * самих точек (stores.micro_report_times / skip_sunday_micro_times /
+ * close_time_weekday / close_time_sunday) — раньше дублировалось в TS-массиве
+ * SCHEDULES, из-за чего новую точку нужно было вручную дописывать в код.
  */
 import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
@@ -15,6 +13,7 @@ import { shiftReminder, microReport, finalReport, microLines, finalLines } from 
 import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../services/report-image.js';
 import { generateDipComment } from '../services/ai.js';
 import { materializeStoreDailyPlans } from '../services/plans.js';
+import { getStoreChatId } from '../services/tenant.js';
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)
@@ -26,65 +25,55 @@ async function factSql(): Promise<string> {
   return `SELECT ${select} FROM sales WHERE sale_date::date = $1::date AND store_id = $2`;
 }
 
-/** Расписание одной точки */
-type StoreSchedule = {
-  /** id в stores, либо несколько алиасов */
-  ids: string[];
-  /** микро-часы пн–сб */
-  micro: number[];
-  /** микро-часы вс (если не задано — как micro) */
-  microSun?: number[];
-  /** финал пн–сб: hour, minute */
-  final: { h: number; m: number };
-  /** финал вс (если не задано — как final) */
-  finalSun?: { h: number; m: number };
+type StorePlanRow = {
+  store_id: string;
+  name: string;
+  code: string;
+  plan: any;
+  micro_report_times: string[] | null;
+  skip_sunday_micro_times: string[] | null;
+  close_time_weekday: string | null;
+  close_time_sunday: string | null;
 };
-
-const SCHEDULES: StoreSchedule[] = [
-  {
-    ids: ['kosmonavtov'],
-    micro: [12, 14, 16, 18, 20],
-    final: { h: 21, m: 0 }
-  },
-  {
-    ids: ['kalinina2'],
-    micro: [10, 12, 14, 16, 18, 20],
-    microSun: [10, 12, 14, 16, 18],
-    final: { h: 20, m: 45 },
-    finalSun: { h: 19, m: 45 }
-  },
-  {
-    ids: ['kalinina11'],
-    micro: [10, 12, 14, 16, 18, 20],
-    final: { h: 22, m: 0 }
-  }
-];
 
 function isSundayMoscow(now: Date): boolean {
   // getDay: 0 = Sunday
   return now.getDay() === 0;
 }
 
-function scheduleForStore(storeId: string): StoreSchedule | null {
-  const id = String(storeId || '').toLowerCase();
-  return (
-    SCHEDULES.find((s) => s.ids.some((x) => x.toLowerCase() === id)) || null
+const DEFAULT_MICRO_HOURS = [10, 12, 14, 16, 18, 20];
+const DEFAULT_FINAL = { h: 21, m: 0 };
+
+function parseHour(t: string): number {
+  return parseInt(String(t).split(':')[0], 10);
+}
+
+/** Микро-часы точки; по воскресеньям вычитаются часы из skip_sunday_micro_times. */
+function microHoursFor(st: StorePlanRow, sunday: boolean): number[] {
+  const base =
+    st.micro_report_times && st.micro_report_times.length
+      ? st.micro_report_times.map(parseHour)
+      : DEFAULT_MICRO_HOURS;
+  if (!sunday) return base;
+  const skip = new Set((st.skip_sunday_micro_times || []).map(parseHour));
+  return base.filter((h) => !skip.has(h));
+}
+
+/** Время финального отчёта = время закрытия точки (будни/вс). */
+function finalTimeFor(st: StorePlanRow, sunday: boolean): { h: number; m: number } {
+  const raw = sunday ? st.close_time_sunday : st.close_time_weekday;
+  if (!raw) return DEFAULT_FINAL;
+  const [h, m] = String(raw).split(':').map((x) => parseInt(x, 10));
+  return { h, m: m || 0 };
+}
+
+async function loadStorePlans(date: string): Promise<StorePlanRow[]> {
+  const stores = await query(
+    `SELECT id, name, code, micro_report_times, skip_sunday_micro_times,
+            close_time_weekday, close_time_sunday
+     FROM stores ORDER BY name`
   );
-}
-
-function microHoursFor(sch: StoreSchedule, sunday: boolean): number[] {
-  if (sunday && sch.microSun) return sch.microSun;
-  return sch.micro;
-}
-
-function finalTimeFor(sch: StoreSchedule, sunday: boolean): { h: number; m: number } {
-  if (sunday && sch.finalSun) return sch.finalSun;
-  return sch.final;
-}
-
-async function loadStorePlans(date: string) {
-  const stores = await query(`SELECT id, name, code FROM stores ORDER BY name`);
-  const out = [];
+  const out: StorePlanRow[] = [];
   for (const st of stores.rows) {
     let planRes = await query(
       `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date::date = $2::date LIMIT 1`,
@@ -100,7 +89,11 @@ async function loadStorePlans(date: string) {
       store_id: st.id,
       name: st.name,
       code: st.code,
-      plan: planRes.rows[0] || {}
+      plan: planRes.rows[0] || {},
+      micro_report_times: st.micro_report_times,
+      skip_sunday_micro_times: st.skip_sunday_micro_times,
+      close_time_weekday: st.close_time_weekday,
+      close_time_sunday: st.close_time_sunday
     });
   }
   return out;
@@ -114,6 +107,7 @@ async function sendStoreReportImage(
 ) {
   if (kind === 'final') return sendStoreStoryReport(st, date);
 
+  const chatId = await getStoreChatId(st.store_id);
   const hourLabel = hour != null ? `${String(hour).padStart(2, '0')}:00` : undefined;
   const caption = `📊 ${st.name} · ${date}${hourLabel ? ' · ' + hourLabel : ''}`;
 
@@ -121,7 +115,8 @@ async function sendStoreReportImage(
     const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'micro', hourLabel });
     const r = await notifyChatPhoto(png, {
       caption,
-      filename: `micro_${st.store_id}_${date}.png`
+      filename: `micro_${st.store_id}_${date}.png`,
+      chatId
     });
     if (r.ok) return r;
     throw new Error(r.error || 'photo_failed');
@@ -132,7 +127,8 @@ async function sendStoreReportImage(
       return await notifyChatPhoto(svg, {
         caption,
         filename: `micro_${st.store_id}_${date}.svg`,
-        asDocument: true
+        asDocument: true,
+        chatId
       });
     } catch (e2: any) {
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
@@ -152,7 +148,7 @@ async function sendStoreReportImage(
         staff: staff.rows.map((x: any) => x.full_name),
         lines
       });
-      await notifyChat(text);
+      await notifyChat(text, chatId);
       return { ok: true, type: 'text_fallback' };
     }
   }
@@ -163,6 +159,7 @@ async function sendStoreStoryReport(
   st: { store_id: string; name: string; code: string; plan: any },
   date: string
 ) {
+  const chatId = await getStoreChatId(st.store_id);
   try {
     const { plan, fact, tomorrow } = await buildStoryReportPngs(st.store_id, date);
 
@@ -181,14 +178,17 @@ async function sendStoreStoryReport(
     // Каждый кадр уже подписан заголовком внутри самой картинки (План дня /
     // Итоговый отчёт / Фокус на завтра) — не дублируем это в caption каждого
     // фото. Вместо трёх отдельных подписей — одно сообщение под всем альбомом.
-    const r = await notifyChatMediaGroup([
-      { buffer: plan, filename: `plan_${st.store_id}_${date}.png` },
-      { buffer: fact, filename: `fact_${st.store_id}_${date}.png` },
-      { buffer: tomorrow, filename: `tomorrow_${st.store_id}_${date}.png` }
-    ]);
+    const r = await notifyChatMediaGroup(
+      [
+        { buffer: plan, filename: `plan_${st.store_id}_${date}.png` },
+        { buffer: fact, filename: `fact_${st.store_id}_${date}.png` },
+        { buffer: tomorrow, filename: `tomorrow_${st.store_id}_${date}.png` }
+      ],
+      { chatId }
+    );
     if (!r.ok) throw new Error(r.error || 'media_group_failed');
 
-    await notifyChat(`🏁 <b>${st.name}</b> · итог дня · ${date}\n\n${comment.text}`);
+    await notifyChat(`🏁 <b>${st.name}</b> · итог дня · ${date}\n\n${comment.text}`, chatId);
     return r;
   } catch (e: any) {
     console.warn('Story report failed, fallback to single final image:', e?.message || e);
@@ -201,10 +201,11 @@ async function sendSingleFinalImage(
   st: { store_id: string; name: string; code: string; plan: any },
   date: string
 ) {
+  const chatId = await getStoreChatId(st.store_id);
   const caption = `🏁 ${st.name} · ${date}`;
   try {
     const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'final' });
-    const r = await notifyChatPhoto(png, { caption, filename: `final_${st.store_id}_${date}.png` });
+    const r = await notifyChatPhoto(png, { caption, filename: `final_${st.store_id}_${date}.png`, chatId });
     if (r.ok) return r;
     throw new Error(r.error || 'photo_failed');
   } catch (e: any) {
@@ -214,7 +215,8 @@ async function sendSingleFinalImage(
       return await notifyChatPhoto(svg, {
         caption,
         filename: `final_${st.store_id}_${date}.svg`,
-        asDocument: true
+        asDocument: true,
+        chatId
       });
     } catch (e2: any) {
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
@@ -234,16 +236,14 @@ async function sendSingleFinalImage(
         staff: staff.rows.map((x: any) => x.full_name),
         lines
       });
-      await notifyChat(text);
+      await notifyChat(text, chatId);
       return { ok: true, type: 'text_fallback' };
     }
   }
 }
 
 export function startReportCron() {
-  console.log(
-    '📅 Cron T2: отчёты по точкам — kosmo 12–20/21:00, kal2 10–20/20:45 (вс 19:45), kal11 10–20/22:00'
-  );
+  console.log('📅 Cron T2: отчёты по точкам — расписание берётся из stores (micro_report_times / close_time_*)');
   setInterval(() => {
     tick().catch((e) => console.error('cron tick', e?.message || e));
   }, 60_000);
@@ -276,27 +276,13 @@ async function tick() {
   const stores = await loadStorePlans(date);
 
   for (const st of stores) {
-    const sch = scheduleForStore(st.store_id);
-    if (!sch) {
-      // неизвестная точка — дефолт: микро каждый чётный час 10–20, финал 21:00
-      if (mm === 0 && [10, 12, 14, 16, 18, 20].includes(hh)) {
-        await sendStoreReportImage(st, date, 'micro', hh);
-        console.log('Микро (default):', st.name, hh + ':00');
-      }
-      if (hh === 21 && mm === 0) {
-        await sendStoreReportImage(st, date, 'final');
-        console.log('Итог (default):', st.name);
-      }
-      continue;
-    }
-
-    const micros = microHoursFor(sch, sunday);
+    const micros = microHoursFor(st, sunday);
     if (mm === 0 && micros.includes(hh)) {
       await sendStoreReportImage(st, date, 'micro', hh);
       console.log('Микро-картинка:', st.name, hh + ':00');
     }
 
-    const fin = finalTimeFor(sch, sunday);
+    const fin = finalTimeFor(st, sunday);
     if (hh === fin.h && mm === fin.m) {
       await sendStoreReportImage(st, date, 'final');
       console.log('Итог-картинка:', st.name, `${fin.h}:${String(fin.m).padStart(2, '0')}`);
@@ -331,11 +317,6 @@ async function sendTomorrowReminders(today: string) {
 
 /** Ручной запуск: все точки, микро за текущий час */
 export async function sendMicroReports(date: string, hour?: number) {
-  const chat = process.env.REPORT_CHAT_ID || process.env.CHAT_ID;
-  if (!chat) {
-    console.error('Микро: нет REPORT_CHAT_ID / CHAT_ID');
-    return { ok: false, error: 'no_chat_id' };
-  }
   try {
     const stores = await loadStorePlans(date);
     const h =
@@ -356,11 +337,6 @@ export async function sendMicroReports(date: string, hour?: number) {
 
 /** Ручной запуск: итог по всем точкам */
 export async function sendFinalReports(date: string) {
-  const chat = process.env.REPORT_CHAT_ID || process.env.CHAT_ID;
-  if (!chat) {
-    console.error('Итог: нет REPORT_CHAT_ID / CHAT_ID');
-    return { ok: false, error: 'no_chat_id' };
-  }
   try {
     const stores = await loadStorePlans(date);
     let sent = 0;

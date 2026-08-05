@@ -60,10 +60,43 @@ export async function listStoresForOrg(orgId: string) {
       `SELECT * FROM stores WHERE COALESCE(org_id,'default') = $1 ORDER BY name`,
       [orgId]
     );
-    if (res.rows.length) return res.rows;
-  } catch (_) {}
+    return res.rows;
+  } catch (_) {
+    return [];
+  }
+}
+
+/** Чат сети, к которой принадлежит точка. Фолбэк — глобальный CHAT_ID (env), если у сети чат не задан. */
+export async function getStoreChatId(storeId: string): Promise<string | undefined> {
   try {
-    const res = await query(`SELECT * FROM stores ORDER BY name`);
+    const res = await query(
+      `SELECT o.chat_id FROM stores s
+       LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
+       WHERE s.id = $1`,
+      [storeId]
+    );
+    return res.rows[0]?.chat_id || undefined;
+  } catch (_) {
+    return undefined;
+  }
+}
+
+/** Чат сети по её id. Фолбэк — глобальный CHAT_ID (env), если у сети чат не задан. */
+export async function getOrgChatId(orgId: string): Promise<string | undefined> {
+  try {
+    const res = await query(`SELECT chat_id FROM organizations WHERE id = $1`, [orgId]);
+    return res.rows[0]?.chat_id || undefined;
+  } catch (_) {
+    return undefined;
+  }
+}
+
+/** Все сети (id + chat_id), у которых явно настроен свой чат. */
+export async function listOrgsWithChat(): Promise<{ id: string; chat_id: string }[]> {
+  try {
+    const res = await query(
+      `SELECT id, chat_id FROM organizations WHERE chat_id IS NOT NULL AND chat_id != ''`
+    );
     return res.rows;
   } catch (_) {
     return [];
