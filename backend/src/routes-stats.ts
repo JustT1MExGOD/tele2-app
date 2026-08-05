@@ -5,14 +5,16 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
-import { requireActive } from './middleware-auth.js';
+import { requireActive, resolveViewOrgId } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
 
 export async function registerStatsRoutes(app: FastifyInstance) {
+  // «Сеть сегодня» — точки своей сети, не все сети вперемешку.
   app.get('/stats/daily', async (request, reply) => {
     if (!requireActive(request, reply)) return;
-    const { date } = request.query as { date?: string };
+    const { date, org_id } = request.query as { date?: string; org_id?: string };
     const d = date || todayMoscow();
+    const orgId = resolveViewOrgId(request.user!, org_id);
 
     // Динамический список метрик — иначе кастомные метрики (заведённые
     // через POST /metrics или добавленные вручную колонки типа import/esim)
@@ -28,16 +30,22 @@ export async function registerStatsRoutes(app: FastifyInstance) {
          ${sumSelect}
        FROM stores st
        LEFT JOIN sales s ON s.store_id = st.id AND s.sale_date = $1
+       WHERE COALESCE(st.org_id, 'default') = $2
        GROUP BY st.id, st.name, st.code, st.hours
        ORDER BY st.hours`,
-      [d]
+      [d, orgId]
     );
     return res.rows;
   });
 
+  // «Топ за 7 дней» — активность на точках своей сети (не по «домашней»
+  // сети сотрудника — подмена в чужой сети должна засчитываться той сети,
+  // где реально стоит точка, как и везде в эпике 17.0).
   app.get('/dashboard', async (request, reply) => {
     if (!requireActive(request, reply)) return;
+    const { org_id } = request.query as { org_id?: string };
     const today = todayMoscow();
+    const orgId = resolveViewOrgId(request.user!, org_id);
     const res = await query(
       `SELECT e.id as employee_id, e.full_name,
               COALESCE(SUM(s.sim),0)::int as sim,
@@ -49,12 +57,14 @@ export async function registerStatsRoutes(app: FastifyInstance) {
               (COALESCE(SUM(s.sim),0) + COALESCE(SUM(s.mnp),0)*2 + COALESCE(SUM(s.pa),0)*3)::int as score
        FROM sales s
        JOIN employees e ON e.id = s.employee_id
+       JOIN stores st ON st.id = s.store_id
        WHERE s.sale_date::date >= ($1::date - interval '6 days')
          AND s.sale_date::date <= $1::date
+         AND COALESCE(st.org_id, 'default') = $2
        GROUP BY e.id, e.full_name
        ORDER BY score DESC, sim DESC
        LIMIT 10`,
-      [today]
+      [today, orgId]
     );
     return {
       top: res.rows,

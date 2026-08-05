@@ -328,12 +328,13 @@ export async function upsertEmployeeMonthPlan(
   }
 }
 
-export async function getMonthSummaryTable(month: string) {
+export async function getMonthSummaryTable(month: string, orgId?: string) {
   const start = monthStart(month);
   const employees = await query(
     `SELECT id, full_name, short_name, role FROM employees
-     WHERE COALESCE(is_active, true) = true
-     ORDER BY full_name`
+     WHERE COALESCE(is_active, true) = true AND COALESCE(org_id, 'default') = $1
+     ORDER BY full_name`,
+    [orgId || 'default']
   );
 
   const rows = [];
@@ -427,21 +428,16 @@ export async function getEmployeeDailyPlan(employeeId: number, date: string) {
   };
 }
 
-/** Доли дневного пула: Космонавтов 55% · Калинина 2 25% · Калинина 11 20% (сумма 1.0) */
-const STORE_SHARES: { id: string; share: number }[] = [
-  { id: 'kosmonavtov', share: 0.55 },
-  { id: 'kalinina11', share: 0.20 },
-  { id: 'kalinina2', share: 0.25 }
-];
-
-export async function computeStoreDailyPlans(date?: string) {
+export async function computeStoreDailyPlans(date?: string, orgId?: string) {
   const d = date || todayMoscow();
   const month = d.slice(0, 7);
   const remainingDays = Math.max(1, remainingDaysInMonth(month));
+  const org = orgId || 'default';
 
-  // сумма остатков планов всех сотрудников / оставшиеся дни
+  // сумма остатков планов сотрудников СВОЕЙ сети / оставшиеся дни
   const employees = await query(
-    `SELECT id FROM employees WHERE COALESCE(is_active, true) = true`
+    `SELECT id FROM employees WHERE COALESCE(is_active, true) = true AND COALESCE(org_id, 'default') = $1`,
+    [org]
   );
 
   const pool: Record<string, number> = {};
@@ -461,23 +457,26 @@ export async function computeStoreDailyPlans(date?: string) {
     dailyPool[m] = Math.ceil(pool[m] / remainingDays);
   }
 
-  // магазины из БД (чтобы новые точки тоже попадали)
-  const storesRes = await query(`SELECT id, name, code FROM stores ORDER BY name`);
-  const storeList = storesRes.rows.length
-    ? storesRes.rows
-    : STORE_SHARES.map((s) => ({ id: s.id, name: s.id, code: s.id }));
+  // точки своей сети (раньше тут был хардкод STORE_SHARES на 3 точки —
+  // stores.plan_share уже был в схеме и даже подправлен вручную в БД, но
+  // код его не читал; теперь доли берутся из колонки, а не из кода).
+  const storesRes = await query(
+    `SELECT id, name, code, plan_share FROM stores WHERE COALESCE(org_id, 'default') = $1 ORDER BY name`,
+    [org]
+  );
+  const storeList = storesRes.rows;
 
-  // shares: known mapping, else equal split
-  const known = new Map(STORE_SHARES.map((s) => [s.id, s.share]));
+  // shares: известные (plan_share > 0), остальные — поровну от остатка
+  const known = new Map(
+    storeList.filter((s: any) => Number(s.plan_share) > 0).map((s: any) => [s.id, Number(s.plan_share)])
+  );
   const unknown = storeList.filter((s: any) => !known.has(s.id));
-  const knownSum = storeList
-    .filter((s: any) => known.has(s.id))
-    .reduce((a: number, s: any) => a + (known.get(s.id) || 0), 0);
+  const knownSum = [...known.values()].reduce((a: number, b: number) => a + b, 0);
   const rest = Math.max(0, 1 - knownSum);
   const equal = unknown.length ? rest / unknown.length : 0;
 
   const stores = storeList.map((st: any) => {
-    const share = known.get(st.id) ?? (equal || 1 / storeList.length);
+    const share = known.get(st.id) ?? (equal || (storeList.length ? 1 / storeList.length : 0));
     const plan: Record<string, number> = {};
     for (const m of METRICS) {
       plan[m] = Math.ceil(dailyPool[m] * share);
@@ -501,12 +500,21 @@ export async function computeStoreDailyPlans(date?: string) {
 }
 
 export async function materializeStoreDailyPlans(date?: string) {
-  const computed = await computeStoreDailyPlans(date);
-  const d = computed.date;
-
+  const d = date || todayMoscow();
   await query(`DELETE FROM store_plans WHERE plan_date = $1::date`, [d]);
 
-  for (const st of computed.stores) {
+  // Пул считается ОТДЕЛЬНО на каждую сеть — иначе план одной сети размывался
+  // бы остатками другой (и делился бы между чужими точками).
+  const orgsRes = await query(`SELECT id FROM organizations`);
+  const orgIds = orgsRes.rows.length ? orgsRes.rows.map((r: any) => r.id) : ['default'];
+
+  let allStores: any[] = [];
+  for (const org of orgIds) {
+    const computed = await computeStoreDailyPlans(d, org);
+    allStores = allStores.concat(computed.stores);
+  }
+
+  for (const st of allStores) {
     const p = st.plan;
     try {
       await query(
@@ -572,7 +580,7 @@ export async function materializeStoreDailyPlans(date?: string) {
     }
   }
 
-  return computed;
+  return { date: d, month: d.slice(0, 7), stores: allStores };
 }
 
 export { monthStart, remainingDaysInMonth };

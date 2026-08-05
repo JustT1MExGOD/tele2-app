@@ -17,14 +17,18 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     const workDate = date || todayMoscow();
     const orgId = resolveViewOrgId(request.user!, org_id);
 
+    // Своя запись видна всегда, даже если сегодня подменяешь в чужой сети —
+    // иначе собственная смена пропадает из «Мой день»/формы продажи у
+    // самого сотрудника, который её выполняет.
     const res = await query(
       `SELECT sch.*, e.full_name, st.name as store_name, st.short_name as store_short
        FROM schedules sch
        JOIN employees e ON e.id = sch.employee_id
        JOIN stores st ON st.id = sch.store_id
-       WHERE sch.work_date::date = $1::date AND COALESCE(st.org_id, 'default') = $2
+       WHERE sch.work_date::date = $1::date
+         AND (COALESCE(st.org_id, 'default') = $2 OR sch.employee_id = $3)
        ORDER BY st.hours, e.full_name`,
-      [workDate, orgId]
+      [workDate, orgId, request.user!.employee_id]
     );
     return res.rows;
   });
@@ -67,6 +71,8 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     const end = endDate.toISOString().slice(0, 10);
     const orgId = resolveViewOrgId(request.user!, org_id);
 
+    // Своя запись видна всегда — «Мой план» тоже читает этот эндпоинт, и
+    // смена в чужой сети (подмена) не должна пропадать из личного графика.
     const res = await query(
       `SELECT sch.work_date, sch.shift_text, sch.hours, sch.store_id,
               e.id as employee_id, e.full_name, e.short_name,
@@ -74,9 +80,10 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
        FROM schedules sch
        JOIN employees e ON e.id = sch.employee_id
        LEFT JOIN stores st ON st.id = sch.store_id
-       WHERE sch.work_date >= $1 AND sch.work_date < $2 AND COALESCE(st.org_id, 'default') = $3
+       WHERE sch.work_date >= $1 AND sch.work_date < $2
+         AND (COALESCE(st.org_id, 'default') = $3 OR sch.employee_id = $4)
        ORDER BY e.full_name, sch.work_date`,
-      [start, end, orgId]
+      [start, end, orgId, request.user!.employee_id]
     );
 
     return { month: m, start, end, items: res.rows };

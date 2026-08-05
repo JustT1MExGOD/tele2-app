@@ -15,7 +15,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { authPlugin, requireAuth } from './middleware-auth.js';
+import { authPlugin, requireAuth, resolveViewOrgId } from './middleware-auth.js';
 import {
   resolveSupervisorStores,
   buildSupervisorDashboard
@@ -39,7 +39,7 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
       });
     }
 
-    const q = (request.query || {}) as { date?: string; days?: string };
+    const q = (request.query || {}) as { date?: string; days?: string; org_id?: string };
     // date: YYYY-MM-DD; days: глубина тренда 7…60 (по умолчанию 14)
     const date =
       typeof q.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(q.date)
@@ -50,9 +50,11 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
     if (days > 60) days = 60;
 
     try {
+      const orgId = resolveViewOrgId(request.user!, q.org_id);
       const scope = await resolveSupervisorStores(
         Number(request.user!.employee_id),
-        String(request.user!.role)
+        String(request.user!.role),
+        orgId
       );
       return await buildSupervisorDashboard({ scope, date, days });
     } catch (e: any) {
@@ -72,9 +74,12 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
     }
 
     try {
+      const q = (request.query || {}) as { org_id?: string };
+      const orgId = resolveViewOrgId(request.user!, q.org_id);
       const scope = await resolveSupervisorStores(
         Number(request.user!.employee_id),
-        String(request.user!.role)
+        String(request.user!.role),
+        orgId
       );
       const dash = await buildSupervisorDashboard({
         scope,

@@ -119,6 +119,10 @@
       const myLevel = ROLE_LEVEL[myRole] ?? -1;
       return ROLE_ORDER.filter((r) => ROLE_LEVEL[r] < myLevel);
     }
+    /** '&org_id=...' если admin переключился на другую сеть, иначе '' — добавлять к URL запроса. */
+    function orgQueryParam() {
+      return me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
+    }
 
     const STORE_COLORS = {
       kosmonavtov: '#6d9eeb',

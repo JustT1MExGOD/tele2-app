@@ -359,7 +359,7 @@
       if (!box) return;
       box.innerHTML = '<div class="skeleton" style="margin:16px"></div><div class="skeleton" style="margin:16px;height:120px"></div>';
       try {
-        const res = await fetch(API + '/supervisor/dashboard?days=14', { headers: authHeaders() });
+        const res = await fetch(API + '/supervisor/dashboard?days=14' + orgQueryParam(), { headers: authHeaders() });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.message || ('HTTP ' + res.status));

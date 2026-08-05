@@ -8,14 +8,20 @@
         const date = todayMoscow();
         // 1) факт + график + шаблон/день из /plans?date=
         // 2) параллельно computed из /plans/stores/daily (из месячных планов сотрудников)
+        const ov = orgQueryParam();
         const [stRes, statsRes, schRes, plansRes, dailyRes] = await Promise.all([
           fetch(API + '/stores', { headers: authHeaders() }),
-          fetch(API + '/stats/daily?date=' + date, { headers: authHeaders() }),
-          fetch(API + '/schedules?date=' + date, { headers: authHeaders() }),
+          fetch(API + '/stats/daily?date=' + date + ov, { headers: authHeaders() }),
+          fetch(API + '/schedules?date=' + date + ov, { headers: authHeaders() }),
           fetch(API + '/plans?date=' + date, { headers: authHeaders() }),
-          fetch(API + '/plans/stores/daily?date=' + date, { headers: authHeaders() })
+          fetch(API + '/plans/stores/daily?date=' + date + ov, { headers: authHeaders() })
         ]);
+        // /stores намеренно не scoped по сети (нужен целиком в других местах —
+        // подмена в чужой сети в форме продажи/кассе) — глобальную переменную
+        // stores не трогаем, для карточек здесь берём локально отфильтрованный список.
         stores = await stRes.json();
+        const myOrgId = me?.role === 'admin' && adminViewOrgId ? adminViewOrgId : me?.org_id;
+        const myStores = (Array.isArray(stores) ? stores : []).filter((s) => (s.org_id || 'default') === (myOrgId || 'default'));
         const stats = await statsRes.json();
         const schedules = await schRes.json();
         const plans = await plansRes.json();
@@ -61,7 +67,7 @@
           staffMap[s.store_id].push(s);
         });
 
-        const list = (Array.isArray(stores) ? stores : []).slice().sort((a, b) => (a.hours || 0) - (b.hours || 0));
+        const list = myStores.slice().sort((a, b) => (a.hours || 0) - (b.hours || 0));
         if (!list.length) {
           box.innerHTML = '<div class="empty">Нет точек</div>';
           return;

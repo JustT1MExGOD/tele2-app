@@ -1,7 +1,10 @@
 /**
  * Аналитика кабинета супервайзера.
  * Health score, темп дня vs план, просадки по точкам, тренд 14д, топ продавцов.
- * scope === null → вся сеть (manager/admin); string[] → только эти store_id.
+ * scope — всегда конкретный список store_id (своя сеть по умолчанию для
+ * manager/admin; весь сектор — для supervisor). Раньше manager/admin получали
+ * scope=null («вся БД без фильтра») — так Command Center и кабинет
+ * супервайзера показывали вообще все сети сразу.
  */
 import { query } from '../db/index.js';
 import { todayMoscow, currentMonthMoscow } from '../utils/date.js';
@@ -14,13 +17,21 @@ function pct(fact: number, plan: number) {
   return Math.round((fact / plan) * 100);
 }
 
-export type StoreScope = string[] | null; // null = все точки
+export type StoreScope = string[] | null; // null = все точки (сейчас нигде не возвращается)
 
 export async function resolveSupervisorStores(
   employeeId: number,
-  role: string
+  role: string,
+  orgId?: string
 ): Promise<StoreScope> {
-  if (role === 'admin' || role === 'manager') return null;
+  if (role === 'admin' || role === 'manager') {
+    try {
+      const res = await query(`SELECT id FROM stores WHERE COALESCE(org_id, 'default') = $1`, [orgId || 'default']);
+      return res.rows.map((r: any) => String(r.id));
+    } catch {
+      return [];
+    }
+  }
   // supervisor = руководитель сектора: видит все точки всех сетей своего
   // сектора (назначение — на сектор целиком, не по отдельным точкам).
   try {

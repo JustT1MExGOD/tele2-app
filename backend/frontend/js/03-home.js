@@ -65,7 +65,7 @@
       }
       section.style.display = '';
       try {
-        const res = await fetch(API + '/supervisor/health', { headers: authHeaders() });
+        const res = await fetch(API + '/supervisor/health?_=1' + orgQueryParam(), { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const d = await res.json();
         const health = Number(d.health) || 0;
@@ -132,8 +132,8 @@
       loadCommandCenter();
       try {
         const [statsRes, dashRes] = await Promise.all([
-          fetch(API + '/stats/daily?date=' + today, { headers: authHeaders() }).catch(() => null),
-          fetch(API + '/dashboard', { headers: authHeaders() }).catch(() => null)
+          fetch(API + '/stats/daily?date=' + today + orgQueryParam(), { headers: authHeaders() }).catch(() => null),
+          fetch(API + '/dashboard?_=1' + orgQueryParam(), { headers: authHeaders() }).catch(() => null)
         ]);
         const stats = (statsRes && statsRes.ok) ? await statsRes.json() : [];
         const list = Array.isArray(stats) ? stats : [];

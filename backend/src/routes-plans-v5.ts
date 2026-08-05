@@ -5,7 +5,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { requireManager, requireAuth } from './middleware-auth.js';
+import { requireManager, requireAuth, requireActive, resolveViewOrgId } from './middleware-auth.js';
 import {
   getMonthSummaryTable,
   upsertEmployeeMonthPlan,
@@ -19,11 +19,13 @@ import {
 import { currentMonthMoscow, todayMoscow } from './utils/date.js';
 
 export async function registerPlansV5Routes(app: FastifyInstance) {
-  // Сводная таблица «как Excel»: факт / план / % по всем сотрудникам
-  app.get('/plans/employees/month', async (request) => {
-    const { month } = request.query as { month?: string };
+  // Сводная таблица «как Excel»: факт / план / % — по сотрудникам своей сети
+  app.get('/plans/employees/month', async (request, reply) => {
+    if (!requireActive(request, reply)) return;
+    const { month, org_id } = request.query as { month?: string; org_id?: string };
     const m = month || currentMonthMoscow();
-    return getMonthSummaryTable(m);
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    return getMonthSummaryTable(m, orgId);
   });
 
   // План одного сотрудника на месяц
@@ -55,10 +57,12 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     return getEmployeeDailyPlan(Number(id), date || todayMoscow());
   });
 
-  // Вычисленные дневные планы точек (50/30/20)
-  app.get('/plans/stores/daily', async (request) => {
-    const { date } = request.query as { date?: string };
-    return computeStoreDailyPlans(date);
+  // Вычисленные дневные планы точек своей сети (доли — stores.plan_share)
+  app.get('/plans/stores/daily', async (request, reply) => {
+    if (!requireActive(request, reply)) return;
+    const { date, org_id } = request.query as { date?: string; org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    return computeStoreDailyPlans(date, orgId);
   });
 
   // Записать дневные планы точек в БД на дату

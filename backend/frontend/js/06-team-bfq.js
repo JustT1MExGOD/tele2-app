@@ -268,7 +268,7 @@
       if (label) label.textContent = monthLabel(planMonth);
       if (box) box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/plans/employees/month?month=' + planMonth, { headers: authHeaders() });
+        const res = await fetch(API + '/plans/employees/month?month=' + planMonth + orgQueryParam(), { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const rows = data.rows || [];
@@ -357,7 +357,7 @@
       const box = document.getElementById('storeDailyPlans');
       if (!box) return;
       try {
-        const res = await fetch(API + '/plans/stores/daily', { headers: authHeaders() });
+        const res = await fetch(API + '/plans/stores/daily?_=1' + orgQueryParam(), { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const stores = data.stores || [];
