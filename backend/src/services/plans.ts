@@ -328,6 +328,66 @@ export async function upsertEmployeeMonthPlan(
   }
 }
 
+/**
+ * План точки на месяц — вносится вручную (не выводится из суммы планов
+ * сотрудников через долю, как раньше в computeStoreDailyPlans). Хранится
+ * отдельно от планов сотрудников: это независимые друг от друга вещи.
+ */
+export async function getStoreMonthPlan(storeId: string, month: string) {
+  const start = monthStart(month);
+  const res = await query(
+    `SELECT * FROM store_month_plans WHERE store_id = $1 AND month = $2::date`,
+    [storeId, start]
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  const plan: Record<string, any> = { ...row };
+  if (plan.credit != null && plan.credit_issued == null) plan.credit_issued = plan.credit;
+  for (const m of METRICS) if (plan[m] == null) plan[m] = 0;
+  return plan;
+}
+
+export async function upsertStoreMonthPlan(storeId: string, month: string, data: Record<string, number>) {
+  const start = monthStart(month);
+  const norm = normalizePlanInput(data);
+  const cols = ['store_id', 'month', ...METRICS];
+  const ph = cols.map((_, i) => `$${i + 1}`);
+  const vals: any[] = [storeId, start, ...METRICS.map((m) => norm[m])];
+  const updates = METRICS.map((m) => `${m} = EXCLUDED.${m}`).join(', ');
+  const res = await query(
+    `INSERT INTO store_month_plans (${cols.join(', ')})
+     VALUES (${ph.join(', ')})
+     ON CONFLICT (store_id, month) DO UPDATE SET
+       ${updates}, updated_at = now()
+     RETURNING *`,
+    vals
+  );
+  return res.rows[0];
+}
+
+/** Факт точки за месяц — сумма продаж всех сотрудников на этой точке (не только своей сети — подмена тоже считается). */
+export async function getStoreMonthFacts(storeId: string, month: string) {
+  const start = monthStart(month);
+  const end = monthEndExclusive(month);
+  const out: Record<string, number> = {};
+  for (const m of METRICS) out[m] = 0;
+  try {
+    const cols = await getSalesColumns();
+    const sumCols = (METRICS as readonly string[]).filter((c) => cols.has(c));
+    const selectParts = sumCols.map((c) => `COALESCE(SUM(${c}),0) as ${c}`);
+    const res = await query(
+      `SELECT ${selectParts.join(', ')} FROM sales
+       WHERE store_id = $1 AND sale_date >= $2::date AND sale_date < $3::date`,
+      [storeId, start, end]
+    );
+    const row = res.rows[0] || {};
+    for (const c of sumCols) out[c] = num(row[c]);
+  } catch (e) {
+    console.error('getStoreMonthFacts failed:', (e as any)?.message || e);
+  }
+  return out;
+}
+
 export async function getMonthSummaryTable(month: string, orgId?: string) {
   const start = monthStart(month);
   const employees = await query(
@@ -428,73 +488,48 @@ export async function getEmployeeDailyPlan(employeeId: number, date: string) {
   };
 }
 
+/**
+ * Дневной план точки = (месячный план точки − факт точки с начала месяца) /
+ * оставшиеся дни — вручную внесённый план точки (store_month_plans), без
+ * долевого распределения суммы планов сотрудников (было раньше — убрали
+ * по просьбе: план точки теперь вносится напрямую и независимо от планов
+ * сотрудников).
+ */
 export async function computeStoreDailyPlans(date?: string, orgId?: string) {
   const d = date || todayMoscow();
   const month = d.slice(0, 7);
   const remainingDays = Math.max(1, remainingDaysInMonth(month));
   const org = orgId || 'default';
 
-  // сумма остатков планов сотрудников СВОЕЙ сети / оставшиеся дни
-  const employees = await query(
-    `SELECT id FROM employees WHERE COALESCE(is_active, true) = true AND COALESCE(org_id, 'default') = $1`,
-    [org]
-  );
-
-  const pool: Record<string, number> = {};
-  for (const m of METRICS) pool[m] = 0;
-
-  for (const e of employees.rows) {
-    const planRow = await getEmployeeMonthPlan(Number(e.id), month);
-    if (!planRow) continue;
-    const fact = await getEmployeeMonthFacts(Number(e.id), month);
-    for (const m of METRICS) {
-      pool[m] += Math.max(0, num(planRow[m]) - num(fact[m]));
-    }
-  }
-
-  const dailyPool: Record<string, number> = {};
-  for (const m of METRICS) {
-    dailyPool[m] = Math.ceil(pool[m] / remainingDays);
-  }
-
-  // точки своей сети (раньше тут был хардкод STORE_SHARES на 3 точки —
-  // stores.plan_share уже был в схеме и даже подправлен вручную в БД, но
-  // код его не читал; теперь доли берутся из колонки, а не из кода).
   const storesRes = await query(
-    `SELECT id, name, code, plan_share FROM stores WHERE COALESCE(org_id, 'default') = $1 ORDER BY name`,
+    `SELECT id, name, code FROM stores WHERE COALESCE(org_id, 'default') = $1 ORDER BY name`,
     [org]
   );
   const storeList = storesRes.rows;
 
-  // shares: известные (plan_share > 0), остальные — поровну от остатка
-  const known = new Map(
-    storeList.filter((s: any) => Number(s.plan_share) > 0).map((s: any) => [s.id, Number(s.plan_share)])
-  );
-  const unknown = storeList.filter((s: any) => !known.has(s.id));
-  const knownSum = [...known.values()].reduce((a: number, b: number) => a + b, 0);
-  const rest = Math.max(0, 1 - knownSum);
-  const equal = unknown.length ? rest / unknown.length : 0;
-
-  const stores = storeList.map((st: any) => {
-    const share = known.get(st.id) ?? (equal || (storeList.length ? 1 / storeList.length : 0));
+  const stores = [];
+  for (const st of storeList) {
+    const planRow = await getStoreMonthPlan(st.id, month);
+    const fact = await getStoreMonthFacts(st.id, month);
     const plan: Record<string, number> = {};
     for (const m of METRICS) {
-      plan[m] = Math.ceil(dailyPool[m] * share);
+      const monthly = planRow ? num(planRow[m]) : 0;
+      const remaining = Math.max(0, monthly - num(fact[m]));
+      plan[m] = Math.ceil(remaining / remainingDays);
     }
-    return {
+    stores.push({
       store_id: st.id,
       name: st.name,
       code: st.code,
-      share,
+      has_plan: !!planRow,
       plan
-    };
-  });
+    });
+  }
 
   return {
     date: d,
     month,
     remaining_days: remainingDays,
-    daily_pool: dailyPool,
     stores
   };
 }

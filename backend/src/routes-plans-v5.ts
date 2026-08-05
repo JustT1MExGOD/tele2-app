@@ -13,9 +13,12 @@ import {
   getEmployeeDailyPlan,
   computeStoreDailyPlans,
   materializeStoreDailyPlans,
+  getStoreMonthPlan,
+  upsertStoreMonthPlan,
   METRICS,
   monthStart
 } from './services/plans.js';
+import { query } from './db/index.js';
 import { currentMonthMoscow, todayMoscow } from './utils/date.js';
 
 export async function registerPlansV5Routes(app: FastifyInstance) {
@@ -57,7 +60,7 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     return getEmployeeDailyPlan(Number(id), date || todayMoscow());
   });
 
-  // Вычисленные дневные планы точек своей сети (доли — stores.plan_share)
+  // Вычисленные дневные планы точек своей сети (остаток месячного плана точки / дни)
   app.get('/plans/stores/daily', async (request, reply) => {
     if (!requireActive(request, reply)) return;
     const { date, org_id } = request.query as { date?: string; org_id?: string };
@@ -70,5 +73,33 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const body = (request.body as any) || {};
     return materializeStoreDailyPlans(body.date);
+  });
+
+  // План одной точки на месяц (вносится вручную, независимо от планов сотрудников)
+  app.get('/plans/stores/:id/month', async (request, reply) => {
+    if (!requireActive(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const { month } = request.query as { month?: string };
+    const m = month || currentMonthMoscow();
+    const plan = await getStoreMonthPlan(id, m);
+    return plan || { store_id: id, month: monthStart(m), empty: true };
+  });
+
+  // Manager: задать / обновить месячный план точки (только своей сети)
+  app.put('/plans/stores/:id/month', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const body = (request.body as any) || {};
+    const orgId = resolveViewOrgId(request.user!, body.org_id);
+    const storeCheck = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM stores WHERE id = $1`, [id]);
+    if (!storeCheck.rows[0] || storeCheck.rows[0].org_id !== orgId) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
+    const month = body.month || currentMonthMoscow();
+    const data: Record<string, number> = {};
+    for (const m of METRICS) {
+      if (body[m] !== undefined) data[m] = Number(body[m]) || 0;
+    }
+    return upsertStoreMonthPlan(id, month, data);
   });
 }

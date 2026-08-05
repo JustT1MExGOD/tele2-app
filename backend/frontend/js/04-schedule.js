@@ -35,8 +35,10 @@
 
         // Приоритет планов:
         // A) материализованные на сегодня (plan_date = date)
-        // B) computed из месячных планов сотрудников (/plans/stores/daily)
-        // C) шаблон plan_date IS NULL
+        // B) computed из месячного плана точки (/plans/stores/daily) — план
+        //    точки теперь вносится вручную, независимо от планов сотрудников
+        //    (раньше был ещё C — шаблон plan_date IS NULL, убрали вместе с
+        //    долевым распределением, план точки его полностью заменяет)
         const planMap = {};
         const todayStr = date;
 
@@ -44,20 +46,14 @@
           const pd = p.plan_date ? String(p.plan_date).slice(0, 10) : null;
           if (pd === todayStr) {
             planMap[p.store_id] = { ...p, _src: 'day' };
-          } else if (pd == null && !planMap[p.store_id]) {
-            planMap[p.store_id] = { ...p, _src: 'template' };
           }
         });
 
         if (dailyComputed?.stores?.length) {
           dailyComputed.stores.forEach(st => {
             const hasDay = planMap[st.store_id]?._src === 'day';
-            // если на сегодня ещё не записали в БД — берём live-расчёт
             if (!hasDay && st.plan) {
-              const anyPositive = Object.values(st.plan).some(v => Number(v) > 0);
-              if (anyPositive || !planMap[st.store_id]) {
-                planMap[st.store_id] = { store_id: st.store_id, ...st.plan, _src: 'computed' };
-              }
+              planMap[st.store_id] = { store_id: st.store_id, ...st.plan, _src: 'computed' };
             }
           });
         }

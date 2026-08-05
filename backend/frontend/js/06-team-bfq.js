@@ -353,6 +353,10 @@
 
 
 
+    // Кэш имён точек последней загрузки — чтобы не передавать имя через
+    // onclick-атрибут строкой (кавычки в названии точки уже ломали такое раньше).
+    let storeDailyPlanNames = {};
+
     async function loadStoreDailyPlans() {
       const box = document.getElementById('storeDailyPlans');
       if (!box) return;
@@ -361,24 +365,30 @@
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const stores = data.stores || [];
+        storeDailyPlanNames = {};
+        stores.forEach(st => { storeDailyPlanNames[st.store_id] = st.name; });
         if (!stores.length) {
           box.innerHTML = '<div class="empty">Нет данных</div>';
           return;
         }
+        const editable = canManage();
         box.innerHTML = stores.map(st => {
           const col = storeColor(st.store_id, st);
           const p = st.plan || {};
+          const initial = (st.name || '?').slice(0, 2).toUpperCase();
           const chips = METRICS.slice(0, 8).map(m =>
             `<div class="stat-chip"><div class="n">${p[m.id] || 0}</div><div class="l">${m.label}</div></div>`
           ).join('');
+          const click = editable ? `onclick="editStoreMonthPlan('${st.store_id}')" style="cursor:pointer"` : 'style="cursor:default"';
           return `
             <div class="store-card" style="border-left:4px solid ${col};margin:8px 12px">
-              <div class="store-head" style="cursor:default">
-                <div class="store-badge" style="background:${col}33;color:${col}">${Math.round((st.share || st.plan_share || 0) * 100)}%</div>
+              <div class="store-head" ${click}>
+                <div class="store-badge" style="background:${col}33;color:${col}">${initial}</div>
                 <div class="store-meta">
                   <div class="store-name">${st.name}</div>
-                  <div class="store-code">${st.code || ''} · дневной план</div>
+                  <div class="store-code">${st.code || ''} · дневной план${st.has_plan ? '' : ' · план на месяц не задан'}</div>
                 </div>
+                ${editable ? '<div class="row-chevron">›</div>' : ''}
               </div>
               <div class="stats-row" style="padding:0 12px 12px">${chips}</div>
             </div>`;
@@ -446,6 +456,55 @@
       toast('План сохранён', 'ok');
       closeModal();
       if (typeof loadMonthPlans === 'function') loadMonthPlans();
+    }
+
+    // План точки на месяц — вручную, независимо от планов сотрудников
+    // (эпик 17.0: убрали распределение по долям, точка теперь ведёт свой план сама).
+    async function editStoreMonthPlan(storeId) {
+      if (!canManage()) return;
+      await loadMetricsCatalog();
+      const month = todayMoscow().slice(0, 7);
+      const name = storeDailyPlanNames[storeId] || storeId;
+      const res = await fetch(API + '/plans/stores/' + storeId + '/month?month=' + month, {
+        headers: authHeaders()
+      });
+      const p = res.ok ? await res.json() : {};
+      document.getElementById('modalTitle').textContent = 'План точки: ' + name;
+      const fields = METRICS.map(m => {
+        let val = p[m.id];
+        if (val == null && m.id === 'credit_issued') val = p.credit;
+        return '<div class="field"><label>' + m.label + (m.unit ? ' (' + m.unit + ')' : '') + '</label>' +
+          '<input type="number" id="smp_' + m.id + '" value="' + (Number(val) || 0) + '"></div>';
+      }).join('');
+      document.getElementById('modalBody').innerHTML =
+        '<div class="empty" style="text-align:left;padding:0 0 12px">Месяц ' + month + ', план на всю точку целиком. Дневной = остаток / оставшиеся дни.</div>' +
+        fields +
+        '<button class="btn-main" onclick="saveStoreMonthPlan(\'' + storeId + '\')">Сохранить</button>';
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    async function saveStoreMonthPlan(storeId) {
+      const month = todayMoscow().slice(0, 7);
+      const body = { month };
+      for (const m of METRICS) {
+        const el = document.getElementById('smp_' + m.id);
+        if (el) body[m.id] = Number(el.value) || 0;
+      }
+      if (body.credit_issued != null) body.credit = body.credit_issued;
+      const res = await fetch(API + '/plans/stores/' + storeId + '/month', {
+        method: 'PUT',
+        headers: authHeaders(true),
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        let msg = 'Ошибка';
+        try { const j = await res.json(); msg = j.message || j.error || msg; } catch (_) {}
+        toast(msg, 'err');
+        return;
+      }
+      toast('План точки сохранён', 'ok');
+      closeModal();
+      if (typeof loadStoreDailyPlans === 'function') loadStoreDailyPlans();
     }
 
         async function loadSupport() {
