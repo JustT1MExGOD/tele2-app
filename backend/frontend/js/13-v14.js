@@ -116,7 +116,11 @@
       try {
         const res = await fetch(API + '/forecast/' + sid + '?days=7', { headers: authHeaders() });
         const data = await res.json();
-        box.innerHTML = (data.items||[]).map(it => {
+        const histDays = Number(data.history_days) || 0;
+        const note = histDays < 14
+          ? `<div class="empty" style="padding:0 0 10px;text-align:left">🍉 Пока только ${histDays} дн. истории — прогноз грубый, будет точнее по мере накопления данных</div>`
+          : '';
+        const cards = (data.items||[]).map(it => {
           const p = it.predicted||{};
           const n = (v) => Math.round(Number(v) || 0);
           return `<div class="mt-card"><div class="mt-name">${it.date}</div><div class="mt-grid mt-grid-4">
@@ -125,7 +129,8 @@
             <div class="mt-cell"><div class="v">${n(p.pa)}</div><div class="l">ПА</div></div>
             <div class="mt-cell"><div class="v">${n(p.combo)}</div><div class="l">Комбо</div></div>
           </div></div>`;
-        }).join('') || '<div class="empty">🍉 Пока нет истории для прогноза по этой точке</div>';
+        }).join('');
+        box.innerHTML = cards ? (note + cards) : '<div class="empty">🍉 Пока нет истории для прогноза по этой точке</div>';
       } catch { box.innerHTML = '<div class="empty">🍉 Прогноз сейчас недоступен, зайди чуть позже</div>'; }
     }
     // ===== WHAT-IF v2 (14.8) =====

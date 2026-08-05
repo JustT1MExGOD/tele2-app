@@ -637,7 +637,8 @@ export async function registerV13Routes(app: FastifyInstance) {
     const { storeId } = request.params as { storeId: string };
     const from = String((request.query as any)?.from || todayMoscow()).slice(0, 10);
     const days = Math.min(Number((request.query as any)?.days) || 7, 14);
-    return { store_id: storeId, items: await forecastStore(storeId, from, days) };
+    const fc = await forecastStore(storeId, from, days);
+    return { store_id: storeId, ...fc };
   });
 
   app.get('/heatmap/:storeId', async (request, reply) => {
