@@ -133,6 +133,38 @@
         box.innerHTML = cards ? (note + cards) : '<div class="empty">🍉 Пока нет истории для прогноза по этой точке</div>';
       } catch { box.innerHTML = '<div class="empty">🍉 Прогноз сейчас недоступен, зайди чуть позже</div>'; }
     }
+
+    // «Кого куда поставить» — эвристика на прогнозе + графике (15.7), manager/admin only.
+    async function loadStaffingHints() {
+      const section = document.getElementById('staffHintsSection');
+      const box = document.getElementById('staffHintsList');
+      if (!section || !box) return;
+      if (!canManage()) { section.style.display = 'none'; return; }
+      try {
+        const res = await fetch(API + '/staffing-hints?days=7', { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const data = await res.json();
+        const items = data.items || [];
+        if (!items.length) {
+          section.style.display = '';
+          box.innerHTML = '<div class="empty">🍉 На неделю вперёд перекосов не видно — график и прогноз сходятся</div>';
+          return;
+        }
+        section.style.display = '';
+        box.innerHTML = items.map(h => `
+          <div class="sv-drop ${h.severity === 'critical' ? '' : 'warn'}" style="margin:8px 0 0">
+            <div class="ico">${h.severity === 'critical' ? '🚨' : '⚠️'}</div>
+            <div style="flex:1">
+              <div class="t">${esc(h.store_name)} · ${h.date}</div>
+              <div class="s">${esc(h.message)}</div>
+              <button class="mchip" style="margin-top:6px" onclick="proposeMoveForStore('${h.store_id}','${h.date}')">Предложить перенос</button>
+            </div>
+          </div>`).join('');
+      } catch {
+        section.style.display = 'none';
+      }
+    }
+
     // ===== WHAT-IF v2 (14.8) =====
     // Сценарий — накапливаемый список переносов вместо одного за раз, плюс
     // сравнение двух посчитанных сценариев (A/B) side-by-side. Симуляция
@@ -144,15 +176,16 @@
     // кабинет супервайзера) ведёт прямо в What-if с уже выбранной точкой-
     // получателем — не нужно с нуля собирать сценарий, только выбрать
     // сотрудника и «откуда».
-    async function proposeMoveForStore(storeId) {
+    async function proposeMoveForStore(storeId, date) {
       switchPage('forecast');
       await fillStoreSelects();
       const wiTo = document.getElementById('wiTo');
       if (wiTo) wiTo.value = storeId;
       const wiDate = document.getElementById('wiDate');
-      if (wiDate && !wiDate.value) wiDate.value = todayMoscow();
+      if (wiDate) wiDate.value = date || todayMoscow();
       const storeName = (window.__stores || stores || []).find(s => s.id === storeId)?.name || storeId;
-      toast(`Точка выбрана: ${storeName} — укажи сотрудника и «с точки»`, 'ok');
+      const dateLabel = date && date !== todayMoscow() ? ` на ${date}` : '';
+      toast(`Точка выбрана: ${storeName}${dateLabel} — укажи сотрудника и «с точки»`, 'ok');
       setTimeout(() => {
         document.getElementById('wiEmp')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 300);

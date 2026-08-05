@@ -22,7 +22,7 @@ import {
 import { generateShiftSummary } from './services/ai.js';
 import { getLiveNetworkMap } from './services/live-map.js';
 import { runSmartAlertsTick } from './services/alerts.js';
-import { forecastStore, salesHeatmap, newbieCohorts } from './services/forecast.js';
+import { forecastStore, salesHeatmap, newbieCohorts, getStaffingHints } from './services/forecast.js';
 import { simulateScheduleMoves } from './services/what-if.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
 
@@ -667,6 +667,14 @@ export async function registerV13Routes(app: FastifyInstance) {
     const days = Math.min(Number((request.query as any)?.days) || 7, 14);
     const fc = await forecastStore(storeId, from, days);
     return { store_id: storeId, ...fc };
+  });
+
+  // «Кого куда поставить» — эвристика на основе прогноза + текущего графика,
+  // не точный расчёт (абсолютной меры «нужно N человек» у нас нет).
+  app.get('/staffing-hints', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const days = Math.min(Number((request.query as any)?.days) || 7, 14);
+    return { items: await getStaffingHints(days) };
   });
 
   app.get('/heatmap/:storeId', async (request, reply) => {

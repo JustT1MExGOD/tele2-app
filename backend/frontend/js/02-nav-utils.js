@@ -105,7 +105,7 @@
       if (name === 'history') { loadHistory(); }
       if (name === 'monthplan') { loadMonthPlans(); }
       if (name === 'heatmap') { fillStoreSelects().then(() => loadHeatmap()); }
-      if (name === 'forecast') { fillStoreSelects(); loadForecast(); const w=document.getElementById('wiDate'); if(w) w.value=todayMoscow(); }
+      if (name === 'forecast') { fillStoreSelects(); loadForecast(); loadStaffingHints(); const w=document.getElementById('wiDate'); if(w) w.value=todayMoscow(); }
       if (name === 'announce') loadAnnouncements();
       if (name === 'reportimg') { fillStoreSelects(); const d=document.getElementById('riDate'); if(d) d.value=todayMoscow(); }
       if (name === 'support') { loadSupportSla(); loadSupport(); }

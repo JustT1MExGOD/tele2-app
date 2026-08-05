@@ -1,4 +1,5 @@
 import { query } from '../db/index.js';
+import { todayMoscow } from '../utils/date.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -83,6 +84,86 @@ export async function forecastStore(storeId: string, fromDate: string, days = 7)
     out.push({ date: iso, dow, predicted, model: 'ses_dow_seasonal' });
   }
   return { items: out, history_days: rows.length };
+}
+
+/**
+ * Подсказки «кого куда поставить» на неделю вперёд. Абсолютной меры
+ * «сколько человек нужно точке» нет — прогноз в штуках SIM/MNP/ПА/Комбо,
+ * не в человеко-часах. Поэтому эвристика относительная: нагрузка на
+ * человека в графике (прогноз / headcount) сравнивается со средней по
+ * сети на ту же дату — кто заметно выше среднего, тот кандидат на
+ * усиление. Отдельно — точки, где на дату вообще никто не поставлен,
+ * а прогноз ненулевой (самый очевидный случай).
+ */
+export async function getStaffingHints(days = 7) {
+  const storesRes = await query(`SELECT id, name FROM stores WHERE COALESCE(is_active,true)=true`);
+  const stores = storesRes.rows as { id: string; name: string }[];
+  if (!stores.length) return [];
+
+  const start = todayMoscow();
+  const forecasts: Record<string, Awaited<ReturnType<typeof forecastStore>>> = {};
+  for (const s of stores) {
+    forecasts[s.id] = await forecastStore(s.id, start, days);
+  }
+
+  const schedRes = await query(
+    `SELECT store_id, work_date::text as d, COUNT(DISTINCT employee_id)::int as headcount
+     FROM schedules
+     WHERE work_date >= $1::date AND work_date < ($1::date + ($2 || ' days')::interval)
+       AND COALESCE(hours, 0) > 0
+     GROUP BY store_id, work_date`,
+    [start, days]
+  );
+  const headcountMap: Record<string, Record<string, number>> = {};
+  for (const r of schedRes.rows) {
+    const d = String(r.d).slice(0, 10);
+    (headcountMap[r.store_id] ||= {})[d] = num(r.headcount);
+  }
+
+  const dates = (forecasts[stores[0].id]?.items || []).map((it) => it.date);
+  const hints: {
+    date: string; store_id: string; store_name: string;
+    severity: 'critical' | 'warn'; message: string;
+  }[] = [];
+
+  for (const date of dates) {
+    let totalDemand = 0;
+    let totalHeadcount = 0;
+    const rows: { store_id: string; name: string; demand: number; headcount: number }[] = [];
+    for (const s of stores) {
+      const item = forecasts[s.id]?.items?.find((it) => it.date === date);
+      const p = (item?.predicted || {}) as Record<string, number>;
+      const demand = num(p.sim) + num(p.mnp) + num(p.pa) + num(p.combo);
+      const headcount = headcountMap[s.id]?.[date] || 0;
+      totalDemand += demand;
+      totalHeadcount += headcount;
+      rows.push({ store_id: s.id, name: s.name, demand, headcount });
+    }
+    const avgLoad = totalHeadcount > 0 ? totalDemand / totalHeadcount : 0;
+    for (const r of rows) {
+      if (r.headcount === 0 && r.demand > 0) {
+        hints.push({
+          date, store_id: r.store_id, store_name: r.name, severity: 'critical',
+          message: `Никто не поставлен, а прогноз ~${Math.round(r.demand)} ед.`
+        });
+      } else if (r.headcount > 0 && avgLoad > 0) {
+        const load = r.demand / r.headcount;
+        if (load > avgLoad * 1.3) {
+          hints.push({
+            date, store_id: r.store_id, store_name: r.name, severity: 'warn',
+            message: `Нагрузка на человека ~${Math.round(load)} против ${Math.round(avgLoad)} в среднем по сети`
+          });
+        }
+      }
+    }
+  }
+
+  hints.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    if (a.severity !== b.severity) return a.severity === 'critical' ? -1 : 1;
+    return 0;
+  });
+  return hints.slice(0, 6);
 }
 
 /** Heatmap: агрегация продаж по часу — proxy без timestamp = по сменам равномерно */
