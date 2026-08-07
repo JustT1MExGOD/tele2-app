@@ -163,7 +163,7 @@
     }
 
     async function loadManagerTickets() {
-      if (!canManage()) return;
+      if (!canAdmin()) return;
       const box = document.getElementById('ticketsBox');
       box.innerHTML = '<div class="section"><div class="section-title">Тикеты</div><div class="skeleton"></div></div>';
       try {

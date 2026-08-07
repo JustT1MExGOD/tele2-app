@@ -17,6 +17,7 @@ import {
   loadUser,
   authPlugin,
   canAssignRole,
+  resolveViewOrgId,
   Role
 } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
@@ -134,13 +135,22 @@ export async function registerV8Routes(app: FastifyInstance) {
     return { ok: true, status: 'pending', request: res.rows[0] };
   });
 
-  // Очередь заявок — manager + supervisor
+  // Очередь заявок — manager + supervisor. Заявка на привязку к УЖЕ
+  // существующему сотруднику (claimed_employee_id) фильтруется по сети
+  // этого сотрудника. Совсем новая заявка (ещё не сотрудник) сеть указать
+  // не может — гость её ещё не выбрал нигде в форме — поэтому видна всем
+  // управляющим сети/сектора, это не дыра, а честное ограничение данных.
   app.get('/access/requests', async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
+    const { org_id } = request.query as { org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id);
     const res = await query(
-      `SELECT * FROM access_requests
-       WHERE status = 'pending'
-       ORDER BY created_at ASC`
+      `SELECT ar.* FROM access_requests ar
+       LEFT JOIN employees e ON e.id = ar.claimed_employee_id
+       WHERE ar.status = 'pending'
+         AND (ar.claimed_employee_id IS NULL OR COALESCE(e.org_id,'default') = $1)
+       ORDER BY ar.created_at ASC`,
+      [orgId]
     );
     return res.rows;
   });

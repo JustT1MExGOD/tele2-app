@@ -34,6 +34,11 @@
       box.innerHTML = '<div class="skeleton"></div>';
       const tools = document.getElementById('managerTools');
       if (tools) tools.style.display = canManage() ? 'block' : 'none';
+      // Тикеты поддержки на бэке намеренно только admin (эскалация к
+      // разработчику/платформе, не менеджерский инбокс сети) — кнопка
+      // раньше показывалась всем manager/senior и падала на 403.
+      const ticketsBtn = document.getElementById('btnSupportTickets');
+      if (ticketsBtn) ticketsBtn.style.display = canAdmin() ? '' : 'none';
       renderOrgSwitcher();
       try {
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';

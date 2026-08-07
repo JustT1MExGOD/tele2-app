@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-15.15.1-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-15.16.0-2AABEE?style=flat-square)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -14,7 +14,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `15.15.1`  
+**Актуальная версия клиента:** `15.16.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -476,6 +476,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **15.14.1** | Структурная чистка без изменения поведения (без анонса — не эпик). Три разросшихся файла-свалки разбиты по темам: `06-team-bfq.js` (802 строки, команда+BFQ+планы+поддержка+модалки) → `06-team-bfq.js`/`06b-plans-bfq.js`/`06c-support-tickets.js`; `routes-v13.ts` (717 строк) → `routes-shifts.ts`/`routes-insights.ts`/`routes-live-alerts.ts`/`routes-comms.ts`/`routes-forecast.ts`; `routes-v3.ts` (557 строк) → `routes-me.ts`/`routes-bfq.ts`/`routes-export.ts`, а `/schedules/bulk`+`DELETE /schedules` переехали в `routes-schedules.ts` — мутации графика были раскиданы по двум файлам. Заодно: дедуп проверки «точка принадлежит вашей сети» в `assertStoreInOrg()` (была продублирована в `routes-schedules.ts` и `routes-plans-v5.ts`); закрыт пробел — `/schedules/bulk` не проверял принадлежность точки сети вообще, хотя одиночный `POST /schedules` уже проверял; удалён мёртвый код (`cellTone()` во фронтенде, нигде не вызывался) |
 | **15.15.0** | Изоляция по сети — последние 6 непроверенных мест. `getLiveNetworkMap()` (живая карта) была самой грубой дырой: показывала имена сотрудников, продажи и кассу вообще всех сетей сразу, без единого фильтра — теперь `orgId` параметр. Аналогично scoped: `GET /forecast/:storeId`, `GET /heatmap/precise/:storeId` (реальный heatmap, который дёргает фронтенд — не путать с параллельным `GET /heatmap/:storeId` в `routes-forecast.ts`, тот не используется) через `assertStoreInOrg()`; `GET /staffing-hints`, `GET /alerts`, `GET /export/bi/daily` через `resolveViewOrgId()`. `newbieCohorts(orgId)` — параметр существовал в сигнатуре и раньше, но нигде не читался в самом SQL-запросе (тот же паттерн, что `plan_share`/`micro_report_times` ранее). Заодно найден и починен независимый баг: `newbieCohorts()` падал с 500 на `invalid input syntax for type date`, когда дата бралась из `created_at` (JS `Date` из pg-драйвера) — `String(date).slice(0,10)` резал `"Tue Jul 28"` вместо ISO |
 | **15.15.1** | Хотфикс: заголовок карточки-анонса версии в чат обрезался по краю на длинных названиях (SVG не переносит текст сам) — буллеты уже переносились строками, а заголовок оставался одной строкой на 26px. `wrapText()` в `report-image.ts` сделан переиспользуемым (параметр максимума символов в строке вместо константы), заголовок теперь тоже переносится, версия и буллеты сдвигаются вниз на высоту второй строки заголовка |
+| **15.16.0** | Изоляция по сети — объявления, каналы, заявки на доступ (`routes-comms.ts`). `announcements.org_id`/`channels.org_id` существовали в схеме и раньше, но ни один запрос их не читал — тот же паттерн, что `plan_share`/`micro_report_times`: сотрудник любой сети видел объявления и мог читать/писать в каналы вообще всех сетей. `GET/POST /announcements` теперь фильтруют/пишут `org_id`; `GET /announcements/:id/reads` проверяет принадлежность объявления сети менеджера; новый `assertChannelInOrg()` гейтит `GET/POST /channels/:id/messages`. `GET /access/requests` (`routes-v8.ts`) теперь фильтрует заявки по уже существующему сотруднику (`claimed_employee_id`) по его сети; заявка от ещё не найденного в системе гостя сети не имеет и видна всем управляющим — осознанное ограничение данных, не дыра. Заодно починена кнопка «Тикеты поддержки» — показывалась всем manager/senior и падала на 403, хотя `routes-support.ts` изначально задуман только для admin (эскалация к разработчику, не менеджерский инбокс сети) |
 
 ---
 
@@ -491,7 +492,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | ✅ готово (15.0.0) | AI Copilot v1 — разбор смены + гипотеза при просадке, бесплатно через Groq |
 | ✅ готово (14.8.0) | What-if со сравнением сценариев A/B |
 | ✅ готово (13.x) | Точный heatmap по часу продажи (`sales_events`) |
-| ✅ готово (15.8.0-15.15.1) | Эпик 17.0 — мультитенант: секторы/сети точек, чат-роутинг по точке и теме, супервайзер на сектор, все разделы (команда/график/касса/промокоды/Command Center/статистика/живая карта/прогноз/heatmap/BI-экспорт) изолированы по сети, переключатель сети у admin. Две реальные сети в проде (РТТ Бижонов, РТТ Гуреева) |
+| ✅ готово (15.8.0-15.16.0) | Эпик 17.0 — мультитенант: секторы/сети точек, чат-роутинг по точке и теме, супервайзер на сектор, все разделы (команда/график/касса/промокоды/объявления/каналы/заявки на доступ/Command Center/статистика/живая карта/прогноз/heatmap/BI-экспорт) изолированы по сети, переключатель сети у admin. Две реальные сети в проде (РТТ Бижонов, РТТ Гуреева) |
 | 🏗️ дальше | Картинка-отчёт на отдельном worker — сейчас resvg рендерится в основном процессе |  
 
 ---
