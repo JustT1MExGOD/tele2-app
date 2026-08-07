@@ -4,7 +4,8 @@
  * await registerV8Routes(app);
  *
  * Важно: на «боевых» роутах (sales write, etc.) вызывай requireActive.
- * Публичные: /health, /ready, /access/status, /access/request, /combo/calc
+ * Публичные: /health, /ready, /access/status, /access/request, /access/orgs,
+ * /access/employees-directory, /combo/calc
  */
 
 import { FastifyInstance } from 'fastify';
@@ -22,6 +23,7 @@ import {
 } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
 import { bot } from './bot/index.js';
+import { listActiveOrgsPublic } from './services/tenant.js';
 
 function esc(s: any) {
   return String(s ?? '')
@@ -60,13 +62,30 @@ export async function registerV8Routes(app: FastifyInstance) {
     };
   });
 
-  // Список сотрудников для «я вот этот» (только имена, без чувствительного)
-  app.get('/access/employees-directory', async () => {
+  // Активные сети — пикер при регистрации. Публично: гость ещё не
+  // авторизован, id+имя(+бренд для темизации) — ничего чувствительного
+  // (нет chat_id, нет sector_id).
+  app.get('/access/orgs', async () => {
+    return listActiveOrgsPublic();
+  });
+
+  // Список сотрудников для «я вот этот» (только имена, без чувствительного).
+  // ?org_id= — сузить до сети, которую гость уже выбрал в пикере, иначе
+  // выбрав сеть B он всё равно мог «заклеймить» сотрудника сети A.
+  app.get('/access/employees-directory', async (request) => {
+    const { org_id } = request.query as { org_id?: string };
+    const params: any[] = [];
+    let orgFilter = '';
+    if (org_id) {
+      params.push(String(org_id));
+      orgFilter = ` AND COALESCE(org_id,'default') = $${params.length}`;
+    }
     const res = await query(
       `SELECT id, full_name FROM employees
        WHERE is_active = true AND (telegram_id IS NULL OR telegram_id = 0)
-         AND (access_status = 'active' OR access_status IS NULL)
-       ORDER BY full_name`
+         AND (access_status = 'active' OR access_status IS NULL)${orgFilter}
+       ORDER BY full_name`,
+      params
     );
     return res.rows;
   });
@@ -96,26 +115,44 @@ export async function registerV8Routes(app: FastifyInstance) {
       return { ok: true, status: 'pending', id: pending.rows[0].id };
     }
 
+    const claimedId = b.claimed_employee_id ? Number(b.claimed_employee_id) : null;
+
+    // Сеть для роутинга уведомления: если claim — сеть заклеймленного
+    // сотрудника (единый источник правды); иначе то, что гость выбрал в
+    // пикере (пикер эпика 16.0), с фолбэком на 'default' как везде в коде.
+    let effectiveOrgId = String(b.org_id || 'default');
+    if (claimedId) {
+      const claimed = await query(`SELECT COALESCE(org_id,'default') as org_id FROM employees WHERE id = $1`, [claimedId]);
+      effectiveOrgId = claimed.rows[0]?.org_id || 'default';
+    }
+    // org_id на самой заявке: NULL для claim-пути (не дублируем сеть
+    // сотрудника — источники могут разойтись), иначе то, что выбрал гость.
+    const storedOrgId = claimedId ? null : (b.org_id ? String(b.org_id) : null);
+
     const res = await query(
       `INSERT INTO access_requests
-         (telegram_id, telegram_username, full_name, claimed_employee_id, message, status)
-       VALUES ($1,$2,$3,$4,$5,'pending')
+         (telegram_id, telegram_username, full_name, claimed_employee_id, message, status, org_id)
+       VALUES ($1,$2,$3,$4,$5,'pending',$6)
        RETURNING *`,
       [
         telegramId,
         b.username || null,
         full_name,
-        b.claimed_employee_id ? Number(b.claimed_employee_id) : null,
-        b.message || ''
+        claimedId,
+        b.message || '',
+        storedOrgId
       ]
     );
 
-    // уведомить managers (и admin)
+    // уведомить managers своей сети + admin (страховка, если у новой сети
+    // ещё нет активного управляющего)
     try {
       const managers = await query(
         `SELECT telegram_id, full_name FROM employees
-         WHERE role IN ('manager','admin') AND telegram_id IS NOT NULL
-           AND access_status = 'active'`
+         WHERE telegram_id IS NOT NULL AND access_status = 'active'
+           AND ( role = 'admin'
+                 OR (role IN ('manager','supervisor','senior') AND COALESCE(org_id,'default') = $1) )`,
+        [effectiveOrgId]
       );
       const text =
         `🔐 <b>Заявка на доступ</b>\n` +
@@ -135,11 +172,10 @@ export async function registerV8Routes(app: FastifyInstance) {
     return { ok: true, status: 'pending', request: res.rows[0] };
   });
 
-  // Очередь заявок — manager + supervisor. Заявка на привязку к УЖЕ
-  // существующему сотруднику (claimed_employee_id) фильтруется по сети
-  // этого сотрудника. Совсем новая заявка (ещё не сотрудник) сеть указать
-  // не может — гость её ещё не выбрал нигде в форме — поэтому видна всем
-  // управляющим сети/сектора, это не дыра, а честное ограничение данных.
+  // Очередь заявок — manager + supervisor. Приоритет сети: прямой org_id на
+  // заявке (эпик 16.0, гость выбрал сеть в пикере при регистрации) → сеть
+  // заклеймленного сотрудника (claim-путь) → 'default' (только хвосты до
+  // миграции access-requests-org.sql, уже закрыты backfill'ом там же).
   app.get('/access/requests', async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
@@ -148,7 +184,7 @@ export async function registerV8Routes(app: FastifyInstance) {
       `SELECT ar.* FROM access_requests ar
        LEFT JOIN employees e ON e.id = ar.claimed_employee_id
        WHERE ar.status = 'pending'
-         AND (ar.claimed_employee_id IS NULL OR COALESCE(e.org_id,'default') = $1)
+         AND COALESCE(ar.org_id, COALESCE(e.org_id,'default'), 'default') = $1
        ORDER BY ar.created_at ASC`,
       [orgId]
     );
@@ -186,12 +222,19 @@ export async function registerV8Routes(app: FastifyInstance) {
         [req.telegram_id, role === 'employee' ? null : role, request.user!.employee_id, req.full_name, employeeId]
       );
     } else {
-      // создать нового — попадает в сеть одобряющего менеджера
+      // Создать нового — попадает в сеть заявки (гость выбрал в пикере при
+      // регистрации), а не в сеть одобряющего. Важно с тех пор, как admin
+      // получает cc по заявкам любой сети (эпик 16.0) — иначе admin,
+      // одобряя чужую заявку из своей сессии, молча создал бы сотрудника
+      // в СВОЕЙ сети. Фолбэк на сеть одобряющего только если у заявки
+      // вообще нет org_id (не должно происходить после миграции, кроме
+      // как для уже неактуальных пред-миграционных строк).
+      const orgId = req.org_id || request.user!.org_id;
       const ins = await query(
         `INSERT INTO employees (full_name, telegram_id, role, access_status, is_active, verified_by, verified_at, org_id)
          VALUES ($1,$2,$3,'active',true,$4,now(),$5)
          RETURNING id`,
-        [req.full_name, req.telegram_id, role, request.user!.employee_id, request.user!.org_id]
+        [req.full_name, req.telegram_id, role, request.user!.employee_id, orgId]
       );
       // если нет serial — может понадобиться ручной id; предполагаем serial/identity
       employeeId = ins.rows[0]?.id;

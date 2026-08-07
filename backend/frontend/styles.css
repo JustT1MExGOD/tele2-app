@@ -1430,6 +1430,7 @@
       padding: 14px 16px; font-size: 16px;
       outline: none;
     }
+    .gate-card select:disabled { opacity: 0.5; cursor: not-allowed; }
     .gate-card input:focus, .gate-card select:focus {
       border-color: var(--primary);
       box-shadow: 0 0 0 3px var(--primary-soft);
@@ -1446,6 +1447,15 @@
       line-height: 1.45; text-align: center;
       margin-bottom: 18px;
     }
+    .gate-icon {
+      position: relative;
+      width: 64px; height: 64px; margin: 0 auto 10px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; font-size: 30px;
+      background: var(--primary-soft);
+    }
+    .gate-icon.warn { background: var(--warning-soft); }
+    .gate-icon.danger { background: var(--danger-soft); }
 
   
     .tut-progress {

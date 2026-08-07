@@ -1,4 +1,4 @@
-import { Bot, InputFile } from 'grammy';
+import { Bot, InputFile, InlineKeyboard } from 'grammy';
 import {
   saleNotificationMulti,
   microReport,
@@ -11,6 +11,7 @@ export const bot = token ? new Bot(token) : (null as any);
 
 const CHAT_ID = process.env.CHAT_ID || process.env.REPORT_CHAT_ID || '';
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID || '';
+const MINI_APP_URL = process.env.MINI_APP_URL || '';
 
 export async function notifyChat(text: string, chatId?: string, threadId?: string) {
   const id = chatId || CHAT_ID;
@@ -127,8 +128,16 @@ export async function startBot() {
     return;
   }
   bot.command('start', async (ctx) => {
+    // web_app-кнопка работает только в приватных чатах (ограничение Bot
+    // API, не стилистика) — бот уже стоит и в групповых чатах сетей ради
+    // /chatid, там кнопку прикреплять нельзя, sendMessage упадёт.
+    const isPrivate = ctx.chat?.type === 'private';
+    const keyboard = isPrivate && MINI_APP_URL
+      ? new InlineKeyboard().webApp('📲 Открыть T2 Sales', MINI_APP_URL)
+      : undefined;
     await ctx.reply('👋 <b>T2 Sales</b>\nОткрой Mini App из меню бота.', {
-      parse_mode: 'HTML'
+      parse_mode: 'HTML',
+      ...(keyboard ? { reply_markup: keyboard } : {})
     });
   });
   // /chatid — узнать chat_id группы и message_thread_id текущей темы (для

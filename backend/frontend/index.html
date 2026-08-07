@@ -20,6 +20,20 @@
     </div>
   </div>
 
+  <!-- SPLASH: экран загрузки на время первого /access/status — виден по
+       умолчанию, скрывается из hideAccessGate()/showAccessGate() (см.
+       08-access-supervisor.js), z-index выше accessGate, чтобы закрыть и его тоже. -->
+  <div id="appSplash" style="display:flex;position:fixed;inset:0;z-index:10000;background:var(--bg,#0a0a0b)">
+    <div class="gate-shell" style="display:flex;flex-direction:column;justify-content:center;align-items:center;flex:1">
+      <div class="gate-top" style="padding-top:0">
+        <div class="gate-logo">🍉</div>
+        <div class="gate-brand">T2 Sales</div>
+      </div>
+      <div class="skeleton" style="width:160px"></div>
+      <div class="skeleton" style="width:110px"></div>
+    </div>
+  </div>
+
 
   <div id="toast" class="toast"></div>
 

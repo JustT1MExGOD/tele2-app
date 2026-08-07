@@ -1,7 +1,17 @@
 /* 08-access-supervisor.js — часть T2 Sales Mini App (см. index.html).
    Классический скрипт, общая глобальная область со всеми /js/*.js — порядок подключения важен. */
     // ===== ACCESS GATE =====
+    // Скрывает сплэш загрузки. Вызывается из hideAccessGate() и
+    // showAccessGate() — это единственные две точки, которыми
+    // bootApp() (все 5 его веток) завершает первый round-trip, поэтому
+    // сплэш гарантированно скрывается на любом исходе, включая ошибку сети.
+    function hideSplash() {
+      const s = document.getElementById('appSplash');
+      if (s) s.style.display = 'none';
+    }
+
     function showAccessGate(st) {
+      hideSplash();
       const gate = document.getElementById('accessGate');
       const body = document.getElementById('gateBody');
       const sub = document.getElementById('gateSubtitle');
@@ -29,7 +39,7 @@
         body.innerHTML = `
           <div class="gate-card">
             <div class="bind-glow"></div>
-            <div style="font-size:40px;text-align:center;margin-bottom:8px;position:relative">⏳</div>
+            <div class="gate-icon warn">⏳</div>
             <div class="gate-title">Ожидайте подтверждения</div>
             <div class="gate-desc">
               Manager или супервайзер подтвердит, что вы сотрудник сети.
@@ -45,7 +55,7 @@
         body.innerHTML = `
           <div class="gate-card">
             <div class="bind-glow"></div>
-            <div style="font-size:40px;text-align:center;margin-bottom:8px;position:relative">🔒</div>
+            <div class="gate-icon danger">🔒</div>
             <div class="gate-title">В доступе отказано</div>
             <div class="gate-desc">
               Напиши управляющему или admin.
@@ -53,8 +63,7 @@
             </div>
             <div class="bind-foot" style="position:relative;margin-bottom:12px">Telegram ID: <code>${tid}</code></div>
             <button class="btn-main" onclick="bootApp()">Проверить снова</button>
-            <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)"
-              onclick="showAccessGate({status:'none'})">Подать заявку заново</button>
+            <button class="btn-ghost" onclick="showAccessGate({status:'none'})">Подать заявку заново</button>
           </div>`;
         return;
       }
@@ -64,9 +73,15 @@
       body.innerHTML = `
         <div class="gate-card">
           <div class="bind-glow"></div>
+          <div class="gate-icon">👋</div>
           <div class="gate-title">Добро пожаловать</div>
           <div class="gate-desc">
             Укажи ФИО как в команде. После подтверждения manager откроется полный доступ к плану, сменам и продажам.
+          </div>
+          <div class="field" id="gateOrgField">
+            <label>Сеть</label>
+            <select id="gateOrg"><option value="" disabled selected>— выбери сеть —</option></select>
+            <div class="bind-foot" id="gateOrgHint" style="display:none;margin-top:6px">Сеть определится по выбранному сотруднику</div>
           </div>
           <div class="field">
             <label>ФИО</label>
@@ -78,15 +93,16 @@
           </div>
           <div class="field">
             <label>Я из списка</label>
-            <select id="gateClaim"><option value="">— новый сотрудник —</option></select>
+            <select id="gateClaim" onchange="onGateClaimChange()"><option value="">— новый сотрудник —</option></select>
           </div>
           <button class="btn-main" style="margin-top:8px" onclick="submitAccessRequest()">Отправить заявку</button>
           <div class="bind-foot" style="position:relative;margin-top:14px">ID: ${tid} · T2 Sales ${typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''}</div>
         </div>`;
-      loadGateDirectory();
+      loadGateOrgs();
     }
 
     function hideAccessGate() {
+      hideSplash();
       const gate = document.getElementById('accessGate');
       if (gate) gate.style.display = 'none';
       const sheet = document.querySelector('.sheet');
@@ -99,20 +115,62 @@
       if (fab) fab.style.display = 'flex';
     }
 
-    async function loadGateDirectory() {
+    // Список сетей для пикера — единственный вариант автовыбирается и
+    // прячется (нет смысла выбирать из одного). При выборе сети — только
+    // тогда подгружается claim-список, отфильтрованный по ней (без
+    // выбранной сети список не грузим вообще, иначе гость сети B опять
+    // мог бы «заклеймить» сотрудника сети A).
+    async function loadGateOrgs() {
       try {
-        const res = await fetch(API + '/access/employees-directory', { headers: authHeaders() });
+        const res = await fetch(API + '/access/orgs', { headers: authHeaders() });
+        if (!res.ok) return;
+        const list = await res.json();
+        const sel = document.getElementById('gateOrg');
+        const field = document.getElementById('gateOrgField');
+        if (!sel) return;
+        const orgs = Array.isArray(list) ? list : [];
+        orgs.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o.id;
+          opt.textContent = o.name;
+          sel.appendChild(opt);
+        });
+        if (orgs.length <= 1) {
+          if (orgs.length === 1) sel.value = orgs[0].id;
+          if (field) field.style.display = 'none';
+          loadGateDirectory(sel.value);
+        } else {
+          sel.onchange = () => loadGateDirectory(sel.value);
+        }
+      } catch (_) {}
+    }
+
+    async function loadGateDirectory(orgId) {
+      try {
+        const orgParam = orgId ? '?org_id=' + encodeURIComponent(orgId) : '';
+        const res = await fetch(API + '/access/employees-directory' + orgParam, { headers: authHeaders() });
         if (!res.ok) return;
         const list = await res.json();
         const sel = document.getElementById('gateClaim');
         if (!sel) return;
-        list.forEach(e => {
+        sel.innerHTML = '<option value="">— новый сотрудник —</option>';
+        (Array.isArray(list) ? list : []).forEach(e => {
           const o = document.createElement('option');
           o.value = e.id;
           o.textContent = e.full_name;
           sel.appendChild(o);
         });
       } catch (_) {}
+    }
+
+    // Claim выбран — сеть сотрудника уже известна сама по себе, пикер
+    // блокируется, чтобы не путать (выбор сети никак не влияет на claim).
+    function onGateClaimChange() {
+      const claim = document.getElementById('gateClaim')?.value;
+      const orgSel = document.getElementById('gateOrg');
+      const hint = document.getElementById('gateOrgHint');
+      if (orgSel) orgSel.disabled = !!claim;
+      if (hint) hint.style.display = claim ? 'block' : 'none';
     }
 
     async function submitAccessRequest() {
@@ -122,11 +180,17 @@
         return;
       }
       const claimed = document.getElementById('gateClaim')?.value;
+      const orgVal = document.getElementById('gateOrg')?.value;
+      if (!claimed && !orgVal) {
+        toast('Выберите сеть', 'err');
+        return;
+      }
       const body = {
         full_name,
         message: document.getElementById('gateMsg')?.value || '',
         username: tgUser()?.username || null,
-        claimed_employee_id: claimed ? Number(claimed) : null
+        claimed_employee_id: claimed ? Number(claimed) : null,
+        org_id: claimed ? null : (orgVal || null)
       };
       const res = await fetch(API + '/access/request', {
         method: 'POST',

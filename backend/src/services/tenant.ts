@@ -153,6 +153,23 @@ export async function listOrgs(): Promise<{ id: string; name: string }[]> {
   }
 }
 
+/** Активные сети — для пикера при регистрации гостя (без авторизации,
+ * без chat_id/sector_id). Не переиспользует listOrgs() — та намеренно
+ * не фильтрует is_active, admin должен видеть и неактивные сети тоже. */
+export async function listActiveOrgsPublic(): Promise<
+  { id: string; name: string; brand_name: string | null; primary_color: string | null; logo_url: string | null }[]
+> {
+  try {
+    const res = await query(
+      `SELECT id, name, brand_name, primary_color, logo_url
+       FROM organizations WHERE COALESCE(is_active, true) = true ORDER BY name`
+    );
+    return res.rows;
+  } catch (_) {
+    return [];
+  }
+}
+
 export async function upsertOrg(body: Partial<Org> & { id: string }) {
   await query(
     `INSERT INTO organizations (id, name, brand_name, primary_color, logo_url)
