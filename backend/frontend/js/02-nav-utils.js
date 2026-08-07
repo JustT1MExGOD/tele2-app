@@ -113,6 +113,7 @@
       if (name === 'access') { loadAccessRequests(); }
       if (name === 'supervisor') { loadSupervisorDash(); }
       if (name === 'live') { loadLiveMap(); }
+      if (name === 'orgs') { loadOrgsAdmin(); }
     }
 
     async function refreshAll() {

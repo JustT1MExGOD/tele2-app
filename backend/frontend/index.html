@@ -381,6 +381,11 @@
           <div class="row-body"><div class="row-title">Добавить точку</div></div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('orgs')" id="btnNetworks" style="display:none">
+          <div class="row-icon">🌐</div>
+          <div class="row-body"><div class="row-title">Сети</div></div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="openAddMetric()">
           <div class="row-icon">🧩</div>
           <div class="row-body"><div class="row-title">Новая метрика плана</div><div class="row-sub">SIM, MNP… + свои пункты</div></div>
@@ -415,6 +420,19 @@
       <div class="section">
         <div class="section-title">История продаж</div>
         <div id="historyList"><div class="skeleton"></div></div>
+      </div>
+    </div>
+
+    <!-- ===== NETWORKS (admin) ===== -->
+    <div id="page-orgs" class="page">
+      <div class="section">
+        <div class="section-title">Сети</div>
+        <button class="row" onclick="openAddOrg()">
+          <div class="row-icon">➕</div>
+          <div class="row-body"><div class="row-title">Добавить сеть</div></div>
+          <div class="row-chevron">›</div>
+        </button>
+        <div id="orgsList"><div class="skeleton"></div></div>
       </div>
     </div>
 

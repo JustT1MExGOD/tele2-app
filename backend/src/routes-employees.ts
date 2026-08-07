@@ -112,9 +112,13 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     const code = String(b.code || '').trim();
     if (!id || !name) return reply.code(400).send({ error: 'id and name required' });
 
-    // Новая точка попадает в сеть создающего её менеджера. Расписание отчётов
-    // (micro_report_times/close_time_*) — с дефолтами, если не задано явно, чтобы
-    // точка сразу подхватилась cron-ом без ручной правки кода (см. cron/reports.ts).
+    // Точка попадает в сеть создающего её менеджера, либо (для admin) в
+    // сеть, явно выбранную переключателем — тот же паттерн, что и в
+    // POST /employees двумя строками выше, раньше здесь был захардкожен
+    // request.user!.org_id без возможности переопределить. Расписание
+    // отчётов (micro_report_times/close_time_*) — с дефолтами, если не
+    // задано явно, чтобы точка сразу подхватилась cron-ом (cron/reports.ts).
+    const org_id = resolveViewOrgId(request.user!, b.org_id);
     const res = await query(
       `INSERT INTO stores (
          id, code, name, short_name, work_time, hours, color, is_active, org_id,
@@ -130,7 +134,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
         b.work_time || '10-21',
         Number(b.hours) || 11,
         b.color || '#6d9eeb',
-        request.user!.org_id,
+        org_id,
         b.micro_report_times || ['10:00', '12:00', '14:00', '16:00', '18:00', '20:00'],
         b.skip_sunday_micro_times || null,
         b.close_time_weekday || '21:00',

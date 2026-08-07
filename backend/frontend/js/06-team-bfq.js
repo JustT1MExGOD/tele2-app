@@ -39,6 +39,8 @@
       // раньше показывалась всем manager/senior и падала на 403.
       const ticketsBtn = document.getElementById('btnSupportTickets');
       if (ticketsBtn) ticketsBtn.style.display = canAdmin() ? '' : 'none';
+      const netBtn = document.getElementById('btnNetworks');
+      if (netBtn) netBtn.style.display = canAdmin() ? '' : 'none';
       renderOrgSwitcher();
       try {
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
@@ -231,9 +233,26 @@
         <div class="field"><label>Название</label><input id="ns_name" placeholder="Ленина 15"></div>
         <div class="field"><label>Код</label><input id="ns_code" placeholder="123456"></div>
         <div class="field"><label>Цвет</label><input id="ns_color" value="#6d9eeb"></div>
+        <div class="field"><label>Часы работы (например 10-21)</label><input id="ns_work_time" value="10-21"></div>
+        <div class="field"><label>Часов в смене</label><input id="ns_hours" type="number" value="11"></div>
+        <div class="field"><label>Время итога дня</label><input id="ns_close_time" value="21:00"></div>
+        <div class="field" style="display:flex;align-items:center;gap:8px">
+          <input id="ns_24h" type="checkbox" onchange="toggle24hStore()">
+          <label for="ns_24h" style="margin:0">Круглосуточно</label>
+        </div>
         <button class="btn-main" onclick="saveNewStore()">Создать</button>
       `;
       document.getElementById('overlay').classList.add('show');
+    }
+
+    function toggle24hStore() {
+      const on = document.getElementById('ns_24h').checked;
+      const wt = document.getElementById('ns_work_time');
+      const hrs = document.getElementById('ns_hours');
+      wt.value = on ? 'круглосуточно' : '10-21';
+      hrs.value = on ? 24 : 11;
+      wt.disabled = on;
+      hrs.disabled = on;
     }
 
     async function saveNewStore() {
@@ -241,11 +260,22 @@
       const name = document.getElementById('ns_name').value.trim();
       const code = document.getElementById('ns_code').value.trim();
       const color = document.getElementById('ns_color').value.trim();
+      const work_time = document.getElementById('ns_work_time').value.trim();
+      const hours = Number(document.getElementById('ns_hours').value) || 11;
+      const close_time = document.getElementById('ns_close_time').value.trim();
       if (!id || !name) { toast('ID и название обязательны', 'err'); return; }
+      const body = {
+        id, name, code, color,
+        work_time: work_time || undefined,
+        hours,
+        close_time_weekday: close_time || undefined,
+        close_time_sunday: close_time || undefined
+      };
+      if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
       const res = await fetch(API + '/stores', {
         method: 'POST',
         headers: authHeaders(true),
-        body: JSON.stringify({ id, name, code, color })
+        body: JSON.stringify(body)
       });
       if (!res.ok) { toast('Ошибка', 'err'); return; }
       toast('Точка создана', 'ok');

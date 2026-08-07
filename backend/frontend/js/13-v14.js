@@ -476,5 +476,95 @@
       }
     }
 
+    // ===== СЕТИ (admin) — создание/редактирование organizations без SQL =====
+    let orgsAdminCache = []; // последний ответ GET /orgs — открываем форму
+                              // редактирования без второго запроса, все поля уже тут
+
+    async function loadOrgsAdmin() {
+      const box = document.getElementById('orgsList');
+      if (!box) return;
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const res = await fetch(API + '/orgs', { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const orgs = await res.json();
+        orgsAdminCache = Array.isArray(orgs) ? orgs : [];
+        box.innerHTML = orgsAdminCache.map(o => `
+          <button class="row" onclick="openEditOrg('${o.id}')">
+            <div class="row-icon">${o.is_active === false ? '⛔' : '🌐'}</div>
+            <div class="row-body">
+              <div class="row-title">${esc(o.name)}${o.is_active === false ? ' · выключена' : ''}</div>
+              <div class="row-sub">${esc(o.id)} · сектор ${esc(o.sector_id || 'default')}${o.chat_id ? ' · чат подключён' : ' · чат не настроен'}</div>
+            </div>
+            <div class="row-chevron">›</div>
+          </button>`).join('') || '<div class="empty">🍉 Сетей пока нет</div>';
+      } catch {
+        box.innerHTML = '<div class="empty">🍉 Не получилось загрузить сети</div>';
+      }
+    }
+
+    function orgFormHTML(o) {
+      o = o || {};
+      return `
+        <div class="field"><label>ID (латиница${o.id ? ', нельзя изменить' : ''})</label>
+          <input id="no_id" placeholder="novaya_set" value="${esc(o.id || '')}" ${o.id ? 'disabled' : ''}></div>
+        <div class="field"><label>Название</label><input id="no_name" value="${esc(o.name || '')}"></div>
+        <div class="field"><label>Бренд (короткое имя)</label><input id="no_brand" value="${esc(o.brand_name || '')}"></div>
+        <div class="field"><label>Основной цвет</label><input id="no_color" value="${esc(o.primary_color || '#2AABEE')}"></div>
+        <div class="field"><label>Сектор</label><input id="no_sector" value="${esc(o.sector_id || 'default')}"></div>
+        <div class="field"><label>Chat ID группы</label><input id="no_chat" placeholder="-100…" value="${esc(o.chat_id || '')}"></div>
+        <div class="field"><label>Thread ID · продажи</label><input id="no_sales_thread" placeholder="необязательно" value="${esc(o.sales_thread_id || '')}"></div>
+        <div class="field"><label>Thread ID · отчёты</label><input id="no_reports_thread" placeholder="необязательно" value="${esc(o.reports_thread_id || '')}"></div>
+        <div class="empty" style="text-align:left;padding:4px 0;font-size:12px">Chat ID и Thread ID узнать командой /chatid в нужной группе/теме Telegram — бот пришлёт оба числа в ответ.</div>
+        ${o.id ? `<div class="field" style="display:flex;align-items:center;gap:8px">
+          <input id="no_active" type="checkbox" ${o.is_active === false ? '' : 'checked'}>
+          <label for="no_active" style="margin:0">Сеть активна</label>
+        </div>` : ''}
+        <button class="btn-main" onclick="saveOrg('${o.id || ''}')">Сохранить</button>
+      `;
+    }
+
+    function openAddOrg() {
+      if (!canAdmin()) return;
+      document.getElementById('modalTitle').textContent = 'Новая сеть';
+      document.getElementById('modalBody').innerHTML = orgFormHTML({});
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    function openEditOrg(id) {
+      if (!canAdmin()) return;
+      const o = orgsAdminCache.find(x => x.id === id);
+      if (!o) { toast('Сеть не найдена', 'err'); return; }
+      document.getElementById('modalTitle').textContent = o.name || id;
+      document.getElementById('modalBody').innerHTML = orgFormHTML(o);
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    async function saveOrg(existingId) {
+      const id = existingId || document.getElementById('no_id').value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      const name = document.getElementById('no_name').value.trim();
+      if (!id || !name) { toast('ID и название обязательны', 'err'); return; }
+      const body = {
+        name,
+        brand_name: document.getElementById('no_brand').value.trim() || undefined,
+        primary_color: document.getElementById('no_color').value.trim() || undefined,
+        sector_id: document.getElementById('no_sector').value.trim() || undefined,
+        chat_id: document.getElementById('no_chat').value.trim() || undefined,
+        sales_thread_id: document.getElementById('no_sales_thread').value.trim() || undefined,
+        reports_thread_id: document.getElementById('no_reports_thread').value.trim() || undefined
+      };
+      const activeEl = document.getElementById('no_active');
+      if (activeEl) body.is_active = activeEl.checked;
+      const res = await fetch(API + '/admin/org/' + encodeURIComponent(id), {
+        method: 'PUT',
+        headers: authHeaders(true),
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      toast(existingId ? 'Сеть обновлена' : 'Сеть создана', 'ok');
+      closeModal();
+      loadOrgsAdmin();
+    }
+
     console.log('T2 Sales UI v14');
 
