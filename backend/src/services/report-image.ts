@@ -288,16 +288,17 @@ export async function buildReleaseCardSvg(
   const brandName = opts?.brand?.name || opts?.name || 'T2 Sales';
   const accent = opts?.brand?.color || opts?.color || '#2AABEE';
 
-  // SVG не переносит текст сам — режем длинные буллеты на строки вручную,
-  // иначе они вылезают за карточку (560px)
-  const MAX_CHARS_PER_LINE = 46;
-  function wrapText(text: string): string[] {
+  // SVG не переносит текст сам — режем длинные строки вручную, иначе они
+  // вылезают за карточку (560px). Раньше это применялось только к буллетам —
+  // заголовок оставался одной строкой без переноса и обрезался по краю
+  // карточки на длинных названиях версий.
+  function wrapText(text: string, maxCharsPerLine: number): string[] {
     const words = text.split(' ');
     const lines: string[] = [];
     let cur = '';
     for (const w of words) {
       const next = cur ? `${cur} ${w}` : w;
-      if (next.length > MAX_CHARS_PER_LINE && cur) {
+      if (next.length > maxCharsPerLine && cur) {
         lines.push(cur);
         cur = w;
       } else {
@@ -308,10 +309,19 @@ export async function buildReleaseCardSvg(
     return lines;
   }
 
-  let y = 150;
+  const TITLE_LINE_HEIGHT = 32;
+  const titleLines = wrapText(entry.title, 26);
+  const titleY = 84;
+  const titleBlock = titleLines
+    .map((line, i) => `<text x="40" y="${titleY + i * TITLE_LINE_HEIGHT}" fill="#FFFFFF" font-size="26" font-family="${FONT}" font-weight="700">${esc(line)}</text>`)
+    .join('\n');
+  const extraTitleHeight = (titleLines.length - 1) * TITLE_LINE_HEIGHT;
+  const versionY = 112 + extraTitleHeight;
+
+  let y = 150 + extraTitleHeight;
   const parts: string[] = [];
   for (const b of entry.bullets) {
-    const lines = wrapText(b);
+    const lines = wrapText(b, 46);
     lines.forEach((line, i) => {
       const x = i === 0 ? 40 : 58;
       const text = i === 0 ? `•  ${esc(line)}` : esc(line);
@@ -330,8 +340,8 @@ export async function buildReleaseCardSvg(
   <rect width="560" height="${height}" rx="24" fill="url(#bg)"/>
   <rect width="560" height="6" fill="${esc(accent)}"/>
   <text x="40" y="48" fill="${esc(accent)}" font-size="13" font-family="${FONT}" font-weight="700">${esc(brandName).toUpperCase()} · ОБНОВЛЕНИЕ</text>
-  <text x="40" y="84" fill="#FFFFFF" font-size="26" font-family="${FONT}" font-weight="700">${esc(entry.title)}</text>
-  <text x="40" y="112" fill="#A1A1AA" font-size="14" font-family="${FONT}">версия ${esc(entry.version)}</text>
+  ${titleBlock}
+  <text x="40" y="${versionY}" fill="#A1A1AA" font-size="14" font-family="${FONT}">версия ${esc(entry.version)}</text>
   ${parts.join('\n')}
   <text x="40" y="${height - 24}" fill="#6B7280" font-size="11" font-family="${FONT}">T2 Sales · Europe/Moscow</text>
 </svg>`;
