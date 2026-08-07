@@ -1350,6 +1350,16 @@
     }
     .mt-extra { display: none; margin-top: 8px; }
     .mt-extra.open { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    /* Вариант «Ещё метрики» для строк-баров (.sv-bar-row) вместо сетки
+       .mt-cell — кабинет супервайзера, toggleMonthExtra() переиспользуется
+       как есть (он только дёргает класс .open + текст кнопки). */
+    .sv-extra { display: none; margin-top: 4px; }
+    .sv-extra.open { display: block; }
+    .sv-toggle {
+      width: 100%; border: none; background: transparent; color: #8B5CF6;
+      font-size: 12px; font-weight: 700; padding: 8px; cursor: pointer;
+      text-align: center;
+    }
     .promo-item {
       display: flex; align-items: center; justify-content: space-between;
       padding: 14px; border-radius: 14px; background: var(--surface);

@@ -9,12 +9,160 @@
 import { query } from '../db/index.js';
 import { todayMoscow, currentMonthMoscow } from '../utils/date.js';
 
+// Тот же полный список, что METRICS в services/plans.ts — держим локальную
+// копию (не импортируем, чтобы не тянуть весь plans.ts) для дневных и
+// месячных срезов по каждому показателю, не только SIM/MNP/ПА.
+const METRICS = [
+  'sim', 'mnp', 'pa', 'combo', 'phones', 'accessories', 'settings',
+  'insurance', 'wink', 'shpd', 'focus', 'credit_request', 'credit_issued',
+  'plotter', 'hb'
+] as const;
+
 function n(v: any) {
   return Number(v) || 0;
 }
 function pct(fact: number, plan: number) {
   if (plan <= 0) return fact > 0 ? 100 : 0;
   return Math.round((fact / plan) * 100);
+}
+
+/** {sim:{fact,plan,pct}, mnp:{...}, ...} по всем METRICS сразу — общий
+ * помощник для дневного и месячного среза (и по точке, и по сектору). */
+function metricsBreakdown(factRow: any, planRow: any) {
+  const out: Record<string, { fact: number; plan: number; pct: number }> = {};
+  for (const m of METRICS) {
+    const f = n(factRow?.[m]);
+    const p = n(planRow?.[m]);
+    out[m] = { fact: f, plan: p, pct: pct(f, p) };
+  }
+  return out;
+}
+
+// ===== Прогноз до конца месяца =====
+// Тот же метод, что services/forecast.ts (простое экспоненциальное
+// сглаживание уровня × сезонная поправка на день недели с усадкой к 1.0),
+// но батчем ОДНИМ запросом на весь список точек сразу — там это один
+// store_id за раз (N+1, приемлемо для одной точки, не для сектора из
+// 10-50 точек × 15 метрик). Уровень сглаживания не пересчитывается своими
+// же прогнозами вперёд (без дрейфа) — ровно как в оригинале: считается
+// один раз из истории, дальше только домножается на сезонный коэффициент
+// нужного дня недели.
+const FC_ALPHA = 0.3;
+const FC_SHRINK_K = 3;
+
+/** store_id -> {metric: прогноз суммы по ОСТАВШИМСЯ дням месяца (не считая date)} */
+async function forecastRemainingOfMonth(
+  storeIds: string[],
+  date: string,
+  month: string
+): Promise<Map<string, Record<string, number>>> {
+  const result = new Map<string, Record<string, number>>();
+  if (!storeIds.length) return result;
+
+  const lastDayDate = new Date(month + '-01T12:00:00');
+  lastDayDate.setMonth(lastDayDate.getMonth() + 1);
+  lastDayDate.setDate(0);
+  const lastDay = lastDayDate.toISOString().slice(0, 10);
+
+  const remainingDates: { dow: number }[] = [];
+  const cursor = new Date(date + 'T12:00:00');
+  cursor.setDate(cursor.getDate() + 1);
+  const end = new Date(lastDay + 'T12:00:00');
+  while (cursor <= end) {
+    remainingDates.push({ dow: cursor.getDay() });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  if (!remainingDates.length) {
+    for (const id of storeIds) {
+      const zero: Record<string, number> = {};
+      for (const m of METRICS) zero[m] = 0;
+      result.set(id, zero);
+    }
+    return result;
+  }
+
+  const histCols = METRICS.map((m) => `COALESCE(SUM(${m}),0) as ${m}`).join(', ');
+  const hist = await query(
+    `SELECT store_id, sale_date::text as d, ${histCols}
+     FROM sales
+     WHERE store_id = ANY($1) AND sale_date >= ($2::date - interval '120 days') AND sale_date < $2::date
+     GROUP BY store_id, sale_date
+     ORDER BY store_id, sale_date`,
+    [storeIds, date]
+  ).catch(() => ({ rows: [] as any[] }));
+
+  // GROUP BY sale_date пропускает дни без продаж вообще — если их молча
+  // выкинуть, сглаженный уровень никогда не увидит настоящий "0" и не
+  // спустится вниз, застревая на случайном высоком дне (особенно заметно
+  // на денежных метриках вроде "Телефоны": один крупный чек и дальше тишина
+  // без учёта нулей давал прогноз в 1700%+ плана — реальный баг, найден
+  // визуальной проверкой перед деплоем). Досыпаем явные нули на пропущенные
+  // дни — тот же приём, что уже используется для `trend` чуть ниже.
+  const histByDateByStore = new Map<string, Map<string, any>>();
+  for (const r of hist.rows) {
+    const d = String(r.d).slice(0, 10);
+    if (!histByDateByStore.has(r.store_id)) histByDateByStore.set(r.store_id, new Map());
+    histByDateByStore.get(r.store_id)!.set(d, r);
+  }
+  const byStore = new Map<string, { dow: number; [k: string]: number }[]>();
+  for (const storeId of storeIds) {
+    const byDate = histByDateByStore.get(storeId);
+    const list: { dow: number; [k: string]: number }[] = [];
+    const dCursor = new Date(date + 'T12:00:00');
+    dCursor.setDate(dCursor.getDate() - 120);
+    const dEnd = new Date(date + 'T12:00:00');
+    while (dCursor < dEnd) {
+      const key = dCursor.toISOString().slice(0, 10);
+      const r = byDate?.get(key);
+      const row: { dow: number; [k: string]: number } = { dow: dCursor.getDay() };
+      for (const m of METRICS) row[m] = r ? n(r[m]) : 0;
+      list.push(row);
+      dCursor.setDate(dCursor.getDate() + 1);
+    }
+    byStore.set(storeId, list);
+  }
+
+  for (const storeId of storeIds) {
+    const rows = byStore.get(storeId) || [];
+    const projected: Record<string, number> = {};
+    for (const m of METRICS) {
+      if (!rows.length) { projected[m] = 0; continue; }
+      // Баг, найденный визуальной проверкой перед деплоем: холодный старт
+      // с фолбэком baseline=1 и level=rows[0][m] работал только для мелких
+      // штучных метрик (SIM/MNP — значения 0-10). На денежных метриках
+      // (Телефоны, Аксессуары — тысячи рублей) первый же ненулевой день
+      // после серии нулей делил сам себя на "1" и давал ratio в десятки
+      // тысяч — прогноз улетал за 1000% плана. Фикс: level стартует со
+      // среднего по ВСЕЙ истории метрики (её реальный масштаб, не
+      // случайное значение первого дня), и холодный фолбэк тоже берёт этот
+      // масштаб вместо универсальной "1". Плюс защитный клэмп на дневной
+      // ratio — единственный экстремальный день не должен в одиночку
+      // определять сезонный множитель дня недели.
+      const seriesMean = rows.reduce((a, r) => a + r[m], 0) / rows.length;
+      const coldBaseline = seriesMean > 0.01 ? seriesMean : 1;
+      let level = seriesMean;
+      const ratioSum: Record<number, number> = {};
+      const ratioCount: Record<number, number> = {};
+      for (const r of rows) {
+        const baseline = level > 0.01 ? level : coldBaseline;
+        const ratio = Math.min(10, r[m] / baseline); // клэмп: день не больше чем "10× от нормы"
+        ratioSum[r.dow] = (ratioSum[r.dow] || 0) + ratio;
+        ratioCount[r.dow] = (ratioCount[r.dow] || 0) + 1;
+        level = FC_ALPHA * r[m] + (1 - FC_ALPHA) * level;
+      }
+      const seasonal: Record<number, number> = {};
+      for (let dow = 0; dow <= 6; dow++) {
+        const cnt = ratioCount[dow] || 0;
+        const raw = cnt ? ratioSum[dow] / cnt : 1;
+        seasonal[dow] = (cnt * raw + FC_SHRINK_K * 1) / (cnt + FC_SHRINK_K);
+      }
+      let sum = 0;
+      for (const rd of remainingDates) sum += Math.max(0, level * (seasonal[rd.dow] ?? 1));
+      projected[m] = Math.round(sum);
+    }
+    result.set(storeId, projected);
+  }
+  return result;
 }
 
 export type StoreScope = string[] | null; // null = все точки (сейчас нигде не возвращается)
@@ -103,12 +251,11 @@ export async function buildSupervisorDashboard(opts: {
     return emptyDash(from, date, month);
   }
 
-  // факт сегодня по точкам
+  // факт сегодня по точкам — все METRICS, не только SIM/MNP/ПА (нужно для
+  // разворачиваемого списка «Ещё метрики» на вкладке «Точки»)
+  const todaySumCols = METRICS.map((m) => `COALESCE(SUM(${m}),0) as ${m}`).join(', ');
   const todayFact = await query(
-    `SELECT store_id,
-       COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp, COALESCE(SUM(pa),0) pa,
-       COALESCE(SUM(combo),0) combo, COALESCE(SUM(phones),0) phones,
-       COALESCE(SUM(accessories),0) accessories, COALESCE(SUM(hb),0) hb
+    `SELECT store_id, ${todaySumCols}
      FROM sales WHERE sale_date::date = $1::date AND store_id = ANY($2)
      GROUP BY store_id`,
     [date, storeIds]
@@ -172,11 +319,11 @@ export async function buildSupervisorDashboard(opts: {
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  // month fact per store
+  // факт с начала месяца по точкам — все METRICS (нужно для «Выполнение
+  // месячного плана» и как база для прогноза до конца месяца)
+  const monthSumCols = METRICS.map((m) => `COALESCE(SUM(${m}),0) as ${m}`).join(', ');
   const monthFact = await query(
-    `SELECT store_id,
-       COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp, COALESCE(SUM(pa),0) pa,
-       COALESCE(SUM(combo),0) combo, COALESCE(SUM(phones),0) phones
+    `SELECT store_id, ${monthSumCols}
      FROM sales
      WHERE sale_date >= $1::date AND sale_date <= $2::date AND store_id = ANY($3)
      GROUP BY store_id`,
@@ -184,15 +331,35 @@ export async function buildSupervisorDashboard(opts: {
   ).catch(() => ({ rows: [] as any[] }));
   const monthMap = new Map(monthFact.rows.map((r: any) => [r.store_id, r]));
 
+  // месячные планы точек (store_month_plans) — бывший single-store хелпер
+  // getStoreMonthPlan() тут не переиспользуем, батчим одним запросом на
+  // весь сектор, а не по точке за раз
+  const monthPlansRes = await query(
+    `SELECT * FROM store_month_plans WHERE store_id = ANY($1) AND month = $2::date`,
+    [storeIds, monthStart]
+  ).catch(() => ({ rows: [] as any[] }));
+  const monthPlanMap = new Map(monthPlansRes.rows.map((r: any) => [r.store_id, r]));
+
+  // Прогноз до конца месяца — SES + сезонность на день недели (см.
+  // forecastRemainingOfMonth выше), один батч-запрос на весь сектор.
+  const forecastMap = await forecastRemainingOfMonth(storeIds, date, month);
+
   // assemble store cards
   const storeCards = [];
   const drops: any[] = [];
   let netSim = 0, netMnp = 0, netPa = 0, netPlanSim = 0, netPlanMnp = 0, netPlanPa = 0;
+  // сектор-wide суммы за месяц (факт/план/прогноз) по каждой метрике
+  const netMonthFact: Record<string, number> = {};
+  const netMonthPlan: Record<string, number> = {};
+  const netMonthForecast: Record<string, number> = {};
+  for (const m of METRICS) { netMonthFact[m] = 0; netMonthPlan[m] = 0; netMonthForecast[m] = 0; }
 
   for (const st of stores) {
     const f = factMap.get(st.id) || {};
     const p = planMap.get(st.id) || {};
     const mf = monthMap.get(st.id) || {};
+    const mp = monthPlanMap.get(st.id) || {};
+    const remaining = forecastMap.get(st.id) || {};
     const staff = shiftByStore.get(st.id) || [];
 
     const sim = n(f.sim), mnp = n(f.mnp), pa = n(f.pa);
@@ -204,6 +371,21 @@ export async function buildSupervisorDashboard(opts: {
 
     netSim += sim; netMnp += mnp; netPa += pa;
     netPlanSim += pSim; netPlanMnp += pMnp; netPlanPa += pPa;
+
+    // Разворачиваемый список «Ещё метрики» — сегодня и месяц (факт/план/%),
+    // плюс прогноз на конец месяца (факт с начала месяца + прогноз остатка).
+    const todayMetrics = metricsBreakdown(f, p);
+    const monthMetrics = metricsBreakdown(mf, mp);
+    const monthForecastMetrics: Record<string, { total: number; plan: number; pct: number }> = {};
+    for (const m of METRICS) {
+      const factVal = n(mf[m]);
+      const planVal = n(mp[m]);
+      const total = factVal + n(remaining[m]);
+      monthForecastMetrics[m] = { total, plan: planVal, pct: pct(total, planVal) };
+      netMonthFact[m] += factVal;
+      netMonthPlan[m] += planVal;
+      netMonthForecast[m] += total;
+    }
 
     const alerts: string[] = [];
     if (staff.length && overall < 40 && (pSim + pMnp + pPa) > 0) {
@@ -254,14 +436,17 @@ export async function buildSupervisorDashboard(opts: {
         pct_sim: simPct,
         pct_mnp: mnpPct,
         pct_pa: paPct,
-        overall
+        overall,
+        metrics: todayMetrics
       },
       month: {
         sim: n(mf.sim),
         mnp: n(mf.mnp),
         pa: n(mf.pa),
         combo: n(mf.combo),
-        phones: n(mf.phones)
+        phones: n(mf.phones),
+        metrics: monthMetrics,
+        forecast: monthForecastMetrics
       },
       alerts
     });
@@ -322,6 +507,17 @@ export async function buildSupervisorDashboard(opts: {
     }
   }
 
+  // Сектор-wide выполнение месячного плана — сумма планов ВСЕХ точек сектора
+  // по каждой метрике против суммы факта, плюс сумма прогнозов каждой точки
+  // до конца месяца (не пересчитано заново на объединённой истории — сумма
+  // отдельных прогнозов точнее, у разных точек разные дни-недели-паттерны).
+  const monthMetricsNet: Record<string, { fact: number; plan: number; pct: number }> = {};
+  const monthForecastNet: Record<string, { total: number; plan: number; pct: number }> = {};
+  for (const m of METRICS) {
+    monthMetricsNet[m] = { fact: netMonthFact[m], plan: netMonthPlan[m], pct: pct(netMonthFact[m], netMonthPlan[m]) };
+    monthForecastNet[m] = { total: netMonthForecast[m], plan: netMonthPlan[m], pct: pct(netMonthForecast[m], netMonthPlan[m]) };
+  }
+
   return {
     date,
     from,
@@ -340,7 +536,8 @@ export async function buildSupervisorDashboard(opts: {
       plan_pa: netPlanPa,
       stores_count: stores.length,
       staff_on_shift: shifts.rows.length,
-      drops_count: drops.length
+      drops_count: drops.length,
+      month: { metrics: monthMetricsNet, forecast: monthForecastNet }
     },
     stores: storeCards,
     drops: drops.sort((a, b) => (a.severity === 'critical' ? -1 : 1)),
@@ -363,6 +560,12 @@ export async function buildSupervisorDashboard(opts: {
 }
 
 function emptyDash(from: string, date: string, month: string) {
+  const emptyMetrics: Record<string, { fact: number; plan: number; pct: number }> = {};
+  const emptyForecast: Record<string, { total: number; plan: number; pct: number }> = {};
+  for (const m of METRICS) {
+    emptyMetrics[m] = { fact: 0, plan: 0, pct: 0 };
+    emptyForecast[m] = { total: 0, plan: 0, pct: 0 };
+  }
   return {
     date,
     from,
@@ -377,7 +580,8 @@ function emptyDash(from: string, date: string, month: string) {
       plan_sim: 0, plan_mnp: 0, plan_pa: 0,
       stores_count: 0,
       staff_on_shift: 0,
-      drops_count: 0
+      drops_count: 0,
+      month: { metrics: emptyMetrics, forecast: emptyForecast }
     },
     stores: [],
     drops: [{ severity: 'warn', message: 'Нет привязанного сектора. Manager: назначь сектор через PUT /supervisor/:id/sector', store_name: '—' }],

@@ -523,24 +523,45 @@
       box.innerHTML = html;
     }
 
+    // Общий примитив строки-бара — используется и на «Точки» (сегодня),
+    // и на «Тренд» (месячный план/прогноз, сектор и по точкам).
+    function svBarRowHTML(label, fact, plan) {
+      const p = plan > 0 ? Math.round((fact / plan) * 100) : (fact > 0 ? 100 : 0);
+      return `<div class="sv-bar-row">
+        <div>${esc(label)}</div>
+        <div class="sv-bar-track"><div class="sv-bar-fill" style="width:${Math.min(100,p)}%;background:${svBarColor(p)}"></div></div>
+        <div style="text-align:right">${fact||0}/${plan||0}</div>
+      </div>`;
+    }
+
+    // «Ещё метрики» на строках-барах (не на сетке .mt-cell — см. .sv-extra
+    // в styles.css) — toggleMonthExtra() из 06b-plans-bfq.js переиспользуется
+    // как есть, он только дёргает класс .open и текст кнопки.
+    function svExtraToggleHTML(idPrefix, rowsHtml) {
+      return `<div class="mt-more">
+        <button type="button" class="sv-toggle" onclick="toggleMonthExtra('${idPrefix}', this)">Ещё метрики ▾</button>
+        <div class="sv-extra" id="${idPrefix}">${rowsHtml}</div>
+      </div>`;
+    }
+
     function renderSvStores(d) {
       const box = document.getElementById('svStoresBody');
       if (!box) return;
-      box.innerHTML = (d.stores || []).map(s => {
+      box.innerHTML = (d.stores || []).map((s, idx) => {
         const t = s.today || {};
         const o = Number(t.overall) || 0;
         const badge = svTone(o);
         const bars = [
-          { l: 'SIM', f: t.sim, p: t.plan_sim, pc: t.pct_sim },
-          { l: 'MNP', f: t.mnp, p: t.plan_mnp, pc: t.pct_mnp },
-          { l: 'ПА', f: t.pa, p: t.plan_pa, pc: t.pct_pa }
-        ].map(b => {
-          const pc = Number(b.pc) || 0;
-          return `<div class="sv-bar-row">
-            <div>${b.l}</div>
-            <div class="sv-bar-track"><div class="sv-bar-fill" style="width:${Math.min(100,pc)}%;background:${svBarColor(pc)}"></div></div>
-            <div style="text-align:right">${b.f||0}/${b.p||0}</div>
-          </div>`;
+          { l: 'SIM', f: t.sim, p: t.plan_sim },
+          { l: 'MNP', f: t.mnp, p: t.plan_mnp },
+          { l: 'ПА', f: t.pa, p: t.plan_pa }
+        ].map(b => svBarRowHTML(b.l, b.f, b.p)).join('');
+        // Остальные метрики (кроме уже показанных SIM/MNP/ПА) — под «Ещё метрики»
+        const shown = new Set(['sim', 'mnp', 'pa']);
+        const extraIds = METRICS.map(m => m.id).filter(id => !shown.has(id));
+        const extraRows = extraIds.map(id => {
+          const v = (t.metrics && t.metrics[id]) || {};
+          return svBarRowHTML(metricLabel(id), v.fact || 0, v.plan || 0);
         }).join('');
         const staff = (s.staff || []).map(x => x.name.split(' ')[0]).join(', ') || '—';
         const alerts = (s.alerts || []).map(a => `<div style="font-size:11px;color:#FF9F0A;margin-top:4px">• ${esc(a)}</div>`).join('');
@@ -554,6 +575,7 @@
             <div class="sv-badge ${badge}">${o}%</div>
           </div>
           <div class="sv-bars">${bars}</div>
+          ${svExtraToggleHTML('svst-' + idx, extraRows)}
           <div class="sv-staff">👥 ${esc(staff)}</div>
           ${alerts}
         </div>`;
@@ -574,10 +596,28 @@
         </div>`).join('') || '<div class="empty">Нет продаж за период</div>';
     }
 
+    // Месячный план: сектор целиком или одна точка. values — {sim:{...},...},
+    // valueKey — 'fact' для «выполнено сейчас», 'total' для «прогноз на конец месяца».
+    function svMonthPlanBlock(idPrefix, values, valueKey) {
+      const ids = METRICS.map(m => m.id);
+      const main = ids.slice(0, 6);
+      const extra = ids.slice(6);
+      const rowsFor = (list) => list.map(id => {
+        const v = values[id] || {};
+        return svBarRowHTML(metricLabel(id), v[valueKey] || 0, v.plan || 0);
+      }).join('');
+      return `<div class="sv-bars">${rowsFor(main)}</div>${svExtraToggleHTML(idPrefix, rowsFor(extra))}`;
+    }
+
     function renderSvTrend(d) {
       const box = document.getElementById('svTrendBody');
       if (!box) return;
-      box.innerHTML = `
+      const net = d.network || {};
+      const netMonth = net.month || {};
+      const netFactPct = pctOfMetric(netMonth.metrics);
+      const netForecastPct = pctOfMetricForecast(netMonth.forecast);
+
+      let html = `
         <div class="sv-chart">
           ${sparklineSVG(d.trend || [], 'units')}
           <div class="sv-chart-legend">
@@ -586,6 +626,48 @@
           </div>
         </div>
       `;
+
+      html += `<div class="sv-section">Месячный план — весь сектор <span>· выполнено сейчас: ${netFactPct}%</span></div>`;
+      html += `<div class="sv-store" style="--sc:#8B5CF6">${svMonthPlanBlock('svmp-net', netMonth.metrics || {}, 'fact')}</div>`;
+
+      html += `<div class="sv-section">Прогноз на конец месяца — сектор <span>· ожидается: ${netForecastPct}%</span></div>`;
+      html += `<div class="sv-store" style="--sc:#8B5CF6">${svMonthPlanBlock('svfc-net', netMonth.forecast || {}, 'total')}</div>`;
+
+      html += `<div class="sv-section">Прогноз по точкам <span>· план на месяц каждой точки</span></div>`;
+      html += (d.stores || []).map((s, idx) => {
+        const fc = (s.month && s.month.forecast) || {};
+        const overallFc = pctOfMetricForecast(fc);
+        return `<div class="sv-store" style="--sc:${s.color || '#8B5CF6'}">
+          <div class="sv-store-head">
+            <div>
+              <div class="sv-store-name">${esc(s.name)}</div>
+              <div class="sv-store-org">${esc(s.org_name || '')}</div>
+            </div>
+            <div class="sv-badge ${svTone(overallFc)}">${overallFc}%</div>
+          </div>
+          ${svMonthPlanBlock('svfcs-' + idx, fc, 'total')}
+        </div>`;
+      }).join('') || '<div class="empty">Нет точек</div>';
+
+      box.innerHTML = html;
+    }
+
+    function n0(v) { return Number(v) || 0; }
+    // Метрики в разных единицах (штуки SIM vs рубли Аксессуары) — суммировать
+    // сырые значения через все 15 нельзя, это бессмысленное число. Общий %
+    // считаем как СРЕДНЕЕ уже готовых процентов по каждой метрике — тот же
+    // принцип, что storeCard.today.overall (среднее simPct/mnpPct/paPct).
+    function avgPct(getPct) {
+      const vals = METRICS.map(m => n0(getPct(m.id)));
+      return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+    }
+    function pctOfMetric(metrics) {
+      if (!metrics) return 0;
+      return avgPct(id => (metrics[id] || {}).pct);
+    }
+    function pctOfMetricForecast(forecast) {
+      if (!forecast) return 0;
+      return avgPct(id => (forecast[id] || {}).pct);
     }
 
 
