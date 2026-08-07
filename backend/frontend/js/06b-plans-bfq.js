@@ -318,6 +318,10 @@
         if (el) body[m.id] = Number(el.value) || 0;
       }
       if (body.credit_issued != null) body.credit = body.credit_issued;
+      // Точка уже пришла из списка, отфильтрованного переключателем сети —
+      // без org_id бэкенд резолвит orgId в СВОЮ сеть admin'а и 403-ит на
+      // чужой точке (assertStoreInOrg), хотя сама точка видна в списке.
+      if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
       const res = await fetch(API + '/plans/stores/' + storeId + '/month', {
         method: 'PUT',
         headers: authHeaders(true),
