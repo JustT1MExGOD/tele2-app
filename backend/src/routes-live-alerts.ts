@@ -4,7 +4,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireAuth, requireManager } from './middleware-auth.js';
+import { requireAuth, requireManager, resolveViewOrgId } from './middleware-auth.js';
 import { getLiveNetworkMap } from './services/live-map.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { simulateScheduleMoves } from './services/what-if.js';
@@ -14,17 +14,21 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   // ========== LIVE MAP + ALERTS ==========
   app.get('/network/live', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
-    return getLiveNetworkMap();
+    const { org_id } = request.query as { org_id?: string };
+    return getLiveNetworkMap(resolveViewOrgId(request.user!, org_id));
   });
 
   app.get('/alerts', async (request, reply) => {
     if (!requireManager(request, reply)) return;
+    const { org_id } = request.query as { org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id);
     const res = await query(
       `SELECT a.*, st.name as store_name
        FROM smart_alerts a
        LEFT JOIN stores st ON st.id = a.store_id
-       WHERE a.status = 'open'
-       ORDER BY a.created_at DESC LIMIT 50`
+       WHERE a.status = 'open' AND COALESCE(st.org_id,'default') = $1
+       ORDER BY a.created_at DESC LIMIT 50`,
+      [orgId]
     );
     return res.rows;
   });

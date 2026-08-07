@@ -95,8 +95,11 @@ export async function forecastStore(storeId: string, fromDate: string, days = 7)
  * усиление. Отдельно — точки, где на дату вообще никто не поставлен,
  * а прогноз ненулевой (самый очевидный случай).
  */
-export async function getStaffingHints(days = 7) {
-  const storesRes = await query(`SELECT id, name FROM stores WHERE COALESCE(is_active,true)=true`);
+export async function getStaffingHints(days = 7, orgId = 'default') {
+  const storesRes = await query(
+    `SELECT id, name FROM stores WHERE COALESCE(is_active,true)=true AND COALESCE(org_id,'default') = $1`,
+    [orgId]
+  );
   const stores = storesRes.rows as { id: string; name: string }[];
   if (!stores.length) return [];
 
@@ -194,18 +197,26 @@ export async function salesHeatmap(storeId: string, weeks = 4) {
 }
 
 /** Когорты новичков: выход на план за 2/4/8 недель */
-export async function newbieCohorts(orgId?: string) {
+export async function newbieCohorts(orgId = 'default') {
+  // orgId был в сигнатуре и раньше, но нигде не читался в самом запросе —
+  // функция всегда возвращала новичков всей БД, а не только своей сети.
   const emps = await query(
     `SELECT id, full_name, hire_date, created_at
      FROM employees
      WHERE COALESCE(is_active,true)=true
+       AND COALESCE(org_id,'default') = $1
        AND (hire_date IS NOT NULL OR created_at IS NOT NULL)
-     ORDER BY COALESCE(hire_date, created_at::date)`
+     ORDER BY COALESCE(hire_date, created_at::date)`,
+    [orgId]
   );
 
   const rows = [];
   for (const e of emps.rows) {
-    const start = String(e.hire_date || e.created_at).slice(0, 10);
+    // created_at приходит как JS Date (timestamptz), а не строка — String(Date)
+    // даёт "Tue Jul 28 2026 ..." вместо ISO, и .slice(0,10) резало "Tue Jul 28",
+    // что дальше падало на invalid input syntax for type date в SQL ниже.
+    const startRaw = e.hire_date || e.created_at;
+    const start = startRaw instanceof Date ? startRaw.toISOString().slice(0, 10) : String(startRaw).slice(0, 10);
     const weeks = [2, 4, 8];
     const points: any = {};
     for (const w of weeks) {

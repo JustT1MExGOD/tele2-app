@@ -5,15 +5,16 @@ function num(v: any) {
   return Number(v) || 0;
 }
 
-/** Live-снимок сети: кто на смене, % плана, касса, статус */
-export async function getLiveNetworkMap() {
+/** Live-снимок сети: кто на смене, % плана, касса, статус — только своей сети */
+export async function getLiveNetworkMap(orgId = 'default') {
   const today = todayMoscow();
 
   const stores = await query(
     `SELECT id, name, code, color, lat, lng, plan_share
      FROM stores
-     WHERE COALESCE(is_active, true) = true
-     ORDER BY hours NULLS LAST, name`
+     WHERE COALESCE(is_active, true) = true AND COALESCE(org_id,'default') = $1
+     ORDER BY hours NULLS LAST, name`,
+    [orgId]
   );
 
   const result = [];

@@ -3,7 +3,7 @@
  * Отчёты /reports/day — в index.ts (не дублировать)
  */
 import { FastifyInstance } from 'fastify';
-import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
+import { authPlugin, requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from './services/tenant.js';
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
 import { todayMoscow } from './utils/date.js';
@@ -72,6 +72,10 @@ export async function registerV14Routes(app: FastifyInstance) {
   app.get('/heatmap/precise/:storeId', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const storeId = (request.params as any).storeId;
+    const { org_id } = request.query as { org_id?: string };
+    if (!(await assertStoreInOrg(storeId, resolveViewOrgId(request.user!, org_id)))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
     const weeks = Math.min(Number((request.query as any)?.weeks) || 4, 12);
     try {
       return await salesHeatmap(storeId, weeks);

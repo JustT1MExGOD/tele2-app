@@ -54,7 +54,7 @@
       }
       grid.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/heatmap/precise/' + encodeURIComponent(sid) + '?weeks=4', { headers: authHeaders() });
+        const res = await fetch(API + '/heatmap/precise/' + encodeURIComponent(sid) + '?weeks=4' + orgQueryParam(), { headers: authHeaders() });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || data.error || 'fail');
         const hours = data.hours || data.by_hour || [];
@@ -114,7 +114,7 @@
       if (!sid||!box) return;
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/forecast/' + sid + '?days=7', { headers: authHeaders() });
+        const res = await fetch(API + '/forecast/' + sid + '?days=7' + orgQueryParam(), { headers: authHeaders() });
         const data = await res.json();
         const histDays = Number(data.history_days) || 0;
         const note = histDays < 14
@@ -141,7 +141,7 @@
       if (!section || !box) return;
       if (!canManage()) { section.style.display = 'none'; return; }
       try {
-        const res = await fetch(API + '/staffing-hints?days=7', { headers: authHeaders() });
+        const res = await fetch(API + '/staffing-hints?days=7' + orgQueryParam(), { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         const items = data.items || [];

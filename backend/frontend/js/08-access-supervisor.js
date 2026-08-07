@@ -414,7 +414,7 @@
         // выше (это live-расчёт при каждом открытии). Manager/admin only —
         // supervisor получит 403 от /alerts, тогда просто не показываем блок.
         try {
-          const aRes = await fetch(API + '/alerts', { headers: authHeaders() });
+          const aRes = await fetch(API + '/alerts?_=1' + orgQueryParam(), { headers: authHeaders() });
           if (aRes.ok) {
             const alerts = await aRes.json();
             html += `<div class="sv-section">Алерты <span>· требуют подтверждения</span></div>`;

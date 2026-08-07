@@ -303,7 +303,7 @@
       const meta = document.getElementById('liveMeta');
       if (box) box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/network/live', { headers: authHeaders() });
+        const res = await fetch(API + '/network/live?_=1' + orgQueryParam(), { headers: authHeaders() });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
         if (meta) meta.textContent = 'Дата: ' + (data.date || todayMoscow()) + ' · обновление при открытии экрана';
