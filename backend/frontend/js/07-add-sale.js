@@ -4,10 +4,14 @@
     async function openAddSale(presetEmployeeId) {
       await loadMetricsCatalog();
       try {
+        // Та же дыра, что и в карточке сотрудника/месячном графике —
+        // без org_id admin при просмотре чужой сети видел бы в форме
+        // добавления продажи СВОИХ сотрудников, а не сети, которую смотрит.
+        const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
         const [empRes, storeRes, schRes] = await Promise.all([
-          fetch(API + '/employees', { headers: authHeaders() }),
+          fetch(API + '/employees' + empParam, { headers: authHeaders() }),
           fetch(API + '/stores', { headers: authHeaders() }),
-          fetch(API + '/schedules?date=' + todayMoscow(), { headers: authHeaders() })
+          fetch(API + '/schedules?date=' + todayMoscow() + orgQueryParam(), { headers: authHeaders() })
         ]);
         employees = await empRes.json();
         stores = await storeRes.json();
@@ -187,6 +191,7 @@
         store_id: storeId,
         sale_date: todayMoscow()
       };
+      if (me?.role === 'admin' && adminViewOrgId) payload.org_id = adminViewOrgId;
 
       let hasAny = false;
       const parts = [];

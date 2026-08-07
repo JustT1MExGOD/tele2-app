@@ -215,8 +215,11 @@
           stores = await stRes.json();
         }
 
-        // Всегда полный список сотрудников, смены накладываем поверх
-        const empRes = await fetch(API + '/employees', { headers: authHeaders() });
+        // Всегда полный список сотрудников, смены накладываем поверх —
+        // та же сеть, что и месячный график выше, иначе строки грида у
+        // admin при просмотре чужой сети — его СОБСТВЕННАЯ команда.
+        const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
+        const empRes = await fetch(API + '/employees' + empParam, { headers: authHeaders() });
         const emps = await empRes.json();
         const byEmp = {};
         (emps || []).forEach(e => {

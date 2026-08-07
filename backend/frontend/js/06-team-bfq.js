@@ -44,7 +44,7 @@
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
         const [empRes, salesRes] = await Promise.all([
           fetch(API + '/employees' + orgParam, { headers: authHeaders() }),
-          fetch(API + '/sales?date=' + todayMoscow(), { headers: authHeaders() })
+          fetch(API + '/sales?date=' + todayMoscow() + orgQueryParam(), { headers: authHeaders() })
         ]);
         employees = await empRes.json();
         const sales = await salesRes.json();
@@ -95,10 +95,14 @@
       document.getElementById('overlay').classList.add('show');
 
       try {
+        // Карточка сотрудника открывается и при просмотре чужой сети
+        // (переключатель у admin) — без org_id все три запроса тихо
+        // резолвились в СВОЮ сеть admin'а, а не в ту, что он смотрит.
+        const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
         const [empRes, salesRes, schRes] = await Promise.all([
-          fetch(API + '/employees', { headers: authHeaders() }),
-          fetch(API + '/sales?date=' + todayMoscow(), { headers: authHeaders() }),
-          fetch(API + '/schedules?date=' + todayMoscow(), { headers: authHeaders() })
+          fetch(API + '/employees' + orgParam, { headers: authHeaders() }),
+          fetch(API + '/sales?date=' + todayMoscow() + orgQueryParam(), { headers: authHeaders() }),
+          fetch(API + '/schedules?date=' + todayMoscow() + orgQueryParam(), { headers: authHeaders() })
         ]);
         const emps = await empRes.json();
         const sales = await salesRes.json();
@@ -147,7 +151,8 @@
       if (!canManage()) return;
       if (!confirm(`Убрать «${metricLabel(metric)}» из продаж сегодня?`)) return;
       try {
-        const res = await fetch(API + '/sales/' + saleId + '/zero', {
+        const zeroOrgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
+        const res = await fetch(API + '/sales/' + saleId + '/zero' + zeroOrgParam, {
           method: 'PUT',
           headers: authHeaders(true),
           body: JSON.stringify({ metric })

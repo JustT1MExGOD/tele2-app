@@ -7,14 +7,20 @@ import { query } from './db/index.js';
 import { notifyChat } from './bot/index.js';
 import { todayMoscow } from './utils/date.js';
 import { logSaleEvents } from './services/heatmap.js';
-import { requireActive, requireManager } from './middleware-auth.js';
+import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
 
 export async function registerSalesRoutes(app: FastifyInstance) {
-  app.get('/sales', async (request) => {
-    const { date } = request.query as { date?: string };
+  // Раньше эндпоинт вообще не проверял авторизацию и не фильтровал по сети —
+  // отдавал продажи всех сетей за день кому угодно с валидным (или вообще
+  // без) X-Telegram-Id. Тот же паттерн self-inclusion, что и в /schedules:
+  // своя запись видна всегда, даже если сегодня подменяешь в чужой сети.
+  app.get('/sales', async (request, reply) => {
+    if (!requireActive(request, reply)) return;
+    const { date, org_id } = request.query as { date?: string; org_id?: string };
     const saleDate = date || todayMoscow();
+    const orgId = resolveViewOrgId(request.user!, org_id);
 
     const res = await query(
       `SELECT s.*, e.full_name, st.name as store_name
@@ -22,8 +28,9 @@ export async function registerSalesRoutes(app: FastifyInstance) {
        JOIN employees e ON e.id = s.employee_id
        JOIN stores st ON st.id = s.store_id
        WHERE s.sale_date = $1
+         AND (COALESCE(st.org_id, 'default') = $2 OR s.employee_id = $3)
        ORDER BY e.full_name`,
-      [saleDate]
+      [saleDate, orgId, request.user!.employee_id]
     );
     return res.rows;
   });
@@ -48,6 +55,15 @@ export async function registerSalesRoutes(app: FastifyInstance) {
         error: 'forbidden',
         message: 'Можно вносить продажи только за себя'
       });
+    }
+    // Manager, вносящий продажу ЗА ДРУГОГО сотрудника — точка должна быть
+    // в его сети (или сети, выбранной admin-переключателем). Свою продажу
+    // на чужой точке (подмена) вносить по-прежнему можно — это легитимно.
+    if (isManagerRole && Number(user.employee_id) !== employee_id) {
+      const orgId = resolveViewOrgId(user, body.org_id);
+      if (!(await assertStoreInOrg(store_id, orgId))) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+      }
     }
     const tg = String(user.telegram_id || '');
 
@@ -168,6 +184,13 @@ export async function registerSalesRoutes(app: FastifyInstance) {
       [id]
     );
     if (!before.rows[0]) return reply.code(404).send({ error: 'not found' });
+    // Точка продажи должна быть в сети менеджера — иначе manager одной сети
+    // мог бы обнулять метрики продаж на точках вообще любой другой сети.
+    const { org_id } = (request.query || {}) as { org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    if (!(await assertStoreInOrg(before.rows[0].store_id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
     const prevVal = Number(before.rows[0].val) || 0;
 
     const res = await query(
