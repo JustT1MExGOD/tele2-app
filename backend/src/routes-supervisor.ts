@@ -1,10 +1,14 @@
 /**
- * Кабинет супервайзера / управляющего
+ * Кабинет супервайзера — отдельный визуал в приложении, изолирован от
+ * manager/senior; admin заходит через явную кнопку.
  *
- * GET /supervisor/dashboard  — полная аналитика (health, просадки, тренд, топ)
- * GET /supervisor/health     — короткий срез для виджетов
+ * GET /supervisor/dashboard  — полная аналитика (health, просадки, тренд, топ).
+ *   Доступ: supervisor | admin.
+ * GET /supervisor/health     — короткий срез для Command Center на главной
+ *   manager/admin (их СОБСТВЕННАЯ сеть, не сектор) — отдельная фича на том
+ *   же движке, кабинета супервайзера не касается.
+ *   Доступ: supervisor | manager | admin.
  *
- * Доступ: supervisor | manager | admin
  * Supervisor = руководитель сектора, видит все точки всех сетей своего
  * сектора (supervisor_sectors → organizations → stores);
  * manager/admin — всю сеть (scope = null).
@@ -22,8 +26,21 @@ import {
 } from './services/supervisor-analytics.js';
 import { todayMoscow } from './utils/date.js';
 
-/** Роли, которым доступен кабинет аналитики */
+/** Полный кабинет супервайзера — только supervisor/admin. Раньше сюда же
+ * пускали manager, но кабинет теперь изолирован от manager/senior (свой
+ * отдельный визуал в приложении); admin сохраняет доступ через явную
+ * кнопку. НЕ путать с canViewSupervisorHealth() ниже — /supervisor/health
+ * питает совсем другую фичу (Command Center manager'а на главной). */
 function canViewSupervisor(user: { role?: string } | null | undefined): boolean {
+  if (!user?.role) return false;
+  return user.role === 'supervisor' || user.role === 'admin';
+}
+
+/** Лёгкий срез для виджета «Сеть за минуту» на главной странице — это
+ * ЕГО СОБСТВЕННАЯ сеть для manager/admin (аналитика по одной сети, не по
+ * сектору), просто исторически считается тем же движком, что и полный
+ * кабинет супервайзера. Изоляция кабинета супервайзера её не касается. */
+function canViewSupervisorHealth(user: { role?: string } | null | undefined): boolean {
   if (!user?.role) return false;
   return user.role === 'supervisor' || user.role === 'manager' || user.role === 'admin';
 }
@@ -35,7 +52,7 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
     if (!canViewSupervisor(request.user)) {
       return reply.code(403).send({
         error: 'forbidden',
-        message: 'Только supervisor / manager / admin'
+        message: 'Только supervisor / admin'
       });
     }
 
@@ -69,7 +86,7 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
 
   app.get('/supervisor/health', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
-    if (!canViewSupervisor(request.user)) {
+    if (!canViewSupervisorHealth(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });
     }
 

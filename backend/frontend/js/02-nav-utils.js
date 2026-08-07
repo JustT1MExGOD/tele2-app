@@ -82,9 +82,10 @@
         n.classList.toggle('active', n.dataset.page === name);
       });
 
-      // FAB всегда доступен для быстрой продажи (кроме access-gate)
+      // FAB всегда доступен для быстрой продажи (кроме access-gate и
+      // кабинета супервайзера — там нет личных продаж, чисто аналитика)
       const fab = document.querySelector('.fab');
-      if (fab) fab.style.display = 'flex';
+      if (fab) fab.style.display = name.indexOf('sv-') === 0 ? 'none' : 'flex';
 
       try {
         loadPage(name);
@@ -111,7 +112,7 @@
       if (name === 'support') { loadSupportSla(); loadSupport(); }
       if (name === 'cash') { loadCash(); }
       if (name === 'access') { loadAccessRequests(); }
-      if (name === 'supervisor') { loadSupervisorDash(); }
+      if (name === 'sv-overview' || name === 'sv-stores' || name === 'sv-people' || name === 'sv-trend') { loadSupervisorData(false); }
       if (name === 'live') { loadLiveMap(); }
       if (name === 'orgs') { loadOrgsAdmin(); }
     }

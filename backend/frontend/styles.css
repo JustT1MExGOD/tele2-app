@@ -1685,13 +1685,20 @@
     .ts-inner.finale .ts-chapter { display: none; }
 
   
-/* ===== SUPERVISOR CABINET ===== */
+/* ===== SUPERVISOR CABINET =====
+   Свой акцент (фиолетовый, #8B5CF6) вместо основного синего — чтобы
+   режим супервайзера считывался с первого взгляда как отдельный визуал.
+   Захардкожено намеренно (не через var(--primary)) — эти классы нигде,
+   кроме кабинета супервайзера, не используются, так что сам факт их
+   применения уже и есть скоуп; менять здесь везде, где раньше был
+   rgba(42,171,238,...)/#2AABEE/#7dd3fc. Семантические цвета (health/
+   план — красный/жёлтый/зелёный) не трогать, они смысловые, не брендовые. */
 .sv-hero {
   margin: 12px 16px 8px;
   padding: 20px 18px 18px;
   border-radius: 24px;
   background:
-    radial-gradient(120% 80% at 10% 0%, rgba(42,171,238,.35), transparent 55%),
+    radial-gradient(120% 80% at 10% 0%, rgba(139,92,246,.35), transparent 55%),
     radial-gradient(90% 70% at 100% 20%, rgba(48,209,88,.12), transparent 50%),
     linear-gradient(165deg, #12141c 0%, #0a0b10 100%);
   border: 1px solid rgba(255,255,255,.08);
@@ -1703,12 +1710,12 @@
   content: '';
   position: absolute; inset: auto -20% -40% auto;
   width: 180px; height: 180px;
-  background: radial-gradient(circle, rgba(42,171,238,.2), transparent 70%);
+  background: radial-gradient(circle, rgba(139,92,246,.2), transparent 70%);
   pointer-events: none;
 }
 .sv-kicker {
   font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase;
-  color: #7dd3fc; font-weight: 700; margin-bottom: 6px;
+  color: #c4b5fd; font-weight: 700; margin-bottom: 6px;
 }
 .sv-title { font-size: 22px; font-weight: 800; letter-spacing: -.3px; }
 .sv-sub { font-size: 13px; color: var(--hint); margin-top: 4px; }
@@ -1772,8 +1779,9 @@
 .sv-store {
   margin: 8px 16px; padding: 14px; border-radius: 20px;
   background: var(--surface); border: 1px solid var(--border);
-  border-left: 4px solid var(--sc, #2AABEE);
+  border-left: 4px solid var(--sc, #8B5CF6);
 }
+.sv-store-org { font-size: 11px; color: #a78bfa; font-weight: 700; margin-top: 1px; }
 .sv-store-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .sv-store-name { font-weight: 800; font-size: 15px; }
 .sv-store-code { font-size: 11px; color: var(--hint); }
@@ -1811,12 +1819,23 @@
 }
 .sv-rank .pos {
   width: 28px; height: 28px; border-radius: 10px; display: grid; place-items: center;
-  font-weight: 800; font-size: 12px; background: #2AABEE22; color: #2AABEE;
+  font-weight: 800; font-size: 12px; background: #8B5CF622; color: #8B5CF6;
 }
 .sv-rank .pos.gold { background: #FFD96633; color: #FFD966; }
 .sv-rank .body { flex: 1; min-width: 0; }
 .sv-rank .name { font-weight: 700; font-size: 13px; }
 .sv-rank .sub { font-size: 11px; color: var(--hint); }
+.sv-rank .org { font-size: 11px; color: #a78bfa; font-weight: 600; }
+
+/* Нижняя навигация кабинета супервайзера — тот же .bottom-nav/.nav-item,
+   только активная вкладка фиолетовая, не var(--primary). */
+#bottomNavSupervisor .nav-item.active { color: #8B5CF6; }
+.sv-exit-btn {
+  display: flex; align-items: center; gap: 6px;
+  margin: 8px 16px 4px; padding: 8px 12px; border-radius: 999px;
+  background: #8B5CF61a; border: 1px solid #8B5CF640; color: #c4b5fd;
+  font-size: 12px; font-weight: 700; cursor: pointer; width: fit-content;
+}
 
 /* Единый тактильный tap-фидбек там, где его раньше не было */
 .row:active,

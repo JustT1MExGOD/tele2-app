@@ -406,7 +406,7 @@
           <div class="row-body"><div class="row-title">Заявки на доступ</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('supervisor')" id="btnSupervisor" style="display:none">
+        <button class="row" onclick="enterSupervisorShell()" id="btnSupervisor" style="display:none">
           <div class="row-icon">📡</div>
           <div class="row-body"><div class="row-title">Кабинет супервайзера</div></div>
           <div class="row-chevron">›</div>
@@ -498,17 +498,57 @@
       </div>
     </div>
 
-    <!-- ===== SUPERVISOR ===== -->
-    
-    <div id="page-supervisor" class="page">
+    <!-- ===== SUPERVISOR SHELL — отдельный визуал, изолирован от manager/senior,
+         admin заходит через кнопку «Кабинет супервайзера». 4 вкладки со своим
+         нижним nav (#bottomNavSupervisor), не часть обычных 5 вкладок app. ===== -->
+    <div id="page-sv-overview" class="page">
       <div class="topbar">
         <div>
           <div class="topbar-title">Супервайзер</div>
-          <div class="topbar-sub">Аналитика сети · прогнозы · просадки</div>
+          <div class="topbar-sub">Обзор сектора</div>
         </div>
-        <button class="icon-btn" onclick="loadSupervisorDash()" title="Обновить">↻</button>
+        <button class="icon-btn" onclick="loadSupervisorData(true)" title="Обновить">↻</button>
       </div>
-      <div id="supervisorBody"></div>
+      <button class="sv-exit-btn" id="svExitBtn" style="display:none" onclick="exitSupervisorShell()">‹ Назад в приложение</button>
+      <div id="svOverviewBody"><div class="skeleton" style="margin:16px"></div></div>
+    </div>
+
+    <div id="page-sv-stores" class="page">
+      <div class="topbar">
+        <div>
+          <div class="topbar-title">Точки</div>
+          <div class="topbar-sub">Все сети сектора</div>
+        </div>
+      </div>
+      <div id="svStoresBody"><div class="skeleton" style="margin:16px"></div></div>
+    </div>
+
+    <div id="page-sv-people" class="page">
+      <div class="topbar">
+        <div>
+          <div class="topbar-title">Люди</div>
+          <div class="topbar-sub">Топ по сектору</div>
+        </div>
+      </div>
+      <div id="svPeopleBody"><div class="skeleton" style="margin:16px"></div></div>
+    </div>
+
+    <div id="page-sv-trend" class="page">
+      <div class="topbar">
+        <div>
+          <div class="topbar-title">Тренд</div>
+          <div class="topbar-sub">Динамика по дням</div>
+        </div>
+      </div>
+      <div class="field" style="margin:12px 16px 0">
+        <label>Глубина</label>
+        <select id="svTrendDays" onchange="loadSupervisorData(true)">
+          <option value="14">14 дней</option>
+          <option value="30">30 дней</option>
+          <option value="60">60 дней</option>
+        </select>
+      </div>
+      <div id="svTrendBody"><div class="skeleton" style="margin:16px"></div></div>
     </div>
 
     <div id="page-heatmap" class="page">
@@ -594,7 +634,7 @@
   <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
     </div>
 
-<nav class="bottom-nav">
+<nav class="bottom-nav" id="bottomNavMain">
     <button class="nav-item active" data-page="home" onclick="switchPage('home')">
       <span class="ico">🏠</span>Главное
     </button>
@@ -609,6 +649,24 @@
     </button>
     <button class="nav-item" data-page="team" onclick="switchPage('team')">
       <span class="ico">👥</span>Команда
+    </button>
+  </nav>
+
+  <!-- Нижняя навигация кабинета супервайзера — своя, изолированная от
+       обычных 5 вкладок. Видна только когда включён режим супервайзера
+       (enterSupervisorShell()), у самого supervisor'а это единственный nav. -->
+  <nav class="bottom-nav" id="bottomNavSupervisor" style="display:none">
+    <button class="nav-item active" data-page="sv-overview" onclick="switchPage('sv-overview')">
+      <span class="ico">📡</span>Обзор
+    </button>
+    <button class="nav-item" data-page="sv-stores" onclick="switchPage('sv-stores')">
+      <span class="ico">🏪</span>Точки
+    </button>
+    <button class="nav-item" data-page="sv-people" onclick="switchPage('sv-people')">
+      <span class="ico">🏆</span>Люди
+    </button>
+    <button class="nav-item" data-page="sv-trend" onclick="switchPage('sv-trend')">
+      <span class="ico">📈</span>Тренд
     </button>
   </nav>
 

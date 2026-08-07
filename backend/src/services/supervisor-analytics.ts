@@ -73,19 +73,25 @@ export async function buildSupervisorDashboard(opts: {
   d.setDate(d.getDate() - (days - 1));
   const from = d.toISOString().slice(0, 10);
 
-  // список точек
+  // Список точек + название сети (o.name) — кабинет супервайзера кросс-сетевой
+  // по своей сути (сектор = несколько сетей), без названия сети непонятно,
+  // какая точка из какой сети в общем списке.
   let storesRes;
   if (opts.scope === null) {
     storesRes = await query(
-      `SELECT id, name, code, COALESCE(color, '#2AABEE') as color
-       FROM stores WHERE COALESCE(is_active, true) = true ORDER BY name`
+      `SELECT s.id, s.name, s.code, COALESCE(s.color, '#2AABEE') as color,
+              COALESCE(s.org_id, 'default') as org_id, COALESCE(o.name, 'default') as org_name
+       FROM stores s LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
+       WHERE COALESCE(s.is_active, true) = true ORDER BY s.name`
     );
   } else if (!opts.scope.length) {
     return emptyDash(from, date, month);
   } else {
     storesRes = await query(
-      `SELECT id, name, code, COALESCE(color, '#2AABEE') as color
-       FROM stores WHERE id = ANY($1) AND COALESCE(is_active, true) = true ORDER BY name`,
+      `SELECT s.id, s.name, s.code, COALESCE(s.color, '#2AABEE') as color,
+              COALESCE(s.org_id, 'default') as org_id, COALESCE(o.name, 'default') as org_name
+       FROM stores s LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
+       WHERE s.id = ANY($1) AND COALESCE(s.is_active, true) = true ORDER BY s.name`,
       [opts.scope]
     );
   }
@@ -228,6 +234,8 @@ export async function buildSupervisorDashboard(opts: {
       name: st.name,
       code: st.code,
       color: st.color || '#2AABEE',
+      org_id: st.org_id,
+      org_name: st.org_name,
       staff_count: staff.length,
       staff: staff.map((x: any) => ({
         id: x.employee_id,
@@ -261,17 +269,19 @@ export async function buildSupervisorDashboard(opts: {
 
   storeCards.sort((a, b) => a.today.overall - b.today.overall);
 
-  // top employees period
+  // top employees period (+ их сеть — кросс-сетевой топ иначе не показывает,
+  // кто откуда, что важно для сектора из нескольких сетей)
   const topEmp = await query(
-    `SELECT e.id, e.full_name,
+    `SELECT e.id, e.full_name, COALESCE(e.org_id,'default') as org_id, COALESCE(o.name,'default') as org_name,
        COALESCE(SUM(s.sim),0) sim, COALESCE(SUM(s.mnp),0) mnp,
        COALESCE(SUM(s.pa),0) pa, COALESCE(SUM(s.combo),0) combo,
        COALESCE(SUM(s.phones),0) phones
      FROM sales s
      JOIN employees e ON e.id = s.employee_id
+     LEFT JOIN organizations o ON o.id = COALESCE(e.org_id, 'default')
      WHERE s.sale_date >= $1::date AND s.sale_date <= $2::date
        AND s.store_id = ANY($3)
-     GROUP BY e.id, e.full_name
+     GROUP BY e.id, e.full_name, e.org_id, o.name
      ORDER BY (COALESCE(SUM(s.sim),0)*2 + COALESCE(SUM(s.mnp),0)*3 + COALESCE(SUM(s.pa),0)*2) DESC
      LIMIT 15`,
     [from, date, storeIds]
@@ -339,6 +349,8 @@ export async function buildSupervisorDashboard(opts: {
       rank: i + 1,
       id: e.id,
       full_name: e.full_name,
+      org_id: e.org_id,
+      org_name: e.org_name,
       sim: n(e.sim),
       mnp: n(e.mnp),
       pa: n(e.pa),
