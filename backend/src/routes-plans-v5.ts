@@ -5,7 +5,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { requireManager, requireAuth, requireActive, resolveViewOrgId } from './middleware-auth.js';
+import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import {
   getMonthSummaryTable,
   upsertEmployeeMonthPlan,
@@ -18,7 +18,6 @@ import {
   METRICS,
   monthStart
 } from './services/plans.js';
-import { query } from './db/index.js';
 import { currentMonthMoscow, todayMoscow } from './utils/date.js';
 
 export async function registerPlansV5Routes(app: FastifyInstance) {
@@ -91,8 +90,7 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const body = (request.body as any) || {};
     const orgId = resolveViewOrgId(request.user!, body.org_id);
-    const storeCheck = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM stores WHERE id = $1`, [id]);
-    if (!storeCheck.rows[0] || storeCheck.rows[0].org_id !== orgId) {
+    if (!(await assertStoreInOrg(id, orgId))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
     const month = body.month || currentMonthMoscow();

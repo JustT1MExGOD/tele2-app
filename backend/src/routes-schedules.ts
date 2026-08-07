@@ -1,11 +1,13 @@
 /**
- * График смен: день, правка, месяц целиком.
- * Вынесено из index.ts при разбиении монолита на модули.
+ * График смен: день, правка (в т.ч. массовая), месяц целиком.
+ * Вынесено из index.ts при разбиении монолита на модули; /schedules/bulk и
+ * DELETE /schedules переехали сюда же из routes-v3.ts — раньше мутации
+ * графика были раскиданы по двум файлам.
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
-import { requireActive, requireManager, resolveViewOrgId } from './middleware-auth.js';
+import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 
 export async function registerSchedulesRoutes(app: FastifyInstance) {
   // График — по точкам своей сети. Сотрудник может быть на смене в чужой
@@ -42,8 +44,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     // выбрал admin переключателем) — иначе руководитель одной сети мог бы
     // расставлять смены на точках чужой сети.
     const orgId = resolveViewOrgId(request.user!, body.org_id);
-    const storeCheck = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM stores WHERE id = $1`, [store_id]);
-    if (!storeCheck.rows[0] || storeCheck.rows[0].org_id !== orgId) {
+    if (!(await assertStoreInOrg(store_id, orgId))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
 
@@ -87,5 +88,73 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     );
 
     return { month: m, start, end, items: res.rows };
+  });
+
+  /**
+   * Массовое сохранение смен на месяц: { items: [{ employee_id, work_date,
+   * store_id, shift_text, hours }] }. Каждая точка проверяется на
+   * принадлежность своей сети — раньше (в routes-v3.ts) эта проверка тут
+   * отсутствовала вообще, хотя одиночный POST /schedules её уже делал.
+   */
+  app.post('/schedules/bulk', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const body = request.body as any;
+    const items = Array.isArray(body?.items) ? body.items : [];
+    if (!items.length) return reply.code(400).send({ error: 'items required' });
+
+    const orgId = resolveViewOrgId(request.user!, body.org_id);
+    const saved = [];
+    for (const item of items) {
+      const employee_id = Number(item.employee_id);
+      const store_id = item.store_id;
+      const work_date = String(item.work_date).slice(0, 10);
+      const shift_text = item.shift_text || '';
+      const hours = Number(item.hours) || 0;
+
+      if (!employee_id || !store_id || !work_date) continue;
+      if (!(await assertStoreInOrg(store_id, orgId))) continue;
+
+      if (hours <= 0) {
+        // удалить смену
+        await query(
+          `DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2`,
+          [employee_id, work_date]
+        );
+        saved.push({ employee_id, work_date, deleted: true });
+        continue;
+      }
+
+      const res = await query(
+        `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (employee_id, work_date)
+         DO UPDATE SET
+           store_id = EXCLUDED.store_id,
+           shift_text = EXCLUDED.shift_text,
+           hours = EXCLUDED.hours
+         RETURNING *`,
+        [employee_id, store_id, work_date, shift_text, hours]
+      );
+      saved.push(res.rows[0]);
+    }
+
+    return { ok: true, count: saved.length, items: saved };
+  });
+
+  /** Удалить одну смену */
+  app.delete('/schedules', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const { employee_id, work_date } = request.query as {
+      employee_id?: string;
+      work_date?: string;
+    };
+    if (!employee_id || !work_date) {
+      return reply.code(400).send({ error: 'employee_id and work_date required' });
+    }
+    await query(
+      `DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2`,
+      [Number(employee_id), work_date]
+    );
+    return { ok: true };
   });
 }

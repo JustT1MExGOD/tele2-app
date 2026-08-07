@@ -20,11 +20,17 @@ import { registerStatsRoutes } from './routes-stats.js';
 import { registerCashRoutes } from './routes-cash.js';
 import { registerPromosRoutes } from './routes-promos.js';
 import { registerReportsRoutes } from './routes-reports.js';
-import { registerV3Routes } from './routes-v3.js';
+import { registerMeRoutes } from './routes-me.js';
+import { registerBfqRoutes } from './routes-bfq.js';
+import { registerExportRoutes } from './routes-export.js';
 import { registerPlansV5Routes } from './routes-plans-v5.js';
 import { registerV8Routes } from './routes-v8.js';
 import { registerSupportRoutes } from './routes-support.js';
-import { registerV13Routes } from './routes-v13.js';
+import { registerShiftsRoutes } from './routes-shifts.js';
+import { registerInsightsRoutes } from './routes-insights.js';
+import { registerLiveAlertsRoutes } from './routes-live-alerts.js';
+import { registerCommsRoutes } from './routes-comms.js';
+import { registerForecastRoutes } from './routes-forecast.js';
 import { registerV14Routes } from './routes-v14.js';
 import { registerMetricsRoutes } from './routes-metrics.js';
 import { registerSupervisorRoutes } from './routes-supervisor.js';
@@ -80,11 +86,17 @@ const routeModules: Array<[string, (app: import('fastify').FastifyInstance) => P
   ['Cash', registerCashRoutes],
   ['Promos', registerPromosRoutes],
   ['Reports (SVG)', registerReportsRoutes],
-  ['V3 (/me, /bfq, история, экспорт)', registerV3Routes],
+  ['Me/role', registerMeRoutes],
+  ['BFQ', registerBfqRoutes],
+  ['История/аудит/экспорт', registerExportRoutes],
   ['Plans v5', registerPlansV5Routes],
   ['Access (v8)', registerV8Routes],
   ['Support', registerSupportRoutes],
-  ['V13 (смены, NLP, offline, live, insights)', registerV13Routes],
+  ['Shifts/NLP/offline sync', registerShiftsRoutes],
+  ['Insights (личная аналитика)', registerInsightsRoutes],
+  ['Live map/alerts/what-if', registerLiveAlertsRoutes],
+  ['Announcements/channels', registerCommsRoutes],
+  ['Forecast/heatmap/BI export', registerForecastRoutes],
   ['V14 (branding, heatmap, tenant)', registerV14Routes],
   ['Metrics', registerMetricsRoutes],
   ['Supervisor', registerSupervisorRoutes],

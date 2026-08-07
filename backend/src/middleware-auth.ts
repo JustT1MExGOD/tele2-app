@@ -218,6 +218,20 @@ export function resolveViewOrgId(user: AuthUser, override?: string | null): stri
   return user.role === 'admin' && override ? override : user.org_id;
 }
 
+/**
+ * Точка принадлежит указанной сети? Один и тот же чек раньше был
+ * продублирован дословно в нескольких роутах (POST /schedules,
+ * PUT /plans/stores/:id/month) — каждый писал свой SELECT store.org_id.
+ */
+export async function assertStoreInOrg(storeId: string, orgId: string): Promise<boolean> {
+  try {
+    const res = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM stores WHERE id = $1`, [storeId]);
+    return !!res.rows[0] && res.rows[0].org_id === orgId;
+  } catch {
+    return false;
+  }
+}
+
 export function isManager(user?: AuthUser | null) {
   return user?.role === 'manager' || user?.role === 'admin' || user?.role === 'senior';
 }

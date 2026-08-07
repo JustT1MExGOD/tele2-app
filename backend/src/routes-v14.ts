@@ -83,7 +83,7 @@ export async function registerV14Routes(app: FastifyInstance) {
       });
     }
   });
-  // POST /admin/rebuild-hour-profiles — уже в routes-v13.ts, не дублировать
+  // POST /admin/rebuild-hour-profiles — уже в routes-forecast.ts, не дублировать
 
   app.post('/internal/log-sale-events', async (request, reply) => {
     if (!requireAuth(request, reply)) return;

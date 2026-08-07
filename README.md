@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-15.14.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-15.14.1-2AABEE?style=flat-square)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -14,7 +14,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `15.14.0`  
+**Актуальная версия клиента:** `15.14.1`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -172,12 +172,18 @@ tele2-app/
     │   ├── routes-cash.ts              (/cash)
     │   ├── routes-promos.ts            (промокоды RTK)
     │   ├── routes-reports.ts           (SVG-отчёты по точке)
-    │   ├── routes-v3.ts
-    │   ├── routes-plans-v5.ts
-    │   ├── routes-v8.ts
+    │   ├── routes-me.ts                (/me, /me/bind, /me/day, назначение роли)
+    │   ├── routes-bfq.ts               (/bfq полный: расчёт, ручной VMR/штраф, анкета)
+    │   ├── routes-export.ts            (история продаж, аудит, CSV-экспорты)
+    │   ├── routes-plans-v5.ts          (месячные планы сотрудников/точек, сводная таблица)
+    │   ├── routes-v8.ts                (заявки на доступ, супервайзер-сектор)
     │   ├── routes-support.ts
-    │   ├── routes-v13.ts
-    │   ├── routes-v14.ts
+    │   ├── routes-shifts.ts            (/shifts/*, NLP-разбор продажи, офлайн-очередь)
+    │   ├── routes-insights.ts          (личная аналитика: /me/insight, /me/self-stats)
+    │   ├── routes-live-alerts.ts       (живая карта, умные алерты, what-if)
+    │   ├── routes-comms.ts             (объявления сети, каналы)
+    │   ├── routes-forecast.ts          (прогноз, heatmap, когорты, BI-экспорт)
+    │   ├── routes-v14.ts               (branding, tenant)
     │   ├── routes-metrics.ts
     │   ├── routes-supervisor.ts
     │   ├── services/   (plans, bfq, nlp, insights, gamification, live-map, alerts, forecast, metrics-catalog,
@@ -189,7 +195,7 @@ tele2-app/
     └── frontend/
         ├── index.html   (разметка + подключение styles.css и js/*.js по порядку)
         ├── styles.css
-        ├── js/          (01-core → 13-v14, классические <script>, общая глобальная область)
+        ├── js/          (01-core → 13-v14, 16 файлов, классические <script>, общая глобальная область)
         └── offline-queue.js
 ```
 
@@ -411,7 +417,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | Планы-нули | month plan + materialize |
 | Касса «не та» | формула +2000 |
 | Tutorial перекрывает UI | ≥ 13.4.1 |
-| V13 404 | registerV13Routes |
+| 404 на существующем роуте | модуль не в `routeModules` в index.ts — проверь регистрацию |
 
 ```powershell
 $h = @{ "X-Telegram-Id" = "ID" }
@@ -467,6 +473,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **15.13.0** | План точки — из «доли от суммы планов сотрудников» в независимый ручной ввод. Новая таблица `store_month_plans` (зеркалит `employee_month_plans`, только на точку) + `GET/PUT /plans/stores/:id/month`, гейт — точка должна принадлежать своей сети (как и `POST /schedules`). `computeStoreDailyPlans()` переписан: вместо суммирования остатков планов всех сотрудников сети и деления по `plan_share` — просто `(план точки на месяц − факт точки с начала месяца) / оставшиеся дни`, ровно та же формула, что уже была для сотрудника (`getEmployeeDailyPlan`), только на уровне точки. Старый шаблон `store_plans` с `plan_date IS NULL` (ручная цифра-фолбэк на день) убран из приоритета в `04-schedule.js` — план точки его полностью заменяет. Планы сотрудников как отдельная сущность (личная статистика/BFQ) не тронуты. У точек, заведённых до этой версии, план на месяц пуст — «План дня по точкам» покажет 0, пока управляющий не введёт план вручную (тап по точке в «Управление») |
 | **15.13.1** | Хотфикс: команда `/chatid` боту — прямо в группе/теме отвечает `chat.id` и `message_thread_id` текущей темы. Нужно было для подключения РТТ Гуреева (их группа с темами — отдельная тема «продажи», отдельная «отчёты»), пригодится для любой следующей сети |
 | **15.14.0** | Подключена вторая реальная сеть — **РТТ Гуреева** (4 точки: Хорошевская 27, Кожевническая 4, Новослободская 10, Комсомольская пл. 3 — круглосуточная, «итог дня» на 21:00; 8 сотрудников). Основная сеть переименована в **РТТ Бижонов**. Их группа в Telegram — форум с темами (отдельная тема «продажи», отдельная «отчёты»), которого раньше в приложении не было вообще — на сеть был только один `chat_id`. Добавлены `sales_thread_id`/`reports_thread_id` на `organizations`, `notifyChat*` в `bot/index.ts` научились передавать `message_thread_id`, новые `getOrgNotifyTarget()`/`getStoreNotifyTarget()` в `tenant.ts` резолвят чат+тему по назначению (продажа → тема продаж, отчёты/алерты → тема отчётов). Заодно найден и исправлен баг: `checkStoreLagAlert()` (алерт отставания 16:00) считал дневные планы только для сети `default` — вторая сеть вообще не получала бы этот алерт |
+| **15.14.1** | Структурная чистка без изменения поведения (без анонса — не эпик). Три разросшихся файла-свалки разбиты по темам: `06-team-bfq.js` (802 строки, команда+BFQ+планы+поддержка+модалки) → `06-team-bfq.js`/`06b-plans-bfq.js`/`06c-support-tickets.js`; `routes-v13.ts` (717 строк) → `routes-shifts.ts`/`routes-insights.ts`/`routes-live-alerts.ts`/`routes-comms.ts`/`routes-forecast.ts`; `routes-v3.ts` (557 строк) → `routes-me.ts`/`routes-bfq.ts`/`routes-export.ts`, а `/schedules/bulk`+`DELETE /schedules` переехали в `routes-schedules.ts` — мутации графика были раскиданы по двум файлам. Заодно: дедуп проверки «точка принадлежит вашей сети» в `assertStoreInOrg()` (была продублирована в `routes-schedules.ts` и `routes-plans-v5.ts`); закрыт пробел — `/schedules/bulk` не проверял принадлежность точки сети вообще, хотя одиночный `POST /schedules` уже проверял; удалён мёртвый код (`cellTone()` во фронтенде, нигде не вызывался) |
 
 ---
 
