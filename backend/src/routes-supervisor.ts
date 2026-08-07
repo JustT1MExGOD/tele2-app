@@ -67,12 +67,25 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
     if (days > 60) days = 60;
 
     try {
-      const orgId = resolveViewOrgId(request.user!, q.org_id);
-      const scope = await resolveSupervisorStores(
-        Number(request.user!.employee_id),
-        String(request.user!.role),
-        orgId
-      );
+      // Admin, заглянувший в кабинет супервайзера через кнопку — видит ВСЁ
+      // (scope=null), не одну сеть. resolveSupervisorStores() для role=admin
+      // резолвит в одну сеть (orgId) — это верно для /supervisor/health
+      // (виджет "Сеть за минуту" на ЕГО ГЛАВНОЙ — своя сеть), но не для
+      // самого кабинета: кабинет — это "весь сектор", а у admin нет
+      // персонального сектора, значит логичный эквивалент — вообще все сети.
+      // Баг найден по живой жалобе: точки РТТ Гуреева не показывались вовсе,
+      // видна была только своя (default) сеть админа.
+      let scope;
+      if (request.user!.role === 'admin') {
+        scope = null;
+      } else {
+        const orgId = resolveViewOrgId(request.user!, q.org_id);
+        scope = await resolveSupervisorStores(
+          Number(request.user!.employee_id),
+          String(request.user!.role),
+          orgId
+        );
+      }
       return await buildSupervisorDashboard({ scope, date, days });
     } catch (e: any) {
       request.log?.error?.(e);
