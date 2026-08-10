@@ -5,7 +5,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
+import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg } from './middleware-auth.js';
 import {
   getMonthSummaryTable,
   upsertEmployeeMonthPlan,
@@ -30,13 +30,22 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     return getMonthSummaryTable(m, orgId);
   });
 
-  // План одного сотрудника на месяц
-  app.get('/plans/employees/:id/month', async (request) => {
+  // План одного сотрудника на месяц. Раньше вообще без авторизации — план
+  // (цели по метрикам) любого сотрудника любой сети был виден по id кому угодно.
+  app.get('/plans/employees/:id/month', async (request, reply) => {
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
-    const { month } = request.query as { month?: string };
+    const { month, org_id } = request.query as { month?: string; org_id?: string };
+    const empId = Number(id);
+    if (empId !== request.user!.employee_id) {
+      const orgId = resolveViewOrgId(request.user!, org_id);
+      if (!(await assertEmployeeInOrg(empId, orgId))) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
+      }
+    }
     const m = month || currentMonthMoscow();
-    const plan = await getEmployeeMonthPlan(Number(id), m);
-    return plan || { employee_id: Number(id), month: monthStart(m), empty: true };
+    const plan = await getEmployeeMonthPlan(empId, m);
+    return plan || { employee_id: empId, month: monthStart(m), empty: true };
   });
 
   // Manager: задать / обновить месячный план сотрудника
@@ -44,6 +53,12 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = request.body as any;
+    // Раньше без проверки — manager любой сети мог задать план сотруднику
+    // вообще любой другой сети по угаданному id.
+    const orgId = resolveViewOrgId(request.user!, body.org_id);
+    if (!(await assertEmployeeInOrg(Number(id), orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
+    }
     const month = body.month || currentMonthMoscow();
     const data: Record<string, number> = {};
     for (const m of METRICS) {

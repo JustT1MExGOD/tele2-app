@@ -43,9 +43,13 @@ export class TestFixtures {
 
   async createEmployee(
     orgId: string,
-    opts: { role?: Role; fullName?: string; telegramId?: number } = {}
+    opts: { role?: Role; fullName?: string; telegramId?: number | null } = {}
   ): Promise<{ id: number; telegramId: number }> {
-    const telegramId = opts.telegramId ?? Math.floor(9_000_000_000 + Math.random() * 900_000_000);
+    // telegramId: null — незанятая карточка (для тестов /me/bind); undefined —
+    // сгенерировать случайный, как раньше.
+    const telegramId = opts.telegramId === null
+      ? null
+      : opts.telegramId ?? Math.floor(9_000_000_000 + Math.random() * 900_000_000);
     const res = await query(
       `INSERT INTO employees (full_name, telegram_id, role, access_status, is_active, org_id)
        VALUES ($1, $2, $3, 'active', true, $4)
@@ -54,7 +58,7 @@ export class TestFixtures {
     );
     const id = Number(res.rows[0].id);
     this.employeeIds.push(id);
-    return { id, telegramId };
+    return { id, telegramId: telegramId as number };
   }
 
   /** FK-safe порядок: сначала записи, ссылающиеся на store/employee, потом

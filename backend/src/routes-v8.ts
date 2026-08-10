@@ -19,6 +19,7 @@ import {
   authPlugin,
   canAssignRole,
   resolveViewOrgId,
+  assertEmployeeInOrg,
   Role
 } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
@@ -201,10 +202,24 @@ export async function registerV8Routes(app: FastifyInstance) {
     // Каскад: одобряющий может выдать только роль строго ниже своей (admin — без ограничений).
     const role: Role = canAssignRole(request.user!.role, requestedRole) ? requestedRole : 'employee';
 
-    const reqRes = await query(`SELECT * FROM access_requests WHERE id = $1`, [Number(id)]);
+    const reqRes = await query(
+      `SELECT ar.*, COALESCE(ar.org_id, e.org_id, 'default') as effective_org_id
+       FROM access_requests ar
+       LEFT JOIN employees e ON e.id = ar.claimed_employee_id
+       WHERE ar.id = $1`,
+      [Number(id)]
+    );
     const req = reqRes.rows[0];
     if (!req || req.status !== 'pending') {
       return reply.code(404).send({ error: 'request not found' });
+    }
+    // Список заявок (GET /access/requests) уже фильтруется по этому же
+    // условию — но сам approve/reject это раньше не перепроверял: manager
+    // одной сети, зная/угадав id заявки другой сети, мог одобрить/отклонить
+    // её напрямую через API, в обход списка.
+    const orgId = resolveViewOrgId(request.user!, b.org_id);
+    if (req.effective_org_id !== orgId) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Заявка не принадлежит вашей сети' });
     }
 
     let employeeId = req.claimed_employee_id ? Number(req.claimed_employee_id) : null;
@@ -264,9 +279,19 @@ export async function registerV8Routes(app: FastifyInstance) {
   app.post('/access/requests/:id/reject', async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { id } = request.params as { id: string };
-    const reqRes = await query(`SELECT * FROM access_requests WHERE id = $1`, [Number(id)]);
+    const reqRes = await query(
+      `SELECT ar.*, COALESCE(ar.org_id, e.org_id, 'default') as effective_org_id
+       FROM access_requests ar
+       LEFT JOIN employees e ON e.id = ar.claimed_employee_id
+       WHERE ar.id = $1`,
+      [Number(id)]
+    );
     const req = reqRes.rows[0];
     if (!req) return reply.code(404).send({ error: 'not found' });
+    const orgId = resolveViewOrgId(request.user!, (request.body as any)?.org_id);
+    if (req.effective_org_id !== orgId) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Заявка не принадлежит вашей сети' });
+    }
 
     await query(
       `UPDATE access_requests
@@ -311,7 +336,15 @@ export async function registerV8Routes(app: FastifyInstance) {
   });
 
   app.put('/supervisor/:id/sector', async (request, reply) => {
+    // Назначение сектора — это доступ ко ВСЕМ сетям сектора разом, а не
+    // одной сети. requireManager (обычный manager сети) раньше мог назначить
+    // ЛЮБОГО сотрудника (любой сети, по угаданному id) супервайзером ЛЮБОГО
+    // сектора — по сути раздавать межсетевые полномочия без ограничений.
+    // Это прерогатива admin, как и переключатель сетей/GET /orgs.
     if (!requireManager(request, reply)) return;
+    if (request.user!.role !== 'admin') {
+      return reply.code(403).send({ error: 'forbidden', message: 'Назначение сектора — только admin' });
+    }
     const { id } = request.params as { id: string };
     const { sector_id } = request.body as { sector_id: string };
     if (!sector_id) return reply.code(400).send({ error: 'sector_id required' });
@@ -337,6 +370,12 @@ export async function registerV8Routes(app: FastifyInstance) {
     // Каскад: можно назначить только роль строго ниже своей (admin — без ограничений).
     if (!canAssignRole(request.user!.role, role)) {
       return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
+    }
+    // Раньше без проверки — manager любой сети мог поменять роль (вплоть до
+    // admin) вообще любому сотруднику любой другой сети по угаданному id.
+    const orgId = resolveViewOrgId(request.user!, b.org_id);
+    if (!(await assertEmployeeInOrg(Number(id), orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
     }
     const res = await query(
       `UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`,

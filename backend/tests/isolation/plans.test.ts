@@ -66,4 +66,55 @@ describe('Изоляция планов (/plans/employees/month, /plans/stores/d
     });
     expect(res.statusCode).toBe(200);
   });
+
+  // Регрессия: оба раньше были без проверки сети — GET вообще без
+  // авторизации (план любого сотрудника любой сети был виден по id кому
+  // угодно), PUT позволял manager чужой сети задать план любому сотруднику.
+  it('GET /plans/employees/:id/month — чужая сеть получает 403', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/plans/employees/${employeeA.id}/month`,
+      headers: authAs(managerB.telegramId)
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('GET /plans/employees/:id/month — без токена вообще — 401', async () => {
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: `/plans/employees/${employeeA.id}/month` });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('GET /plans/employees/:id/month — своя сеть может смотреть', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/plans/employees/${employeeA.id}/month`,
+      headers: authAs(managerA.telegramId)
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('PUT /plans/employees/:id/month — чужая сеть получает 403', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/plans/employees/${employeeA.id}/month`,
+      headers: { ...authAs(managerB.telegramId), 'content-type': 'application/json' },
+      payload: { sim: 50 }
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('PUT /plans/employees/:id/month — своя сеть может задать план', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/plans/employees/${employeeA.id}/month`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { sim: 50 }
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });

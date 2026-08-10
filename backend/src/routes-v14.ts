@@ -6,7 +6,6 @@ import { FastifyInstance } from 'fastify';
 import { authPlugin, requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from './services/tenant.js';
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
-import { todayMoscow } from './utils/date.js';
 
 export async function registerV14Routes(app: FastifyInstance) {
   app.get('/branding', async (request) => {
@@ -88,27 +87,13 @@ export async function registerV14Routes(app: FastifyInstance) {
   });
   // POST /admin/rebuild-hour-profiles — уже в routes-forecast.ts, не дублировать
 
-  app.post('/internal/log-sale-events', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
-    const b = (request.body || {}) as any;
-    try {
-      await logSaleEvents({
-        employee_id: Number(b.employee_id),
-        store_id: b.store_id,
-        sale_date: b.sale_date || todayMoscow(),
-        metrics: b.metrics || {},
-        source: b.source || 'api',
-        hour: b.hour != null ? Number(b.hour) : hourMoscow()
-      });
-      return { ok: true };
-    } catch (e: any) {
-      return reply.code(500).send({
-        error: 'log_failed',
-        message: e?.message || String(e),
-        hint: 'CREATE TABLE sales_events — sql/v14-roadmap.sql'
-      });
-    }
-  });
+  // Раньше тут был POST /internal/log-sale-events — публичный HTTP-роут
+  // ("internal" только в названии), requireAuth(любой активный сотрудник),
+  // без проверки, что employee_id/store_id вообще существуют или свои —
+  // можно было залить фальшивые события в heatmap на любого сотрудника
+  // любой сети. Ни одного вызова с фронта не было — logSaleEvents()
+  // уже вызывается напрямую из POST /sales (routes-sales.ts), через
+  // авторизованный путь. Удалён вместо починки неиспользуемой копии.
 }
 
 export { logSaleEvents, hourMoscow, salesHeatmap };

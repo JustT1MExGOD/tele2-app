@@ -104,4 +104,26 @@ describe('Изоляция графика смен (/schedules)', () => {
     const rows = res.json();
     expect(rows.find((r: any) => Number(r.employee_id) === employeeB.id)).toBeUndefined();
   });
+
+  // Регрессия: DELETE /schedules был вообще без проверки сети — manager
+  // любой сети мог удалить смену любого сотрудника на любую дату.
+  it('DELETE /schedules — чужая сеть получает 403', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/schedules?employee_id=${employeeA.id}&work_date=2026-06-16`,
+      headers: authAs(managerB.telegramId)
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('DELETE /schedules — своя сеть может удалить смену', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/schedules?employee_id=${employeeA.id}&work_date=2026-06-16`,
+      headers: authAs(managerA.telegramId)
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });

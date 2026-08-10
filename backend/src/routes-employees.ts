@@ -8,7 +8,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireActive, requireManager, canAssignRole, resolveViewOrgId, Role } from './middleware-auth.js';
+import { requireActive, requireManager, canAssignRole, resolveViewOrgId, assertEmployeeInOrg, assertStoreInOrg, Role } from './middleware-auth.js';
 
 export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.get('/employees', async (request, reply) => {
@@ -58,6 +58,12 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.patch('/employees/:id', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
+    // Раньше без проверки — manager любой сети мог переименовать/деактивировать
+    // сотрудника вообще любой другой сети по угаданному (маленькому, последовательному) id.
+    const orgId = resolveViewOrgId(request.user!, (request.body as any)?.org_id);
+    if (!(await assertEmployeeInOrg(Number(id), orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
+    }
     const b = request.body as any;
     const sets: string[] = [];
     const vals: any[] = [];
@@ -90,6 +96,10 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.delete('/employees/:id', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
+    const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
+    if (!(await assertEmployeeInOrg(Number(id), orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
+    }
     // soft delete — отвязываем telegram, но продажи/историю не трогаем
     const res = await query(
       `UPDATE employees SET is_active = false, telegram_id = NULL WHERE id = $1
@@ -155,6 +165,10 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.patch('/stores/:id', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
+    const orgId = resolveViewOrgId(request.user!, (request.body as any)?.org_id);
+    if (!(await assertStoreInOrg(id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
     const b = request.body as any;
     const allowed = [
       'name',
@@ -190,6 +204,10 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.delete('/stores/:id', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
+    const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
+    if (!(await assertStoreInOrg(id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
     await query(`UPDATE stores SET is_active = false WHERE id = $1`, [id]);
     return { ok: true, id };
   });

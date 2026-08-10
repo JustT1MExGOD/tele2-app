@@ -144,12 +144,26 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
   /** Удалить одну смену */
   app.delete('/schedules', async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const { employee_id, work_date } = request.query as {
+    const { employee_id, work_date, org_id } = request.query as {
       employee_id?: string;
       work_date?: string;
+      org_id?: string;
     };
     if (!employee_id || !work_date) {
       return reply.code(400).send({ error: 'employee_id and work_date required' });
+    }
+    // Раньше без проверки — manager любой сети мог удалить смену вообще
+    // любого сотрудника на любую дату (та же дыра, что была в POST /schedules
+    // до его собственного фикса — только тут вообще без чека).
+    const existing = await query(
+      `SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2`,
+      [Number(employee_id), work_date]
+    );
+    if (existing.rows[0]?.store_id) {
+      const orgId = resolveViewOrgId(request.user!, org_id);
+      if (!(await assertStoreInOrg(existing.rows[0].store_id, orgId))) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+      }
     }
     await query(
       `DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2`,

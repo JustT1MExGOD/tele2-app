@@ -4,7 +4,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireManager, isManager, canAssignRole, Role } from './middleware-auth.js';
+import { isManager } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
 
 export async function registerMeRoutes(app: FastifyInstance) {
@@ -33,28 +33,61 @@ export async function registerMeRoutes(app: FastifyInstance) {
   });
 
   app.post('/me/bind', async (request, reply) => {
+    // Раньше telegram_id брался из тела запроса (или вообще из спуфабельного
+    // заголовка) — любой мог отвязать чужой telegram_id от его карточки и
+    // привязать СВОЙ к произвольному employee_id, включая admin. Полный
+    // захват аккаунта, без какой-либо авторизации. telegram_id теперь
+    // ТОЛЬКО из request.user (подтверждён подписью Telegram initData в
+    // authPlugin) — populated даже для гостя без employee_id, так что
+    // ранний self-bind по-прежнему работает.
+    const telegram_id = Number(request.user?.telegram_id || 0);
+    if (!telegram_id) {
+      return reply.code(401).send({ error: 'unauthorized', message: 'Telegram initData не подтверждён' });
+    }
     const body = request.body as any;
-    const headerTg = request.headers['x-telegram-id'];
-    const telegram_id = Number(body?.telegram_id || headerTg || 0);
     const employee_id = Number(body?.employee_id);
-    if (!telegram_id || !employee_id) {
-      return reply.code(400).send({ error: 'telegram_id and employee_id required' });
+    if (!employee_id) {
+      return reply.code(400).send({ error: 'employee_id required' });
     }
 
-    // снять tg с других карточек, привязать к выбранной
+    // Карточка должна быть либо ещё не привязана, либо уже привязана к
+    // ЭТОМУ ЖЕ telegram_id (идемпотентный повтор) — иначе это захват уже
+    // занятой карточки чужого сотрудника (в т.ч. admin) со своим telegram_id.
+    const target = await query(`SELECT telegram_id FROM employees WHERE id = $1`, [employee_id]);
+    if (!target.rows[0]) {
+      return reply.code(404).send({ error: 'employee not found' });
+    }
+    const currentOwner = target.rows[0].telegram_id ? Number(target.rows[0].telegram_id) : null;
+    if (currentOwner && currentOwner !== telegram_id) {
+      return reply.code(409).send({ error: 'already_bound', message: 'Карточка уже привязана к другому Telegram' });
+    }
+
+    // снять tg с других карточек, привязать к выбранной. Между SELECT-чеком
+    // выше и этим UPDATE — узкое окно гонки при двух одновременных bind на
+    // один telegram_id; employees.telegram_id теперь UNIQUE (0002), так что
+    // проигравший запрос падает по constraint, а не молча портит данные —
+    // ловим это здесь и отдаём тот же понятный 409, а не голую ошибку SQL.
     await query(
       `UPDATE employees SET telegram_id = NULL WHERE telegram_id = $1`,
       [telegram_id]
     );
-    const res = await query(
-      `UPDATE employees
-       SET telegram_id = $1,
-           access_status = COALESCE(NULLIF(access_status, ''), 'active'),
-           is_active = true
-       WHERE id = $2
-       RETURNING id as employee_id, id, full_name, short_name, role, telegram_id, access_status`,
-      [telegram_id, employee_id]
-    );
+    let res;
+    try {
+      res = await query(
+        `UPDATE employees
+         SET telegram_id = $1,
+             access_status = COALESCE(NULLIF(access_status, ''), 'active'),
+             is_active = true
+         WHERE id = $2
+         RETURNING id as employee_id, id, full_name, short_name, role, telegram_id, access_status`,
+        [telegram_id, employee_id]
+      );
+    } catch (e: any) {
+      if (e?.code === '23505') {
+        return reply.code(409).send({ error: 'already_bound', message: 'Карточка уже привязана к другому Telegram' });
+      }
+      throw e;
+    }
     if (!res.rows[0]) {
       return reply.code(404).send({ error: 'employee not found' });
     }
@@ -197,22 +230,8 @@ export async function registerMeRoutes(app: FastifyInstance) {
     };
   });
 
-  // Назначить роль (каскад: только строго ниже своей, admin — без ограничений)
-  app.post('/employees/:id/role', async (request, reply) => {
-    if (!requireManager(request, reply)) return;
-    const { id } = request.params as { id: string };
-    const { role } = request.body as { role?: string };
-    const ALL_ROLES: Role[] = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
-    if (!ALL_ROLES.includes(role as Role)) {
-      return reply.code(400).send({ error: 'invalid role' });
-    }
-    if (!canAssignRole(request.user!.role, role as Role)) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
-    }
-    const res = await query(
-      `UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`,
-      [role, id]
-    );
-    return res.rows[0];
-  });
+  // Назначение роли живёт в PATCH /employees/:id/role (routes-v8.ts) — этот
+  // POST-дубликат (v3) не вызывается фронтендом (setRole() шлёт PATCH) и
+  // не проверял принадлежность сотрудника сети; удалён вместо починки
+  // неиспользуемой копии.
 }
