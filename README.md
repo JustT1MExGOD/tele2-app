@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-17.3.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-17.4.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `17.3.0`  
+**Актуальная версия клиента:** `17.4.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -406,6 +406,7 @@ schema-only снапшот прод-схемы, без данных/пароле
 4. Start: `npm start`  
 5. Health: `/health`  
 6. **Replicas = 1**  
+7. **Деплой ждёт зелёный CI** (с 17.3.0) — `checkSuites: true` на deployment trigger сервиса (Railway GraphQL API, `deploymentTriggerUpdate`, настройки нет в `railway.json` — только через API/дашборд). Красный `.github/workflows/ci.yml` теперь блокирует деплой, а не просто сигнализирует постфактум
 
 Лог успеха: `✅ V13 routes registered`, `🚀 Сервер на 0.0.0.0:…`
 
@@ -514,6 +515,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **17.1.0** | Вторая волна тестов изоляции — статистика/дэшборд (`/stats/daily`, `/dashboard`), живая карта (`/network/live`), планы (`/plans/employees/month`, `/plans/stores/daily`, `/plans/stores/:id/month`), промокоды (`/promos`), объявления и каналы (`/announcements`, `/channels`), заявки на доступ (`/access/requests`) — ещё 26 тестов на те самые места, где раньше находили реальные дыры (15.12.0, 15.15.0, 15.16.0). Итого 62 теста на слой авторизации/изоляции сети |
 | **17.2.0** | Аудит всех роутов (`grep` на отсутствие `org_id`/`resolveViewOrgId`/`assertStoreInOrg`) нашёл 4 реальные дыры, которые предыдущие волны эпика 17.0 не задели: `GET /bfq`, `/bfq/:employeeId` были вообще без авторизации — кто угодно без токена мог узнать BFQ любого сотрудника любой сети по id; `GET /sales/history`, `/sales/audit`, `/export/sales.csv`, `/export/bfq.csv`, `/export/schedules.csv` отдавали данные сразу всех сетей любому manager; `/sales/quick` и `/sync/batch` (офлайн-очередь) — параллельные пути внесения продажи в обход основного `POST /sales` — не проверяли ни своего сотрудника, ни свою точку; `GET /reports/day/:storeId` отдавал превью отчёта любой точки по id. Все четыре закрыты тем же паттерном (`resolveViewOrgId`/`assertStoreInOrg` + новый `assertEmployeeInOrg`) и покрыты 22 регрессионными тестами — итого 84 теста изоляции. Заодно докручен admin-переключатель сети на новых проверках (BFQ-карточка в «Команде», CSV-экспорты, превью отчёта) — тот же класс пропуска `org_id`, что чинился весь сеанс |
 | **17.3.0** | Ещё 2 дыры того же класса: what-if симуляция переноса смен (`/schedule/what-if`, `/schedule/what-if/apply`) тянула точки ВСЕХ сетей без фильтра — `/apply` реально пишет в `schedules`, то есть можно было переставить чужого сотрудника на точку любой другой сети; теперь сценарий строится только по своей сети. `POST /alerts/:id/ack` гасил алерт по id без проверки сети — manager другой сети мог тихо снять чужой критический алерт. Плюс регрессионные тесты на уже закрытые в 15.15.0 места (`/forecast`, `/heatmap`, `/cohorts/newbies`, `/staffing-hints`, `/export/bi/daily`) — итого 96 тестов изоляции. Заодно переименован «Эпик 17.0» в истории версий 15.8.0-15.16.0 (старое кодовое имя эпика мультитенанта этого же сеанса) — не путать с реальной версией 17.x, это другой, более поздний эпик |
+| **17.4.0** | Последний пункт «Дорожной карты»: рендер отчётов (`resvg`, SVG→PNG) вынесен в `worker_threads` (`src/workers/svg-render.worker.ts` + пул из 2 воркеров, `services/svg-render-pool.ts`) — замерено, один рендер занимает 350-400мс синхронной работы, раньше на это время блокировался вообще весь сервер (cron шлёт микро/итоговые отчёты по каждой точке несколько раз в день). Проверено на реальных данных через `buildApp()` + `app.inject('/health')`, поллинг каждые 15мс во время реального рендера — event loop не блокируется, ответ стабильно <1мс. Плюс включён `checkSuites` на deployment trigger Railway — красный CI теперь блокирует деплой |
 
 ---
 
@@ -530,7 +532,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | ✅ готово (14.8.0) | What-if со сравнением сценариев A/B |
 | ✅ готово (13.x) | Точный heatmap по часу продажи (`sales_events`) |
 | ✅ готово (15.8.0-15.16.0) | Эпик мультитенанта — секторы/сети точек, чат-роутинг по точке и теме, супервайзер на сектор, все разделы (команда/график/касса/промокоды/объявления/каналы/заявки на доступ/Command Center/статистика/живая карта/прогноз/heatmap/BI-экспорт) изолированы по сети, переключатель сети у admin. Две реальные сети в проде (РТТ Бижонов, РТТ Гуреева) |
-| 🏗️ дальше | Картинка-отчёт на отдельном worker — сейчас resvg рендерится в основном процессе |  
+| ✅ готово (17.4.0) | Картинка-отчёт на отдельном worker — resvg вынесен из основного процесса в `worker_threads` |  
 
 ---
 

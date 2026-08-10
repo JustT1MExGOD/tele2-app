@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { query } from '../db/index.js';
 import { getMetricDefs, MICRO_KEYS, groupForMetric } from './metrics-catalog.js';
 import { getStoreHourWeights } from './insights.js';
+import { renderSvgToPng } from './svg-render-pool.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -356,12 +357,7 @@ export async function buildReleaseCardPng(
 }
 
 export async function svgToPng(svg: string): Promise<Buffer> {
-  const { Resvg } = await import('@resvg/resvg-js');
-  const resvg = new Resvg(svg, {
-    fitTo: { mode: 'width', value: 1120 },
-    font: { fontFiles: FONT_FILES, loadSystemFonts: true, defaultFontFamily: FONT }
-  });
-  return Buffer.from(resvg.render().asPng());
+  return renderSvgToPng({ svg, fitWidth: 1120, fontFiles: FONT_FILES, defaultFontFamily: FONT });
 }
 
 export async function buildDailyReportPng(
