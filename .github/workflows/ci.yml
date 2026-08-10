@@ -11,8 +11,11 @@ jobs:
       run:
         working-directory: backend
     services:
+      # Прод — Postgres 18.4 (см. sql/ci-schema.sql — снят pg_dump 18 оттуда же);
+      # версия сервиса должна совпадать, иначе схема может не загрузиться из-за
+      # синтаксиса/фич, которых нет в более старом Postgres.
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -33,7 +36,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
