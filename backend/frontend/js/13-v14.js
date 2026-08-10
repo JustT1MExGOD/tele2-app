@@ -14,16 +14,7 @@
     async function fillStoreSelects() {
       let list = window.__stores || [];
       if (!list.length) {
-        try {
-          let r = await fetch(API + '/org/stores', { headers: authHeaders() });
-          if (r.ok) list = (await r.json()).stores || [];
-        } catch (_) {}
-        if (!list.length) {
-          try {
-            const r = await fetch(API + '/stores', { headers: authHeaders() });
-            if (r.ok) { const d = await r.json(); list = Array.isArray(d) ? d : (d.stores||[]); }
-          } catch (_) {}
-        }
+        list = await fetchOrgStores();
         window.__stores = list;
       }
       if (!list.length) {

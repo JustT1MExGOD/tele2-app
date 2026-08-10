@@ -26,6 +26,10 @@
 
     function switchAdminOrg(orgId) {
       adminViewOrgId = orgId;
+      // Пикеры точек кэшируют список на window.__stores/stores — без сброса
+      // после смены сети admin продолжил бы видеть точки прошлой сети.
+      window.__stores = null;
+      stores = [];
       loadTeam();
     }
 
@@ -281,4 +285,5 @@
       toast('Точка создана', 'ok');
       closeModal();
       stores = [];
+      window.__stores = null;
     }

@@ -202,9 +202,37 @@
         const totals = data.totals || {};
         const fact = totals.fact || {};
         const plan = totals.plan || {};
-        const rows = METRICS.map(m => svBarRowHTML(m.label, Number(fact[m.id]) || 0, Number(plan[m.id]) || 0)).join('');
-        box.innerHTML = `<div class="sv-store" style="--sc:#2AABEE"><div class="sv-bars">${rows}</div></div>`
+        const netRows = METRICS.map(m => svBarRowHTML(m.label, Number(fact[m.id]) || 0, Number(plan[m.id]) || 0)).join('');
+        let html = `<div class="sv-store" style="--sc:#2AABEE"><div class="sv-bars">${netRows}</div></div>`
           + `<div class="empty" style="text-align:left;padding:8px 16px">Сотрудников: ${data.rows ? data.rows.length : 0} · ост. дней: ${data.remaining_days ?? '—'}</div>`;
+
+        // По каждому сотруднику сети — тот же барный стиль, что у сети целиком,
+        // вместо .mt-cell сетки на «Планы и факт за месяц». MAIN(6)/EXTRA(9) —
+        // тот же сплит, что и там, просто другой визуал.
+        const empRows = data.rows || [];
+        if (empRows.length) {
+          html += `<div class="sv-section">По сотрудникам</div>`;
+          const mainIds = METRICS.slice(0, 6);
+          const extraIds = METRICS.slice(6);
+          html += empRows.map((r, idx) => {
+            const ef = r.fact || {};
+            const ep = r.plan || {};
+            const mainRows = mainIds.map(m => svBarRowHTML(m.label, Number(ef[m.id]) || 0, Number(ep[m.id]) || 0)).join('');
+            const extraRows = extraIds.map(m => svBarRowHTML(m.label, Number(ef[m.id]) || 0, Number(ep[m.id]) || 0)).join('');
+            return `<div class="sv-store" style="--sc:#2AABEE">
+              <div class="sv-store-head">
+                <div>
+                  <div class="sv-store-name">${esc(r.full_name || '')}</div>
+                  <div class="sv-store-code">${roleLabel(r.role)} · смен ${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</div>
+                </div>
+              </div>
+              <div class="sv-bars">${mainRows}</div>
+              ${svExtraToggleHTML('nme-' + idx, extraRows)}
+            </div>`;
+          }).join('');
+        }
+
+        box.innerHTML = html;
       } catch (e) {
         console.error(e);
         box.innerHTML = '<div class="empty">Не удалось загрузить</div>';

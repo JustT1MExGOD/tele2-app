@@ -14,8 +14,7 @@
       if (box) box.innerHTML = '<div class="skeleton"></div>';
       try {
         if (!stores.length) {
-          const stRes = await fetch(API + '/stores', { headers: authHeaders() });
-          stores = await stRes.json();
+          stores = await fetchOrgStores();
         }
         const sel = document.getElementById('cashStore');
         if (sel) sel.innerHTML = stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');

@@ -124,6 +124,19 @@
       return me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
     }
 
+    /** Точки СВОЕЙ сети (или сети, которую смотрит admin через переключатель) —
+     * единая точка входа для всех пикеров точек в приложении. В отличие от
+     * /stores (намеренно кросс-сетевой — нужен планировщику/аналитике), сюда
+     * никогда не попадают чужие точки. */
+    async function fetchOrgStores() {
+      try {
+        const q = orgQueryParam();
+        const res = await fetch(API + '/org/stores' + (q ? '?' + q.slice(1) : ''), { headers: authHeaders() });
+        if (res.ok) return (await res.json()).stores || [];
+      } catch (_) {}
+      return [];
+    }
+
     const STORE_COLORS = {
       kosmonavtov: '#6d9eeb',
       kalinina2: '#ff6d01',

@@ -9,19 +9,14 @@
         // 1) факт + график + шаблон/день из /plans?date=
         // 2) параллельно computed из /plans/stores/daily (из месячных планов сотрудников)
         const ov = orgQueryParam();
-        const [stRes, statsRes, schRes, plansRes, dailyRes] = await Promise.all([
-          fetch(API + '/stores', { headers: authHeaders() }),
+        const [storesData, statsRes, schRes, plansRes, dailyRes] = await Promise.all([
+          fetchOrgStores(),
           fetch(API + '/stats/daily?date=' + date + ov, { headers: authHeaders() }),
           fetch(API + '/schedules?date=' + date + ov, { headers: authHeaders() }),
           fetch(API + '/plans?date=' + date, { headers: authHeaders() }),
           fetch(API + '/plans/stores/daily?date=' + date + ov, { headers: authHeaders() })
         ]);
-        // /stores намеренно не scoped по сети (нужен целиком в других местах —
-        // подмена в чужой сети в форме продажи/кассе) — глобальную переменную
-        // stores не трогаем, для карточек здесь берём локально отфильтрованный список.
-        stores = await stRes.json();
-        const myOrgId = me?.role === 'admin' && adminViewOrgId ? adminViewOrgId : me?.org_id;
-        const myStores = (Array.isArray(stores) ? stores : []).filter((s) => (s.org_id || 'default') === (myOrgId || 'default'));
+        stores = storesData;
         const stats = await statsRes.json();
         const schedules = await schRes.json();
         const plans = await plansRes.json();
@@ -63,7 +58,7 @@
           staffMap[s.store_id].push(s);
         });
 
-        const list = myStores.slice().sort((a, b) => (a.hours || 0) - (b.hours || 0));
+        const list = stores.slice().sort((a, b) => (a.hours || 0) - (b.hours || 0));
         if (!list.length) {
           box.innerHTML = '<div class="empty">Нет точек</div>';
           return;
@@ -132,12 +127,12 @@
       try {
         const date = todayMoscow();
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const [schRes, stRes] = await Promise.all([
+        const [schRes, storesData] = await Promise.all([
           fetch(API + '/schedules?date=' + date + orgParam, { headers: authHeaders() }),
-          fetch(API + '/stores', { headers: authHeaders() })
+          fetchOrgStores()
         ]);
         const schedules = await schRes.json();
-        stores = await stRes.json();
+        stores = storesData;
 
         if (!Array.isArray(schedules) || !schedules.length) {
           box.innerHTML = '<div class="section"><div class="empty">Сегодня никого в графике</div></div>';
@@ -211,8 +206,7 @@
         const items = data.items || [];
 
         if (!stores.length) {
-          const stRes = await fetch(API + '/stores', { headers: authHeaders() });
-          stores = await stRes.json();
+          stores = await fetchOrgStores();
         }
 
         // Всегда полный список сотрудников, смены накладываем поверх —
@@ -278,8 +272,7 @@
     async function editDay(employeeId, dateStr, currentStoreId, currentHours) {
       if (!canManage()) return;
       if (!stores.length) {
-        const stRes = await fetch(API + '/stores', { headers: authHeaders() });
-        stores = await stRes.json();
+        stores = await fetchOrgStores();
       }
       document.getElementById('modalTitle').textContent = 'Смена ' + dateStr;
       document.getElementById('modalBody').innerHTML = `

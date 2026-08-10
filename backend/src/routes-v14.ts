@@ -57,16 +57,15 @@ export async function registerV14Routes(app: FastifyInstance) {
     return upsertOrg({ id, ...body });
   });
 
+  // Точки своей сети — единый источник для всех пикеров точек во фронтенде
+  // (см. fetchOrgStores() в 01-core.js). admin может явно затребовать другую
+  // сеть тем же переключателем, что и везде (resolveViewOrgId) — остальные
+  // роли override игнорируют и всегда видят только свою сеть.
   app.get('/org/stores', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
-    try {
-      const orgId = await orgIdForEmployee(request.user!.employee_id);
-      return { org_id: orgId, stores: await listStoresForOrg(orgId) };
-    } catch {
-      const { query } = await import('./db/index.js');
-      const res = await query(`SELECT * FROM stores ORDER BY name`);
-      return { org_id: 'default', stores: res.rows };
-    }
+    const { org_id } = request.query as { org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id) || 'default';
+    return { org_id: orgId, stores: await listStoresForOrg(orgId) };
   });
 
   app.get('/heatmap/precise/:storeId', async (request, reply) => {
