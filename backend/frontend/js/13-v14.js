@@ -270,14 +270,16 @@
 
       box.innerHTML = '<div class="skeleton"></div>';
       try {
+        const wiBody = { date, moves };
+        if (me?.role === 'admin' && adminViewOrgId) wiBody.org_id = adminViewOrgId;
         const res = await fetch(API + '/schedule/what-if', {
           method: 'POST',
           headers: authHeaders(true),
-          body: JSON.stringify({ date, moves })
+          body: JSON.stringify(wiBody)
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || data.error || 'fail');
-        window.__lastWhatIf = { date: data.date || date, moves };
+        window.__lastWhatIf = { date: data.date || date, moves, org_id: wiBody.org_id };
         window.__wiLastResult = { data, date: data.date || date, moves };
         const scenario = renderWiScenario(data, date);
         box.innerHTML = scenario.html;

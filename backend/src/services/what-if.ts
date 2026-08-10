@@ -43,13 +43,20 @@ export type WhatIfMove = {
 export async function simulateScheduleMoves(opts: {
   date?: string;
   moves: WhatIfMove[];
+  orgId: string;
 }) {
   const date = toDateISO(opts.date || todayMoscow());
   const moves = opts.moves || [];
 
+  // Точки только своей сети — раньше тянулись ВСЕ активные точки всех
+  // сетей, симуляция (и, что хуже, /apply — реальная запись в schedules)
+  // могла двигать сотрудника на точку вообще любой другой сети. Точки
+  // чужой сети просто не попадают в coverage, поэтому move на них ниже
+  // естественно отбрасывается как unknown_store — без отдельного чека.
   const stores = await query(
     `SELECT id, name, code, COALESCE(color, '#2AABEE') as color
-     FROM stores WHERE COALESCE(is_active, true) = true ORDER BY name`
+     FROM stores WHERE COALESCE(is_active, true) = true AND COALESCE(org_id,'default') = $1 ORDER BY name`,
+    [opts.orgId]
   );
 
   type Cov = {

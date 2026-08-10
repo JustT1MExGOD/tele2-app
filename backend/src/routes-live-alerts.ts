@@ -4,7 +4,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireAuth, requireManager, resolveViewOrgId } from './middleware-auth.js';
+import { requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getLiveNetworkMap } from './services/live-map.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { simulateScheduleMoves } from './services/what-if.js';
@@ -36,6 +36,16 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   app.post('/alerts/:id/ack', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
+    const { org_id } = (request.body || {}) as { org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    const alert = await query(`SELECT store_id FROM smart_alerts WHERE id = $1`, [Number(id)]);
+    if (!alert.rows[0]) return reply.code(404).send({ error: 'not found' });
+    // Раньше можно было погасить чужой алерт, зная/угадав его id (обычный
+    // инкрементный bigint) — manager другой сети мог тихо снять критический
+    // алерт вообще любой сети.
+    if (alert.rows[0].store_id && !(await assertStoreInOrg(alert.rows[0].store_id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Алерт не принадлежит вашей сети' });
+    }
     const res = await query(
       `UPDATE smart_alerts SET status='acked', acked_at=now(), acked_by=$1
        WHERE id=$2 RETURNING *`,
@@ -63,8 +73,9 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
         work_date: body.date
       });
     }
+    const orgId = resolveViewOrgId(request.user!, body.org_id);
     try {
-      return await simulateScheduleMoves({ date: body.date, moves });
+      return await simulateScheduleMoves({ date: body.date, moves, orgId });
     } catch (e: any) {
       return reply.code(500).send({ error: 'what_if_failed', message: e?.message || String(e) });
     }
@@ -87,8 +98,11 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'moves required' });
     }
 
-    // сначала симуляция — отсечь skipped
-    const sim = await simulateScheduleMoves({ date, moves });
+    // Точки не своей сети simulateScheduleMoves теперь просто не видит
+    // (coverage строится только по своей сети) — moves на них уже придут
+    // сюда как skipped: 'unknown_store', реальной записи в schedules не будет.
+    const orgId = resolveViewOrgId(request.user!, body.org_id);
+    const sim = await simulateScheduleMoves({ date, moves, orgId });
     const applied = [];
     for (const m of sim.moves_applied || []) {
       if (m.skipped) continue;
