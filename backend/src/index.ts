@@ -1,10 +1,21 @@
 import './env.js'; // должен быть первым — см. комментарий в env.ts
 import { buildApp } from './app.js';
+import { runMigrations } from './db/migrate.js';
 import { startBot } from './bot/index.js';
 import { startReportCron } from './cron/reports.js';
 import { todayMoscow } from './utils/date.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { announceReleaseIfNeeded } from './services/release-announce.js';
+
+// Непримененные миграции — перед подъёмом приложения, не после: если схема
+// не готова, сервер не должен успеть принять ни одного запроса.
+try {
+  const { applied } = await runMigrations();
+  if (applied.length) console.log('📦 Применены миграции:', applied.join(', '));
+} catch (e: any) {
+  console.error('❌ Миграции упали, сервер не стартует:', e?.message || e);
+  process.exit(1);
+}
 
 const app = await buildApp();
 

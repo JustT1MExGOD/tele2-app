@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-17.4.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-17.5.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `17.4.0`  
+**Актуальная версия клиента:** `17.5.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -385,16 +385,14 @@ curl -s localhost:3000/health
 # DATABASE_URL на свой локальный Postgres, например:
 # DATABASE_URL=postgresql://postgres@127.0.0.1:5432/t2_test
 
-psql "$DATABASE_URL" -f ../sql/ci-schema.sql   # один раз — накатить схему
 cd backend
+npm run migrate   # один раз — накатить схему (см. §18, sql/migrations/)
 npm test
 ```
 
 В CI (`.github/workflows/ci.yml`) то же самое происходит автоматически на
-каждый push — Postgres поднимается в одноразовом контейнере, схема (свежий
-schema-only снапшот прод-схемы, без данных/паролей) грузится из
-`sql/ci-schema.sql`. После следующего ad hoc изменения схемы на проде файл
-нужно перегенерировать: `npm run db:dump-schema` (с `DATABASE_URL` на прод).
+каждый push — Postgres поднимается в одноразовом контейнере, схема
+накатывается тем же `npm run migrate`, что и на проде.
 
 ---
 
@@ -414,13 +412,31 @@ schema-only снапшот прод-схемы, без данных/пароле
 
 ## 18. Миграции SQL
 
-Накатывать через Railway Query или:
+С 17.5.0 — система миграций (`backend/src/db/migrate.ts`), не ad hoc SQL
+руками на Railway. Пронумерованные файлы в `sql/migrations/`, трекинг —
+таблица `schema_migrations` (`name`, `applied_at`).
 
-```bash
-psql "$DATABASE_URL" -f sql/promos.sql
-```
+**Новое изменение схемы**: создать `sql/migrations/00NN_описание.sql` со
+следующим номером — и всё, применяется само:
 
-Нужны UNIQUE на schedules, access_status/role у employees, store_cash, v13-таблицы, `rtk_promocodes`.
+- **На проде** — автоматически при следующем деплое, до открытия порта
+  (`index.ts`, до `app.listen()`). Если миграция падает — сервер не
+  стартует (лучше не поднимаемся, чем поднимаемся с неверной схемой);
+  `railway.json` → `restartPolicyType: ON_FAILURE` в этом случае будет
+  ретраить старт, так что упавшую миграцию нужно чинить новым коммитом,
+  а не полагаться на ретраи.
+- **В CI** (`.github/workflows/ci.yml`) — `npm run migrate` на чистом
+  Postgres на каждый push, тем самым же кодом, что и на проде.
+- **Локально** — `cd backend && npm run migrate` (нужен `DATABASE_URL` в
+  окружении).
+
+Файл уже применённой миграции задним числом не редактируется — новое
+изменение, даже мелкое, всегда новый номер.
+
+`sql/migrations/0001_baseline.sql` — снапшот схемы на момент введения
+системы (17.5.0), на самом проде НЕ исполнялся — `schema_migrations` там
+сразу засеяна записью об этом файле, чтобы не пытаться заново создать уже
+существующие таблицы. Исполняется только на чистой БД (CI, локальный тест).
 
 ---
 
@@ -516,6 +532,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **17.2.0** | Аудит всех роутов (`grep` на отсутствие `org_id`/`resolveViewOrgId`/`assertStoreInOrg`) нашёл 4 реальные дыры, которые предыдущие волны эпика 17.0 не задели: `GET /bfq`, `/bfq/:employeeId` были вообще без авторизации — кто угодно без токена мог узнать BFQ любого сотрудника любой сети по id; `GET /sales/history`, `/sales/audit`, `/export/sales.csv`, `/export/bfq.csv`, `/export/schedules.csv` отдавали данные сразу всех сетей любому manager; `/sales/quick` и `/sync/batch` (офлайн-очередь) — параллельные пути внесения продажи в обход основного `POST /sales` — не проверяли ни своего сотрудника, ни свою точку; `GET /reports/day/:storeId` отдавал превью отчёта любой точки по id. Все четыре закрыты тем же паттерном (`resolveViewOrgId`/`assertStoreInOrg` + новый `assertEmployeeInOrg`) и покрыты 22 регрессионными тестами — итого 84 теста изоляции. Заодно докручен admin-переключатель сети на новых проверках (BFQ-карточка в «Команде», CSV-экспорты, превью отчёта) — тот же класс пропуска `org_id`, что чинился весь сеанс |
 | **17.3.0** | Ещё 2 дыры того же класса: what-if симуляция переноса смен (`/schedule/what-if`, `/schedule/what-if/apply`) тянула точки ВСЕХ сетей без фильтра — `/apply` реально пишет в `schedules`, то есть можно было переставить чужого сотрудника на точку любой другой сети; теперь сценарий строится только по своей сети. `POST /alerts/:id/ack` гасил алерт по id без проверки сети — manager другой сети мог тихо снять чужой критический алерт. Плюс регрессионные тесты на уже закрытые в 15.15.0 места (`/forecast`, `/heatmap`, `/cohorts/newbies`, `/staffing-hints`, `/export/bi/daily`) — итого 96 тестов изоляции. Заодно переименован «Эпик 17.0» в истории версий 15.8.0-15.16.0 (старое кодовое имя эпика мультитенанта этого же сеанса) — не путать с реальной версией 17.x, это другой, более поздний эпик |
 | **17.4.0** | Последний пункт «Дорожной карты»: рендер отчётов (`resvg`, SVG→PNG) вынесен в `worker_threads` (`src/workers/svg-render.worker.ts` + пул из 2 воркеров, `services/svg-render-pool.ts`) — замерено, один рендер занимает 350-400мс синхронной работы, раньше на это время блокировался вообще весь сервер (cron шлёт микро/итоговые отчёты по каждой точке несколько раз в день). Проверено на реальных данных через `buildApp()` + `app.inject('/health')`, поллинг каждые 15мс во время реального рендера — event loop не блокируется, ответ стабильно <1мс. Плюс включён `checkSuites` на deployment trigger Railway — красный CI теперь блокирует деплой |
+| **17.5.0** | Система миграций (`src/db/migrate.ts`) вместо ad hoc SQL руками на проде. Пронумерованные файлы в `sql/migrations/` + трекинг в `schema_migrations` — применяются сами: на проде автоматически при старте сервера (до открытия порта), в CI на каждый push, локально `npm run migrate`. `0001_baseline.sql` — снапшот текущей схемы, на самом проде не исполнялся (таблица заранее засеяна записью об этом файле), только на чистой БД (CI/локально). Заодно удалён `sql/ci-schema.sql` — его содержимое теперь и есть `0001_baseline.sql`, поддерживать два файла с одной и той же схемой смысла не было |
 
 ---
 

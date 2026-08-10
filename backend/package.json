@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "17.4.0",
+  "version": "17.5.0",
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -8,7 +8,7 @@
     "dev": "tsx src/index.ts",
     "smoke:frontend": "node scripts/smoke-frontend.mjs",
     "test": "vitest run",
-    "db:dump-schema": "pg_dump \"$DATABASE_URL\" --schema-only --no-owner --no-privileges --no-comments -f ../sql/ci-schema.sql"
+    "migrate": "tsx src/migrate-cli.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

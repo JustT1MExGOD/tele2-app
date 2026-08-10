@@ -11,9 +11,9 @@ jobs:
       run:
         working-directory: backend
     services:
-      # Прод — Postgres 18.4 (см. sql/ci-schema.sql — снят pg_dump 18 оттуда же);
-      # версия сервиса должна совпадать, иначе схема может не загрузиться из-за
-      # синтаксиса/фич, которых нет в более старом Postgres.
+      # Прод — Postgres 18.4 (см. sql/migrations/0001_baseline.sql — снят
+      # pg_dump 18 оттуда же); версия сервиса должна совпадать, иначе схема
+      # может не накатиться из-за синтаксиса/фич, которых нет в более старом Postgres.
       postgres:
         image: postgres:18
         env:
@@ -43,8 +43,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Load schema into test database
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ../sql/ci-schema.sql
+      - name: Apply migrations to test database
+        run: npm run migrate
 
       - name: Type check
         run: npx tsc --noEmit
