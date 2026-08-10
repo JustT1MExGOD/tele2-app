@@ -48,21 +48,38 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       [employee_id]
     );
 
-    const res = await query(
-      `INSERT INTO shift_sessions
-         (employee_id, store_id, work_date, status, opened_at, open_lat, open_lng, open_accuracy_m)
-       VALUES ($1,$2,$3,'open', now(), $4, $5, $6)
-       RETURNING *`,
-      [
-        employee_id,
-        store_id,
-        date,
-        body.lat ?? null,
-        body.lng ?? null,
-        body.accuracy_m ?? null
-      ]
-    );
-    return { ok: true, session: res.rows[0] };
+    // Partial unique index (employee_id) WHERE status='open' — гонка: два
+    // параллельных /shifts/open для одного сотрудника оба проходят
+    // "закрыть висящие open" выше (в этот момент ещё ни одной 'open'-строки
+    // нет), и без constraint оба вставили бы свою 'open'-сессию, оставляя
+    // сотрудника с двумя одновременно "открытыми" сменами. Проигравший
+    // ловит 23505 и получает уже открытую победителем сессию вместо ошибки.
+    try {
+      const res = await query(
+        `INSERT INTO shift_sessions
+           (employee_id, store_id, work_date, status, opened_at, open_lat, open_lng, open_accuracy_m)
+         VALUES ($1,$2,$3,'open', now(), $4, $5, $6)
+         RETURNING *`,
+        [
+          employee_id,
+          store_id,
+          date,
+          body.lat ?? null,
+          body.lng ?? null,
+          body.accuracy_m ?? null
+        ]
+      );
+      return { ok: true, session: res.rows[0] };
+    } catch (e: any) {
+      if (e?.code === '23505') {
+        const existing = await query(
+          `SELECT * FROM shift_sessions WHERE employee_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1`,
+          [employee_id]
+        );
+        return { ok: true, session: existing.rows[0], deduped: true };
+      }
+      throw e;
+    }
   });
 
   app.post('/shifts/close', async (request, reply) => {
@@ -123,6 +140,13 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     if (planPct < 100) idealMissing.push(`план дня не закрыт (${planPct}%)`);
     if (num(fact.mnp) === 0) idealMissing.push('нет MNP');
 
+    // AND status = 'open' делает переход атомарным compare-and-swap: если
+    // два запроса close (двойной тап, повторный клиентский ретрай) прочитали
+    // один и тот же open-сессию до того, как любой из них успел её закрыть,
+    // выигрывает только тот UPDATE, что выполнится первым — у второго
+    // WHERE ... AND status='open' больше не совпадёт ни с одной строкой, и
+    // он получит 0 обновлённых строк вместо того, чтобы тоже перевести уже
+    // закрытую сессию в 'closed' и (что хуже) начислить награду второй раз.
     const res = await query(
       `UPDATE shift_sessions SET
          status = 'closed',
@@ -134,7 +158,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
          blockers = $5,
          ideal_shift = $6,
          score = $7
-       WHERE id = $8
+       WHERE id = $8 AND status = 'open'
        RETURNING *`,
       [
         body.lat ?? null,
@@ -147,6 +171,15 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
         sess.id
       ]
     );
+
+    if (!res.rows[0]) {
+      // Проиграли гонку — другой параллельный запрос (или более ранний
+      // ретрай того же клиента) уже закрыл именно эту сессию между нашим
+      // SELECT и UPDATE. Не ошибка и не повод считать/начислять что-либо
+      // заново — отдаём уже закрытую сессию как есть.
+      const already = await query(`SELECT * FROM shift_sessions WHERE id = $1`, [sess.id]);
+      return { ok: true, session: already.rows[0], deduped: true };
+    }
 
     // XP/бейджи/streak — не более одного раза за календарный день. Без этой
     // проверки open→close можно было спамить сколько угодно раз подряд (ни
