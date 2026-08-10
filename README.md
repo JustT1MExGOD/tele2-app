@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-17.7.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-17.8.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `17.7.0`  
+**Актуальная версия клиента:** `17.8.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -538,6 +538,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **17.5.1** | Хотфикс: 17.5.0 крашлупился на реальном деплое (`restartPolicyType: ON_FAILURE`, Railway ретраил старт раз в секунду) — миграции лежали в `sql/migrations/` на корне репозитория, а Root Directory сервиса на Railway = `backend`, всё, что снаружи, в контейнер не попадает вообще. Перенесены в `backend/migrations/`. Заодно найден и починен смежный баг, который вскрылся при отладке: `set_config('search_path','',false)` внутри `0001_baseline.sql` (стандартный pg_dump) не транзакционный — переживает даже `ROLLBACK` — и «протекал» на весь пул соединений: следующий случайный запрос, который доставал ту же переиспользуемую коннекцию из пула, падал с «relation X does not exist» на ровном месте. `RESET search_path` теперь явно вызывается перед возвратом клиента в пул. Старый (17.4.0) деплой всё это время продолжал обслуживать реальный трафик — простоя не было |
 | **17.6.0** | Алерт в рабочий чат при падении миграции или старта сервера (`alertAndExit()` в `index.ts`, переиспользует уже существовавший, но нигде не подключённый `notifyAdmin()` из `bot/index.ts`) — раньше единственным сигналом были Railway logs, которые никто не смотрит проактивно, именно так сегодня и нашли баг 17.5.0. Таймаут 5с на отправку, чтобы недоступность Telegram не подвесила сам выход из процесса |
 | **17.7.0** | Пользователь принёс security-чеклист от стороннего ИИ — большая часть уже была закрыта этим сеансом или неприменима к масштабу проекта, но сплошной проход по всем `PATCH/PUT/DELETE` подтвердил самое главное подозрение и нашёл реальный захват аккаунта: `POST /me/bind` брал telegram_id из тела запроса, а не из подтверждённой Telegram initData — любой мог отвязать чужой telegram_id (в т.ч. admin) и привязать свой, без единой авторизации. Плюс ещё 8 эндпоинтов без проверки сети (`PATCH/DELETE /employees/:id` и `/stores/:id`, `PATCH /employees/:id/role`, `DELETE /schedules`, `GET/PUT /plans/employees/:id/month`, approve/reject заявок на доступ), `PUT /supervisor/:id/sector` сужен до admin (межсетевые полномочия), удалены 2 неиспользуемых уязвимых дубликата эндпоинтов, `employees.telegram_id` получил `UNIQUE` (закрывает race condition в bind/approve — были не в транзакции). 121 тест изоляции |
+| **17.8.0** | Оставшиеся 2 пункта из внешнего чеклиста. CORS (`origin: true` → `origin: false`) — фронтенд всегда бьёт на API своим же origin (`window.location.origin`), легитимного кросс-origin браузерного вызова нет; проверено вживую через Playwright (свой origin работает, чужой блокируется). `EXPLAIN (ANALYZE, BUFFERS)` на проде по самым частым запросам подтвердил: `stores`/`employees` без индекса на `org_id` вообще — каждый org-scoped запрос сеанса Seq Scan; сейчас незаметно (7×7 строк), но первое, что упрётся при росте, особенно в N+1-циклах (`getLiveNetworkMap`, `calculateAllBFQ` — по 4 запроса на точку/сотрудника). Добавлены индексы (`stores.org_id`, `employees.org_id`, `sales`/`schedules(store_id, дата)`); сами N+1-циклы намеренно не трогали — преждевременная оптимизация при текущих объёмах (`supervisor-analytics.ts` уже показывает, как это делать правильно — батчем на весь сектор, 16.3.0) |
 
 ---
 

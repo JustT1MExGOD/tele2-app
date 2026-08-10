@@ -61,7 +61,15 @@ function findFrontendDir(): string | null {
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
-  await app.register(cors, { origin: true });
+  // origin: true (было) отражал ЛЮБОЙ Origin — но фронтенд всегда бьёт на
+  // API тем же доменом, с которого сам загружен (API = window.location.origin
+  // в 01-core.js), а бот открывает Mini App той же ссылкой (MINI_APP_URL —
+  // тот же Railway-домен). Легитимного кросс-origin браузерного вызова нет
+  // ни в одном сценарии — origin: false явно это фиксирует (браузер сам
+  // блокирует кросс-origin чтение ответа; не-браузерные вызовы — curl,
+  // Node fetch, тестовый набор — CORS вообще не касается, это чисто
+  // браузерный механизм).
+  await app.register(cors, { origin: false });
 
   // Единая точка резолва пользователя (telegram_id проверяется по подписи
   // Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.
