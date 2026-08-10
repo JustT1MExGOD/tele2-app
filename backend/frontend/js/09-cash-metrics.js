@@ -82,6 +82,7 @@
         cash_1c: Number(document.getElementById('cash1c').value) || 0,
         comment: document.getElementById('cashComment').value || ''
       };
+      if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
       const res = await fetch(API + '/cash', {
         method: 'PUT',
         headers: authHeaders(true),

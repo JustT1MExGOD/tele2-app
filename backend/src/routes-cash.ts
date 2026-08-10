@@ -5,7 +5,7 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
-import { requireManager, requireActive, resolveViewOrgId } from './middleware-auth.js';
+import { requireManager, requireActive, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 
 export async function registerCashRoutes(app: FastifyInstance) {
   // Кассу смотрят и вносят все активные сотрудники на точке, не только
@@ -84,6 +84,14 @@ export async function registerCashRoutes(app: FastifyInstance) {
 
     if (!store_id) {
       return reply.code(400).send({ error: 'store_id required' });
+    }
+
+    // Точка должна принадлежать своей сети (или сети, которую явно выбрал
+    // admin переключателем) — раньше этой проверки не было вообще (в отличие
+    // от /schedules и /sales), кассу можно было вписать на точку любой сети.
+    const orgId = resolveViewOrgId(request.user!, body.org_id);
+    if (!(await assertStoreInOrg(store_id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
 
     const res = await query(
