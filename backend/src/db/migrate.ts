@@ -17,16 +17,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function findMigrationsDir(): string {
+  // ВАЖНО: миграции живут в backend/migrations, НЕ в sql/migrations на
+  // корне репо — Railway деплоит только Root Directory=backend целиком,
+  // всё, что снаружи (sql/ на корне), в контейнер не попадает вообще.
+  // Прод рухнул именно на этом при первом заходе — держим миграции внутри
+  // backend/, чтобы deploy artifact и репозиторий не расходились.
   const candidates = [
-    path.join(process.cwd(), '../sql/migrations'),
-    path.join(process.cwd(), 'sql/migrations'),
-    path.join(__dirname, '../../../sql/migrations'),
-    path.join(__dirname, '../../sql/migrations')
+    path.join(process.cwd(), 'migrations'),
+    path.join(__dirname, '../../migrations')
   ];
   for (const dir of candidates) {
     if (fs.existsSync(dir)) return dir;
   }
-  throw new Error('sql/migrations не найдена ни по одному из ожидаемых путей');
+  throw new Error('backend/migrations не найдена ни по одному из ожидаемых путей');
 }
 
 export async function runMigrations(): Promise<{ applied: string[] }> {
@@ -70,6 +73,14 @@ export async function runMigrations(): Promise<{ applied: string[] }> {
       }
     }
   } finally {
+    // set_config('search_path','',false) в pg_dump-миграциях (baseline)
+    // не транзакционный — переживает даже ROLLBACK, значит бы «протёк» бы
+    // на ВЕСЬ пул: клиент возвращается туда же и достаётся под случайный
+    // следующий запрос где угодно в приложении, который сломался бы на
+    // ровном месте («relation X does not exist») без этого сброса.
+    try {
+      await client.query('RESET search_path');
+    } catch (_) {}
     client.release();
   }
   return { applied };
