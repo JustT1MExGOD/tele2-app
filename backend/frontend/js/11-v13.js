@@ -150,6 +150,7 @@
               ${gam.streak_days ? `<div style="font-size:12px;color:var(--hint)">🔥 ${gam.streak_days} дн.</div>` : ''}
             </div>
           </div>
+          ${data.rewarded === false ? `<div style="font-size:12px;color:var(--hint);margin-top:8px">Смена на эту дату уже была закрыта и награждена сегодня — XP не начисляется повторно</div>` : ''}
         </div>
         <button class="btn-main" style="margin-top:14px" onclick="closeModal()">Понятно</button>
       `;

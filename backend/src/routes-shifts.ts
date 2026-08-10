@@ -7,7 +7,7 @@ import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { requireAuth, isManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { parseSalePhrase } from './services/sales-nlp.js';
-import { evaluateAfterSale, evaluateShiftClose } from './services/gamification.js';
+import { evaluateAfterSale, evaluateShiftClose, getGamificationProfile } from './services/gamification.js';
 import { generateShiftSummary } from './services/ai.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
 import { applySaleUpsert, claimIdempotencyKey } from './services/sales-write.js';
@@ -148,12 +148,33 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       ]
     );
 
-    const gam = await evaluateShiftClose({
-      employeeId: employee_id,
-      score,
-      ideal,
-      planPct
-    });
+    // XP/бейджи/streak — не более одного раза за календарный день. Без этой
+    // проверки open→close можно было спамить сколько угодно раз подряд (ни
+    // open, ни close ничем не ограничены) и каждый close начислял полную
+    // награду заново — бесконечный фарм XP/уровней/streak без единой
+    // реальной продажи. Смена при этом всё равно закрывается нормально
+    // (сохраняются score/факт/AI-разбор), просто повторное закрытие того же
+    // дня не награждается второй раз.
+    const alreadyRewarded = await query(
+      `SELECT 1 FROM shift_sessions
+       WHERE employee_id = $1 AND work_date::date = $2::date AND status = 'closed' AND id != $3
+       LIMIT 1`,
+      [employee_id, date, sess.id]
+    );
+    let gam: any;
+    let rewarded = true;
+    if (alreadyRewarded.rows[0]) {
+      rewarded = false;
+      const profile = await getGamificationProfile(employee_id);
+      gam = { ...(profile || {}), xp_gained: 0, leveled_up: false };
+    } else {
+      gam = await evaluateShiftClose({
+        employeeId: employee_id,
+        score,
+        ideal,
+        planPct
+      });
+    }
 
     const factOut = { sim: num(fact.sim), mnp: num(fact.mnp), pa: num(fact.pa), combo: num(fact.combo) };
     const empRow = await query(`SELECT full_name FROM employees WHERE id = $1`, [employee_id]);
@@ -179,6 +200,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       fact: factOut,
       day_plan: dayPlan,
       gamification: gam,
+      rewarded,
       ai_summary: aiSummary
     };
   });

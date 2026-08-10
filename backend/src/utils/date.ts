@@ -33,10 +33,14 @@ export function nowTimeMoscow(): string {
 export function toDateISO(v: any): string {
   if (v == null || v === '') return todayMoscow();
   if (v instanceof Date && !isNaN(v.getTime())) {
-    // календарный день в UTC как pg date часто приходит
-    const y = v.getUTCFullYear();
-    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(v.getUTCDate()).padStart(2, '0');
+    // node-postgres парсит колонку типа date в полночь ПО ЛОКАЛЬНОМУ
+    // времени процесса (не UTC) — поэтому нужны локальные геттеры. С
+    // getUTC*() тут был скрытый баг: на проде (Railway-контейнер в UTC)
+    // локальное = UTC, поэтому не проявлялось, а на машине разработчика
+    // в Europe/Moscow (UTC+3) сдвигало дату на день назад
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
   const s = String(v).trim();
