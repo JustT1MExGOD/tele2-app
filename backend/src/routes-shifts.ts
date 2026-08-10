@@ -10,6 +10,9 @@ import { parseSalePhrase } from './services/sales-nlp.js';
 import { evaluateAfterSale, evaluateShiftClose } from './services/gamification.js';
 import { generateShiftSummary } from './services/ai.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
+import { applySaleUpsert, claimIdempotencyKey } from './services/sales-write.js';
+import { notifyChat } from './bot/index.js';
+import { getStoreNotifyTarget } from './services/tenant.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -236,25 +239,56 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       }
     }
 
-    // reuse same upsert pattern as main /sales
-    const fields = Object.keys(parsed.metrics);
-    const insertCols = ['employee_id', 'store_id', 'sale_date', ...fields];
-    const vals: any[] = [employee_id, store_id, sale_date, ...fields.map((f) => parsed.metrics[f])];
-    const ph = vals.map((_, i) => `$${i + 1}`);
-    const sets = fields.map((f) => `${f} = sales.${f} + EXCLUDED.${f}`);
-    sets.push('updated_at = now()');
+    const tg = request.user!.telegram_id ? Number(request.user!.telegram_id) : null;
+    // Та же идемпотентность, что теперь и в основном POST /sales — без неё
+    // повторный тап "Добавить" удваивал сумму (запись аддитивная).
+    const clientId = body.client_id ? String(body.client_id).slice(0, 128) : null;
+    if (clientId) {
+      const fresh = await claimIdempotencyKey(clientId, employee_id, tg, body);
+      if (!fresh) {
+        const existing = await query(
+          `SELECT * FROM sales WHERE employee_id = $1 AND store_id = $2 AND sale_date = $3`,
+          [employee_id, store_id, sale_date]
+        );
+        return { ok: true, deduped: true, parsed, sale: existing.rows[0] || null };
+      }
+    }
 
-    const res = await query(
-      `INSERT INTO sales (${insertCols.join(',')})
-       VALUES (${ph.join(',')})
-       ON CONFLICT (employee_id, store_id, sale_date)
-       DO UPDATE SET ${sets.join(', ')}
-       RETURNING *`,
-      vals
-    );
+    // Единый с POST /sales и /sync/batch путь записи — раньше свой
+    // отдельный INSERT без GREATEST(0, ...) (мог уйти в минус) и без
+    // sales_audit/sales_events: продажи через быстрый ввод были невидимы
+    // и в истории правок, и в heatmap.
+    const { row, applied } = await applySaleUpsert({
+      employee_id,
+      store_id,
+      sale_date,
+      metrics: parsed.metrics,
+      source: 'quick',
+      createdByTelegramId: tg
+    });
 
     await evaluateAfterSale(employee_id, parsed.metrics);
-    return { ok: true, parsed, sale: res.rows[0] };
+
+    // Уведомление в чат — той же логикой, что основной /sales. Раньше его
+    // тут не было: быстрый ввод происходил невидимо для команды в чате.
+    try {
+      const info = await query(
+        `SELECT e.full_name, st.name as store_name FROM employees e, stores st WHERE e.id = $1 AND st.id = $2`,
+        [employee_id, store_id]
+      );
+      if (info.rows[0] && applied.length) {
+        const { saleNotificationMulti } = await import('./bot/messages.js');
+        const text = await saleNotificationMulti({
+          employeeName: info.rows[0].full_name,
+          storeName: info.rows[0].store_name,
+          items: applied.map((a) => ({ metric: a.metric, value: a.value }))
+        });
+        const target = await getStoreNotifyTarget(store_id, 'sales');
+        await notifyChat(text, target.chatId, target.threadId);
+      }
+    } catch (_) {}
+
+    return { ok: true, parsed, sale: row };
   });
 
   // ========== OFFLINE SYNC ==========
@@ -310,24 +344,21 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
             }
           }
 
-          // имена колонок идут прямо в SQL (не как параметры) — обязательна
-          // белая проверка формата, иначе это SQL-инъекция через ключи JSON
-          const SAFE_COLUMN = /^[a-z][a-z0-9_]{0,29}$/;
-          const fields = Object.keys(metrics).filter(
-            (k) => SAFE_COLUMN.test(k) && num(metrics[k]) !== 0
-          );
-          if (store_id && fields.length) {
-            const insertCols = ['employee_id', 'store_id', 'sale_date', ...fields];
-            const vals: any[] = [employee_id, store_id, sale_date, ...fields.map((f) => num(metrics[f]))];
-            const ph = vals.map((_, i) => `$${i + 1}`);
-            const sets = fields.map((f) => `${f} = GREATEST(0, sales.${f} + EXCLUDED.${f})`);
-            sets.push('updated_at = now()');
-            await query(
-              `INSERT INTO sales (${insertCols.join(',')}) VALUES (${ph.join(',')})
-               ON CONFLICT (employee_id, store_id, sale_date)
-               DO UPDATE SET ${sets.join(', ')}`,
-              vals
-            );
+          // Тот же путь записи, что у POST /sales и /sales/quick — раньше
+          // тут был свой третий инлайн-INSERT без sales_audit/sales_events,
+          // синхронизированные продажи не попадали ни в историю правок, ни
+          // в heatmap. Идемпотентность здесь уже обеспечена снаружи (INSERT
+          // в offline_sync_log по client_id чуть выше) — свой ключ внутрь
+          // не передаём, иначе она сработала бы дважды на одном и том же op.
+          if (store_id) {
+            await applySaleUpsert({
+              employee_id,
+              store_id,
+              sale_date,
+              metrics,
+              source: 'sync',
+              createdByTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null
+            });
           }
         }
         // shift_open/shift_close никогда не ставятся в офлайн-очередь —

@@ -67,8 +67,14 @@
               <button type="button" onclick="setAllQty(10)">10</button>
             </div>
           </div>
-          <button class="btn-main" onclick="submitSale()">Добавить</button>
+          <button class="btn-main" id="saleSubmitBtn" onclick="submitSale()">Добавить</button>
         `;
+
+        // Один client_id на всю сессию формы — если submitSale() ретраит
+        // (ошибка сети) или пользователь дважды тапнул кнопку до того, как
+        // она успела задизейблиться, бэкенд задедупит по этому же ключу
+        // вместо того чтобы удвоить сумму продажи.
+        window.__saleClientId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
 
         window._schByEmp = schByEmp;
         renderSaleMetrics();
@@ -179,17 +185,27 @@
     }
 
     async function submitSale() {
+      const btn = document.getElementById('saleSubmitBtn');
+      // Дизейблим сразу — иначе нетерпеливый двойной тап на сенсорном
+      // экране успевает уйти двумя запросами ДО того, как придёт первый
+      // ответ; client_id ниже страхует и сетевые ретраи, но не отменяет
+      // смысла не плодить лишние запросы на ровном месте.
+      if (btn?.disabled) return;
+      if (btn) btn.disabled = true;
+
       const employeeId = document.getElementById('modalEmployee')?.value;
       const storeId = document.getElementById('modalStore')?.value;
       if (!employeeId || !storeId) {
         toast('Укажи сотрудника и точку', 'err');
+        if (btn) btn.disabled = false;
         return;
       }
 
       const payload = {
         employee_id: Number(employeeId),
         store_id: storeId,
-        sale_date: todayMoscow()
+        sale_date: todayMoscow(),
+        client_id: window.__saleClientId
       };
       if (me?.role === 'admin' && adminViewOrgId) payload.org_id = adminViewOrgId;
 
@@ -206,6 +222,7 @@
       }
       if (!hasAny) {
         toast('Выбери метрики и количество', 'err');
+        if (btn) btn.disabled = false;
         return;
       }
 
@@ -216,6 +233,7 @@
         toast('Тренировка: ' + parts.join(', ') + ' — по-настоящему это уйдёт в базу и в чат', 'ok');
         saleSelection = {};
         window.__tutorialDryRunCallback?.();
+        if (btn) btn.disabled = false;
         return;
       }
 
@@ -251,7 +269,8 @@
               store_id: storeId,
               employee_id: Number(employeeId),
               metrics,
-              sale_date: todayMoscow()
+              sale_date: todayMoscow(),
+              client_id: window.__saleClientId
             });
             closeModal();
             saleSelection = {};
@@ -262,6 +281,7 @@
           }
         }
         toast(msg && msg !== 'fail' ? msg : 'Ошибка сохранения', 'err');
+        if (btn) btn.disabled = false;
       }
     }
 

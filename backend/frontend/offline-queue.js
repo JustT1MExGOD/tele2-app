@@ -65,8 +65,14 @@
   }
 
   async function enqueueSale(payload) {
+    // client_id по возможности — от вызывающего кода (тот же ключ, что уже
+    // ушёл в неудавшийся POST /sales): если запрос на самом деле дошёл до
+    // сервера и применился, а клиент просто не увидел ответ (сеть
+    // оборвалась после), /sync/batch увидит тот же client_id уже занятым
+    // и отдаст 'duplicate' вместо повторного применения — без этого
+    // очередь сгенерировала бы новый ключ и задвоила сумму продажи.
     const op = {
-      client_id: uuid(),
+      client_id: payload.client_id || uuid(),
       type: 'sale',
       created_at: new Date().toISOString(),
       store_id: payload.store_id,

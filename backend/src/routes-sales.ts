@@ -6,10 +6,10 @@ import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { notifyChat } from './bot/index.js';
 import { todayMoscow } from './utils/date.js';
-import { logSaleEvents } from './services/heatmap.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
+import { applySaleUpsert, claimIdempotencyKey } from './services/sales-write.js';
 
 export async function registerSalesRoutes(app: FastifyInstance) {
   // Раньше эндпоинт вообще не проверял авторизацию и не фильтровал по сети —
@@ -65,7 +65,25 @@ export async function registerSalesRoutes(app: FastifyInstance) {
         return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
       }
     }
-    const tg = String(user.telegram_id || '');
+    const tg = user.telegram_id ? Number(user.telegram_id) : null;
+
+    // Идемпотентность: тот же offline_sync_log/client_id, что уже был
+    // только в /sync/batch — раньше повторный тап "Добавить" (нетерпеливый
+    // палец на сенсорном экране) или сетевой ретрай после успешного, но
+    // не дошедшего до клиента ответа тихо удваивал сумму продажи, потому
+    // что запись аддитивная (+=). Ключ необязательный — старые клиенты без
+    // client_id работают как раньше, просто без этой защиты.
+    const clientId = body.client_id ? String(body.client_id).slice(0, 128) : null;
+    if (clientId) {
+      const fresh = await claimIdempotencyKey(clientId, employee_id, tg, body);
+      if (!fresh) {
+        const existing = await query(
+          `SELECT * FROM sales WHERE employee_id = $1 AND store_id = $2 AND sale_date = $3`,
+          [employee_id, store_id, sale_date]
+        );
+        return existing.rows[0] || { ok: true, deduped: true };
+      }
+    }
 
     // Базовые + кастомные (import/imp/esim и любые ключи body a-z0-9_)
     const baseFields = [
@@ -77,70 +95,30 @@ export async function registerSalesRoutes(app: FastifyInstance) {
       (k) =>
         /^[a-z][a-z0-9_]{0,29}$/.test(k) &&
         !baseFields.includes(k) &&
-        !['employee_id', 'store_id', 'sale_date', 'date', 'id'].includes(k)
+        !['employee_id', 'store_id', 'sale_date', 'date', 'id', 'client_id', 'org_id'].includes(k)
     );
     const fields = [...baseFields, ...extraFromBody];
 
-    const insertCols = ['employee_id', 'store_id', 'sale_date'];
-    const insertVals: any[] = [employee_id, store_id, sale_date];
-    const placeholders = ['$1', '$2', '$3'];
-    const setParts: string[] = [];
-    const applied: { metric: string; value: number }[] = [];
-    let i = 4;
-
+    const metrics: Record<string, number> = {};
     for (const f of fields) {
       if (body[f] !== undefined && body[f] !== null && body[f] !== '') {
         const val = Number(body[f]) || 0;
-        if (!Number.isFinite(val)) continue;
-        insertCols.push(f);
-        insertVals.push(val);
-        placeholders.push('$' + i);
-        setParts.push(`${f} = GREATEST(0, sales.${f} + EXCLUDED.${f})`);
-        applied.push({ metric: f, value: val });
-        i++;
+        if (Number.isFinite(val)) metrics[f] = val;
       }
     }
 
-    if (setParts.length === 0) {
+    if (!Object.keys(metrics).length) {
       return reply.code(400).send({ error: 'no metrics', message: 'Не выбраны метрики или колонка отсутствует в sales' });
     }
-    setParts.push('updated_at = now()');
 
-    const sql = `
-      INSERT INTO sales (${insertCols.join(',')})
-      VALUES (${placeholders.join(',')})
-      ON CONFLICT (employee_id, store_id, sale_date)
-      DO UPDATE SET ${setParts.join(', ')}
-      RETURNING *
-    `;
-
-    const res = await query(sql, insertVals);
-    const row = res.rows[0];
-
-    try {
-      for (const a of applied) {
-        await query(
-          `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source, created_by)
-           VALUES ($1, $2, $3, $4, $5, 'api', $6)`,
-          [employee_id, store_id, sale_date, a.metric, a.value, tg ? Number(tg) : null]
-        );
-      }
-    } catch (_) {}
-
-    // v14: час МСК → sales_events для heatmap
-    try {
-      const metrics: Record<string, number> = {};
-      for (const a of applied) metrics[a.metric] = a.value;
-      await logSaleEvents({
-        employee_id,
-        store_id,
-        sale_date,
-        metrics,
-        source: 'api'
-      });
-    } catch (e) {
-      console.warn('sales_events log failed:', (e as any)?.message || e);
-    }
+    const { row, applied } = await applySaleUpsert({
+      employee_id,
+      store_id,
+      sale_date,
+      metrics,
+      source: 'api',
+      createdByTelegramId: tg
+    });
 
     try {
       const info = await query(

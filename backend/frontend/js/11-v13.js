@@ -250,9 +250,12 @@
           <input id="quickSaleText" placeholder="две симки одно mnp" />
         </div>
         <div id="quickSalePreview" class="empty" style="display:none;text-align:left"></div>
-        <button class="btn-main" onclick="submitQuickSale()">Разобрать и записать</button>
+        <button class="btn-main" id="quickSaleSubmitBtn" onclick="submitQuickSale()">Разобрать и записать</button>
         <button class="btn-ghost" style="margin-top:8px;width:100%" onclick="previewQuickSale()">Только разобрать</button>
       `;
+      // Один client_id на сессию формы — та же защита от двойного тапа/
+      // сетевого ретрая, что и в обычном добавлении продажи (07-add-sale.js).
+      window.__quickSaleClientId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
       try {
         if (typeof openModal === 'function') openModal();
         else document.getElementById('overlay')?.classList.add('show');
@@ -280,12 +283,15 @@
     }
 
     async function submitQuickSale() {
+      const btn = document.getElementById('quickSaleSubmitBtn');
+      if (btn?.disabled) return;
       const text = document.getElementById('quickSaleText')?.value || '';
       if (!text.trim()) { toast('Введи фразу', 'err'); return; }
+      if (btn) btn.disabled = true;
       try {
         const res = await fetch(API + '/sales/quick', {
           method: 'POST', headers: authHeaders(true),
-          body: JSON.stringify({ text })
+          body: JSON.stringify({ text, client_id: window.__quickSaleClientId })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'fail');
@@ -295,6 +301,7 @@
         loadPage(page);
       } catch (e) {
         toast(e.message || 'Ошибка', 'err');
+        if (btn) btn.disabled = false;
       }
     }
 
