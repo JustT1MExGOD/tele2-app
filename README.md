@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-17.1.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-17.2.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `17.1.0`  
+**Актуальная версия клиента:** `17.2.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -512,6 +512,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **17.0.0** | Эпик «Надёжность перед деньгами»: CI на каждый push (`.github/workflows/ci.yml`) — Postgres-контейнер, проверка типов, smoke-тест фронтенда, 36 тестов на слой авторизации/изоляции сети (`vitest`, `backend/tests/`). Весь сеанс регулярно всплывал один и тот же класс багов — эндпоинт забывал отфильтровать данные по сети (сотрудники в 15.11.0, статистика/планы в 15.12.0, продажи без авторизации вообще в 15.16.1, пикеры точек в 16.5.0) — каждый раз находили вручную; теперь это проверяется автоматически. Тестовая БД — свежий schema-only снапшот прод-схемы (`sql/ci-schema.sql`, без данных и паролей, CI поднимает его в одноразовом контейнере — никакого доступа к проду из CI не требуется). Для `app.inject()` без реального порта вынесена `buildApp()` (`backend/src/app.ts`) из `index.ts` — тот теперь только `buildApp()` + `listen()` + бот/крон. Попутно, пока строили тесты именно на этот класс багов, нашли и закрыли реальную дыру: `PUT /cash` вообще не проверял, что точка принадлежит сети сотрудника (в отличие от `/schedules`/`/sales`, где эта проверка уже была) |
 | **17.0.1** | Хотфикс первого прогона CI: Postgres-сервис в workflow был версии 16, а `sql/ci-schema.sql` снят `pg_dump` версии 18 (та же версия, что и на проде) — часть схемы не грузилась (`psql` падал с exit 3). Подняли сервис до `postgres:18`, чтобы версия совпадала с прод-БД |
 | **17.1.0** | Вторая волна тестов изоляции — статистика/дэшборд (`/stats/daily`, `/dashboard`), живая карта (`/network/live`), планы (`/plans/employees/month`, `/plans/stores/daily`, `/plans/stores/:id/month`), промокоды (`/promos`), объявления и каналы (`/announcements`, `/channels`), заявки на доступ (`/access/requests`) — ещё 26 тестов на те самые места, где раньше находили реальные дыры (15.12.0, 15.15.0, 15.16.0). Итого 62 теста на слой авторизации/изоляции сети |
+| **17.2.0** | Аудит всех роутов (`grep` на отсутствие `org_id`/`resolveViewOrgId`/`assertStoreInOrg`) нашёл 4 реальные дыры, которые предыдущие волны эпика 17.0 не задели: `GET /bfq`, `/bfq/:employeeId` были вообще без авторизации — кто угодно без токена мог узнать BFQ любого сотрудника любой сети по id; `GET /sales/history`, `/sales/audit`, `/export/sales.csv`, `/export/bfq.csv`, `/export/schedules.csv` отдавали данные сразу всех сетей любому manager; `/sales/quick` и `/sync/batch` (офлайн-очередь) — параллельные пути внесения продажи в обход основного `POST /sales` — не проверяли ни своего сотрудника, ни свою точку; `GET /reports/day/:storeId` отдавал превью отчёта любой точки по id. Все четыре закрыты тем же паттерном (`resolveViewOrgId`/`assertStoreInOrg` + новый `assertEmployeeInOrg`) и покрыты 22 регрессионными тестами — итого 84 теста изоляции. Заодно докручен admin-переключатель сети на новых проверках (BFQ-карточка в «Команде», CSV-экспорты, превью отчёта) — тот же класс пропуска `org_id`, что чинился весь сеанс |
 
 ---
 

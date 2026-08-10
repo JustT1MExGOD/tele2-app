@@ -232,6 +232,17 @@ export async function assertStoreInOrg(storeId: string, orgId: string): Promise<
   }
 }
 
+/** Сотрудник принадлежит указанной сети? Тот же паттерн, что assertStoreInOrg —
+ * нужен там, где по чужому employee_id можно достучаться до BFQ/анкет/etc. */
+export async function assertEmployeeInOrg(employeeId: number, orgId: string): Promise<boolean> {
+  try {
+    const res = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM employees WHERE id = $1`, [employeeId]);
+    return !!res.rows[0] && res.rows[0].org_id === orgId;
+  } catch {
+    return false;
+  }
+}
+
 export function isManager(user?: AuthUser | null) {
   return user?.role === 'manager' || user?.role === 'admin' || user?.role === 'senior';
 }

@@ -5,7 +5,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireAuth, isManager } from './middleware-auth.js';
+import { requireAuth, isManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { parseSalePhrase } from './services/sales-nlp.js';
 import { evaluateAfterSale, evaluateShiftClose } from './services/gamification.js';
 import { generateShiftSummary } from './services/ai.js';
@@ -210,7 +210,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     }
 
     const employee_id = Number(body.employee_id || request.user!.employee_id);
-    if (!isManager(request.user) && employee_id !== request.user!.employee_id) {
+    const isManagerRole = isManager(request.user);
+    if (!isManagerRole && employee_id !== request.user!.employee_id) {
       return reply.code(403).send({ error: 'только свои продажи' });
     }
 
@@ -224,6 +225,16 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       store_id = sch.rows[0]?.store_id;
     }
     if (!store_id) return reply.code(400).send({ error: 'store_id required' });
+
+    // Manager, вносящий продажу ЗА ДРУГОГО сотрудника — точка должна быть в
+    // его сети (тот же чек, что в основном POST /sales); свою продажу на
+    // чужой точке (подмена) вносить по-прежнему можно.
+    if (isManagerRole && employee_id !== request.user!.employee_id) {
+      const orgId = resolveViewOrgId(request.user!, body.org_id);
+      if (!(await assertStoreInOrg(store_id, orgId))) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+      }
+    }
 
     // reuse same upsert pattern as main /sales
     const fields = Object.keys(parsed.metrics);
@@ -283,6 +294,22 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
           const employee_id = Number(op.employee_id || request.user!.employee_id);
           const store_id = op.store_id;
           const sale_date = String(op.sale_date || todayMoscow()).slice(0, 10);
+
+          // Та же проверка, что в /sales/quick и основном POST /sales —
+          // раньше офлайн-синхронизация вообще не проверяла ни "свой ли это
+          // сотрудник", ни "своя ли сеть", employee_id/store_id брались из
+          // тела как есть. Один плохой op не должен рушить весь batch —
+          // кидаем Error, его ловит try/catch ниже и помечает just этот op.
+          if (employee_id !== request.user!.employee_id) {
+            if (!isManager(request.user)) {
+              throw new Error('можно синхронизировать только свои продажи');
+            }
+            const orgId = resolveViewOrgId(request.user!, op.org_id);
+            if (!store_id || !(await assertStoreInOrg(store_id, orgId))) {
+              throw new Error('точка не принадлежит вашей сети');
+            }
+          }
+
           // имена колонок идут прямо в SQL (не как параметры) — обязательна
           // белая проверка формата, иначе это SQL-инъекция через ключи JSON
           const SAFE_COLUMN = /^[a-z][a-z0-9_]{0,29}$/;

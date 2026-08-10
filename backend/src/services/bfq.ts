@@ -319,12 +319,15 @@ export async function calculateEmployeeBFQ(employeeId: number, month: string) {
   };
 }
 
-export async function calculateAllBFQ(month: string) {
+/** orgId обязателен — раньше без него отдавал BFQ вообще всех сетей
+ * (routes-bfq.ts, routes-export.ts), теперь оба вызова обязаны его передать. */
+export async function calculateAllBFQ(month: string, orgId: string) {
   const emps = await query(
     `SELECT id, full_name, short_name, role
      FROM employees
-     WHERE is_active = true
-     ORDER BY full_name`
+     WHERE is_active = true AND COALESCE(org_id, 'default') = $1
+     ORDER BY full_name`,
+    [orgId]
   );
 
   const items = [];

@@ -9,7 +9,7 @@
         const from = todayMoscow().slice(0, 8) + '01';
         const to = todayMoscow();
         const res = await fetch(
-          `${API}/sales/history?from=${from}&to=${to}`,
+          `${API}/sales/history?from=${from}&to=${to}${orgQueryParam()}`,
           { headers: authHeaders() }
         );
         if (!res.ok) throw new Error('fail');
@@ -207,6 +207,7 @@
       if (type === 'sales') path = `/export/sales.csv?from=${from}&to=${to}`;
       if (type === 'bfq') path = `/export/bfq.csv?month=${month}`;
       if (type === 'schedules') path = `/export/schedules.csv?month=${month}`;
+      path += orgQueryParam();
       try {
         const res = await fetch(API + path, { headers: authHeaders() });
         if (!res.ok) { toast('Ошибка экспорта', 'err'); return; }

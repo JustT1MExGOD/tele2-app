@@ -8,7 +8,7 @@
       box.innerHTML = '<div class="skeleton"></div>';
       try {
         const month = scheduleMonth || todayMoscow().slice(0, 7);
-        const res = await fetch(API + '/bfq?month=' + month, { headers: authHeaders() });
+        const res = await fetch(API + '/bfq?month=' + month + orgQueryParam(), { headers: authHeaders() });
         if (!res.ok) throw new Error('no bfq');
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.items || []);
@@ -38,7 +38,7 @@
       document.getElementById('overlay').classList.add('show');
       try {
         const month = todayMoscow().slice(0, 7);
-        const res = await fetch(API + '/bfq/' + id + '?month=' + month, { headers: authHeaders() });
+        const res = await fetch(API + '/bfq/' + id + '?month=' + month + orgQueryParam(), { headers: authHeaders() });
         const d = await res.json();
         const f = d.fact || {};
         const fc = d.forecast || {};
@@ -77,10 +77,12 @@
       const vmr = Number(document.getElementById('bfqVmr').value) || 0;
       const penalty = Number(document.getElementById('bfqPenalty').value) || 0;
       const month = todayMoscow().slice(0, 7);
+      const body = { employee_id: employeeId, month, vmr_avg: vmr, penalty };
+      if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
       const res = await fetch(API + '/bfq/manual', {
         method: 'POST',
         headers: authHeaders(true),
-        body: JSON.stringify({ employee_id: employeeId, month, vmr_avg: vmr, penalty })
+        body: JSON.stringify(body)
       });
       if (!res.ok) { toast('Нет прав или ошибка', 'err'); return; }
       toast('Сохранено', 'ok');

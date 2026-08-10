@@ -12,7 +12,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { todayMoscow } from './utils/date.js';
-import { requireActive, requireManager } from './middleware-auth.js';
+import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { buildDailyReportSvg, buildStoryReportSvgs } from './services/report-image.js';
 
 export async function registerReportsRoutes(app: FastifyInstance) {
@@ -22,6 +22,13 @@ export async function registerReportsRoutes(app: FastifyInstance) {
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
     const kind = ((request.query as any)?.kind === 'micro' ? 'micro' : 'final') as 'micro' | 'final';
     if (!storeId) return reply.code(400).send({ error: 'store_id_required' });
+    // Раньше любой активный сотрудник мог запросить превью отчёта чужой
+    // точки, зная/угадав её id (слаги вроде "kalinina2" несложно угадать).
+    const { org_id } = request.query as { org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    if (!(await assertStoreInOrg(storeId, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
     try {
       // 'final' в проде уходит в чат как story из 3 кадров (14.7.0) — превью
       // должно показывать то же самое, а не одиночную старую картинку.

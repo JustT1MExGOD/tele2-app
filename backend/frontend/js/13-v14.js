@@ -431,7 +431,7 @@
       }
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/reports/day/' + encodeURIComponent(sid) + '?date=' + encodeURIComponent(date), {
+        const res = await fetch(API + '/reports/day/' + encodeURIComponent(sid) + '?date=' + encodeURIComponent(date) + orgQueryParam(), {
           headers: authHeaders()
         });
         const text = await res.text();

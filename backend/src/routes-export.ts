@@ -5,7 +5,7 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { calculateAllBFQ } from './services/bfq.js';
-import { requireAuth, requireManager, isManager } from './middleware-auth.js';
+import { requireAuth, requireManager, isManager, resolveViewOrgId } from './middleware-auth.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 
 function csvEscape(v: any) {
@@ -25,25 +25,31 @@ export async function registerExportRoutes(app: FastifyInstance) {
       employee_id?: string;
       store_id?: string;
       limit?: string;
+      org_id?: string;
     };
 
     const from = q.from || todayMoscow().slice(0, 8) + '01';
     const to = q.to || todayMoscow();
     const limit = Math.min(Number(q.limit) || 500, 2000);
+    const orgId = resolveViewOrgId(request.user!, q.org_id);
 
-    // employee видит только себя, manager — всех
+    // employee видит только себя, manager — всех своей сети
     let employeeFilter = q.employee_id ? Number(q.employee_id) : null;
     if (!isManager(request.user) && request.user) {
       employeeFilter = request.user.employee_id;
     }
 
-    const params: any[] = [from, to];
+    // Раньше manager видел историю продаж ВСЕХ сетей сразу — теперь только
+    // своей (или явно выбранной admin-переключателем); своя запись видна
+    // всегда, даже если сегодня подменяешь в чужой сети.
+    const params: any[] = [from, to, orgId, request.user!.employee_id];
     let sql = `
       SELECT s.*, e.full_name, st.name as store_name
       FROM sales s
       JOIN employees e ON e.id = s.employee_id
       JOIN stores st ON st.id = s.store_id
       WHERE s.sale_date >= $1 AND s.sale_date <= $2
+        AND (COALESCE(st.org_id,'default') = $3 OR s.employee_id = $4)
     `;
     if (employeeFilter) {
       params.push(employeeFilter);
@@ -62,16 +68,17 @@ export async function registerExportRoutes(app: FastifyInstance) {
 
   app.get('/sales/audit', async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const q = request.query as { from?: string; to?: string; employee_id?: string };
+    const q = request.query as { from?: string; to?: string; employee_id?: string; org_id?: string };
     const from = q.from || todayMoscow().slice(0, 8) + '01';
     const to = q.to || todayMoscow();
-    const params: any[] = [from, to];
+    const orgId = resolveViewOrgId(request.user!, q.org_id);
+    const params: any[] = [from, to, orgId];
     let sql = `
       SELECT a.*, e.full_name, st.name as store_name
       FROM sales_audit a
       LEFT JOIN employees e ON e.id = a.employee_id
       LEFT JOIN stores st ON st.id = a.store_id
-      WHERE a.sale_date >= $1 AND a.sale_date <= $2
+      WHERE a.sale_date >= $1 AND a.sale_date <= $2 AND COALESCE(st.org_id,'default') = $3
     `;
     if (q.employee_id) {
       params.push(Number(q.employee_id));
@@ -86,10 +93,11 @@ export async function registerExportRoutes(app: FastifyInstance) {
   app.get('/export/sales.csv', async (request, reply) => {
     if (!requireManager(request, reply)) return;
 
-    const q = request.query as { from?: string; to?: string; store_id?: string };
+    const q = request.query as { from?: string; to?: string; store_id?: string; org_id?: string };
     const from = q.from || todayMoscow().slice(0, 8) + '01';
     const to = q.to || todayMoscow();
-    const params: any[] = [from, to];
+    const orgId = resolveViewOrgId(request.user!, q.org_id);
+    const params: any[] = [from, to, orgId];
     let sql = `
       SELECT s.sale_date, e.full_name, st.name as store_name, st.code,
              s.sim, s.mnp, s.pa, s.combo, s.phones, s.accessories,
@@ -98,7 +106,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
       FROM sales s
       JOIN employees e ON e.id = s.employee_id
       JOIN stores st ON st.id = s.store_id
-      WHERE s.sale_date >= $1 AND s.sale_date <= $2
+      WHERE s.sale_date >= $1 AND s.sale_date <= $2 AND COALESCE(st.org_id,'default') = $3
     `;
     if (q.store_id) {
       params.push(q.store_id);
@@ -133,9 +141,10 @@ export async function registerExportRoutes(app: FastifyInstance) {
 
   app.get('/export/bfq.csv', async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const { month } = request.query as { month?: string };
+    const { month, org_id } = request.query as { month?: string; org_id?: string };
     const m = month || currentMonthMoscow();
-    const items = await calculateAllBFQ(m);
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    const items = await calculateAllBFQ(m, orgId);
 
     const header = [
       'employee', 'bfq_fact', 'bfq_forecast', 'quality', 'profit',
@@ -170,8 +179,9 @@ export async function registerExportRoutes(app: FastifyInstance) {
 
   app.get('/export/schedules.csv', async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const { month } = request.query as { month?: string };
+    const { month, org_id } = request.query as { month?: string; org_id?: string };
     const m = month || currentMonthMoscow();
+    const orgId = resolveViewOrgId(request.user!, org_id);
     const start = `${m}-01`;
     const endDate = new Date(`${m}-01T12:00:00`);
     endDate.setMonth(endDate.getMonth() + 1);
@@ -183,9 +193,9 @@ export async function registerExportRoutes(app: FastifyInstance) {
        FROM schedules sch
        JOIN employees e ON e.id = sch.employee_id
        JOIN stores st ON st.id = sch.store_id
-       WHERE sch.work_date >= $1 AND sch.work_date < $2
+       WHERE sch.work_date >= $1 AND sch.work_date < $2 AND COALESCE(st.org_id,'default') = $3
        ORDER BY sch.work_date, e.full_name`,
-      [start, end]
+      [start, end, orgId]
     );
 
     const header = ['date', 'employee', 'store', 'code', 'shift', 'hours'];
