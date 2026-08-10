@@ -144,6 +144,11 @@
           <div class="row-body"><div class="row-title">Планы и факт за месяц</div><div class="row-sub">видно всей команде</div></div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('netmonth')">
+          <div class="row-icon">📈</div>
+          <div class="row-body"><div class="row-title">Сеть за месяц</div><div class="row-sub">все метрики · вся команда</div></div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="switchPage('plan')">
           <div class="row-icon">📋</div>
           <div class="row-body"><div class="row-title">План дня по точкам</div></div>
@@ -451,6 +456,19 @@
       <div class="section" id="storeDailyPlanSection">
         <div class="section-title">Дневные планы точек сегодня</div>
         <div id="storeDailyPlans"><div class="skeleton"></div></div>
+      </div>
+    </div>
+
+    <!-- ===== NETWORK MONTH (все метрики, вся команда сети целиком) ===== -->
+    <div id="page-netmonth" class="page">
+      <div class="section">
+        <div class="section-title">Сеть за месяц</div>
+        <div class="month-nav" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 12px 4px">
+          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" onclick="shiftNetMonth(-1)">‹</button>
+          <div id="netMonthLabel" style="font-weight:700;min-width:120px;text-align:center"></div>
+          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" onclick="shiftNetMonth(1)">›</button>
+        </div>
+        <div id="netMonthBody"><div class="skeleton"></div></div>
       </div>
     </div>
 

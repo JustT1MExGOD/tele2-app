@@ -147,13 +147,17 @@
         }).join('') + '</div>';
 
         const tf = (data.totals && data.totals.fact) || null;
+        // data.totals.pct тоже существовал в ответе (getMonthSummaryTable()),
+        // просто раньше не читался — карточка всегда рендерилась без тона
+        // (зелёный/жёлтый), потому что cell() получала пустой {} вместо pct.
+        const tp = (data.totals && data.totals.pct) || {};
         if (tf) {
           html += `<div class="mt-card" style="margin:0 12px 16px;border-color:var(--primary)">
             <div class="mt-name" style="margin-bottom:10px">Итого сеть · ${planMonth}</div>
-            <div class="mt-grid">${MAIN.map(m => cell(m, tf, {})).join('')}</div>
+            <div class="mt-grid">${MAIN.map(m => cell(m, tf, tp)).join('')}</div>
             <div class="mt-more">
               <button type="button" class="mt-toggle" onclick="toggleMonthExtra('mpx-tot', this)">Ещё метрики ▾</button>
-              <div class="mt-extra" id="mpx-tot">${EXTRA.map(m => cell(m, tf, {})).join('')}</div>
+              <div class="mt-extra" id="mpx-tot">${EXTRA.map(m => cell(m, tf, tp)).join('')}</div>
             </div>
           </div>`;
         }
@@ -170,6 +174,41 @@
       const d = new Date(Date.UTC(y, m - 1 + delta, 1));
       planMonth = d.toISOString().slice(0, 7);
       loadMonthPlans();
+    }
+
+    // «Сеть за месяц» — все 15 метрик сразу, план/факт/% всей команды сети,
+    // строками-барами (тот же стиль, что кабинет супервайзера, svBarRowHTML/
+    // svBarColor из 08-access-supervisor.js — переиспользуем как есть, это
+    // тот же общий global scope). Данные те же, что и «Итого сеть» на
+    // «Планы и факт за месяц» (GET /plans/employees/month, data.totals) —
+    // просто отдельная быстрая вкладка без разбивки по сотрудникам.
+    function shiftNetMonth(delta) {
+      const [y, m] = planMonth.split('-').map(Number);
+      const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+      planMonth = d.toISOString().slice(0, 7);
+      loadNetMonth();
+    }
+
+    async function loadNetMonth() {
+      const box = document.getElementById('netMonthBody');
+      const label = document.getElementById('netMonthLabel');
+      if (!box) return;
+      if (label) label.textContent = planMonth;
+      box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+      try {
+        const res = await fetch(API + '/plans/employees/month?month=' + planMonth + orgQueryParam(), { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const data = await res.json();
+        const totals = data.totals || {};
+        const fact = totals.fact || {};
+        const plan = totals.plan || {};
+        const rows = METRICS.map(m => svBarRowHTML(m.label, Number(fact[m.id]) || 0, Number(plan[m.id]) || 0)).join('');
+        box.innerHTML = `<div class="sv-store" style="--sc:#2AABEE"><div class="sv-bars">${rows}</div></div>`
+          + `<div class="empty" style="text-align:left;padding:8px 16px">Сотрудников: ${data.rows ? data.rows.length : 0} · ост. дней: ${data.remaining_days ?? '—'}</div>`;
+      } catch (e) {
+        console.error(e);
+        box.innerHTML = '<div class="empty">Не удалось загрузить</div>';
+      }
     }
 
     function toggleMonthExtra(id, btn) {
