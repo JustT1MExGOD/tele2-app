@@ -25,6 +25,16 @@ async function factSql(): Promise<string> {
   return `SELECT ${select} FROM sales WHERE sale_date::date = $1::date AND store_id = $2`;
 }
 
+/** true — событие claim'нуто впервые (можно отправлять), false — уже было
+ * отправлено (кто-то другой уже забрал этот же ключ, пропускаем). */
+export async function claimCronSend(key: string): Promise<boolean> {
+  const res = await query(
+    `INSERT INTO cron_send_log (key) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id`,
+    [key]
+  );
+  return !!res.rows[0];
+}
+
 type StorePlanRow = {
   store_id: string;
   name: string;
@@ -262,7 +272,9 @@ async function tick() {
   const sunday = isSundayMoscow(now);
 
   // напоминания о завтрашней смене — как было
-  if (hh === 20 && mm === 0) await sendTomorrowReminders(date);
+  if (hh === 20 && mm === 0 && (await claimCronSend(`tomorrow_reminders:${date}`))) {
+    await sendTomorrowReminders(date);
+  }
 
   // Дневные планы точек раньше материализовались только вручную кнопкой
   // «Записать дневные планы в БД» — если никто не нажал, store_plans на
@@ -280,13 +292,13 @@ async function tick() {
 
   for (const st of stores) {
     const micros = microHoursFor(st, sunday);
-    if (mm === 0 && micros.includes(hh)) {
+    if (mm === 0 && micros.includes(hh) && (await claimCronSend(`micro:${st.store_id}:${date}:${hh}`))) {
       await sendStoreReportImage(st, date, 'micro', hh);
       console.log('Микро-картинка:', st.name, hh + ':00');
     }
 
     const fin = finalTimeFor(st, sunday);
-    if (hh === fin.h && mm === fin.m) {
+    if (hh === fin.h && mm === fin.m && (await claimCronSend(`final:${st.store_id}:${date}`))) {
       await sendStoreReportImage(st, date, 'final');
       console.log('Итог-картинка:', st.name, `${fin.h}:${String(fin.m).padStart(2, '0')}`);
     }
