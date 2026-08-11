@@ -246,6 +246,14 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('command-center')">
+          <div class="row-icon">🧭</div>
+          <div class="row-body">
+            <div class="row-title">Command Center</div>
+            <div class="row-sub">Что происходит · где проблема · что делать</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="startTutorial('employee')">
           <div class="row-icon">🎓</div>
           <div class="row-body">
@@ -647,6 +655,10 @@
       </div>
       <div id="gateBody"></div>
     </div>
+
+    <div id="page-command-center" class="page">
+      <div id="ccPageBody"><div class="skeleton"></div></div>
+    </div>
   </div>
 
   <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
@@ -704,5 +716,6 @@
   <script src="/js/11-v13.js"></script>
   <script src="/js/12-promos.js"></script>
   <script src="/js/13-v14.js"></script>
+  <script src="/js/14-command-center.js"></script>
 </body>
 </html>

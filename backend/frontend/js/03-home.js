@@ -81,7 +81,7 @@
               <div class="cc-line"><b>${d.overall_pct || 0}%</b> план дня</div>
               <div class="cc-line cc-${pace >= 0 ? 'up' : 'down'}">${paceText}</div>
             </div>
-            ${canAdmin() ? `<button class="row-chevron" style="background:none;border:none;font-size:20px;color:var(--hint)" onclick="enterSupervisorShell()">›</button>` : ''}
+            <button class="row-chevron" style="background:none;border:none;font-size:20px;color:var(--hint)" onclick="switchPage('command-center')">›</button>
           </div>
           ${drops.length
             ? drops.slice(0, 3).map(x => `

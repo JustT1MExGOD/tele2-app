@@ -37,6 +37,7 @@ import { registerForecastRoutes } from './routes-forecast.js';
 import { registerV14Routes } from './routes-v14.js';
 import { registerMetricsRoutes } from './routes-metrics.js';
 import { registerSupervisorRoutes } from './routes-supervisor.js';
+import { registerCommandCenterRoutes } from './routes-command-center.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,6 +113,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     ['V14 (branding, heatmap, tenant)', registerV14Routes],
     ['Metrics', registerMetricsRoutes],
     ['Supervisor', registerSupervisorRoutes],
+    ['Command Center', registerCommandCenterRoutes],
   ];
 
   for (const [label, register] of routeModules) {

@@ -559,6 +559,57 @@ export async function buildSupervisorDashboard(opts: {
   };
 }
 
+/**
+ * Сотрудники, просевшие СЕГОДНЯ относительно своей же смены — не топ (уже
+ * есть top_employees), а обратное. Простая, объяснимая эвристика, не ML:
+ * сотрудник на смене сегодня, у него 0 продаж, но на ТОЙ ЖЕ точке в ТОТ ЖЕ
+ * день есть хотя бы один коллега с ненулевыми продажами (иначе это уже
+ * store-level drop "0 продаж при плане и смене" из buildSupervisorDashboard,
+ * не персональная просадка) — и уже вторая половина дня (после 14:00 МСК),
+ * чтобы не ловить того, кто просто час назад открыл смену.
+ */
+export async function findUnderperformingEmployees(scope: StoreScope, date: string) {
+  const nowMsk = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
+  if (date === todayMoscow() && nowMsk.getHours() < 14) return [];
+
+  const filter = storeFilterSql(scope, 'st', 1);
+  if (scope !== null && !scope.length) return [];
+
+  const res = await query(
+    `SELECT sch.employee_id, e.full_name, sch.store_id, st.name as store_name,
+       COALESCE(SUM(s.sim + s.mnp + s.pa + s.combo), 0) as units
+     FROM schedules sch
+     JOIN employees e ON e.id = sch.employee_id
+     JOIN stores st ON st.id = sch.store_id
+     LEFT JOIN sales s ON s.employee_id = sch.employee_id AND s.store_id = sch.store_id
+       AND s.sale_date::date = sch.work_date::date
+     WHERE sch.work_date::date = $${scope !== null ? 2 : 1}::date
+       AND COALESCE(sch.hours, 0) > 0
+       ${filter.sql}
+     GROUP BY sch.employee_id, e.full_name, sch.store_id, st.name`,
+    scope !== null ? [...filter.params, date] : [date]
+  ).catch(() => ({ rows: [] as any[] }));
+
+  const byStore = new Map<string, { employee_id: number; full_name: string; units: number }[]>();
+  for (const r of res.rows) {
+    if (!byStore.has(r.store_id)) byStore.set(r.store_id, []);
+    byStore.get(r.store_id)!.push({ employee_id: Number(r.employee_id), full_name: r.full_name, units: n(r.units) });
+  }
+
+  const out: { employee_id: number; full_name: string; store_id: string; store_name: string }[] = [];
+  const storeNames = new Map(res.rows.map((r: any) => [r.store_id, r.store_name]));
+  for (const [storeId, staff] of byStore) {
+    const hasAnySales = staff.some((s) => s.units > 0);
+    if (!hasAnySales) continue; // уже store-level drop, не дублируем
+    for (const s of staff) {
+      if (s.units === 0) {
+        out.push({ employee_id: s.employee_id, full_name: s.full_name, store_id: storeId, store_name: storeNames.get(storeId) });
+      }
+    }
+  }
+  return out;
+}
+
 function emptyDash(from: string, date: string, month: string) {
   const emptyMetrics: Record<string, { fact: number; plan: number; pct: number }> = {};
   const emptyForecast: Record<string, { total: number; plan: number; pct: number }> = {};
