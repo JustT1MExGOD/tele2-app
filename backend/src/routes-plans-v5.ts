@@ -113,6 +113,24 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     for (const m of METRICS) {
       if (body[m] !== undefined) data[m] = Number(body[m]) || 0;
     }
-    return upsertStoreMonthPlan(id, month, data);
+    const plan = await upsertStoreMonthPlan(id, month, data);
+
+    // store_plans (снапшот на сегодня/завтра, откуда реально читают BFQ,
+    // live-map, дашборд, отчёты, supervisor-analytics) материализуется
+    // только кроном в 6:00 МСК — без этого правка плана точки среди дня
+    // была бы не видна нигде, кроме GET /plans/stores/daily (он единственный
+    // считает живьём из store_month_plans), вплоть до завтрашнего утра.
+    // Пересчитываем сразу теми же двумя днями, что кроном каждое утро.
+    try {
+      const today = todayMoscow();
+      const tomorrow = new Date(today + 'T12:00:00');
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      await materializeStoreDailyPlans(today);
+      await materializeStoreDailyPlans(tomorrow.toISOString().slice(0, 10));
+    } catch (e: any) {
+      console.error('re-materialize after store plan edit failed:', e?.message || e);
+    }
+
+    return plan;
   });
 }

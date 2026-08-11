@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
+import { query } from '../../src/db/index.js';
+import { todayMoscow } from '../../src/utils/date.js';
 
 describe('Изоляция планов (/plans/employees/month, /plans/stores/daily, /plans/stores/:id/month)', () => {
   const fx = new TestFixtures();
@@ -116,5 +118,48 @@ describe('Изоляция планов (/plans/employees/month, /plans/stores/d
       payload: { sim: 50 }
     });
     expect(res.statusCode).toBe(200);
+  });
+
+  // Регрессия: store_plans (снапшот на сегодня/завтра) материализовался
+  // только кроном в 6:00 МСК — правка плана точки среди дня была видна
+  // сразу только в GET /plans/stores/daily (считает живьём), а BFQ/
+  // live-map/дашборд/отчёты/supervisor-analytics, читающие store_plans
+  // напрямую, показывали бы старые цифры вплоть до следующего утра.
+  it('PUT /plans/stores/:id/month — снапшот store_plans на сегодня обновляется сразу, без крона', async () => {
+    const app = await getApp();
+    const today = todayMoscow();
+
+    const first = await app.inject({
+      method: 'PUT',
+      url: `/plans/stores/${storeA}/month`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { sim: 300 }
+    });
+    expect(first.statusCode).toBe(200);
+
+    const row1 = await query(
+      `SELECT sim FROM store_plans WHERE store_id = $1 AND plan_date = $2::date`,
+      [storeA, today]
+    );
+    expect(row1.rows.length).toBe(1);
+    const sim1 = Number(row1.rows[0].sim);
+    expect(sim1).toBeGreaterThan(0);
+
+    // Меняем план ещё раз тем же днём — снапшот должен пересчитаться, а не
+    // остаться на значении первой правки.
+    const second = await app.inject({
+      method: 'PUT',
+      url: `/plans/stores/${storeA}/month`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { sim: 3000 }
+    });
+    expect(second.statusCode).toBe(200);
+
+    const row2 = await query(
+      `SELECT sim FROM store_plans WHERE store_id = $1 AND plan_date = $2::date`,
+      [storeA, today]
+    );
+    expect(row2.rows.length).toBe(1);
+    expect(Number(row2.rows[0].sim)).toBeGreaterThan(sim1);
   });
 });
