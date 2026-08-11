@@ -94,4 +94,51 @@ describe('Изоляция BFQ (/bfq)', () => {
     });
     expect(res.statusCode).toBe(200);
   });
+
+  // Регрессия: BFQ брал план из store_plans WHERE plan_date IS NULL —
+  // строки, которая создаётся один раз нулями при создании точки и НИКОГДА
+  // не обновляется. Реальный план сотрудника (employee_month_plans,
+  // PUT /plans/employees/:id/month) в расчёт BFQ вообще не попадал —
+  // менеджер мог сколько угодно менять план, BFQ его не видел никогда.
+  it('PUT /plans/employees/:id/month — изменение плана сразу отражается в GET /bfq/:employeeId', async () => {
+    const app = await getApp();
+    const month = '2026-05';
+
+    const setPlan = await app.inject({
+      method: 'PUT',
+      url: `/plans/employees/${employeeA.id}/month`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { month, sim: 40, mnp: 10 }
+    });
+    expect(setPlan.statusCode).toBe(200);
+
+    const bfq1 = await app.inject({
+      method: 'GET',
+      url: `/bfq/${employeeA.id}?month=${month}`,
+      headers: authAs(managerA.telegramId)
+    });
+    expect(bfq1.statusCode).toBe(200);
+    const body1 = bfq1.json();
+    expect(Number(body1.plan.sim)).toBe(40);
+    expect(Number(body1.plan.mnp)).toBe(10);
+
+    // Меняем план ещё раз — BFQ должен подхватить новое значение сразу,
+    // без промежуточного шага материализации/крона.
+    const setPlan2 = await app.inject({
+      method: 'PUT',
+      url: `/plans/employees/${employeeA.id}/month`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { month, sim: 100, mnp: 25 }
+    });
+    expect(setPlan2.statusCode).toBe(200);
+
+    const bfq2 = await app.inject({
+      method: 'GET',
+      url: `/bfq/${employeeA.id}?month=${month}`,
+      headers: authAs(managerA.telegramId)
+    });
+    const body2 = bfq2.json();
+    expect(Number(body2.plan.sim)).toBe(100);
+    expect(Number(body2.plan.mnp)).toBe(25);
+  });
 });

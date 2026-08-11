@@ -9,6 +9,7 @@
  */
 
 import { query } from '../db/index.js';
+import { getEmployeeMonthPlan } from './plans.js';
 
 export const BFQ_CONFIG = {
   comboBoostExtra: 4,    // факт комбо >= план + 4
@@ -210,30 +211,6 @@ async function getEmployeeMonthShifts(employeeId: number, month: string) {
   return { worked, remaining };
 }
 
-async function getEmployeePlan(employeeId: number) {
-  // План точки, где сотрудник чаще всего работает в месяце, иначе любой шаблон
-  const res = await query(
-    `SELECT sp.*
-     FROM store_plans sp
-     WHERE sp.plan_date IS NULL
-       AND sp.store_id = (
-         SELECT store_id FROM schedules
-         WHERE employee_id = $1
-         GROUP BY store_id
-         ORDER BY COUNT(*) DESC
-         LIMIT 1
-       )
-     LIMIT 1`,
-    [employeeId]
-  );
-  if (res.rows[0]) return res.rows[0];
-
-  const any = await query(
-    `SELECT * FROM store_plans WHERE plan_date IS NULL LIMIT 1`
-  );
-  return any.rows[0] || {};
-}
-
 async function getEmployeeFacts(employeeId: number, month: string) {
   const start = `${month}-01`;
   const endDate = new Date(`${month}-01T12:00:00`);
@@ -290,7 +267,18 @@ async function getManual(employeeId: number, month: string) {
 }
 
 export async function calculateEmployeeBFQ(employeeId: number, month: string) {
-  const plan = await getEmployeePlan(employeeId);
+  // Раньше план брался из store_plans WHERE plan_date IS NULL — строки,
+  // которая создаётся РОВНО ОДИН РАЗ (нулями) при создании точки и никогда
+  // больше нигде не обновляется ни одним из существующих эндпоинтов.
+  // Реальный, живой план сотрудника — employee_month_plans, который
+  // PUT /plans/employees/:id/month обновляет прямо сейчас — BFQ этот план
+  // вообще не видел: правка плана никогда не отражалась в расчёте BFQ.
+  const plan: Record<string, any> = (await getEmployeeMonthPlan(employeeId, month)) || {};
+  // Остальной bfq.ts (factsToPct/calcProfit/calcTopUpBlock) читает
+  // plan.credit — upsertEmployeeMonthPlan пишет только credit_issued,
+  // колонка credit остаётся на DEFAULT 0 навсегда. Без этого моста план по
+  // кредитам обнулился бы точно так же, как до фикса.
+  plan.credit = num(plan.credit_issued);
   const fact = await getEmployeeFacts(employeeId, month);
   const pctFact = factsToPct(fact, plan);
   const { vmr, penalty } = await getManual(employeeId, month);
