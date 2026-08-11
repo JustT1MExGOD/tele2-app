@@ -53,9 +53,24 @@ export async function registerMeRoutes(app: FastifyInstance) {
     // Карточка должна быть либо ещё не привязана, либо уже привязана к
     // ЭТОМУ ЖЕ telegram_id (идемпотентный повтор) — иначе это захват уже
     // занятой карточки чужого сотрудника (в т.ч. admin) со своим telegram_id.
-    const target = await query(`SELECT telegram_id FROM employees WHERE id = $1`, [employee_id]);
+    const target = await query(`SELECT telegram_id, is_active FROM employees WHERE id = $1`, [employee_id]);
     if (!target.rows[0]) {
       return reply.code(404).send({ error: 'employee not found' });
+    }
+    // GET /employees (единственный источник списка карточек для бинда во
+    // фронте) уже фильтрует is_active=true — но сам /me/bind принимает
+    // employee_id из тела запроса без проверки, а UPDATE ниже раньше сам же
+    // ставил is_active=true на любую карточку. Уволенный/маленький
+    // последовательный id легко угадать — без этой проверки кто угодно мог
+    // руками (в обход фронта) привязать свой Telegram к карточке
+    // ДЕАКТИВИРОВАННОГО сотрудника и унаследовать всю его историю продаж/
+    // BFQ/XP — реактивация карточки должна быть осознанным действием
+    // менеджера (PATCH /employees/:id), а не побочным эффектом self-bind.
+    if (target.rows[0].is_active === false) {
+      return reply.code(409).send({
+        error: 'employee_inactive',
+        message: 'Карточка деактивирована. Обратитесь к менеджеру для восстановления доступа'
+      });
     }
     const currentOwner = target.rows[0].telegram_id ? Number(target.rows[0].telegram_id) : null;
     if (currentOwner && currentOwner !== telegram_id) {

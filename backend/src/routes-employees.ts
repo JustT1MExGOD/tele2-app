@@ -107,6 +107,17 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
       [Number(id)]
     );
     if (!res.rows[0]) return reply.code(404).send({ error: 'not found' });
+
+    // Будущие смены — не история, а обещание, что человек выйдет на
+    // работу. GET /schedules/live-map их не фильтрует по is_active — без
+    // очистки уволенный сотрудник продолжал бы висеть в завтрашнем графике
+    // и учитываться в покрытии точки, будто он реально выйдет. Прошлые
+    // смены (реальная история — кто фактически работал) не трогаем.
+    await query(
+      `DELETE FROM schedules WHERE employee_id = $1 AND work_date::date >= (now() AT TIME ZONE 'Europe/Moscow')::date`,
+      [Number(id)]
+    ).catch((e: any) => console.error('cleanup future schedules on employee delete:', e?.message || e));
+
     return { ok: true, ...res.rows[0] };
   });
 

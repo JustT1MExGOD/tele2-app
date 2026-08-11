@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
+import { query } from '../../src/db/index.js';
 
 // Регрессия на КРИТИЧНУЮ дыру: POST /me/bind был вообще без авторизации —
 // telegram_id брался из тела запроса (или спуфабельного заголовка), не из
@@ -70,5 +71,32 @@ describe('Изоляция привязки Telegram (POST /me/bind)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(Number(body.telegram_id)).toBe(attackerTelegramId);
+  });
+
+  // Регрессия: GET /employees (единственный источник списка карточек для
+  // бинда во фронте) уже фильтрует is_active=true, но сам POST /me/bind
+  // принимал employee_id из тела без проверки и сам же реактивировал
+  // карточку (is_active=true) на любой bind. employee_id — маленький
+  // последовательный int, легко угадать/запомнить — без этой проверки
+  // кто угодно руками (в обход фронта) мог привязать свой Telegram к
+  // карточке уволенного и унаследовать всю его историю продаж/BFQ/XP.
+  it('нельзя привязаться к деактивированной (уволенной) карточке', async () => {
+    const fired = await fx.createEmployee(orgA, { role: 'employee', fullName: 'Fired Employee' });
+    await query(`UPDATE employees SET is_active = false, telegram_id = NULL WHERE id = $1`, [fired.id]);
+
+    const newHireTelegramId = Math.floor(9_000_000_000 + Math.random() * 900_000_000);
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/me/bind',
+      headers: { 'x-telegram-id': String(newHireTelegramId), 'content-type': 'application/json' },
+      payload: { employee_id: fired.id }
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('employee_inactive');
+
+    const row = await query(`SELECT is_active, telegram_id FROM employees WHERE id = $1`, [fired.id]);
+    expect(row.rows[0].is_active).toBe(false);
+    expect(row.rows[0].telegram_id).toBeNull();
   });
 });

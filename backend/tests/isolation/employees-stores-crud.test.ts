@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
+import { query } from '../../src/db/index.js';
 
 // Регрессия: PATCH/DELETE /employees/:id и PATCH/DELETE /stores/:id были
 // вообще без проверки сети — manager любой сети мог переименовать/
@@ -55,6 +56,38 @@ describe('Изоляция CRUD сотрудников и точек (PATCH/DELE
       payload: { full_name: 'Legit Rename' }
     });
     expect(res.statusCode).toBe(200);
+  });
+
+  // Регрессия: увольнение (soft-delete) не чистило БУДУЩИЕ смены —
+  // уволенный продолжал бы висеть в завтрашнем графике/покрытии точки,
+  // будто реально выйдет на работу. Прошлые смены — реальная история,
+  // трогать нельзя; будущие — не история, а обещание, которое больше не
+  // актуально.
+  it('DELETE /employees/:id — чистит будущие смены, прошлые оставляет как историю', async () => {
+    const target = await fx.createEmployee(orgA, { role: 'employee', fullName: 'To Be Fired' });
+    await query(
+      `INSERT INTO schedules (employee_id, store_id, work_date, hours) VALUES ($1, $2, '2026-01-01', 8)`,
+      [target.id, storeA]
+    );
+    await query(
+      `INSERT INTO schedules (employee_id, store_id, work_date, hours) VALUES ($1, $2, '2099-01-01', 8)`,
+      [target.id, storeA]
+    );
+
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/employees/${target.id}`,
+      headers: authAs(managerA.telegramId)
+    });
+    expect(res.statusCode).toBe(200);
+
+    const remaining = await query(
+      `SELECT work_date FROM schedules WHERE employee_id = $1 ORDER BY work_date`,
+      [target.id]
+    );
+    expect(remaining.rows.length).toBe(1);
+    expect(new Date(remaining.rows[0].work_date).getFullYear()).toBe(2026);
   });
 
   it('PATCH /stores/:id — чужая сеть получает 403', async () => {
