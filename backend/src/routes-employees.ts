@@ -220,6 +220,17 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
     await query(`UPDATE stores SET is_active = false WHERE id = $1`, [id]);
+
+    // Та же логика, что при увольнении сотрудника (17.14.0): будущие смены —
+    // не история, а обещание, что кто-то выйдет работать именно СЮДА.
+    // GET /schedules не фильтрует точку по is_active — без очистки
+    // сотрудники продолжали бы висеть в графике закрытой точки. Прошлые
+    // смены (реальная история) не трогаем.
+    await query(
+      `DELETE FROM schedules WHERE store_id = $1 AND work_date::date >= (now() AT TIME ZONE 'Europe/Moscow')::date`,
+      [id]
+    ).catch((e: any) => console.error('cleanup future schedules on store delete:', e?.message || e));
+
     return { ok: true, id };
   });
 }

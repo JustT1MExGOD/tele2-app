@@ -121,4 +121,34 @@ describe('Изоляция CRUD сотрудников и точек (PATCH/DELE
     });
     expect(res.statusCode).toBe(200);
   });
+
+  // Та же логика, что при увольнении сотрудника: закрытие точки не должно
+  // оставлять сотрудников висеть в её будущем графике, но прошлая история
+  // (кто реально работал на этой точке) должна остаться нетронутой.
+  it('DELETE /stores/:id — чистит будущие смены на точке, прошлые оставляет как историю', async () => {
+    const closingStore = await fx.createStore(orgA, 'Closing Store');
+    await query(
+      `INSERT INTO schedules (employee_id, store_id, work_date, hours) VALUES ($1, $2, '2026-01-01', 8)`,
+      [employeeA.id, closingStore]
+    );
+    await query(
+      `INSERT INTO schedules (employee_id, store_id, work_date, hours) VALUES ($1, $2, '2099-01-01', 8)`,
+      [employeeA.id, closingStore]
+    );
+
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/stores/${closingStore}`,
+      headers: authAs(managerA.telegramId)
+    });
+    expect(res.statusCode).toBe(200);
+
+    const remaining = await query(
+      `SELECT work_date FROM schedules WHERE store_id = $1 ORDER BY work_date`,
+      [closingStore]
+    );
+    expect(remaining.rows.length).toBe(1);
+    expect(new Date(remaining.rows[0].work_date).getFullYear()).toBe(2026);
+  });
 });
