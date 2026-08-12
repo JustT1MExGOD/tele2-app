@@ -507,6 +507,52 @@
     }
     .sch-cell.off { opacity: 0.5; }
 
+    /* Сводный график команды (manager/senior/admin) — узкая таблица на
+       весь месяц, горизонтальный скролл вместо переноса на мобильном. */
+    .sum-sch-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .sum-sch-table {
+      border-collapse: collapse;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .sum-sch-table th, .sum-sch-table td {
+      border: 1px solid var(--border);
+      padding: 4px 6px;
+      text-align: center;
+    }
+    .sum-sch-table thead th {
+      background: var(--surface-2);
+      color: var(--hint);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .sum-sch-table thead th span { color: var(--hint); font-weight: 400; }
+    .sum-sch-day.we { background: var(--danger-soft); }
+    .sum-sch-name {
+      position: sticky;
+      left: 0;
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 600;
+      text-align: left;
+      white-space: normal;
+      min-width: 140px;
+      max-width: 140px;
+      z-index: 1;
+    }
+    thead .sum-sch-name { z-index: 2; background: var(--surface-2); }
+    .sum-sch-cell.work { background: var(--warning-soft); color: var(--warning); font-weight: 600; }
+    .sum-sch-cell.off { background: var(--primary-soft); color: var(--primary); }
+    .sum-sch-store { font-size: 9px; font-weight: 700; opacity: 0.9; }
+
     /* Today schedule list */
     .today-store {
       margin-bottom: 4px;
@@ -622,6 +668,30 @@
     }
     .toast.ok { background: var(--success); border-color: transparent; }
     .toast.err { background: var(--danger); border-color: transparent; }
+
+    /* Pull-to-refresh — видимый индикатор вместо "невидимого" срабатывания:
+       появляется и растёт по мере протяжки, меняет текст на пороге, чтобы
+       было понятно, что вот-вот случится обновление, а не сюрприз. */
+    .ptr-indicator {
+      position: fixed;
+      top: calc(8px + env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%) translateY(-48px);
+      background: var(--surface);
+      color: var(--hint);
+      padding: 8px 16px;
+      border-radius: var(--radius-md);
+      font-size: 12px;
+      font-weight: var(--fw-semi);
+      z-index: 2500;
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--border);
+      transition: opacity 0.15s var(--ease-out);
+    }
+    .ptr-indicator.ready { color: var(--primary); }
+    .ptr-indicator.refreshing { color: var(--primary); opacity: 1 !important; transform: translateX(-50%) translateY(0) !important; }
 
     /* Modal bottom sheet */
     .overlay {

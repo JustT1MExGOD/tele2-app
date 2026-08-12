@@ -26,17 +26,38 @@ function currentVersion(): string {
   }
 }
 
+/**
+ * true — версия claim'нута этим вызовом (можно отправлять), false — уже
+ * была отмечена анонсированной (этим же или другим процессом), отправлять
+ * не нужно. Claim атомарный и происходит ДО отправки, не после — раньше
+ * это были SELECT-проверка и UPDATE-отметка двумя отдельными шагами с
+ * медленной отправкой в Telegram (сборка PNG + сетевой запрос) между ними:
+ * Railway держит старый контейнер живым, пока новый не пройдёт healthcheck
+ * (17.5.1), и оба процесса на старте видели "ещё не анонсировано", оба
+ * слали одно и то же в чат (тот же класс гонки, что чинили для
+ * cron-отчётов в 17.16.0). WHERE ... IS DISTINCT FROM делает UPDATE
+ * условным — если строка уже на этой версии, DO UPDATE не срабатывает и
+ * RETURNING не отдаёт строку, ровно как offline_sync_log/cron_send_log.
+ */
+export async function claimReleaseAnnouncement(version: string): Promise<boolean> {
+  const claim = await query(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES ('last_announced_version', $1, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+     WHERE app_settings.value IS DISTINCT FROM EXCLUDED.value
+     RETURNING value`,
+    [version]
+  );
+  return !!claim.rows[0];
+}
+
 export async function announceReleaseIfNeeded() {
   const version = currentVersion();
   const entry = getChangelogEntry(version);
   if (!entry) return; // хотфикс или версия без записи в CHANGELOG — тихо
 
   try {
-    const res = await query(
-      `SELECT value FROM app_settings WHERE key = 'last_announced_version'`
-    );
-    const last = res.rows[0]?.value;
-    if (last === version) return; // уже анонсировали эту версию
+    if (!(await claimReleaseAnnouncement(version))) return;
 
     const { png } = await buildReleaseCardPng(entry);
     const caption = `🚀 T2 Sales обновился до ${version}: ${entry.title}`;
@@ -53,18 +74,15 @@ export async function announceReleaseIfNeeded() {
       if (sent.ok) anySent = true;
       else console.warn('announceReleaseIfNeeded: send failed for chat', chatId, sent.error);
     }
-    if (!anySent) {
-      console.warn('announceReleaseIfNeeded: no send succeeded, not marking as announced');
-      return;
+    // Claim уже сделан выше (до отправки) — версия отмечена анонсированной
+    // независимо от исхода отправки. Полный сетевой сбой Telegram здесь —
+    // не более чем один пропущенный анонс (не критично для бизнеса), и это
+    // безопаснее, чем повторный спам в чат при каждом перезапуске контейнера.
+    if (anySent) {
+      console.log(`📣 Анонс версии ${version} отправлен в чат`);
+    } else {
+      console.warn('announceReleaseIfNeeded: no send succeeded (уже помечено анонсированным, повтора не будет)');
     }
-
-    await query(
-      `INSERT INTO app_settings (key, value, updated_at)
-       VALUES ('last_announced_version', $1, now())
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-      [version]
-    );
-    console.log(`📣 Анонс версии ${version} отправлен в чат`);
   } catch (e: any) {
     console.error('announceReleaseIfNeeded failed:', e?.message || e);
   }

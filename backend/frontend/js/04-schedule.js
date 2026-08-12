@@ -92,6 +92,7 @@
                 ${progressHTML(metricLabel('sim'), fact.sim, plan.sim)}
                 ${progressHTML(metricLabel('mnp'), fact.mnp, plan.mnp)}
                 ${progressHTML(metricLabel('pa'), fact.pa, plan.pa)}
+                ${progressHTML(metricLabel('hb'), fact.hb, plan.hb)}
 
                 <div class="block-label">Товарка</div>
                 ${progressHTML(metricLabel('combo'), fact.combo, plan.combo)}
@@ -229,6 +230,8 @@
         const total = daysInMonth(scheduleMonth);
         const list = Object.values(byEmp).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
         const editable = canManage();
+
+        renderSummarySchedule(list, total);
         const hint = editable
           ? '<div class="empty" style="padding:8px 0 12px">Нажми на день, чтобы поставить / убрать смену</div>'
           : '';
@@ -267,6 +270,76 @@
         console.error(e);
         box.innerHTML = '<div class="empty">Ошибка загрузки графика</div>';
       }
+    }
+
+    /** manager/senior/admin — сводный график всей команды на месяц (как
+     * Excel-версия, которой сеть уже пользуется), а не только свой личный
+     * график ниже. Обычный сотрудник этот блок не видит. */
+    function canViewSummarySchedule() {
+      const r = (typeof me !== 'undefined' && me && me.role) || '';
+      return r === 'manager' || r === 'senior' || r === 'admin';
+    }
+
+    const RU_WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+    function renderSummarySchedule(list, total) {
+      const section = document.getElementById('summaryScheduleSection');
+      if (!section) return;
+      if (!canViewSummarySchedule()) {
+        section.innerHTML = '';
+        return;
+      }
+      if (!list.length) {
+        section.innerHTML = '';
+        return;
+      }
+
+      const [y, m] = scheduleMonth.split('-').map(Number);
+      let head = '<th class="sum-sch-name">ФИО</th>';
+      for (let d = 1; d <= total; d++) {
+        const dow = new Date(y, m - 1, d).getDay();
+        head += `<th class="sum-sch-day${dow === 0 || dow === 6 ? ' we' : ''}">${d}<br><span>${RU_WEEKDAYS[dow]}</span></th>`;
+      }
+
+      const rows = list.map(emp => {
+        let modeCells = '', hourCells = '';
+        for (let d = 1; d <= total; d++) {
+          const key = scheduleMonth + '-' + String(d).padStart(2, '0');
+          const row = emp.days[key];
+          const hours = Number(row?.hours) || 0;
+          const isOff = !row || hours <= 0;
+          const cls = isOff ? 'off' : 'work';
+          if (isOff) {
+            modeCells += `<td class="sum-sch-cell off">вых</td>`;
+            hourCells += `<td class="sum-sch-cell off">0</td>`;
+          } else {
+            // Сводка теперь на всю сеть сразу (несколько точек в одной
+            // таблице, не одна точка на лист, как в Excel-версии) — без
+            // названия точки в самой ячейке непонятно, куда именно вышел
+            // человек в этот день, особенно при подменах на чужой точке.
+            const col = storeColor(row.store_id);
+            const storeShort = esc((row.store_short || row.store_name || '').slice(0, 6));
+            modeCells += `<td class="sum-sch-cell work" title="${esc(row.store_name || '')}">
+              ${esc(row.shift_text || '')}<br><span class="sum-sch-store" style="color:${col}">${storeShort}</span></td>`;
+            hourCells += `<td class="sum-sch-cell work">${hours}</td>`;
+          }
+        }
+        return `
+          <tr>
+            <td class="sum-sch-name" rowspan="2">${esc(emp.name)}</td>
+            ${modeCells}
+          </tr>
+          <tr>${hourCells}</tr>`;
+      }).join('');
+
+      section.innerHTML = `
+        <div class="section-title" style="padding:0 0 8px">Сводный график команды</div>
+        <div class="sum-sch-scroll">
+          <table class="sum-sch-table">
+            <thead><tr>${head}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
     }
 
     async function editDay(employeeId, dateStr, currentStoreId, currentHours) {
