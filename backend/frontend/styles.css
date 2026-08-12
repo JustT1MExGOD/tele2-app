@@ -506,6 +506,25 @@
       padding: 0 1px;
     }
     .sch-cell.off { opacity: 0.5; }
+    .sch-cell.pad {
+      background: transparent;
+      color: var(--hint);
+      opacity: 0.35;
+      pointer-events: none;
+    }
+    .sch-week-head {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      padding: 0 10px;
+      margin-bottom: 2px;
+    }
+    .sch-week-head div {
+      text-align: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--hint);
+      text-transform: uppercase;
+    }
 
     /* Сводный график команды (manager/senior/admin) — узкая таблица на
        весь месяц, горизонтальный скролл вместо переноса на мобильном. */

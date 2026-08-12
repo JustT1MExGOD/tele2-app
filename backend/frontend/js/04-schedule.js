@@ -190,6 +190,50 @@
       return new Date(y, m, 0).getDate();
     }
 
+    const RU_WEEKDAYS_MON = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+    function weekdayHeaderHtml() {
+      return `<div class="sch-week-head">${RU_WEEKDAYS_MON.map(w => `<div>${w}</div>`).join('')}</div>`;
+    }
+
+    /** Настоящая календарная сетка (как в обычном календаре телефона) —
+     * раньше дни шли просто по порядку 1..total без выравнивания по дням
+     * недели, поэтому непонятно было, что попадает на выходные. День 1
+     * теперь стоит в своей настоящей колонке (Пн первая), а хвосты
+     * соседних месяцев — серые, некликабельные, только для ориентира. */
+    function calendarCellsHtml(emp, y, m, total, editable) {
+      const firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7; // 0=Пн..6=Вс
+      const prevTotal = new Date(y, m - 1, 0).getDate();
+
+      let cells = '';
+      for (let i = firstDow - 1; i >= 0; i--) {
+        cells += `<div class="sch-cell pad"><div class="d">${prevTotal - i}</div></div>`;
+      }
+      for (let d = 1; d <= total; d++) {
+        const key = scheduleMonth + '-' + String(d).padStart(2, '0');
+        const row = emp.days[key];
+        const storeId = row?.store_id || (stores[0] && stores[0].id) || '';
+        const hours = row?.hours || 0;
+        const click = editable
+          ? `onclick="editDay(${emp.id}, '${key}', '${storeId}', ${hours})"`
+          : '';
+        if (row) {
+          const short = (row.store_short || row.store_name || '').slice(0, 4);
+          const col = storeColor(row.store_id);
+          cells += `<div class="sch-cell work" ${click} title="${row.store_name || ''} ${row.shift_text || ''}"
+            style="background:${col}22;color:${col};border-color:${col}">
+            <div class="d">${d}</div><div class="s">${short}</div></div>`;
+        } else {
+          cells += `<div class="sch-cell off" ${click}><div class="d">${d}</div></div>`;
+        }
+      }
+      const trailing = (7 - ((firstDow + total) % 7)) % 7;
+      for (let d = 1; d <= trailing; d++) {
+        cells += `<div class="sch-cell pad"><div class="d">${d}</div></div>`;
+      }
+      return cells;
+    }
+
     async function loadMonthSchedule() {
       document.getElementById('monthLabel').textContent = monthLabel(scheduleMonth);
       const box = document.getElementById('monthBoard');
@@ -236,27 +280,10 @@
           ? '<div class="empty" style="padding:8px 0 12px">Нажми на день, чтобы поставить / убрать смену</div>'
           : '';
 
-        box.innerHTML = hint + list.map(emp => {
+        const [gy, gm] = scheduleMonth.split('-').map(Number);
+        box.innerHTML = hint + weekdayHeaderHtml() + list.map(emp => {
           const workCount = Object.keys(emp.days).length;
-          let cells = '';
-          for (let d = 1; d <= total; d++) {
-            const key = scheduleMonth + '-' + String(d).padStart(2, '0');
-            const row = emp.days[key];
-            const storeId = row?.store_id || (stores[0] && stores[0].id) || '';
-            const hours = row?.hours || 0;
-            const click = editable
-              ? `onclick="editDay(${emp.id}, '${key}', '${storeId}', ${hours})"`
-              : '';
-            if (row) {
-              const short = (row.store_short || row.store_name || '').slice(0, 4);
-              const col = storeColor(row.store_id);
-              cells += `<div class="sch-cell work" ${click} title="${row.store_name || ''} ${row.shift_text || ''}"
-                style="background:${col}22;color:${col};border-color:${col}">
-                <div class="d">${d}</div><div class="s">${short}</div></div>`;
-            } else {
-              cells += `<div class="sch-cell off" ${click}><div class="d">${d}</div></div>`;
-            }
-          }
+          const cells = calendarCellsHtml(emp, gy, gm, total, editable);
           return `
             <div class="sch-emp">
               <div class="sch-emp-head">
