@@ -80,10 +80,10 @@ async function loadCommandCenterPage() {
   }
 }
 
-/* «Что делать» — действие ведёт к уже существующему экрану, ничего
-   нового не открываем: open_employee → карточка сотрудника (уже везде
-   используется), open_store → живая карта (полноценной detail-страницы
-   точки в проекте нет, не изобретаем её здесь). */
+/* «Что делать» — открыть_сотрудника/открыть_точку ведут на уже
+   существующие экраны, ничего нового не открываем. create_task (18.4) —
+   единственное настоящее действие: создаёт задачу с контекстом проблемы
+   уже предзаполненным. */
 function ccActionButton(action) {
   if (action.type === 'open_employee') {
     return `<button class="mchip" onclick="openEmployeeCard(${action.id})">Открыть сотрудника</button>`;
@@ -91,5 +91,104 @@ function ccActionButton(action) {
   if (action.type === 'open_store') {
     return `<button class="mchip" onclick="switchPage('live')">Открыть точку</button>`;
   }
+  if (action.type === 'create_task') {
+    const ctx = JSON.stringify({
+      store_id: action.store_id || null,
+      employee_id: action.employee_id || null,
+      alert_id: action.alert_id || null,
+      title: action.message || ''
+    }).replace(/"/g, '&quot;');
+    return `<button class="mchip" onclick='openCreateTaskModal(${ctx})'>Создать задачу</button>`;
+  }
   return '';
+}
+
+/* Модалка создания задачи — переиспользует общий overlay/modalBody (тот же
+   механизм, что openAddSale()), контекст (точка/сотрудник/alert) уже
+   предзаполнен из проблемы Command Center. */
+async function openCreateTaskModal(ctx) {
+  ctx = ctx || {};
+  const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
+  let employees = [];
+  try {
+    const res = await fetch(API + '/employees' + empParam, { headers: authHeaders() });
+    employees = await res.json();
+  } catch (_) {}
+
+  document.getElementById('modalTitle').textContent = 'Новая задача';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="field">
+      <label>Что сделать</label>
+      <input type="text" id="taskTitle" value="${esc(ctx.title || '')}" placeholder="Например: проверить остатки после 18:00">
+    </div>
+    <div class="field">
+      <label>Кому</label>
+      <select id="taskAssignee">
+        ${(employees || []).map(e =>
+          `<option value="${e.id}" ${String(e.id) === String(ctx.employee_id) ? 'selected' : ''}>${esc(e.full_name)}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <div class="field">
+      <label>Приоритет</label>
+      <select id="taskPriority">
+        <option value="normal" selected>Обычный</option>
+        <option value="high">Высокий</option>
+        <option value="urgent">Срочно</option>
+        <option value="low">Низкий</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Дедлайн (необязательно)</label>
+      <input type="datetime-local" id="taskDueAt">
+    </div>
+    <button class="btn-main" id="taskSubmitBtn" onclick="submitCreateTask(${JSON.stringify({
+      store_id: ctx.store_id || null,
+      alert_id: ctx.alert_id || null
+    }).replace(/"/g, '&quot;')})">Создать</button>
+  `;
+  document.getElementById('overlay').classList.add('show');
+}
+
+async function submitCreateTask(ctx) {
+  const btn = document.getElementById('taskSubmitBtn');
+  if (btn?.disabled) return;
+
+  const title = document.getElementById('taskTitle')?.value.trim();
+  const assignedTo = document.getElementById('taskAssignee')?.value;
+  if (!title || !assignedTo) {
+    toast('Укажи, что сделать и кому', 'err');
+    return;
+  }
+  if (btn) btn.disabled = true;
+
+  const priority = document.getElementById('taskPriority')?.value;
+  const dueAtRaw = document.getElementById('taskDueAt')?.value;
+  const payload = {
+    title,
+    assigned_to: Number(assignedTo),
+    priority,
+    store_id: ctx.store_id || undefined,
+    alert_id: ctx.alert_id || undefined,
+    due_at: dueAtRaw ? new Date(dueAtRaw).toISOString() : undefined
+  };
+  if (me?.role === 'admin' && adminViewOrgId) payload.org_id = adminViewOrgId;
+
+  try {
+    const res = await fetch(API + '/tasks', {
+      method: 'POST',
+      headers: authHeaders(true),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'fail');
+    }
+    closeModal();
+    toast('Задача создана', 'ok');
+    if (typeof page !== 'undefined' && page === 'command-center') loadCommandCenterPage();
+  } catch (e) {
+    toast(e.message || 'Не удалось создать задачу', 'err');
+    if (btn) btn.disabled = false;
+  }
 }

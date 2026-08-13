@@ -38,9 +38,42 @@
               return progressHTML(metricShort(m), x.fact, x.plan);
             }).join('')}
             <button class="btn-main" style="margin-top:8px" onclick="openAddSale()">+ Продажа</button>
-          </div>`;
+          </div>
+          ${myTasksHTML(d.tasks)}`;
       } catch (e) {
         box.innerHTML = '<div class="empty">Не удалось загрузить «Мой день»</div>';
+      }
+    }
+
+    /* 18.4 — задачи, назначенные менеджером (Command Center → create_task),
+       на единственном персональном экране сотрудника. */
+    function myTasksHTML(tasks) {
+      if (!Array.isArray(tasks) || !tasks.length) return '';
+      return `
+        <div class="section-title" style="padding:12px 0 8px">Мои задачи</div>
+        ${tasks.map(t => `
+          <div class="row" style="cursor:default">
+            <div class="row-icon">📋</div>
+            <div class="row-body">
+              <div class="row-title">${esc(t.title)}</div>
+              <div class="row-sub">${t.store_name ? esc(t.store_name) + ' · ' : ''}${t.status === 'in_progress' ? 'В работе' : 'Открыта'}${t.due_at ? ' · до ' + new Date(t.due_at).toLocaleString('ru') : ''}</div>
+            </div>
+            <button class="mchip" onclick="completeMyTask(${t.id})">Готово</button>
+          </div>`).join('')}`;
+    }
+
+    async function completeMyTask(id) {
+      try {
+        const res = await fetch(API + '/tasks/' + id + '/status', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ status: 'done' })
+        });
+        if (!res.ok) throw new Error('fail');
+        toast('Задача выполнена', 'ok');
+        loadMyDay();
+      } catch (e) {
+        toast('Не удалось отметить задачу', 'err');
       }
     }
 

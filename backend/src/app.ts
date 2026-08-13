@@ -38,6 +38,7 @@ import { registerV14Routes } from './routes-v14.js';
 import { registerMetricsRoutes } from './routes-metrics.js';
 import { registerSupervisorRoutes } from './routes-supervisor.js';
 import { registerCommandCenterRoutes } from './routes-command-center.js';
+import { registerTasksRoutes } from './routes-tasks.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,6 +115,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     ['Metrics', registerMetricsRoutes],
     ['Supervisor', registerSupervisorRoutes],
     ['Command Center', registerCommandCenterRoutes],
+    ['Tasks', registerTasksRoutes],
   ];
 
   for (const [label, register] of routeModules) {

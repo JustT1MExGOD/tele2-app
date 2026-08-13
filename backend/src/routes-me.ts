@@ -226,6 +226,17 @@ export async function registerMeRoutes(app: FastifyInstance) {
     const totalFact = metrics.reduce((s, m) => s + (Number(fact[m]) || 0), 0);
     const totalPlan = metrics.reduce((s, m) => s + (dailyPlan[m] || 0), 0);
 
+    // Незакрытые задачи (18.4) — «Мой день» уже единственный персональный
+    // экран сотрудника, естественное место показать, что назначил менеджер.
+    const tasks = await query(
+      `SELECT t.*, st.name as store_name
+       FROM tasks t
+       LEFT JOIN stores st ON st.id = t.store_id
+       WHERE t.assigned_to = $1 AND t.status IN ('open', 'in_progress')
+       ORDER BY t.due_at NULLS LAST, t.created_at DESC`,
+      [e.id]
+    ).catch(() => ({ rows: [] as any[] }));
+
     return {
       bound: true,
       employee: e,
@@ -241,7 +252,8 @@ export async function registerMeRoutes(app: FastifyInstance) {
       },
       month_plan: monthPlan,
       month_fact: mf,
-      remaining_shifts: div
+      remaining_shifts: div,
+      tasks: tasks.rows
     };
   });
 

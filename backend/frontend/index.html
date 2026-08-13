@@ -256,6 +256,14 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('tasks')">
+          <div class="row-icon">📋</div>
+          <div class="row-body">
+            <div class="row-title">Задачи</div>
+            <div class="row-sub">Кто что делает по сети</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="startTutorial('employee')">
           <div class="row-icon">🎓</div>
           <div class="row-body">
@@ -662,6 +670,10 @@
     <div id="page-command-center" class="page">
       <div id="ccPageBody"><div class="skeleton"></div></div>
     </div>
+
+    <div id="page-tasks" class="page">
+      <div id="tasksPageBody"><div class="skeleton"></div></div>
+    </div>
   </div>
 
   <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
@@ -720,5 +732,6 @@
   <script src="/js/12-promos.js"></script>
   <script src="/js/13-v14.js"></script>
   <script src="/js/14-command-center.js"></script>
+  <script src="/js/15-tasks.js"></script>
 </body>
 </html>

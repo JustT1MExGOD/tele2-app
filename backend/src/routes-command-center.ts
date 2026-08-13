@@ -65,6 +65,9 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
       // Единый problems-список — фронту не нужно знать источник, только
       // severity/текст/куда вести. store-level drops уже отсортированы
       // критичными вперёд в dash.drops.
+      // create_task (18.4) добавляется КАЖДОЙ проблеме отдельным действием —
+      // фронту не нужно знать источник, только что в контексте есть
+      // (store_id/employee_id/alert_id), чтобы предзаполнить форму задачи.
       const problems = [
         ...dash.drops.map((d: any) => ({
           severity: d.severity,
@@ -72,14 +75,25 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
           store_id: d.store_id,
           store_name: d.store_name,
           ai_comment: d.ai_comment,
-          actions: d.store_id ? [{ type: 'open_store', id: d.store_id }] : []
+          actions: [
+            ...(d.store_id ? [{ type: 'open_store', id: d.store_id }] : []),
+            { type: 'create_task', store_id: d.store_id || null, employee_id: null, message: d.message }
+          ]
         })),
         ...underperforming.map((u) => ({
           severity: 'warn' as const,
           message: `${u.full_name} — 0 продаж сегодня при работающих коллегах`,
           store_id: u.store_id,
           store_name: u.store_name,
-          actions: [{ type: 'open_employee', id: u.employee_id }]
+          actions: [
+            { type: 'open_employee', id: u.employee_id },
+            {
+              type: 'create_task',
+              store_id: u.store_id || null,
+              employee_id: u.employee_id,
+              message: `${u.full_name} — 0 продаж сегодня`
+            }
+          ]
         })),
         ...alertsRes.rows.map((a: any) => ({
           severity: a.severity,
@@ -87,7 +101,10 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
           store_id: a.store_id,
           store_name: a.store_name,
           alert_id: a.id,
-          actions: a.store_id ? [{ type: 'open_store', id: a.store_id }] : []
+          actions: [
+            ...(a.store_id ? [{ type: 'open_store', id: a.store_id }] : []),
+            { type: 'create_task', store_id: a.store_id || null, employee_id: null, alert_id: a.id, message: a.title }
+          ]
         }))
       ];
 

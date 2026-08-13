@@ -1280,6 +1280,11 @@
       font-size: 14px;
       cursor: pointer;
     }
+    .quick button.active {
+      background: var(--primary-soft);
+      color: var(--primary);
+      border-color: var(--primary);
+    }
     .btn-main {
       width: 100%;
       padding: 15px var(--sp-4);

@@ -116,6 +116,7 @@
       if (name === 'sv-overview' || name === 'sv-stores' || name === 'sv-people' || name === 'sv-trend') { loadSupervisorData(false); }
       if (name === 'live') { loadLiveMap(); }
       if (name === 'command-center') { loadCommandCenterPage(); }
+      if (name === 'tasks') { loadTasksPage(); }
       if (name === 'orgs') { loadOrgsAdmin(); }
     }
 
