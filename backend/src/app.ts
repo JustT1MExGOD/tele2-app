@@ -39,6 +39,7 @@ import { registerMetricsRoutes } from './routes-metrics.js';
 import { registerSupervisorRoutes } from './routes-supervisor.js';
 import { registerCommandCenterRoutes } from './routes-command-center.js';
 import { registerTasksRoutes } from './routes-tasks.js';
+import { registerStoreProfileRoutes } from './routes-store-profile.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,6 +117,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     ['Supervisor', registerSupervisorRoutes],
     ['Command Center', registerCommandCenterRoutes],
     ['Tasks', registerTasksRoutes],
+    ['Store Profile', registerStoreProfileRoutes],
   ];
 
   for (const [label, register] of routeModules) {

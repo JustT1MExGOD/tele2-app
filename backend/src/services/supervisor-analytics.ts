@@ -296,7 +296,14 @@ export async function buildSupervisorDashboard(opts: {
 
   // series 14 days for charts
   const series = await query(
-    `SELECT sale_date::date as d,
+    // sale_date::text (не ::date) — раньше `d` возвращался JS Date-объектом
+    // (node-postgres парсит date-колонку в полночь ПО ЛОКАЛЬНОМУ времени
+    // процесса), а String(dateObj) даёт "Tue Aug 11", не "2026-08-11" —
+    // seriesMap ключился нечитаемой строкой, которая никогда не совпадала
+    // с ключом ниже (cursor.toISOString()), и trend был ВСЕГДА пустым
+    // (тот же класс бага, что чинили в toDateISO() 17.10.0 — там, где
+    // рядом forecastRemainingOfMonth уже кастует в ::text, бага нет).
+    `SELECT sale_date::text as d,
        COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp, COALESCE(SUM(pa),0) pa,
        COALESCE(SUM(combo),0) combo
      FROM sales

@@ -89,7 +89,7 @@ function ccActionButton(action) {
     return `<button class="mchip" onclick="openEmployeeCard(${action.id})">Открыть сотрудника</button>`;
   }
   if (action.type === 'open_store') {
-    return `<button class="mchip" onclick="switchPage('live')">Открыть точку</button>`;
+    return `<button class="mchip" onclick="openStoreProfile('${action.id}')">Открыть точку</button>`;
   }
   if (action.type === 'create_task') {
     const ctx = JSON.stringify({

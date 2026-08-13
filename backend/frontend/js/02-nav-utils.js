@@ -117,6 +117,7 @@
       if (name === 'live') { loadLiveMap(); }
       if (name === 'command-center') { loadCommandCenterPage(); }
       if (name === 'tasks') { loadTasksPage(); }
+      if (name === 'store-profile') { renderStoreProfile(); }
       if (name === 'orgs') { loadOrgsAdmin(); }
     }
 
