@@ -13,6 +13,7 @@ import { todayMoscow, toDateISO } from './utils/date.js';
 import { applySaleUpsert, claimIdempotencyKey } from './services/sales-write.js';
 import { notifyChat } from './bot/index.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
+import { computeDayPlanFact } from './services/shift-pace.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -54,6 +55,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // нет), и без constraint оба вставили бы свою 'open'-сессию, оставляя
     // сотрудника с двумя одновременно "открытыми" сменами. Проигравший
     // ловит 23505 и получает уже открытую победителем сессию вместо ошибки.
+    let session: any;
+    let deduped = false;
     try {
       const res = await query(
         `INSERT INTO shift_sessions
@@ -69,17 +72,50 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
           body.accuracy_m ?? null
         ]
       );
-      return { ok: true, session: res.rows[0] };
+      session = res.rows[0];
     } catch (e: any) {
       if (e?.code === '23505') {
         const existing = await query(
           `SELECT * FROM shift_sessions WHERE employee_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1`,
           [employee_id]
         );
-        return { ok: true, session: existing.rows[0], deduped: true };
+        session = existing.rows[0];
+        deduped = true;
+      } else {
+        throw e;
       }
-      throw e;
     }
+
+    // Shift 2.0 (18.7) — фаза «до»: план на сегодня, передача от предыдущей
+    // смены на этой точке (любой сотрудник), незакрытые задачи сотрудника.
+    const [pace, handoverRes, tasksRes] = await Promise.all([
+      computeDayPlanFact(employee_id, date),
+      query(
+        `SELECT ss.handover_note, ss.closed_at, e.full_name as from_employee_name
+         FROM shift_sessions ss
+         JOIN employees e ON e.id = ss.employee_id
+         WHERE ss.store_id = $1 AND ss.status = 'closed' AND ss.handover_note IS NOT NULL
+         ORDER BY ss.closed_at DESC LIMIT 1`,
+        [store_id]
+      ),
+      query(
+        `SELECT t.*, st.name as store_name
+         FROM tasks t
+         LEFT JOIN stores st ON st.id = t.store_id
+         WHERE t.assigned_to = $1 AND t.status IN ('open', 'in_progress')
+         ORDER BY t.due_at NULLS LAST, t.created_at DESC`,
+        [employee_id]
+      )
+    ]);
+
+    return {
+      ok: true,
+      session,
+      deduped,
+      day_plan: pace.dayPlan,
+      handover: handoverRes.rows[0] || null,
+      open_tasks: tasksRes.rows
+    };
   });
 
   app.post('/shifts/close', async (request, reply) => {
@@ -99,40 +135,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     const sess = open.rows[0];
     const date = toDateISO(sess.work_date);
 
-    // факт за день
-    const sales = await query(
-      `SELECT COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp,
-              COALESCE(SUM(pa),0) pa, COALESCE(SUM(combo),0) combo
-       FROM sales WHERE employee_id = $1 AND sale_date::date = $2::date`,
-      [employee_id, date]
-    );
-    const fact = sales.rows[0] || {};
+    const { fact, dayPlan, planPct } = await computeDayPlanFact(employee_id, date);
     const score = num(fact.sim) + num(fact.mnp) * 2 + num(fact.pa) * 3 + num(fact.combo) * 2;
-
-    // план дня из /me-логики упрощённо
-    const month = date.slice(0, 7) + '-01';
-    const planRow = await query(
-      `SELECT sim, mnp, pa, combo FROM employee_month_plans
-       WHERE employee_id = $1 AND month::date = $2::date`,
-      [employee_id, month]
-    );
-    const rem = await query(
-      `SELECT COUNT(*)::int c FROM schedules
-       WHERE employee_id = $1 AND work_date::date >= $2::date
-         AND work_date::date < ($3::date + interval '1 month') AND COALESCE(hours,0)>0`,
-      [employee_id, date, month]
-    );
-    const div = Math.max(1, num(rem.rows[0]?.c));
-    const mp = planRow.rows[0] || {};
-    const dayPlan = {
-      sim: Math.ceil(num(mp.sim) / div),
-      mnp: Math.ceil(num(mp.mnp) / div),
-      pa: Math.ceil(num(mp.pa) / div),
-      combo: Math.ceil(num(mp.combo) / div)
-    };
-    const dayPlanUnits = dayPlan.sim + dayPlan.mnp + dayPlan.pa + dayPlan.combo;
-    const factUnits = num(fact.sim) + num(fact.mnp) + num(fact.pa) + num(fact.combo);
-    const planPct = dayPlanUnits > 0 ? Math.round((factUnits / dayPlanUnits) * 100) : 0;
     const ideal = planPct >= 100 && num(fact.mnp) > 0;
 
     // почему смена не идеальная — для разбора, а не голой галочки
@@ -157,8 +161,9 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
          mood = $4,
          blockers = $5,
          ideal_shift = $6,
-         score = $7
-       WHERE id = $8 AND status = 'open'
+         score = $7,
+         handover_note = $8
+       WHERE id = $9 AND status = 'open'
        RETURNING *`,
       [
         body.lat ?? null,
@@ -168,6 +173,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
         body.blockers || null,
         ideal,
         score,
+        body.handover_note || null,
         sess.id
       ]
     );
@@ -248,7 +254,14 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
        ORDER BY ss.opened_at DESC LIMIT 1`,
       [request.user!.employee_id]
     );
-    return { session: res.rows[0] || null };
+    const session = res.rows[0] || null;
+    if (!session) return { session: null };
+
+    // Shift 2.0 (18.7) — фаза «во время»: живой план/факт дня, пока смена
+    // открыта, той же формулой, что при закрытии.
+    const date = toDateISO(session.work_date);
+    const pace = await computeDayPlanFact(request.user!.employee_id!, date);
+    return { session, fact: pace.fact, day_plan: pace.dayPlan, plan_pct: pace.planPct };
   });
 
   // ========== NLP PARSE + OPTIONAL APPLY ==========

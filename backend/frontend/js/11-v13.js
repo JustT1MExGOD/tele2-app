@@ -73,10 +73,42 @@
         if (!res.ok) throw new Error(data.error || data.message || 'fail');
         toast('Смена открыта', 'ok');
         try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
+        showShiftBrief(data);
         loadMyPlan();
       } catch (e) {
         toast(e.message || 'Не удалось открыть смену', 'err');
       }
+    }
+
+    // ===== SHIFT BRIEF (18.7) =====
+    // Фаза «до»: план на сегодня + передача от предыдущей смены на этой
+    // точке (если есть) + незакрытые задачи сотрудника — вместо того чтобы
+    // всё это узнавать только постфактум при закрытии.
+    function showShiftBrief(data) {
+      const plan = data.day_plan || {};
+      const handover = data.handover;
+      const tasksList = data.open_tasks || [];
+      document.getElementById('modalTitle').textContent = 'Смена открыта';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="progress-block" style="margin-bottom:12px;text-align:left">
+          <div class="section-title" style="margin-bottom:8px">План на сегодня</div>
+          ${['sim', 'mnp', 'pa', 'combo'].map(m => progressHTML(metricLabel(m), 0, plan[m])).join('')}
+        </div>
+        ${handover ? `
+          <div class="progress-block" style="margin-bottom:12px;text-align:left">
+            <div class="section-title" style="margin-bottom:8px">Передача от предыдущей смены</div>
+            <div style="font-size:13px;line-height:1.5">${esc(handover.handover_note)}</div>
+            <div style="font-size:12px;color:var(--hint);margin-top:6px">${esc(handover.from_employee_name || '')}${handover.closed_at ? ' · ' + (timeMoscow(handover.closed_at) || '') : ''}</div>
+          </div>` : ''}
+        ${tasksList.length ? `
+          <div class="progress-block" style="text-align:left">
+            <div class="section-title" style="margin-bottom:8px">Открытые задачи (${tasksList.length})</div>
+            ${tasksList.map(t => `<div style="font-size:13px;margin-top:4px">• ${esc(t.title)}</div>`).join('')}
+          </div>` : ''}
+        <button class="btn-main" style="margin-top:14px" onclick="closeModal()">Понятно</button>
+      `;
+      if (typeof openModal === 'function') openModal();
+      else document.getElementById('overlay')?.classList.add('show');
     }
 
     async function closeShiftSession() {
@@ -87,6 +119,8 @@
           <textarea id="closeReport" rows="3" placeholder="Кратко…"></textarea></div>
         <div class="field"><label>Настроение 1–5</label>
           <input type="number" id="closeMood" min="1" max="5" value="4"></div>
+        <div class="field"><label>Заметка для следующей смены (необязательно)</label>
+          <textarea id="closeHandover" rows="2" placeholder="Что важно знать тому, кто откроет смену следующим на этой точке…"></textarea></div>
         <button type="button" class="btn-main" style="background:#e74c3c" onclick="confirmCloseShift()">Закрыть смену</button>
       `;
       openModal();
@@ -95,12 +129,13 @@
     async function confirmCloseShift() {
       const report = document.getElementById('closeReport')?.value || '';
       const mood = Math.min(5, Math.max(1, Number(document.getElementById('closeMood')?.value) || 4));
+      const handoverNote = document.getElementById('closeHandover')?.value || '';
       try {
         const geo = await geoCoords();
         const res = await fetch(API + '/shifts/close', {
           method: 'POST',
           headers: authHeaders(true),
-          body: JSON.stringify({ ...geo, self_report: report, mood })
+          body: JSON.stringify({ ...geo, self_report: report, mood, handover_note: handoverNote })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || data.error || 'fail');
@@ -179,13 +214,16 @@
         if (shiftEl) {
           const sess = cur.session;
           if (sess) {
+            const liveFact = cur.fact || {};
+            const livePlan = cur.day_plan || {};
             shiftEl.innerHTML = `
               <div class="progress-block" style="margin-bottom:12px">
                 <div class="section-title" style="margin-bottom:8px">Смена открыта</div>
                 <div style="font-size:13px;color:var(--hint);margin-bottom:10px">
                   ${sess.store_name || sess.store_id} · с ${timeMoscow(sess.opened_at) || '—'} МСК
                 </div>
-                <button class="btn-main" style="background:#e74c3c" onclick="closeShiftSession()">Закрыть смену</button>
+                ${['sim', 'mnp', 'pa', 'combo'].map(m => progressHTML(metricLabel(m), liveFact[m], livePlan[m])).join('')}
+                <button class="btn-main" style="background:#e74c3c;margin-top:10px" onclick="closeShiftSession()">Закрыть смену</button>
               </div>`;
           } else {
             shiftEl.innerHTML = `
