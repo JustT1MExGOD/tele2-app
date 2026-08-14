@@ -56,6 +56,7 @@ async function loadCommandCenterPage() {
                 ${p.ai_comment ? `<div class="s" style="margin-top:4px;font-style:italic">🤖 ${esc(p.ai_comment)}</div>` : ''}
                 <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
                   ${(p.actions || []).map(a => ccActionButton(a)).join('')}
+                  ${p.alert_id ? `<button class="mchip" onclick="ccAckAlert(${p.alert_id})">Взять в работу</button>` : ''}
                 </div>
               </div>
             </div>`).join('') : '<div class="empty" style="padding:10px 0 0">Проблем нет — сеть в ритме</div>'}
@@ -77,6 +78,23 @@ async function loadCommandCenterPage() {
   } catch (e) {
     console.error(e);
     box.innerHTML = '<div class="empty">Command Center сейчас недоступен, зайди чуть позже</div>';
+  }
+}
+
+/* 18.6 — быстрый переход алерта в in_progress прямо из Command Center,
+   без похода на отдельную страницу «Алерты». */
+async function ccAckAlert(alertId) {
+  try {
+    const res = await fetch(API + '/alerts/' + alertId + '/status', {
+      method: 'POST',
+      headers: authHeaders(true),
+      body: JSON.stringify({ status: 'in_progress' })
+    });
+    if (!res.ok) throw new Error('fail');
+    toast('Взято в работу', 'ok');
+    loadCommandCenterPage();
+  } catch (e) {
+    toast('Не удалось обновить алерт', 'err');
   }
 }
 

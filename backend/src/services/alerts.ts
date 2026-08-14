@@ -104,7 +104,7 @@ export async function runSmartAlertsTick() {
   return { hour, created: created.length, items: created };
 }
 
-async function insertAlertOnce(opts: {
+export async function insertAlertOnce(opts: {
   store_id: string;
   employee_id?: number;
   alert_type: string;
@@ -113,20 +113,16 @@ async function insertAlertOnce(opts: {
   body: string;
   payload: any;
 }) {
-  // не дублировать такой же тип по точке за сегодня
-  const exists = await query(
-    `SELECT id FROM smart_alerts
-     WHERE store_id = $1 AND alert_type = $2
-       AND created_at::date = CURRENT_DATE
-       AND status = 'open'
-     LIMIT 1`,
-    [opts.store_id, opts.alert_type]
-  );
-  if (exists.rows[0]) return null;
-
+  // Атомарный claim по partial unique index (store_id, alert_type,
+  // alert_date) WHERE status='open' (0007) — раньше это была
+  // SELECT-проверка и отдельный INSERT, уязвимые к гонке между двумя
+  // одновременно живыми контейнерами при деплое (см. миграцию). ON
+  // CONFLICT DO NOTHING делает второй, проигравший вызов молча no-op.
   const res = await query(
-    `INSERT INTO smart_alerts (store_id, employee_id, alert_type, severity, title, body, payload)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    `INSERT INTO smart_alerts (store_id, employee_id, alert_type, severity, title, body, payload, alert_date)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT DO NOTHING
+     RETURNING *`,
     [
       opts.store_id,
       opts.employee_id || null,
@@ -134,8 +130,9 @@ async function insertAlertOnce(opts: {
       opts.severity,
       opts.title,
       opts.body,
-      JSON.stringify(opts.payload || {})
+      JSON.stringify(opts.payload || {}),
+      todayMoscow()
     ]
   );
-  return res.rows[0];
+  return res.rows[0] || null;
 }

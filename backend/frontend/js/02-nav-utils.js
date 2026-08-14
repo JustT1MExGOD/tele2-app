@@ -118,6 +118,7 @@
       if (name === 'command-center') { loadCommandCenterPage(); }
       if (name === 'tasks') { loadTasksPage(); }
       if (name === 'store-profile') { renderStoreProfile(); }
+      if (name === 'alerts') { loadAlertsPage(); }
       if (name === 'orgs') { loadOrgsAdmin(); }
     }
 

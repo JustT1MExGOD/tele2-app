@@ -264,6 +264,14 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('alerts')">
+          <div class="row-icon">🚨</div>
+          <div class="row-body">
+            <div class="row-title">Алерты</div>
+            <div class="row-sub">Полный жизненный цикл, не только открытые</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="startTutorial('employee')">
           <div class="row-icon">🎓</div>
           <div class="row-body">
@@ -678,6 +686,10 @@
     <div id="page-store-profile" class="page">
       <div id="storeProfileBody"><div class="skeleton"></div></div>
     </div>
+
+    <div id="page-alerts" class="page">
+      <div id="alertsPageBody"><div class="skeleton"></div></div>
+    </div>
   </div>
 
   <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
@@ -738,5 +750,6 @@
   <script src="/js/14-command-center.js"></script>
   <script src="/js/15-tasks.js"></script>
   <script src="/js/16-store-profile.js"></script>
+  <script src="/js/17-alerts.js"></script>
 </body>
 </html>

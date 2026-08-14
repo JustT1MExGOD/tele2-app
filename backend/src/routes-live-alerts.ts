@@ -18,17 +18,24 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     return getLiveNetworkMap(resolveViewOrgId(request.user!, org_id));
   });
 
+  const VALID_ALERT_STATUSES = new Set(['open', 'acked', 'in_progress', 'resolved', 'dismissed']);
+
+  // status по умолчанию 'open' — обратная совместимость с тем, как этот
+  // роут работал до 18.6 (был жёстко захардкожен на открытые алерты).
   app.get('/alerts', async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const { org_id } = request.query as { org_id?: string };
+    const { org_id, status } = request.query as { org_id?: string; status?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
+    const statusFilter = status && VALID_ALERT_STATUSES.has(status) ? status : 'open';
     const res = await query(
-      `SELECT a.*, st.name as store_name
+      `SELECT a.*, st.name as store_name,
+         t.id as task_id, t.status as task_status
        FROM smart_alerts a
        LEFT JOIN stores st ON st.id = a.store_id
-       WHERE a.status = 'open' AND COALESCE(st.org_id,'default') = $1
+       LEFT JOIN tasks t ON t.alert_id = a.id
+       WHERE a.status = $1 AND COALESCE(st.org_id,'default') = $2
        ORDER BY a.created_at DESC LIMIT 50`,
-      [orgId]
+      [statusFilter, orgId]
     );
     return res.rows;
   });
@@ -47,9 +54,38 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Алерт не принадлежит вашей сети' });
     }
     const res = await query(
-      `UPDATE smart_alerts SET status='acked', acked_at=now(), acked_by=$1
+      `UPDATE smart_alerts SET status='acked', acked_at=now(), acked_by=$1, updated_at=now()
        WHERE id=$2 RETURNING *`,
       [request.user!.employee_id, Number(id)]
+    );
+    return res.rows[0];
+  });
+
+  // 18.6 — полный жизненный цикл алерта (не только open->acked). /ack
+  // остаётся отдельным эндпоинтом для обратной совместимости, но теперь
+  // это частный случай той же логики.
+  app.post('/alerts/:id/status', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const body = (request.body || {}) as { org_id?: string; status?: string };
+    const orgId = resolveViewOrgId(request.user!, body.org_id);
+    const alert = await query(`SELECT store_id FROM smart_alerts WHERE id = $1`, [Number(id)]);
+    if (!alert.rows[0]) return reply.code(404).send({ error: 'not found' });
+    if (alert.rows[0].store_id && !(await assertStoreInOrg(alert.rows[0].store_id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Алерт не принадлежит вашей сети' });
+    }
+    const status = String(body.status || '');
+    if (!VALID_ALERT_STATUSES.has(status) || status === 'open') {
+      return reply.code(400).send({ error: 'invalid status' });
+    }
+    const res = await query(
+      `UPDATE smart_alerts SET
+         status = $1,
+         updated_at = now(),
+         acked_at = COALESCE(acked_at, now()),
+         acked_by = COALESCE(acked_by, $2)
+       WHERE id = $3 RETURNING *`,
+      [status, request.user!.employee_id, Number(id)]
     );
     return res.rows[0];
   });

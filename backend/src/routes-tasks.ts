@@ -231,6 +231,19 @@ export async function registerTasksRoutes(app: FastifyInstance) {
           await notifyUser(creator.rows[0].telegram_id, `✅ <b>Задача выполнена</b>\n\n${task.title}`);
         }
       } catch (_) {}
+
+      // 18.6: «результат» из формулировки роадмапа для alerts — задача,
+      // созданная из алерта (Command Center create_task с alert_id), сама
+      // закрывает его при выполнении, без отдельного ручного шага в
+      // «Алертах». Не трогаем уже resolved/dismissed — не переоткрываем.
+      if (task.alert_id) {
+        await query(
+          `UPDATE smart_alerts SET status='resolved', updated_at=now(),
+             acked_at = COALESCE(acked_at, now()), acked_by = COALESCE(acked_by, $1)
+           WHERE id = $2 AND status NOT IN ('resolved', 'dismissed')`,
+          [user.employee_id, task.alert_id]
+        ).catch(() => {});
+      }
     }
 
     return res.rows[0];
