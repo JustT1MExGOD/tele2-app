@@ -14,6 +14,7 @@ import { FastifyInstance } from 'fastify';
 import { todayMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { buildDailyReportSvg, buildStoryReportSvgs } from './services/report-image.js';
+import { sendNetworkDigest } from './services/network-digest.js';
 
 export async function registerReportsRoutes(app: FastifyInstance) {
   app.get('/reports/day/:storeId', async (request, reply) => {
@@ -69,6 +70,22 @@ export async function registerReportsRoutes(app: FastifyInstance) {
       const date = String(body.date || todayMoscow()).slice(0, 10);
       const result = await sendFinalReports(date);
       return result;
+    } catch (e: any) {
+      return reply.code(500).send({ error: 'send_failed', message: e?.message || String(e) });
+    }
+  });
+
+  /** Ручная отправка недельной/месячной сводки по сети (18.9) — тот же
+   * тест-триггер, что send-micro/send-final; ручная кнопка намеренно не
+   * участвует в cron-claim, тот же осознанный выбор, что уже сделан там. */
+  app.post('/reports/send-digest', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const body = (request.body || {}) as any;
+    const kind = body.kind === 'monthly' ? 'monthly' : 'weekly';
+    try {
+      const orgId = resolveViewOrgId(request.user!, body.org_id);
+      await sendNetworkDigest(kind, { orgId, bypassClaim: true });
+      return { ok: true, kind };
     } catch (e: any) {
       return reply.code(500).send({ error: 'send_failed', message: e?.message || String(e) });
     }

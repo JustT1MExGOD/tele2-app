@@ -3,6 +3,7 @@ import { buildApp } from './app.js';
 import { runMigrations } from './db/migrate.js';
 import { startBot, notifyAdmin } from './bot/index.js';
 import { startReportCron } from './cron/reports.js';
+import { startDigestCron } from './cron/digest.js';
 import { todayMoscow } from './utils/date.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { announceReleaseIfNeeded } from './services/release-announce.js';
@@ -49,6 +50,7 @@ try {
 
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
   startReportCron();
+  startDigestCron();
   announceReleaseIfNeeded().catch((e) => console.error('release announce:', e?.message || e));
 
   // умные алерты каждые 30 мин (внутри — только 11–21 МСК)

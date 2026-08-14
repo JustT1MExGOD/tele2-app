@@ -161,6 +161,36 @@ export function finalReport(opts: {
   );
 }
 
+/** 18.9 Reports — недельная/месячная сводка по сети (не по точке), первая
+ * периодическая сетевая сводка в проекте: раньше в чат уходили только
+ * ежедневные фото-отчёты по каждой точке отдельно. */
+export function networkDigest(opts: {
+  orgName: string;
+  periodLabel: string;
+  days: number;
+  overallPlanPct: number;
+  paceDelta: number;
+  topStores: { name: string; pct: number }[];
+  bottomStores: { name: string; pct: number }[];
+}) {
+  const storeLine = (s: { name: string; pct: number }) => `${statusMark(s.pct)} ${esc(s.name)} — <b>${s.pct}%</b>`;
+  const topBlock = opts.topStores.length
+    ? `\n<b>🏆 Лучшие точки</b>\n${opts.topStores.map(storeLine).join('\n')}\n`
+    : '';
+  const bottomBlock = opts.bottomStores.length
+    ? `\n<b>⚠️ Требуют внимания</b>\n${opts.bottomStores.map(storeLine).join('\n')}\n`
+    : '';
+  const paceSign = opts.paceDelta > 0 ? '+' : '';
+  return (
+    `📋 <b>СВОДКА ПО СЕТИ · ${esc(opts.periodLabel.toUpperCase())}</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+    `🏢 <b>${esc(opts.orgName)}</b> · ${opts.days} дн.\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `${lineRow('План по сети', opts.overallPlanPct, 100)}\n` +
+    `📈 Темп: <b>${paceSign}${opts.paceDelta}%</b> к среднему\n` +
+    `${topBlock}${bottomBlock}` +
+    `\n━━━━━━━━━━━━━━━━━━━━\n<i>T2 Sales</i>`
+  );
+}
+
 export function shiftReminder(opts: {
   employeeName: string; storeName: string; shiftText: string; hours: number; dateLabel: string;
 }) {
