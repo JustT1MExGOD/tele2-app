@@ -135,6 +135,9 @@
 
         document.getElementById('modalTitle').textContent = emp?.full_name || 'Сотрудник';
         document.getElementById('modalBody').innerHTML = `
+          ${typeof canViewAnalytics === 'function' && canViewAnalytics()
+            ? `<button class="btn-ghost" style="width:100%;margin-bottom:12px" onclick="closeModal();openEmployeeProfile(${id})">Профиль →</button>`
+            : ''}
           <div class="field">
             <label>Смена сегодня</label>
             <div style="font-size:15px;font-weight:600">

@@ -119,6 +119,7 @@
       if (name === 'tasks') { loadTasksPage(); }
       if (name === 'store-profile') { renderStoreProfile(); }
       if (name === 'alerts') { loadAlertsPage(); }
+      if (name === 'employee-profile') { renderEmployeeProfile(); }
       if (name === 'orgs') { loadOrgsAdmin(); }
     }
 

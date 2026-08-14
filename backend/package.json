@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "18.7.0",
+  "version": "18.8.0",
   "type": "module",
   "scripts": {
     "build": "tsc",

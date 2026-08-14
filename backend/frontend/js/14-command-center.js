@@ -104,7 +104,7 @@ async function ccAckAlert(alertId) {
    уже предзаполненным. */
 function ccActionButton(action) {
   if (action.type === 'open_employee') {
-    return `<button class="mchip" onclick="openEmployeeCard(${action.id})">Открыть сотрудника</button>`;
+    return `<button class="mchip" onclick="openEmployeeProfile(${action.id})">Открыть сотрудника</button>`;
   }
   if (action.type === 'open_store') {
     return `<button class="mchip" onclick="openStoreProfile('${action.id}')">Открыть точку</button>`;
