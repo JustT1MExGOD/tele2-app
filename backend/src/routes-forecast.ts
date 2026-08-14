@@ -8,6 +8,7 @@ import { requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from 
 import { forecastStore, salesHeatmap, newbieCohorts, getStaffingHints } from './services/forecast.js';
 import { rebuildHourProfiles } from './services/insights.js';
 import { getLiveNetworkMap } from './services/live-map.js';
+import { generateForecastSummary, getLatestForecastSummary } from './services/ai.js';
 import { todayMoscow } from './utils/date.js';
 
 export async function registerForecastRoutes(app: FastifyInstance) {
@@ -21,7 +22,21 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     const from = String((request.query as any)?.from || todayMoscow()).slice(0, 10);
     const days = Math.min(Number((request.query as any)?.days) || 7, 14);
     const fc = await forecastStore(storeId, from, days);
-    return { store_id: storeId, ...fc };
+
+    // AI только объясняет уже посчитанный прогноз словами, раз в день на
+    // точку (кэш в ai_audit) — не дёргает Groq при каждом открытии страницы.
+    let aiSummary = await getLatestForecastSummary(storeId, from);
+    if (!aiSummary && fc.history_days >= 7) {
+      const storeRow = await query(`SELECT name FROM stores WHERE id = $1`, [storeId]);
+      aiSummary = await generateForecastSummary({
+        storeId,
+        storeName: storeRow.rows[0]?.name || storeId,
+        date: from,
+        items: fc.items
+      });
+    }
+
+    return { store_id: storeId, ...fc, ai_summary: aiSummary };
   });
 
   // «Кого куда поставить» — эвристика на основе прогноза + текущего графика,

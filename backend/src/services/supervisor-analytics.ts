@@ -8,6 +8,7 @@
  */
 import { query } from '../db/index.js';
 import { todayMoscow, currentMonthMoscow } from '../utils/date.js';
+import { buildSesModel, projectDay } from './forecast.js';
 
 // Тот же полный список, что METRICS в services/plans.ts — держим локальную
 // копию (не импортируем, чтобы не тянуть весь plans.ts) для дневных и
@@ -39,16 +40,11 @@ function metricsBreakdown(factRow: any, planRow: any) {
 }
 
 // ===== Прогноз до конца месяца =====
-// Тот же метод, что services/forecast.ts (простое экспоненциальное
-// сглаживание уровня × сезонная поправка на день недели с усадкой к 1.0),
-// но батчем ОДНИМ запросом на весь список точек сразу — там это один
-// store_id за раз (N+1, приемлемо для одной точки, не для сектора из
-// 10-50 точек × 15 метрик). Уровень сглаживания не пересчитывается своими
-// же прогнозами вперёд (без дрейфа) — ровно как в оригинале: считается
-// один раз из истории, дальше только домножается на сезонный коэффициент
-// нужного дня недели.
-const FC_ALPHA = 0.3;
-const FC_SHRINK_K = 3;
+// Числовая модель (SES + сезонность дня недели) вынесена в
+// services/forecast.ts::buildSesModel/projectDay — раньше здесь была
+// задублированная копия того же алгоритма. Здесь только батчинг ОДНИМ
+// запросом на весь список точек сразу (там это один store_id за раз,
+// приемлемо для одной точки, не для сектора из 10-50 точек × 15 метрик).
 
 /** store_id -> {metric: прогноз суммы по ОСТАВШИМСЯ дням месяца (не считая date)} */
 async function forecastRemainingOfMonth(
@@ -127,37 +123,9 @@ async function forecastRemainingOfMonth(
     const projected: Record<string, number> = {};
     for (const m of METRICS) {
       if (!rows.length) { projected[m] = 0; continue; }
-      // Баг, найденный визуальной проверкой перед деплоем: холодный старт
-      // с фолбэком baseline=1 и level=rows[0][m] работал только для мелких
-      // штучных метрик (SIM/MNP — значения 0-10). На денежных метриках
-      // (Телефоны, Аксессуары — тысячи рублей) первый же ненулевой день
-      // после серии нулей делил сам себя на "1" и давал ratio в десятки
-      // тысяч — прогноз улетал за 1000% плана. Фикс: level стартует со
-      // среднего по ВСЕЙ истории метрики (её реальный масштаб, не
-      // случайное значение первого дня), и холодный фолбэк тоже берёт этот
-      // масштаб вместо универсальной "1". Плюс защитный клэмп на дневной
-      // ratio — единственный экстремальный день не должен в одиночку
-      // определять сезонный множитель дня недели.
-      const seriesMean = rows.reduce((a, r) => a + r[m], 0) / rows.length;
-      const coldBaseline = seriesMean > 0.01 ? seriesMean : 1;
-      let level = seriesMean;
-      const ratioSum: Record<number, number> = {};
-      const ratioCount: Record<number, number> = {};
-      for (const r of rows) {
-        const baseline = level > 0.01 ? level : coldBaseline;
-        const ratio = Math.min(10, r[m] / baseline); // клэмп: день не больше чем "10× от нормы"
-        ratioSum[r.dow] = (ratioSum[r.dow] || 0) + ratio;
-        ratioCount[r.dow] = (ratioCount[r.dow] || 0) + 1;
-        level = FC_ALPHA * r[m] + (1 - FC_ALPHA) * level;
-      }
-      const seasonal: Record<number, number> = {};
-      for (let dow = 0; dow <= 6; dow++) {
-        const cnt = ratioCount[dow] || 0;
-        const raw = cnt ? ratioSum[dow] / cnt : 1;
-        seasonal[dow] = (cnt * raw + FC_SHRINK_K * 1) / (cnt + FC_SHRINK_K);
-      }
+      const model = buildSesModel(rows.map((r) => ({ dow: r.dow, value: r[m] })));
       let sum = 0;
-      for (const rd of remainingDates) sum += Math.max(0, level * (seasonal[rd.dow] ?? 1));
+      for (const rd of remainingDates) sum += projectDay(model, rd.dow);
       projected[m] = Math.round(sum);
     }
     result.set(storeId, projected);

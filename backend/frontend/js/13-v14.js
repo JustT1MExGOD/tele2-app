@@ -111,7 +111,26 @@
         const note = histDays < 14
           ? `<div class="empty" style="padding:0 0 10px;text-align:left">🍉 Пока только ${histDays} дн. истории — прогноз грубый, будет точнее по мере накопления данных</div>`
           : '';
-        const cards = (data.items||[]).map(it => {
+        const items = data.items || [];
+        const totals = items.map(it => {
+          const p = it.predicted || {};
+          return (Number(p.sim)||0) + (Number(p.mnp)||0) + (Number(p.pa)||0) + (Number(p.combo)||0);
+        });
+        const totalMax = Math.max(1, ...totals);
+        const trendBars = items.length ? `
+          <div class="progress-block" style="margin-bottom:12px">
+            <div class="section-title" style="margin-bottom:8px">Форма недели, юниты в день</div>
+            <div style="display:flex;align-items:flex-end;gap:2px;height:50px">
+              ${items.map((it, i) => `
+                <div style="flex:1;background:var(--primary-soft);border-radius:2px 2px 0 0;height:${Math.max(4, Math.round(totals[i] / totalMax * 100))}%" title="${it.date}: ${totals[i]}"></div>
+              `).join('')}
+            </div>
+          </div>` : '';
+        const aiBlock = data.ai_summary ? `
+          <div class="progress-block" style="margin-bottom:12px;text-align:left;font-size:13px;line-height:1.5">
+            🤖 ${esc(data.ai_summary)}
+          </div>` : '';
+        const cards = items.map(it => {
           const p = it.predicted||{};
           const n = (v) => Math.round(Number(v) || 0);
           return `<div class="mt-card"><div class="mt-name">${it.date}</div><div class="mt-grid mt-grid-4">
@@ -121,7 +140,7 @@
             <div class="mt-cell"><div class="v">${n(p.combo)}</div><div class="l">Комбо</div></div>
           </div></div>`;
         }).join('');
-        box.innerHTML = cards ? (note + cards) : '<div class="empty">🍉 Пока нет истории для прогноза по этой точке</div>';
+        box.innerHTML = cards ? (note + trendBars + aiBlock + cards) : '<div class="empty">🍉 Пока нет истории для прогноза по этой точке</div>';
       } catch { box.innerHTML = '<div class="empty">🍉 Прогноз сейчас недоступен, зайди чуть позже</div>'; }
     }
 

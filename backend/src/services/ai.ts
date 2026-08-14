@@ -37,7 +37,7 @@ async function callGroq(prompt: string, maxTokens: number): Promise<string | nul
 }
 
 async function logAudit(opts: {
-  kind: 'shift_summary' | 'dip_comment';
+  kind: 'shift_summary' | 'dip_comment' | 'forecast_summary';
   employeeId?: number | null;
   storeId?: string | null;
   refDate?: string | null;
@@ -156,6 +156,53 @@ export async function getLatestDipComment(storeId: string, date: string): Promis
     [storeId, date]
   ).catch(() => ({ rows: [] as any[] }));
   return res.rows[0]?.response || null;
+}
+
+const DOW_LABELS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+/** Уже сгенерированное сегодня объяснение прогноза точки, если есть —
+ * страница «Прогноз» не должна дёргать Groq на каждое открытие. */
+export async function getLatestForecastSummary(storeId: string, date: string): Promise<string | null> {
+  const res = await query(
+    `SELECT response FROM ai_audit
+     WHERE kind = 'forecast_summary' AND store_id = $1 AND ref_date = $2::date
+     ORDER BY created_at DESC LIMIT 1`,
+    [storeId, date]
+  ).catch(() => ({ rows: [] as any[] }));
+  return res.rows[0]?.response || null;
+}
+
+/**
+ * Короткое объяснение 7-дневного прогноза точки — деталь уже посчитана
+ * (services/forecast.ts::forecastStore, SES + сезонность дня недели),
+ * AI только читает готовые числа и объясняет их словами, ничего не
+ * придумывает сам (см. принцип роадмапа эпохи 19.x). Кэшируется на день
+ * через ai_audit — см. getLatestForecastSummary.
+ */
+export async function generateForecastSummary(opts: {
+  storeId: string;
+  storeName: string;
+  date: string;
+  items: { date: string; dow: number; predicted: Record<string, number> }[];
+}): Promise<string | null> {
+  const lines = opts.items
+    .map((it) => {
+      const total = ['sim', 'mnp', 'pa', 'combo'].reduce((s, k) => s + num(it.predicted[k]), 0);
+      return `${DOW_LABELS[it.dow]} ${it.date}: SIM ${it.predicted.sim || 0}, MNP ${it.predicted.mnp || 0}, ПА ${it.predicted.pa || 0}, комбо ${it.predicted.combo || 0} (итого ${total})`;
+    })
+    .join('\n');
+
+  const prompt = `Ты — аналитик сети салонов связи Т2. Вот прогноз продаж точки на 7 дней вперёд (уже посчитан статистической моделью, ты его не пересчитываешь, только объясняешь). Дай короткое объяснение (1-2 предложения, без markdown, на русском): какие дни недели по прогнозу слабее/сильнее остальных и что с этим стоит сделать (например, усилить смену в конкретный день). Пиши по делу, без общих фраз.
+
+Точка: ${opts.storeName}
+Прогноз по дням:
+${lines}`;
+
+  const text = await callGroq(prompt, 250);
+  if (!text) return null;
+
+  await logAudit({ kind: 'forecast_summary', storeId: opts.storeId, refDate: opts.date, prompt, response: text });
+  return text;
 }
 
 function num(v: any) {

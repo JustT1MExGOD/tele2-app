@@ -23,6 +23,55 @@ type Metric = (typeof METRICS)[number];
 const ALPHA = 0.3; // вес свежих данных в сглаживании уровня
 const SHRINK_K = 3; // сколько наблюдений нужно дню недели, чтобы его поправка "перевесила" нейтральную
 
+export interface SesModel {
+  level: number;
+  seasonal: Record<number, number>;
+}
+
+/**
+ * Числовая сердцевина прогноза — вынесена сюда из трёх мест, где раньше
+ * жили три версии одного и того же метода (страница «Прогноз» точки,
+ * месячный прогноз кабинета супервайзера, и до этой правки — третья,
+ * упрощённая копия в BFQ). Вызывающий обязан сам заполнить пропущенные
+ * дни явными нулями в `dailyValues` — без этого сглаженный уровень
+ * никогда не видит реальный ноль и застревает на случайном высоком дне
+ * (баг, найденный визуальной проверкой на денежных метриках: один
+ * крупный чек и дальше тишина без нулей давал прогноз в 1700%+ плана).
+ * cold-start берёт масштаб из среднего по всей истории (не из первого
+ * дня — тот может быть случайным), плюс клэмп дневного ratio, чтобы один
+ * экстремальный день не определял сезонный коэффициент дня недели.
+ */
+export function buildSesModel(
+  dailyValues: { dow: number; value: number }[],
+  alpha = ALPHA,
+  shrinkK = SHRINK_K
+): SesModel {
+  if (!dailyValues.length) return { level: 0, seasonal: {} };
+  const seriesMean = dailyValues.reduce((a, r) => a + r.value, 0) / dailyValues.length;
+  const coldBaseline = seriesMean > 0.01 ? seriesMean : 1;
+  let level = seriesMean;
+  const ratioSum: Record<number, number> = {};
+  const ratioCount: Record<number, number> = {};
+  for (const r of dailyValues) {
+    const baseline = level > 0.01 ? level : coldBaseline;
+    const ratio = Math.min(10, r.value / baseline);
+    ratioSum[r.dow] = (ratioSum[r.dow] || 0) + ratio;
+    ratioCount[r.dow] = (ratioCount[r.dow] || 0) + 1;
+    level = alpha * r.value + (1 - alpha) * level;
+  }
+  const seasonal: Record<number, number> = {};
+  for (let dow = 0; dow <= 6; dow++) {
+    const cnt = ratioCount[dow] || 0;
+    const raw = cnt ? ratioSum[dow] / cnt : 1;
+    seasonal[dow] = (cnt * raw + shrinkK * 1) / (cnt + shrinkK);
+  }
+  return { level, seasonal };
+}
+
+export function projectDay(model: SesModel, dow: number): number {
+  return Math.max(0, model.level * (model.seasonal[dow] ?? 1));
+}
+
 export async function forecastStore(storeId: string, fromDate: string, days = 7) {
   const hist = await query(
     `SELECT sale_date::text as d,
@@ -36,36 +85,27 @@ export async function forecastStore(storeId: string, fromDate: string, days = 7)
      ORDER BY sale_date`,
     [storeId, fromDate]
   );
-  const rows = hist.rows.map((r: any) => ({
-    date: String(r.d).slice(0, 10),
-    dow: new Date(String(r.d).slice(0, 10) + 'T12:00:00').getDay(),
-    sim: num(r.sim), mnp: num(r.mnp), pa: num(r.pa), combo: num(r.combo)
-  }));
+  const byDate = new Map<string, any>();
+  for (const r of hist.rows) byDate.set(String(r.d).slice(0, 10), r);
 
-  const model: Record<Metric, { level: number; seasonal: Record<number, number> }> = {} as any;
+  // Заполняем все 120 дней окна, включая дни без единой продажи — те, что
+  // GROUP BY sale_date молча пропускает. См. комментарий у buildSesModel.
+  const rows: { dow: number; [k: string]: number }[] = [];
+  const cursor = new Date(fromDate + 'T12:00:00');
+  cursor.setDate(cursor.getDate() - 120);
+  const end = new Date(fromDate + 'T12:00:00');
+  while (cursor < end) {
+    const key = cursor.toISOString().slice(0, 10);
+    const r = byDate.get(key);
+    const row: { dow: number; [k: string]: number } = { dow: cursor.getDay() };
+    for (const m of METRICS) row[m] = r ? num(r[m]) : 0;
+    rows.push(row);
+    cursor.setDate(cursor.getDate() + 1);
+  }
 
+  const model: Record<Metric, SesModel> = {} as any;
   for (const m of METRICS) {
-    if (!rows.length) {
-      model[m] = { level: 0, seasonal: {} };
-      continue;
-    }
-    let level = rows[0][m];
-    const ratioSum: Record<number, number> = {};
-    const ratioCount: Record<number, number> = {};
-    for (const r of rows) {
-      const baseline = level > 0.01 ? level : 1; // избегаем деления на ~0 на холодном старте
-      const ratio = r[m] / baseline;
-      ratioSum[r.dow] = (ratioSum[r.dow] || 0) + ratio;
-      ratioCount[r.dow] = (ratioCount[r.dow] || 0) + 1;
-      level = ALPHA * r[m] + (1 - ALPHA) * level;
-    }
-    const seasonal: Record<number, number> = {};
-    for (let dow = 0; dow <= 6; dow++) {
-      const n = ratioCount[dow] || 0;
-      const raw = n ? ratioSum[dow] / n : 1;
-      seasonal[dow] = (n * raw + SHRINK_K * 1) / (n + SHRINK_K);
-    }
-    model[m] = { level, seasonal };
+    model[m] = buildSesModel(rows.map((r) => ({ dow: r.dow, value: r[m] })));
   }
 
   const start = new Date(fromDate + 'T12:00:00');
@@ -78,12 +118,14 @@ export async function forecastStore(storeId: string, fromDate: string, days = 7)
 
     const predicted: Record<string, number> = {};
     for (const m of METRICS) {
-      const { level, seasonal } = model[m];
-      predicted[m] = Math.max(0, Math.round(level * (seasonal[dow] ?? 1)));
+      predicted[m] = Math.round(projectDay(model[m], dow));
     }
     out.push({ date: iso, dow, predicted, model: 'ses_dow_seasonal' });
   }
-  return { items: out, history_days: rows.length };
+  // history_days — сколько дней окна реально содержали хотя бы одну
+  // продажу (не длина заполненного нулями массива для модели) — тем же
+  // смыслом, что раньше, страница «Прогноз» предупреждает при < 14.
+  return { items: out, history_days: hist.rows.length };
 }
 
 /**
