@@ -11,7 +11,6 @@ import { query } from '../db/index.js';
 import { getChangelogEntry } from '../changelog.js';
 import { buildReleaseCardPng } from './report-image.js';
 import { notifyChatPhoto } from '../bot/index.js';
-import { listOrgsWithChat } from './tenant.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,25 +62,23 @@ export async function announceReleaseIfNeeded() {
     const caption = `🚀 T2 Sales обновился до ${version}: ${entry.title}`;
     const filename = `release_${version}.png`;
 
-    // Анонс релиза платформенный — шлём во все сети с настроенным чатом.
-    // Пока сетей с явным chat_id нет (сейчас так), notifyChatPhoto сам
-    // фолбэчится на глобальный CHAT_ID — поведение не меняется.
-    const orgs = await listOrgsWithChat();
-    const targets = orgs.length ? orgs.map((o) => o.chat_id) : [undefined];
-    let anySent = false;
-    for (const chatId of targets) {
-      const sent = await notifyChatPhoto(png, { caption, filename, chatId });
-      if (sent.ok) anySent = true;
-      else console.warn('announceReleaseIfNeeded: send failed for chat', chatId, sent.error);
+    // Анонсы версий уходят только в выделенный Telegram-канал, не в общий
+    // рабочий чат сети — явный выбор (раньше шло туда же, куда продажи/
+    // алерты/отчёты, через глобальный CHAT_ID-фолбэк notifyChatPhoto).
+    const channelId = process.env.RELEASE_CHANNEL_ID;
+    if (!channelId) {
+      console.warn('announceReleaseIfNeeded: RELEASE_CHANNEL_ID не задан, анонс пропущен (версия уже помечена анонсированной)');
+      return;
     }
+    const sent = await notifyChatPhoto(png, { caption, filename, chatId: channelId });
     // Claim уже сделан выше (до отправки) — версия отмечена анонсированной
-    // независимо от исхода отправки. Полный сетевой сбой Telegram здесь —
-    // не более чем один пропущенный анонс (не критично для бизнеса), и это
-    // безопаснее, чем повторный спам в чат при каждом перезапуске контейнера.
-    if (anySent) {
-      console.log(`📣 Анонс версии ${version} отправлен в чат`);
+    // независимо от исхода отправки. Сбой отправки здесь — не более чем
+    // один пропущенный анонс (не критично для бизнеса), и это безопаснее,
+    // чем повторный спам при каждом перезапуске контейнера.
+    if (sent.ok) {
+      console.log(`📣 Анонс версии ${version} отправлен в канал`);
     } else {
-      console.warn('announceReleaseIfNeeded: no send succeeded (уже помечено анонсированным, повтора не будет)');
+      console.warn('announceReleaseIfNeeded: отправка не удалась', sent.error, '(уже помечено анонсированным, повтора не будет)');
     }
   } catch (e: any) {
     console.error('announceReleaseIfNeeded failed:', e?.message || e);
