@@ -89,7 +89,7 @@ async function renderAlertDetail(id) {
         <div class="row-chevron">›</div>
       </button>` : ''}
       <div class="quick" style="margin-top:10px">
-        ${next.map(([s, label]) => `<button onclick="changeAlertStatus(${a.id}, '${s}')">${label}</button>`).join('')}
+        ${next.map(([s, label]) => `<button onclick="changeAlertStatus(${a.id}, '${s}', this)">${label}</button>`).join('')}
       </div>
     `;
   } catch (e) {
@@ -97,7 +97,9 @@ async function renderAlertDetail(id) {
   }
 }
 
-async function changeAlertStatus(id, status) {
+async function changeAlertStatus(id, status, btnEl) {
+  if (btnEl?.disabled) return;
+  if (btnEl) btnEl.disabled = true;
   try {
     const res = await fetch(API + '/alerts/' + id + '/status', {
       method: 'POST',
@@ -110,5 +112,7 @@ async function changeAlertStatus(id, status) {
     if (typeof page !== 'undefined' && page === 'alerts') loadAlertsPage();
   } catch (e) {
     toast('Не удалось изменить статус', 'err');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
   }
 }

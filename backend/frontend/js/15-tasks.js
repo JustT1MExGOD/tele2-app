@@ -90,7 +90,7 @@ async function renderTaskDetail(id) {
         ${esc(t.assignee_name || '')}${t.store_name ? ' · ' + esc(t.store_name) : ''} · ${TASK_STATUS_LABEL[t.status] || t.status}${t.due_at ? ' · до ' + new Date(t.due_at).toLocaleString('ru') : ''}
       </div>
       <div class="quick" style="margin-bottom:10px">
-        ${nextButtons.map(([s, label]) => `<button onclick="changeTaskStatus(${t.id}, '${s}')">${label}</button>`).join('')}
+        ${nextButtons.map(([s, label]) => `<button onclick="changeTaskStatus(${t.id}, '${s}', this)">${label}</button>`).join('')}
       </div>
       <div class="field">
         <label>История</label>
@@ -105,14 +105,16 @@ async function renderTaskDetail(id) {
       <div class="field">
         <input type="text" id="taskCommentInput" placeholder="Комментарий">
       </div>
-      <button class="btn-main" onclick="submitTaskComment(${t.id})">Добавить комментарий</button>
+      <button class="btn-main" onclick="submitTaskComment(${t.id}, this)">Добавить комментарий</button>
     `;
   } catch (e) {
     box.innerHTML = '<div class="empty">Не удалось загрузить задачу</div>';
   }
 }
 
-async function changeTaskStatus(id, status) {
+async function changeTaskStatus(id, status, btnEl) {
+  if (btnEl?.disabled) return;
+  if (btnEl) btnEl.disabled = true;
   try {
     const res = await fetch(API + '/tasks/' + id + '/status', {
       method: 'POST',
@@ -125,13 +127,17 @@ async function changeTaskStatus(id, status) {
     if (typeof page !== 'undefined' && page === 'tasks') loadTasksPage();
   } catch (e) {
     toast('Не удалось изменить статус', 'err');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
   }
 }
 
-async function submitTaskComment(id) {
+async function submitTaskComment(id, btnEl) {
+  if (btnEl?.disabled) return;
   const input = document.getElementById('taskCommentInput');
   const body = input?.value.trim();
   if (!body) return;
+  if (btnEl) btnEl.disabled = true;
   try {
     const res = await fetch(API + '/tasks/' + id + '/comments', {
       method: 'POST',
@@ -142,5 +148,7 @@ async function submitTaskComment(id) {
     await renderTaskDetail(id);
   } catch (e) {
     toast('Не удалось отправить комментарий', 'err');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
   }
 }

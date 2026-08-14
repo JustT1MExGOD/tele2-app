@@ -18,8 +18,8 @@ function loadReportsPage() {
       </div>
       ${canSend ? `
         <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="mchip" onclick="sendNetworkDigestNow('weekly')">Отправить недельную</button>
-          <button class="mchip" onclick="sendNetworkDigestNow('monthly')">Отправить месячную</button>
+          <button class="mchip" onclick="sendNetworkDigestNow('weekly', this)">Отправить недельную</button>
+          <button class="mchip" onclick="sendNetworkDigestNow('monthly', this)">Отправить месячную</button>
         </div>` : ''}
     </div>
 
@@ -57,7 +57,9 @@ function loadReportsPage() {
   `;
 }
 
-async function sendNetworkDigestNow(kind) {
+async function sendNetworkDigestNow(kind, btnEl) {
+  if (btnEl?.disabled) return;
+  if (btnEl) btnEl.disabled = true;
   try {
     const res = await fetch(API + '/reports/send-digest', {
       method: 'POST',
@@ -69,5 +71,7 @@ async function sendNetworkDigestNow(kind) {
     toast(kind === 'monthly' ? 'Месячная сводка отправлена' : 'Недельная сводка отправлена', 'ok');
   } catch (e) {
     toast(e.message || 'Не удалось отправить сводку', 'err');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
   }
 }

@@ -63,8 +63,18 @@
     }
 
     // ===== Navigation =====
+    // Экран, с которого пришли — только для drill-in страниц вроде
+    // Store/Employee Profile (открываются с конкретным id из карточки, а
+    // не как обычный пункт меню «Инструменты»), которым после открытия
+    // некуда вернуться, кроме как заново тыкать нижнюю вкладку.
+    let previousPage = null;
+    function goBack() {
+      switchPage(previousPage || 'home');
+    }
+
     function switchPage(name) {
       if (!name) return;
+      previousPage = page;
       page = name;
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       const el = document.getElementById('page-' + name);
