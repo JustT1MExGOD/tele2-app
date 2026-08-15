@@ -116,31 +116,39 @@
         <div id="commandCenterBody"><div class="skeleton"></div></div>
       </div>
 
-      <div class="section" id="myDaySection">
-        <div class="section-title">Мой день</div>
-        <div id="myDayBody"><div class="skeleton"></div></div>
+      <div class="section" id="homeTodaySwipe">
+        <div class="swipe-dots"><span class="dot"></span><span class="dot"></span></div>
+        <div class="swipe-track">
+          <div class="swipe-panel">
+            <div class="section-title">Мой день</div>
+            <div id="myDayStoreHead"></div>
+            <div id="myDayBody"><div class="skeleton"></div></div>
+          </div>
+          <div class="swipe-panel">
+            <div class="section-title">Сеть сегодня</div>
+            <div class="stats-row" id="homeStats">
+              <div class="stat-chip"><div class="n" id="hSim">0</div><div class="l">SIM</div></div>
+              <div class="stat-chip"><div class="n" id="hMnp">0</div><div class="l">MNP</div></div>
+              <div class="stat-chip"><div class="n" id="hPa">0</div><div class="l">ПА</div></div>
+              <div class="stat-chip"><div class="n" id="hCombo">0</div><div class="l">Комбо</div></div>
+              <div class="stat-chip"><div class="n" id="hPhones">0</div><div class="l">Телефоны</div></div>
+              <div class="stat-chip"><div class="n" id="hAcc">0</div><div class="l">Аксы</div></div>
+            </div>
+            <div id="networkPulse" style="margin-top:10px"></div>
+          </div>
+        </div>
       </div>
 
       <div class="section">
-        <div class="section-title">Сеть сегодня</div>
-        <div class="stats-row" id="homeStats">
-          <div class="stat-chip"><div class="n" id="hSim">0</div><div class="l">SIM</div></div>
-          <div class="stat-chip"><div class="n" id="hMnp">0</div><div class="l">MNP</div></div>
-          <div class="stat-chip"><div class="n" id="hPa">0</div><div class="l">ПА</div></div>
-          <div class="stat-chip"><div class="n" id="hCombo">0</div><div class="l">Комбо</div></div>
-          <div class="stat-chip"><div class="n" id="hPhones">0</div><div class="l">Телефоны</div></div>
-          <div class="stat-chip"><div class="n" id="hAcc">0</div><div class="l">Аксы</div></div>
+        <div class="section-title">Калькуляторы</div>
+        <div style="display:flex;gap:8px;padding:0 16px 16px">
+          <button class="mchip" style="flex:1" onclick="openComboCalc()">📱 Комбо</button>
+          <button class="mchip" style="flex:1" onclick="openSchoolCalc()">🎒 Школа</button>
         </div>
-        <div id="networkPulse" style="margin-top:10px"></div>
       </div>
 
       <div class="section">
         <div class="section-title">Быстрые действия</div>
-        <button class="row" onclick="openAddSale()">
-          <div class="row-icon">➕</div>
-          <div class="row-body"><div class="row-title">Добавить продажу</div></div>
-          <div class="row-chevron">›</div>
-        </button>
         <button class="row" onclick="switchPage('monthplan')">
           <div class="row-icon">📊</div>
           <div class="row-body"><div class="row-title">Планы и факт за месяц</div><div class="row-sub">видно всей команде</div></div>
@@ -154,11 +162,6 @@
         <button class="row" onclick="switchPage('plan')">
           <div class="row-icon">📋</div>
           <div class="row-body"><div class="row-title">План дня по точкам</div></div>
-          <div class="row-chevron">›</div>
-        </button>
-        <button class="row" onclick="switchPage('today')">
-          <div class="row-icon">👥</div>
-          <div class="row-body"><div class="row-title">Кто на смене сегодня</div></div>
           <div class="row-chevron">›</div>
         </button>
         <button class="row" onclick="switchPage('support')">
@@ -344,10 +347,8 @@
         <div id="lkShift"></div>
         <div id="lkInsight"></div>
         <div id="lkToday"></div>
-        <div id="lkDayMetrics"></div>
         <div id="lkMonth"></div>
         <div id="lkWeek"></div>
-        <div id="lkSales"></div>
         <div id="lkBfq"></div>
         <div id="lkGamification"></div>
         <div id="lkActions"></div>
@@ -394,7 +395,7 @@
       </div>
       <div class="section" id="managerTools" style="display:none;">
         <div class="section-title">Управление</div>
-        <button class="row" onclick="switchPage('history')">
+        <button class="row" onclick="historyEmployeeFilter=null;switchPage('history')">
           <div class="row-icon">📜</div>
           <div class="row-body"><div class="row-title">История продаж</div></div>
           <div class="row-chevron">›</div>
@@ -723,7 +724,7 @@
 
 <nav class="bottom-nav" id="bottomNavMain">
     <button class="nav-item active" data-page="home" onclick="switchPage('home')">
-      <span class="ico">🏠</span>Главное
+      <span class="ico">🏠</span>Главная
     </button>
     <button class="nav-item" data-page="plan" onclick="switchPage('plan')">
       <span class="ico">📋</span>План
@@ -732,7 +733,7 @@
       <span class="ico">📅</span>График
     </button>
     <button class="nav-item" data-page="my" onclick="switchPage('my')">
-      <span class="ico">👤</span>Мой
+      <span class="ico">👤</span>Профиль
     </button>
     <button class="nav-item" data-page="team" onclick="switchPage('team')">
       <span class="ico">👥</span>Команда

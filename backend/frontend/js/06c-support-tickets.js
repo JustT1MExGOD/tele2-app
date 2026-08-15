@@ -2,14 +2,20 @@
    Классический скрипт, общая глобальная область со всеми /js/*.js — порядок подключения важен.
    История продаж, поддержка/FAQ/тикеты, копирование графика на неделю,
    CSV-экспорты (вынесено из 06-team-bfq.js). */
+    // 21: «История твоих продаж» в Профиль переиспользует эту же страницу —
+    // historyEmployeeFilter задаётся перед switchPage('history') и сбрасывается
+    // на общий сетевой вид пунктом «История продаж» в Команде.
+    let historyEmployeeFilter = null;
+
     async function loadHistory() {
       const box = document.getElementById('historyList');
       box.innerHTML = '<div class="skeleton"></div>';
       try {
         const from = todayMoscow().slice(0, 8) + '01';
         const to = todayMoscow();
+        const empParam = historyEmployeeFilter ? `&employee_id=${historyEmployeeFilter}` : '';
         const res = await fetch(
-          `${API}/sales/history?from=${from}&to=${to}${orgQueryParam()}`,
+          `${API}/sales/history?from=${from}&to=${to}${empParam}${orgQueryParam()}`,
           { headers: authHeaders() }
         );
         if (!res.ok) throw new Error('fail');
@@ -19,11 +25,13 @@
           box.innerHTML = '<div class="empty">Нет продаж за период</div>';
           return;
         }
+        // Своя история — имя на каждой строке избыточно (все строки — «я»),
+        // показываем точку первой строкой вместо ФИО.
         box.innerHTML = items.map(s => `
           <div class="row">
             <div class="row-body">
-              <div class="row-title">${esc(s.full_name)}</div>
-              <div class="row-sub">${String(s.sale_date).slice(0, 10)} · ${esc(s.store_name)}
+              <div class="row-title">${historyEmployeeFilter ? esc(s.store_name) : esc(s.full_name)}</div>
+              <div class="row-sub">${String(s.sale_date).slice(0, 10)}${historyEmployeeFilter ? '' : ' · ' + esc(s.store_name)}
                 · SIM ${s.sim || 0} · MNP ${s.mnp || 0} · ПА ${s.pa || 0}</div>
             </div>
           </div>

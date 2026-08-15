@@ -21,6 +21,15 @@
         const shift = d.shift;
         const tot = d.total || {};
         const pr = d.progress || {};
+        const headEl = document.getElementById('myDayStoreHead');
+        if (headEl) {
+          headEl.innerHTML = shift
+            ? `<div style="padding:0 16px 10px">
+                <div style="font-size:15px;font-weight:700">${esc(shift.store_code || shift.store_name || '')}</div>
+                ${shift.store_address ? `<div style="font-size:12px;color:var(--hint);margin-top:2px">${esc(shift.store_address)}</div>` : ''}
+              </div>`
+            : `<div style="padding:0 16px 10px"><div style="font-size:15px;font-weight:700">Выходной</div></div>`;
+        }
         box.innerHTML = `
           <div class="progress-block">
             ${shift ? `
@@ -33,7 +42,7 @@
                 <div class="row-value">${tot.pct || 0}%</div>
               </div>` : `
               <div class="empty" style="text-align:left;padding:0 0 10px">Сегодня выходной / нет в графике</div>`}
-            ${['sim','mnp','pa','combo','phones'].map(m => {
+            ${Object.keys(pr).filter(m => (pr[m]?.plan || 0) > 0).map(m => {
               const x = pr[m] || { fact: 0, plan: 0, pct: 0 };
               return progressHTML(metricShort(m), x.fact, x.plan);
             }).join('')}
@@ -163,6 +172,7 @@
 
       loadMyDay();
       loadCommandCenter();
+      initSwipePanels(document.getElementById('homeTodaySwipe'));
       try {
         const [statsRes, dashRes] = await Promise.all([
           fetch(API + '/stats/daily?date=' + today + orgQueryParam(), { headers: authHeaders() }).catch(() => null),

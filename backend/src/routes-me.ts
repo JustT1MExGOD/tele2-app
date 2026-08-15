@@ -128,12 +128,12 @@ export async function registerMeRoutes(app: FastifyInstance) {
       [Number(telegramId)]
     );
     if (!emp.rows[0]) {
-      return { bound: false, message: 'Привяжите аккаунт во вкладке Мой' };
+      return { bound: false, message: 'Привяжите аккаунт во вкладке Профиль' };
     }
     const e = emp.rows[0];
 
     const sch = await query(
-      `SELECT sch.*, st.name as store_name, st.color, st.code as store_code
+      `SELECT sch.*, st.name as store_name, st.color, st.code as store_code, st.address as store_address
        FROM schedules sch
        LEFT JOIN stores st ON st.id = sch.store_id
        WHERE sch.employee_id = $1

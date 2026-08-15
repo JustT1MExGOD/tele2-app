@@ -39,7 +39,7 @@
       const root = document.getElementById('lkRoot');
       if (root) {
         root.style.display = 'block';
-        ['lkProfile','lkShift','lkInsight','lkToday','lkDayMetrics','lkMonth','lkWeek','lkSales','lkBfq','lkGamification','lkActions']
+        ['lkProfile','lkShift','lkInsight','lkToday','lkMonth','lkWeek','lkBfq','lkGamification','lkActions']
           .forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<div class="skeleton" style="margin-bottom:10px"></div>';
@@ -87,11 +87,10 @@
       const month = today.slice(0, 7);
 
       // Параллельная загрузка
-      const [dayRes, progRes, monthSchRes, salesRes, bfqRes, monthPlanRes] = await Promise.allSettled([
+      const [dayRes, progRes, monthSchRes, bfqRes, monthPlanRes] = await Promise.allSettled([
         fetch(API + '/me/day', { headers: authHeaders() }),
         fetch(API + '/employee/progress/' + empId + '?date=' + today, { headers: authHeaders() }),
         fetch(API + '/schedules/month?month=' + month, { headers: authHeaders() }),
-        fetch(API + '/sales?date=' + today, { headers: authHeaders() }),
         fetch(API + '/bfq?month=' + month, { headers: authHeaders() }),
         fetch(API + '/plans/employees/month?month=' + month, { headers: authHeaders() })
       ]);
@@ -104,7 +103,6 @@
       const dayData = await jsonOk(dayRes);
       const progData = await jsonOk(progRes);
       const monthSch = await jsonOk(monthSchRes);
-      const salesData = await jsonOk(salesRes);
       const bfqData = await jsonOk(bfqRes);
       const monthPlansRaw = await jsonOk(monthPlanRes);
       // API: { month, rows, totals }
@@ -145,40 +143,24 @@
         tot.plan > 0 ? Math.round((tot.fact / tot.plan) * 100) : 0
       );
 
-      document.getElementById('lkToday').innerHTML = `
+      // 11: на выходной кольцо «0% план / Нет смены» дублирует и pill
+      // «Сегодня выходной» в шапке профиля, и текст блока «Смена» ниже —
+      // три места об одном и том же. На выходной просто не рендерим кольцо.
+      document.getElementById('lkToday').innerHTML = storeName ? `
         <div class="section-title" style="margin-bottom:8px">Сегодня</div>
         <div class="lk-ring-card">
           ${ringSVG(dayPct)}
           <div class="lk-ring-info">
-            <div class="lk-ring-title">${storeName ? 'Смена на точке' : 'Нет смены'}</div>
-            <div class="lk-ring-sub">
-              ${storeName
-                ? `Выполнение дневного плана по ключевым метрикам.`
-                : `В графике на сегодня тебя нет — продажи всё равно можно добавить.`}
+            <div class="lk-ring-title">Смена на точке</div>
+            <div class="lk-ring-sub">Выполнение дневного плана по ключевым метрикам.</div>
+            <div class="lk-ring-store">
+              <span class="lk-dot" style="background:${color}"></span>
+              ${storeName}${shift?.shift_text ? ' · ' + shift.shift_text : ''}
             </div>
-            ${storeName ? `
-              <div class="lk-ring-store">
-                <span class="lk-dot" style="background:${color}"></span>
-                ${storeName}${shift?.shift_text ? ' · ' + shift.shift_text : ''}
-              </div>` : ''}
           </div>
-        </div>`;
+        </div>` : '';
 
-      // --- Метрики дня ---
-      const pr = dayData?.progress || progData || {};
-      const dayKeys = ['sim', 'mnp', 'pa', 'combo', 'phones', 'accessories'];
-      document.getElementById('lkDayMetrics').innerHTML = `
-        <div class="section-title" style="margin-bottom:8px">Факт / план дня</div>
-        <div class="lk-metrics-grid">
-          ${dayKeys.map(key => {
-            const x = pr[key] || {};
-            const fact = x.fact != null ? x.fact : (x.value != null ? x.value : (typeof x === 'number' ? x : 0));
-            const plan = x.plan != null ? x.plan : 0;
-            return metricCard(metricShort(key), fact, plan);
-          }).join('')}
-        </div>`;
-
-      // --- Месяц ---
+      // --- Месяц (22: тот же .mt-card стиль, что «Планы и факт за месяц») ---
       let monthHtml = '';
       const myMonth = (monthPlans || []).find(p =>
         String(p.employee_id) === String(empId) || String(p.id) === String(empId)
@@ -187,27 +169,38 @@
       if (myMonth) {
         const plan = myMonth.plan || {};
         const fact = myMonth.fact || {};
-        const mm = ['sim', 'mnp', 'pa', 'combo', 'phones', 'accessories', 'settings', 'focus'];
+        const pct = myMonth.pct || {};
+        const MAIN = METRICS.slice(0, 6);
+        const EXTRA = METRICS.slice(6);
+        const cell = (m) => {
+          const f = Number(fact[m.id]) || 0;
+          const pc = Number(pct[m.id]) || 0;
+          const tone = pc >= 100 ? 'good' : pc >= 50 ? 'warn' : (f > 0 ? '' : 'bad');
+          return `<div class="mt-cell ${tone}"><div class="v">${f}</div><div class="l">${m.label}</div></div>`;
+        };
         monthHtml = `
-          <div class="section-title" style="margin-bottom:8px">Месяц ${month}</div>
-          <div class="progress-block" style="margin-bottom:12px">
-            ${mm.map(key => progressHTML(
-              metricShort(key),
-              Number(fact[key]) || 0,
-              Number(plan[key]) || 0
-            )).join('')}
-            <div class="empty" style="padding:8px 0 0;text-align:left;font-size:12px">
-              Смен: ${myMonth.shifts || 0} · осталось: ${myMonth.remaining_shifts || 0}
+          <div class="mt-card">
+            <div class="mt-card-head">
+              <div>
+                <div class="mt-name">Месяц ${month}</div>
+                <div class="mt-meta">Смен: ${myMonth.shifts || 0} · осталось: ${myMonth.remaining_shifts || 0}</div>
+              </div>
+            </div>
+            <div class="mt-grid">${MAIN.map(cell).join('')}</div>
+            <div class="mt-more">
+              <button type="button" class="mt-toggle" onclick="toggleMonthExtra('lkMonthExtra', this)">Ещё метрики ▾</button>
+              <div class="mt-extra" id="lkMonthExtra">${EXTRA.map(cell).join('')}</div>
             </div>
           </div>`;
       } else {
         monthHtml = `
-          <div class="section-title" style="margin-bottom:8px">Месяц ${month}</div>
-          <div class="progress-block" style="margin-bottom:12px">
+          <div class="mt-card">
+            <div class="mt-name" style="margin-bottom:8px">Месяц ${month}</div>
             <div class="empty" style="padding:8px 0">Месячный план подтянется, когда будут данные</div>
           </div>`;
       }
-      document.getElementById('lkMonth').innerHTML = monthHtml;
+      document.getElementById('lkMonth').innerHTML =
+        `<div class="section-title" style="margin-bottom:8px">Прогресс за месяц</div>` + monthHtml;
 
       // --- Неделя (график) ---
       const schedules = Array.isArray(monthSch)
@@ -262,42 +255,6 @@
         <div style="font-size:11px;color:var(--hint);margin:4px 0 12px">
           Цвет точки = смена · серый = выходной
         </div>`;
-
-      // --- Продажи сегодня (личные) ---
-      const allSales = Array.isArray(salesData) ? salesData : (salesData?.items || []);
-      const mySales = allSales.filter(s => String(s.employee_id) === String(empId));
-
-      let salesHtml = '';
-      if (mySales.length) {
-        // агрегируем одну строку на сегодня; METRICS вместо захардкоженного
-        // списка — заодно кастомные метрики (не только базовые 15) теперь
-        // тоже попадают в «Мои продажи сегодня», если по ним что-то внесли
-        const agg = {};
-        mySales.forEach(s => {
-          METRICS.forEach(m => {
-            const v = Number(s[m.id]) || 0;
-            if (v) agg[m.id] = (agg[m.id] || 0) + v;
-          });
-        });
-        const parts = Object.entries(agg).map(([k, v]) => `${metricShort(k)} ${v}`);
-        salesHtml = `
-          <div class="section-title" style="margin-bottom:8px">Мои продажи сегодня</div>
-          <div class="progress-block" style="margin-bottom:12px">
-            <div class="lk-sale-row">
-              <div class="ls-date">${formatDateRu(today)}</div>
-              <div class="ls-metrics">${parts.join(' · ') || '—'}</div>
-            </div>
-            <button class="btn-main" style="margin-top:10px" onclick="openAddSale(${empId})">+ Ещё продажа</button>
-          </div>`;
-      } else {
-        salesHtml = `
-          <div class="section-title" style="margin-bottom:8px">Мои продажи сегодня</div>
-          <div class="progress-block" style="margin-bottom:12px">
-            <div class="empty" style="padding:8px 0">Пока пусто</div>
-            <button class="btn-main" onclick="openAddSale(${empId})">+ Добавить продажу</button>
-          </div>`;
-      }
-      document.getElementById('lkSales').innerHTML = salesHtml;
 
       // --- BFQ ---
       const bfqList = Array.isArray(bfqData) ? bfqData : (bfqData?.items || bfqData?.employees || []);
@@ -364,6 +321,11 @@
             <div class="la-ico">🗺</div>
             <div class="la-title">Сеть live</div>
             <div class="la-sub">Все точки</div>
+          </button>
+          <button class="lk-action" onclick="historyEmployeeFilter=${empId};switchPage('history')">
+            <div class="la-ico">🧾</div>
+            <div class="la-title">История продаж</div>
+            <div class="la-sub">Твои продажи</div>
           </button>
         </div>`;
 

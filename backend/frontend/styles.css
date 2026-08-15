@@ -307,6 +307,14 @@
       flex-shrink: 0;
     }
 
+    /* Свайп-панели (Мой день ↔ Сеть сегодня на Главной) */
+    #homeTodaySwipe { overflow: hidden; }
+    .swipe-dots { display: flex; justify-content: center; gap: 6px; padding: 12px 0 4px; }
+    .swipe-dots .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); cursor: pointer; transition: background var(--dur-fast) var(--ease); }
+    .swipe-dots .dot.active { background: var(--primary); }
+    .swipe-track { display: flex; }
+    .swipe-panel { flex: 0 0 100%; min-width: 100%; }
+
     /* Stats chips */
     .stats-row {
       display: grid;

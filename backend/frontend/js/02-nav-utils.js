@@ -140,3 +140,67 @@
       toast('Готово', 'ok');
     }
 
+    /* Свайп между несколькими панелями в одном слоте (сейчас — «Мой день»
+       ↔ «Сеть сегодня» на Главной, задел под свайп между вкладками позже).
+       Тот же приём, что pull-to-refresh (07-add-sale.js): жест отслеживается
+       целиком через touchmove, а не только по началу/концу — иначе
+       вертикальный скролл страницы будет постоянно путаться со свайпом.
+       Направление (гориз./вертик.) решается один раз в начале жеста и
+       больше не пересматривается. */
+    function initSwipePanels(containerEl) {
+      if (!containerEl || containerEl.dataset.swipeInit) return;
+      const track = containerEl.querySelector('.swipe-track');
+      const panels = track ? Array.from(track.children) : [];
+      const dots = Array.from(containerEl.querySelectorAll('.swipe-dots .dot'));
+      if (!track || panels.length < 2) return;
+      containerEl.dataset.swipeInit = '1';
+
+      let current = 0;
+      let width = containerEl.clientWidth;
+      let startX = 0, startY = 0, dragging = false, horizontal = null;
+
+      function settle(index, animate = true) {
+        current = Math.max(0, Math.min(panels.length - 1, index));
+        track.style.transition = animate ? 'transform 0.25s ease' : 'none';
+        track.style.transform = `translateX(${-current * width}px)`;
+        dots.forEach((d, i) => d.classList.toggle('active', i === current));
+      }
+
+      window.addEventListener('resize', () => { width = containerEl.clientWidth; settle(current, false); });
+
+      track.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        dragging = true;
+        horizontal = null;
+        width = containerEl.clientWidth;
+        track.style.transition = 'none';
+      }, { passive: true });
+
+      track.addEventListener('touchmove', (e) => {
+        if (!dragging) return;
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        if (horizontal === null) {
+          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+          horizontal = Math.abs(dx) > Math.abs(dy);
+          if (!horizontal) { dragging = false; return; }
+        }
+        if (!horizontal) return;
+        track.style.transform = `translateX(${-current * width + dx}px)`;
+      }, { passive: true });
+
+      track.addEventListener('touchend', (e) => {
+        if (!dragging || !horizontal) { dragging = false; return; }
+        dragging = false;
+        const dx = e.changedTouches[0].clientX - startX;
+        const THRESHOLD = width * 0.2;
+        if (dx <= -THRESHOLD && current < panels.length - 1) settle(current + 1);
+        else if (dx >= THRESHOLD && current > 0) settle(current - 1);
+        else settle(current);
+      }, { passive: true });
+
+      dots.forEach((dot, i) => dot.addEventListener('click', () => settle(i)));
+      settle(0, false);
+    }
+
