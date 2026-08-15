@@ -5,6 +5,25 @@
       tg.ready();
       tg.expand();
       try { tg.setHeaderColor('#000000'); tg.setBackgroundColor('#f2f2f7'); } catch (_) {}
+
+      // Некоторые клиенты Telegram рисуют «Закрыть»/дату/шеврон/меню
+      // плавающими поверх контента, а не отдельной полосой — из-за этого
+      // наш .app-header (аватар, тема, обновить) оказывался под ними.
+      // contentSafeAreaInset — именно про это: отступ под плавающий чужой UI
+      // (safeAreaInset — отдельно про вырез/статус-бар устройства).
+      function applyTgSafeArea() {
+        const top = (tg.safeAreaInset?.top || 0) + (tg.contentSafeAreaInset?.top || 0);
+        // На <html> не годится: [data-theme="light|dark"] на <body> сам
+        // объявляет этот токен (0px) — своё значение элемента всегда
+        // перебивает унаследованное, экран .app-header внутри body так
+        // и не увидел бы наш инлайн-стиль с html. Ставим прямо на body.
+        document.body.style.setProperty('--tg-content-safe-top', top + 'px');
+      }
+      try {
+        applyTgSafeArea();
+        tg.onEvent('safeAreaChanged', applyTgSafeArea);
+        tg.onEvent('contentSafeAreaChanged', applyTgSafeArea);
+      } catch (_) {}
     }
 
     // Клиентская версия (О приложении + бейдж на главной)

@@ -7,6 +7,7 @@
       const user = tgUser();
       if (!user?.id) {
         box.innerHTML = '<div class="empty">Открой из Telegram, чтобы видеть свой день</div>';
+        document.getElementById('homeTodaySwipe')?._swipeRefreshHeight?.();
         return;
       }
       try {
@@ -16,6 +17,7 @@
           box.innerHTML = `
             <div class="empty" style="text-align:left;padding:8px 0">Аккаунт не привязан</div>
             <button class="btn-main" onclick="switchPage('my')">Привязать себя</button>`;
+          document.getElementById('homeTodaySwipe')?._swipeRefreshHeight?.();
           return;
         }
         const shift = d.shift;
@@ -52,6 +54,7 @@
       } catch (e) {
         box.innerHTML = '<div class="empty">Не удалось загрузить «Мой день»</div>';
       }
+      document.getElementById('homeTodaySwipe')?._swipeRefreshHeight?.();
     }
 
     /* 18.4 — задачи, назначенные менеджером (Command Center → create_task),
@@ -218,6 +221,7 @@
               </div>
             </div>`;
         }
+        document.getElementById('homeTodaySwipe')?._swipeRefreshHeight?.();
 
         const box = document.getElementById('homeTop');
         if (box) {

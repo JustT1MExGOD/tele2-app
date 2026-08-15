@@ -160,7 +160,10 @@
           </div>
         </div>` : '';
 
-      // --- Месяц (22: тот же .mt-card стиль, что «Планы и факт за месяц») ---
+      // --- Месяц (22: формат «БЛОК GI / Товарка / Ростелеком / Кредиты» —
+      // тот же, что у карточки точки на «План» (loadPlanDay, 04-schedule.js),
+      // а не числовая сетка «Планы и факт за месяц» — там речь про сеть,
+      // здесь про себя, и факт/план в процентах читается понятнее ) ---
       let monthHtml = '';
       const myMonth = (monthPlans || []).find(p =>
         String(p.employee_id) === String(empId) || String(p.id) === String(empId)
@@ -169,15 +172,12 @@
       if (myMonth) {
         const plan = myMonth.plan || {};
         const fact = myMonth.fact || {};
-        const pct = myMonth.pct || {};
-        const MAIN = METRICS.slice(0, 6);
-        const EXTRA = METRICS.slice(6);
-        const cell = (m) => {
-          const f = Number(fact[m.id]) || 0;
-          const pc = Number(pct[m.id]) || 0;
-          const tone = pc >= 100 ? 'good' : pc >= 50 ? 'warn' : (f > 0 ? '' : 'bad');
-          return `<div class="mt-cell ${tone}"><div class="v">${f}</div><div class="l">${m.label}</div></div>`;
-        };
+        const GROUPS = [
+          { label: 'Блок GI', rows: [['sim'], ['mnp'], ['pa'], ['hb']] },
+          { label: 'Товарка', rows: [['combo'], ['phones'], ['accessories'], ['insurance']] },
+          { label: 'Ростелеком', rows: [['wink'], ['shpd'], ['focus']] },
+          { label: 'Кредиты', rows: [['credit_request', 'Заявка'], ['credit_issued', 'Выданный']] }
+        ];
         monthHtml = `
           <div class="mt-card">
             <div class="mt-card-head">
@@ -186,11 +186,10 @@
                 <div class="mt-meta">Смен: ${myMonth.shifts || 0} · осталось: ${myMonth.remaining_shifts || 0}</div>
               </div>
             </div>
-            <div class="mt-grid">${MAIN.map(cell).join('')}</div>
-            <div class="mt-more">
-              <button type="button" class="mt-toggle" onclick="toggleMonthExtra('lkMonthExtra', this)">Ещё метрики ▾</button>
-              <div class="mt-extra" id="lkMonthExtra">${EXTRA.map(cell).join('')}</div>
-            </div>
+            ${GROUPS.map(g => `
+              <div class="block-label">${g.label}</div>
+              ${g.rows.map(([id, label]) => progressHTML(label || metricLabel(id), fact[id], plan[id])).join('')}
+            `).join('')}
           </div>`;
       } else {
         monthHtml = `

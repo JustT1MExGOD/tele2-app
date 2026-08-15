@@ -161,8 +161,13 @@
 
       function settle(index, animate = true) {
         current = Math.max(0, Math.min(panels.length - 1, index));
-        track.style.transition = animate ? 'transform 0.25s ease' : 'none';
+        track.style.transition = animate ? 'transform 0.25s ease, height 0.25s ease' : 'none';
         track.style.transform = `translateX(${-current * width}px)`;
+        // Панели разной высоты (напр. «Мой день» на выходной короче, чем в
+        // рабочий день) — без этого высота трека всегда была под самую
+        // высокую панель (align-items: stretch по умолчанию), и в короткой
+        // панели снизу висела пустая область.
+        track.style.height = panels[current].scrollHeight + 'px';
         dots.forEach((d, i) => d.classList.toggle('active', i === current));
       }
 
@@ -202,5 +207,10 @@
 
       dots.forEach((dot, i) => dot.addEventListener('click', () => settle(i)));
       settle(0, false);
+
+      // Панели заполняются асинхронно (fetch) уже после первого settle(),
+      // когда высота ещё меряется по скелетону/заглушке — вызывающий код
+      // должен пересчитать высоту, когда контент реально готов.
+      containerEl._swipeRefreshHeight = () => settle(current, false);
     }
 
