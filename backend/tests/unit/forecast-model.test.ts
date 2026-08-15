@@ -63,4 +63,35 @@ describe('buildSesModel / projectDay', () => {
       expect(projectDay(model, dow)).toBeGreaterThanOrEqual(0);
     }
   });
+
+  // 19.2 Anomaly Detection — spread/sampleCount кормят z-score в
+  // services/anomaly.ts, регресс на то, что они вообще осмысленные.
+  it('spread у идеально ровной истории близок к нулю (стабильная точка)', () => {
+    const rows = Array.from({ length: 56 }, (_, i) => ({ dow: i % 7, value: 10 }));
+    const model = buildSesModel(rows);
+    for (let dow = 0; dow <= 6; dow++) {
+      expect(model.spread[dow]).toBeLessThan(0.1);
+    }
+  });
+
+  it('spread у шумной истории заметно выше, чем у ровной', () => {
+    const stable = Array.from({ length: 56 }, (_, i) => ({ dow: i % 7, value: 10 }));
+    // Тот же день недели (dow=1), но значения скачут 2..18 вместо ровных 10.
+    const noisy = Array.from({ length: 56 }, (_, i) => ({
+      dow: i % 7,
+      value: i % 7 === 1 ? (i % 2 === 0 ? 2 : 18) : 10
+    }));
+    const stableModel = buildSesModel(stable);
+    const noisyModel = buildSesModel(noisy);
+    expect(noisyModel.spread[1]).toBeGreaterThan(stableModel.spread[1]);
+  });
+
+  it('sampleCount считает все обработанные наблюдения на день недели, включая гап-филл-нули', () => {
+    const rows = Array.from({ length: 21 }, (_, i) => ({ dow: i % 7, value: i < 14 ? 5 : 0 }));
+    const model = buildSesModel(rows);
+    // 21 день / 7 дней недели = 3 наблюдения на каждый dow.
+    for (let dow = 0; dow <= 6; dow++) {
+      expect(model.sampleCount[dow]).toBe(3);
+    }
+  });
 });

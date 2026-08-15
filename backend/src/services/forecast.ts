@@ -26,6 +26,13 @@ const SHRINK_K = 3; // сколько наблюдений нужно дню н�
 export interface SesModel {
   level: number;
   seasonal: Record<number, number>;
+  /** Разброс (стандартное отклонение) ratio по дню недели — насколько
+   * типично скачет факт вокруг seasonal[dow] в единицах ratio, не в
+   * абсолютных числах. Используется для z-score в детекции аномалий
+   * (services/anomaly.ts, 19.2) — forecastStore/forecastRemainingOfMonth
+   * это поле не читают, только прогнозируют вперёд по seasonal. */
+  spread: Record<number, number>;
+  sampleCount: Record<number, number>;
 }
 
 /**
@@ -46,26 +53,39 @@ export function buildSesModel(
   alpha = ALPHA,
   shrinkK = SHRINK_K
 ): SesModel {
-  if (!dailyValues.length) return { level: 0, seasonal: {} };
+  if (!dailyValues.length) return { level: 0, seasonal: {}, spread: {}, sampleCount: {} };
   const seriesMean = dailyValues.reduce((a, r) => a + r.value, 0) / dailyValues.length;
   const coldBaseline = seriesMean > 0.01 ? seriesMean : 1;
   let level = seriesMean;
   const ratioSum: Record<number, number> = {};
+  const ratioSumSq: Record<number, number> = {};
   const ratioCount: Record<number, number> = {};
   for (const r of dailyValues) {
     const baseline = level > 0.01 ? level : coldBaseline;
     const ratio = Math.min(10, r.value / baseline);
     ratioSum[r.dow] = (ratioSum[r.dow] || 0) + ratio;
+    ratioSumSq[r.dow] = (ratioSumSq[r.dow] || 0) + ratio * ratio;
     ratioCount[r.dow] = (ratioCount[r.dow] || 0) + 1;
     level = alpha * r.value + (1 - alpha) * level;
   }
   const seasonal: Record<number, number> = {};
+  const spread: Record<number, number> = {};
   for (let dow = 0; dow <= 6; dow++) {
     const cnt = ratioCount[dow] || 0;
     const raw = cnt ? ratioSum[dow] / cnt : 1;
     seasonal[dow] = (cnt * raw + shrinkK * 1) / (cnt + shrinkK);
+    // Популяционное стандартное отклонение вокруг raw (не вокруг
+    // seasonal — spread про реальный разброс наблюдений, усадка
+    // seasonal тут ни при чём). Меньше 2 наблюдений — разброс неизвестен,
+    // консервативный широкий пол вместо ложной уверенности в узком 0.
+    if (cnt >= 2) {
+      const variance = Math.max(0, ratioSumSq[dow] / cnt - raw * raw);
+      spread[dow] = Math.sqrt(variance);
+    } else {
+      spread[dow] = 1;
+    }
   }
-  return { level, seasonal };
+  return { level, seasonal, spread, sampleCount: ratioCount };
 }
 
 export function projectDay(model: SesModel, dow: number): number {

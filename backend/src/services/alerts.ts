@@ -4,6 +4,7 @@
 import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
 import { notifyAdmin, notifyChat } from '../bot/index.js';
+import { checkAnomalyVsForecast } from './anomaly.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -21,6 +22,13 @@ export async function runSmartAlertsTick() {
 
   // только в рабочие часы
   if (hour < 11 || hour > 21) return { skipped: true, hour };
+
+  // Раз в день, на первом тике окна — сравнение вчерашнего завершённого
+  // дня с прогнозом (19.2, Anomaly Detection). Отдельная выборка точек
+  // внутри checkAnomalyVsForecast — не завязана на общий stores.rows ниже.
+  if (hour === 11) {
+    await checkAnomalyVsForecast().catch((e) => console.error('checkAnomalyVsForecast:', e?.message || e));
+  }
 
   const stores = await query(
     `SELECT id, name, code FROM stores WHERE COALESCE(is_active,true)=true`
@@ -112,6 +120,9 @@ export async function insertAlertOnce(opts: {
   title: string;
   body: string;
   payload: any;
+  /** По умолчанию сегодня — детекция аномалий (19.2) проверяет ВЧЕРАШНИЙ
+   * завершённый день и должна клеймиться под его датой, не под сегодняшней. */
+  alert_date?: string;
 }) {
   // Атомарный claim по partial unique index (store_id, alert_type,
   // alert_date) WHERE status='open' (0007) — раньше это была
@@ -131,7 +142,7 @@ export async function insertAlertOnce(opts: {
       opts.title,
       opts.body,
       JSON.stringify(opts.payload || {}),
-      todayMoscow()
+      opts.alert_date || todayMoscow()
     ]
   );
   return res.rows[0] || null;
