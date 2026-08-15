@@ -64,7 +64,7 @@
           return;
         }
 
-        box.innerHTML = list.map((store, idx) => {
+        box.innerHTML = list.map((store) => {
           const fact = statsMap[store.id] || {};
           const plan = planMap[store.id] || {};
           const staff = staffMap[store.id] || [];
@@ -74,7 +74,7 @@
           const overall = sp > 0 ? Math.round((sf / sp) * 100) : (sf > 0 ? 100 : 0);
 
           return `
-            <div class="store-card ${idx === 0 ? 'open' : ''}" id="sc-${store.id}">
+            <div class="store-card" id="sc-${store.id}">
               <div class="store-head" onclick="toggleStore('${store.id}')">
                 <div class="store-badge">${(store.short_name || store.name || '?').slice(0, 2)}</div>
                 <div class="store-meta">

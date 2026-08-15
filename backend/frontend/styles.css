@@ -1340,6 +1340,13 @@
     .page { display: none; }
     .page.active { display: block; }
 
+    /* 12: свайп между вкладками нижней навигации — анимируем только
+       вошедшую страницу (см. initTabSwipe/switchPageWithSlide, 02-nav-utils.js) */
+    @keyframes pageSlideInLeft { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes pageSlideInRight { from { transform: translateX(-24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .page-slide-in-left { animation: pageSlideInLeft 0.18s ease; }
+    .page-slide-in-right { animation: pageSlideInRight 0.18s ease; }
+
     .link-row {
       display: flex;
       align-items: center;

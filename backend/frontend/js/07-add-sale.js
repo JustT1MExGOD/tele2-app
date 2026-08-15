@@ -147,6 +147,10 @@
 
     function closeModal() {
       document.getElementById('overlay')?.classList.remove('show');
+      // Сброс на случай, если закрыли посреди свайпа (см. initModalSwipeClose
+      // ниже) — иначе следующее открытие модалки унаследует смещение.
+      const sheet = document.querySelector('.sheet-modal');
+      if (sheet) { sheet.style.transform = ''; sheet.style.transition = ''; }
     }
 
 
@@ -320,6 +324,10 @@
     }
 
     document.addEventListener('touchstart', (e) => {
+      // Модалка открыта поверх страницы, проскроленной в 0, — свайп по
+      // модалке (см. initModalSwipeClose ниже) не должен ещё и триггерить
+      // фоновый refreshAll() от pull-to-refresh.
+      if (document.getElementById('overlay')?.classList.contains('show')) return;
       if (window.scrollY === 0) {
         ptrStartY = e.touches[0].clientY;
         ptrTracking = true;
@@ -357,4 +365,45 @@
         refreshAll();
       }
     }, { passive: true });
+
+    /* 15: свайп-вниз для закрытия модалки продажи. Жест ловим только на
+       .sheet-modal (не на document, как PTR выше) — и только если начался
+       на ручке/заголовке, а не внутри #modalBody: иначе обычный скролл
+       формы вниз тоже закрывал бы её. Порог ниже, чем у свайпа вкладок
+       (initTabSwipe, 02-nav-utils.js) — модалка физически ближе к пальцу. */
+    function initModalSwipeClose() {
+      const sheet = document.querySelector('.sheet-modal');
+      if (!sheet) return;
+      const SWIPE_CLOSE_THRESHOLD = 80;
+      let startY = 0, dragging = false;
+
+      sheet.addEventListener('touchstart', (e) => {
+        if (!e.target.closest('.grab, .modal-title')) { dragging = false; return; }
+        startY = e.touches[0].clientY;
+        dragging = true;
+        sheet.style.transition = 'none';
+      }, { passive: true });
+
+      sheet.addEventListener('touchmove', (e) => {
+        if (!dragging) return;
+        const dy = Math.max(0, e.touches[0].clientY - startY);
+        sheet.style.transform = `translateY(${dy}px)`;
+      }, { passive: true });
+
+      function endDrag(e) {
+        if (!dragging) return;
+        dragging = false;
+        const dy = Math.max(0, (e.changedTouches?.[0]?.clientY ?? startY) - startY);
+        sheet.style.transition = 'transform 0.2s ease';
+        if (dy >= SWIPE_CLOSE_THRESHOLD) {
+          sheet.style.transform = 'translateY(100%)';
+          setTimeout(closeModal, 200);
+        } else {
+          sheet.style.transform = '';
+        }
+      }
+      sheet.addEventListener('touchend', endDrag, { passive: true });
+      sheet.addEventListener('touchcancel', endDrag, { passive: true });
+    }
+    initModalSwipeClose();
 
