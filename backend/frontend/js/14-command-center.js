@@ -49,11 +49,11 @@ async function loadCommandCenterPage() {
         <div style="padding:0 16px 16px">
           ${problems.length ? problems.map(p => `
             <div class="sv-drop ${p.severity === 'critical' ? '' : 'warn'}" style="margin:8px 0 0">
-              <div class="ico">${p.severity === 'critical' ? '🚨' : '⚠️'}</div>
+              <div class="ico">${p.severity === 'critical' ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 18v-6a5 5 0 1 1 10 0v6" /> <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z" /> <path d="M21 12h1" /> <path d="M18.5 4.5 18 5" /> <path d="M2 12h1" /> <path d="M12 2v1" /> <path d="m4.929 4.929.707.707" /> <path d="M12 12v6" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /> </svg>'}</div>
               <div style="flex:1">
                 <div class="t">${esc(p.store_name || 'Точка')}</div>
                 <div class="s">${esc(p.message || '')}</div>
-                ${p.ai_comment ? `<div class="s" style="margin-top:4px;font-style:italic">🤖 ${esc(p.ai_comment)}</div>` : ''}
+                ${p.ai_comment ? `<div class="s" style="margin-top:4px;font-style:italic"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 8V4H8" /> <rect width="16" height="12" x="4" y="8" rx="2" /> <path d="M2 14h2" /> <path d="M20 14h2" /> <path d="M15 13v2" /> <path d="M9 13v2" /> </svg> ${esc(p.ai_comment)}</div>` : ''}
                 <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
                   ${(p.actions || []).map(a => ccActionButton(a)).join('')}
                   ${p.alert_id ? `<button class="mchip" onclick="ccAckAlert(${p.alert_id})">Взять в работу</button>` : ''}
@@ -66,7 +66,7 @@ async function loadCommandCenterPage() {
       ${canAdmin() || (typeof me !== 'undefined' && me?.role === 'supervisor') ? `
         <div class="section">
           <button class="row" onclick="enterSupervisorShell()">
-            <div class="row-icon">📊</div>
+            <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" /> </svg></div>
             <div class="row-body">
               <div class="row-title">Полная аналитика сектора</div>
               <div class="row-sub">Тренд · топ продавцов · разбивка по точкам</div>

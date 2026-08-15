@@ -55,7 +55,7 @@
         body.innerHTML = `
           <div class="gate-card">
             <div class="bind-glow"></div>
-            <div class="gate-icon danger">🔒</div>
+            <div class="gate-icon danger"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" /> </svg></div>
             <div class="gate-title">В доступе отказано</div>
             <div class="gate-desc">
               Напиши управляющему или admin.
@@ -73,7 +73,7 @@
       body.innerHTML = `
         <div class="gate-card">
           <div class="bind-glow"></div>
-          <div class="gate-icon">👋</div>
+          <div class="gate-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" /> <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" /> <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" /> <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /> </svg></div>
           <div class="gate-title">Добро пожаловать</div>
           <div class="gate-desc">
             Укажи ФИО как в команде. После подтверждения manager откроется полный доступ к плану, сменам и продажам.
@@ -508,11 +508,11 @@
       if ((d.drops || []).length) {
         html += d.drops.map(x => `
           <div class="sv-drop ${x.severity === 'critical' ? '' : 'warn'}">
-            <div class="ico">${x.severity === 'critical' ? '🚨' : '⚠️'}</div>
+            <div class="ico">${x.severity === 'critical' ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 18v-6a5 5 0 1 1 10 0v6" /> <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z" /> <path d="M21 12h1" /> <path d="M18.5 4.5 18 5" /> <path d="M2 12h1" /> <path d="M12 2v1" /> <path d="m4.929 4.929.707.707" /> <path d="M12 12v6" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /> </svg>'}</div>
             <div style="flex:1">
               <div class="t">${esc(x.store_name || 'Точка')}</div>
               <div class="s">${esc(x.message || '')}${x.overall != null ? ' · ' + x.overall + '% плана' : ''}</div>
-              ${x.ai_comment ? `<div class="s" style="margin-top:4px;font-style:italic">🤖 ${esc(x.ai_comment)}</div>` : ''}
+              ${x.ai_comment ? `<div class="s" style="margin-top:4px;font-style:italic"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 8V4H8" /> <rect width="16" height="12" x="4" y="8" rx="2" /> <path d="M2 14h2" /> <path d="M20 14h2" /> <path d="M15 13v2" /> <path d="M9 13v2" /> </svg> ${esc(x.ai_comment)}</div>` : ''}
               ${x.store_id ? `<button class="mchip" style="margin-top:6px" onclick="event.stopPropagation();proposeMoveForStore('${x.store_id}')">Предложить перенос</button>` : ''}
             </div>
           </div>`).join('');
@@ -576,7 +576,7 @@
           </div>
           <div class="sv-bars">${bars}</div>
           ${svExtraToggleHTML('svst-' + idx, extraRows)}
-          <div class="sv-staff">👥 ${esc(staff)}</div>
+          <div class="sv-staff"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /> </svg> ${esc(staff)}</div>
           ${alerts}
         </div>`;
       }).join('') || '<div class="empty">Нет точек — сектор не назначен</div>';

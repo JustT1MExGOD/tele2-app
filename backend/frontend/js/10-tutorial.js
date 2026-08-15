@@ -39,7 +39,7 @@
         kind: 'cutscene', chapter: 2, page: 'my',
         title: 'Открыть смену',
         text: 'В начале дня на точке жми «Открыть смену» — приложение зафиксирует время (может спросить геолокацию). В конце дня — «Закрыть смену» и короткий самоотчёт. Без открытой смены часть цифр считается хуже.',
-        practice: [{ id: 'shift', label: '🟢 Понял: открыть смену' }]
+        practice: [{ id: 'shift', label: '<span class="status-dot" style="background:var(--success)"></span> Понял: открыть смену' }]
       },
       {
         kind: 'cutscene', chapter: 2, celebrate: true,
@@ -59,13 +59,13 @@
         kind: 'practice-real', chapter: 3,
         title: 'Заполни как в жизни',
         text: 'Сейчас откроется настоящая форма — та же самая, что и в реальной работе. Смело жми, выбирай пару метрик, ставь количество и нажимай «Добавить». Это тренировка — в базу ничего не запишется и в чат команде ничего не уйдёт.',
-        practiceLabel: '📱 Открыть форму продажи'
+        practiceLabel: '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Открыть форму продажи'
       },
       {
         kind: 'cutscene', chapter: 3,
         title: 'Быстрый ввод',
         text: 'Мой → «Быстрый ввод»: напиши «две симки и одно mnp» — приложение само разберёт фразу. Удобно, когда руки заняты на точке.',
-        practice: [{ id: 'quick', label: '⚡ Попробовать фразу' }]
+        practice: [{ id: 'quick', label: '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z" /> </svg> Попробовать фразу' }]
       },
       {
         kind: 'cutscene', chapter: 3, celebrate: true,
@@ -101,7 +101,7 @@
         kind: 'cutscene', chapter: 5, page: 'home',
         title: 'Комбо на пальцах',
         text: 'На главной есть инструменты: BFQ, расчёт комбо, касса, live-сеть, промокоды. Комбо считается прямо на телефоне: цена минус скидка, плюс 28%, плюс 1950.',
-        practice: [{ id: 'combo', label: '📱 Открыть расчёт комбо' }]
+        practice: [{ id: 'combo', label: '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Открыть расчёт комбо' }]
       },
       {
         kind: 'cutscene', chapter: 5,
@@ -150,7 +150,7 @@
         kind: 'cutscene', finale: true, celebrate: true,
         title: 'Готов к первой смене',
         text: 'Красава, прошёл весь курс. Дальше — только практика, и она у тебя точно получится. Если что забудешь — обучение всегда под рукой: Главное → Обучение.',
-        reward: '🎓 +50 XP · бейдж «Обучение пройдено»'
+        reward: '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /> </svg> +50 XP · бейдж «Обучение пройдено»'
       }
     ];
 
@@ -254,7 +254,7 @@
         kind: 'cutscene', finale: true, celebrate: true,
         title: 'Курс управляющего пройден',
         text: 'Готово — теперь у тебя есть весь контекст, не только права. Перезапустить курс можно из Инструментов → «Обучение manager».',
-        reward: '🎓 +50 XP · бейдж «Обучение управляющего пройдено»'
+        reward: '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /> </svg> +50 XP · бейдж «Обучение управляющего пройдено»'
       }
     ];
 
@@ -347,7 +347,7 @@
           }).catch(() => {});
         } catch (_) {}
       }
-      toast(skipped ? 'Обучение закрыто' : 'Обучение завершено 🎉', 'ok');
+      toast(skipped ? 'Обучение закрыто' : 'Обучение завершено <svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5.8 11.3 2 22l10.7-3.79" /> <path d="M4 3h.01" /> <path d="M22 8h.01" /> <path d="M15 2h.01" /> <path d="M22 20h.01" /> <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10" /> <path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17" /> <path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" /> <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" /> </svg>', 'ok');
       switchPage('home');
     }
 
@@ -372,7 +372,7 @@
         const task = document.getElementById('tutTask');
         if (task) {
           task.classList.add('done');
-          if (msg) task.textContent = '✅ ' + msg;
+          if (msg) task.textContent = '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> ' + msg;
         }
         const nextBtn = document.getElementById('tutNextBtn');
         if (nextBtn) nextBtn.disabled = false;

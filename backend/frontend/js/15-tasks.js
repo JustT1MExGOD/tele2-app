@@ -13,7 +13,7 @@ const TASK_STATUS_LABEL = {
 };
 
 function taskPriorityBadge(p) {
-  const map = { urgent: '🔴 Срочно', high: '🟠 Высокий', normal: '', low: '⚪ Низкий' };
+  const map = { urgent: '<span class="status-dot" style="background:var(--danger)"></span> Срочно', high: '<span class="status-dot" style="background:var(--warning)"></span> Высокий', normal: '', low: '<span class="status-dot" style="background:var(--border)"></span> Низкий' };
   return map[p] || '';
 }
 
@@ -45,7 +45,7 @@ async function loadTasksPage() {
       <div style="padding:0 16px 16px">
         ${items.length ? items.map(t => `
           <button class="row" onclick="openTaskDetail(${t.id})">
-            <div class="row-icon">${t.status === 'done' ? '✅' : t.status === 'cancelled' ? '🚫' : '📋'}</div>
+            <div class="row-icon">${t.status === 'done' ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg>' : t.status === 'cancelled' ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M4.929 4.929 19.07 19.071" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg>'}</div>
             <div class="row-body">
               <div class="row-title">${esc(t.title)} ${taskPriorityBadge(t.priority)}</div>
               <div class="row-sub">${esc(t.assignee_name || '')}${t.store_name ? ' · ' + esc(t.store_name) : ''} · ${TASK_STATUS_LABEL[t.status] || t.status}</div>

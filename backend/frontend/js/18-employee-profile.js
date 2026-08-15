@@ -72,12 +72,12 @@ async function renderEmployeeProfile() {
         <div class="section-title">Прогресс</div>
         <div style="padding:0 16px;display:flex;gap:8px;flex-wrap:wrap">
           <div class="mchip" style="cursor:default">XP: ${gam.xp || 0}${gam.next_level_xp != null ? ' / ' + gam.next_level_xp : ''}</div>
-          <div class="mchip" style="cursor:default">🔥 ${gam.streak_days || 0} дн.</div>
+          <div class="mchip" style="cursor:default"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" /> </svg> ${gam.streak_days || 0} дн.</div>
           <div class="mchip" style="cursor:default">Лучшая смена: ${gam.best_shift_score || 0}</div>
         </div>
         ${(gam.badges || []).length ? `
         <div style="padding:8px 16px 0;display:flex;gap:6px;flex-wrap:wrap">
-          ${gam.badges.map(b => `<div class="mchip" style="cursor:default">🏅 ${esc(b.title || b.badge_code)}</div>`).join('')}
+          ${gam.badges.map(b => `<div class="mchip" style="cursor:default"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15" /> <path d="M11 12 5.12 2.2" /> <path d="m13 12 5.88-9.8" /> <path d="M8 7h8" /> <circle cx="12" cy="17" r="5" /> <path d="M12 18v-2h-.5" /> </svg> ${esc(b.title || b.badge_code)}</div>`).join('')}
         </div>` : ''}
       </div>
 
@@ -86,7 +86,7 @@ async function renderEmployeeProfile() {
         <div class="section-title">Смены за период (score)</div>
         <div style="padding:0 16px;display:flex;align-items:flex-end;gap:2px;height:60px">
           ${shifts.slice().reverse().map(s => `
-            <div style="flex:1;background:var(--primary-soft);border-radius:2px 2px 0 0;height:${Math.max(4, Math.round((Number(s.score) || 0) / scoreMax * 100))}%" title="${s.date}: ${s.score}${s.ideal_shift ? ' ⭐' : ''}"></div>
+            <div style="flex:1;background:var(--primary-soft);border-radius:2px 2px 0 0;height:${Math.max(4, Math.round((Number(s.score) || 0) / scoreMax * 100))}%" title="${s.date}: ${s.score}${s.ideal_shift ? ' <svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /> </svg>' : ''}"></div>
           `).join('')}
         </div>
       </div>
@@ -95,7 +95,7 @@ async function renderEmployeeProfile() {
         <div class="section-title">Последние смены</div>
         ${shifts.map(s => `
           <div class="row" style="cursor:default">
-            <div class="row-icon">${s.ideal_shift ? '⭐' : '📅'}</div>
+            <div class="row-icon">${s.ideal_shift ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg>'}</div>
             <div class="row-body">
               <div class="row-title">${esc(s.date)} · ${esc(s.store_name || s.store_id || '')}</div>
               <div class="row-sub">score ${s.score ?? 0}${s.mood ? ' · настроение ' + s.mood + '/5' : ''}</div>

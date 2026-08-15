@@ -50,7 +50,7 @@ async function renderStoreProfile() {
       <div class="section">
         <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
           <span>${esc(d.store?.name || 'Точка')}</span>
-          ${canManage() ? `<button class="mchip" onclick="editStoreDisplayName('${storeId}')">✏️ Название</button>` : ''}
+          ${canManage() ? `<button class="mchip" onclick="editStoreDisplayName('${storeId}')"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /> <path d="m15 5 4 4" /> </svg> Название</button>` : ''}
         </div>
         <div class="cc-row" style="padding:0 16px">
           <div class="cc-health ${tone}">${d.health?.score ?? 0}</div>
@@ -88,7 +88,7 @@ async function renderStoreProfile() {
         <div class="section-title">Задачи по точке</div>
         ${d.tasks.map(t => `
           <button class="row" onclick="openTaskDetail(${t.id})">
-            <div class="row-icon">📋</div>
+            <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></div>
             <div class="row-body">
               <div class="row-title">${esc(t.title)}</div>
               <div class="row-sub">${esc(t.assignee_name || '')} · ${t.status === 'in_progress' ? 'В работе' : 'Открыта'}</div>
@@ -101,7 +101,7 @@ async function renderStoreProfile() {
       <div class="section">
         <div class="section-title">Алерты</div>
         <div style="padding:0 16px 16px">
-          ${d.alerts.map(a => `<div class="sv-drop warn" style="margin:8px 0 0"><div class="ico">⚠️</div><div class="s">${esc(a)}</div></div>`).join('')}
+          ${d.alerts.map(a => `<div class="sv-drop warn" style="margin:8px 0 0"><div class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /> </svg></div><div class="s">${esc(a)}</div></div>`).join('')}
         </div>
       </div>` : ''}
     `;

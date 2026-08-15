@@ -126,7 +126,7 @@
               <div class="lk-avatar" id="lkAvatar">
                 ${photo ? `<img src="${photo}" alt="">` : (fullName[0] || 'T')}
               </div>
-              <button type="button" class="lk-avatar-edit" onclick="pickAvatarFile()" title="Сменить аватарку">📷</button>
+              <button type="button" class="lk-avatar-edit" onclick="pickAvatarFile()" title="Сменить аватарку"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" /> <circle cx="12" cy="13" r="3" /> </svg></button>
             </div>
             <div>
               <div class="lk-name">${fullName}</div>
@@ -134,9 +134,9 @@
             </div>
           </div>
           <div class="lk-hero-meta">
-            ${storeName ? `<div class="lk-pill">📍 <strong>${storeName}</strong></div>` : `<div class="lk-pill">Сегодня выходной</div>`}
-            ${shift?.shift_text ? `<div class="lk-pill">🕒 <strong>${shift.shift_text}</strong>${shift.hours ? ' · ' + shift.hours + 'ч' : ''}</div>` : ''}
-            <div class="lk-pill">📅 <strong>${formatDateRu(today)}</strong></div>
+            ${storeName ? `<div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /> <circle cx="12" cy="10" r="3" /> </svg> <strong>${storeName}</strong></div>` : `<div class="lk-pill">Сегодня выходной</div>`}
+            ${shift?.shift_text ? `<div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 6v6l4 2" /> </svg> <strong>${shift.shift_text}</strong>${shift.hours ? ' · ' + shift.hours + 'ч' : ''}</div>` : ''}
+            <div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg> <strong>${formatDateRu(today)}</strong></div>
           </div>
         </div>`;
       // Кастомная аватарка (19) приоритетнее photo_url из Telegram —
@@ -295,42 +295,42 @@
         <div class="section-title" style="margin-bottom:8px">Действия</div>
         <div class="lk-actions-grid">
           <button class="lk-action" onclick="openAddSale(${empId})">
-            <div class="la-ico">➕</div>
+            <div class="la-ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /> </svg></div>
             <div class="la-title">Продажа</div>
             <div class="la-sub">Внести метрики</div>
           </button>
           <button class="lk-action" onclick="switchPage('schedule')">
-            <div class="la-ico">📅</div>
+            <div class="la-ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg></div>
             <div class="la-title">График</div>
             <div class="la-sub">Месяц целиком</div>
           </button>
           <button class="lk-action" onclick="switchPage('plan')">
-            <div class="la-ico">🎯</div>
+            <div class="la-ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <circle cx="12" cy="12" r="6" /> <circle cx="12" cy="12" r="2" /> </svg></div>
             <div class="la-title">План дня</div>
             <div class="la-sub">Все точки</div>
           </button>
           <button class="lk-action" onclick="startTutorial('employee')">
-            <div class="la-ico">🎓</div>
+            <div class="la-ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /> </svg></div>
             <div class="la-title">Обучение</div>
             <div class="la-sub">Как пользоваться</div>
           </button>
           <button class="lk-action" onclick="openShiftSession()">
-            <div class="la-ico">🟢</div>
+            <div class="la-ico"><span class="status-dot" style="background:var(--success)"></span></div>
             <div class="la-title">Смена</div>
             <div class="la-sub">Открыть / закрыть</div>
           </button>
           <button class="lk-action" onclick="openQuickSale()">
-            <div class="la-ico">⚡</div>
+            <div class="la-ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z" /> </svg></div>
             <div class="la-title">Быстрый ввод</div>
             <div class="la-sub">«две симки mnp»</div>
           </button>
           <button class="lk-action" onclick="switchPage('live')">
-            <div class="la-ico">🗺</div>
+            <div class="la-ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /> <path d="M15 5.764v15" /> <path d="M9 3.236v15" /> </svg></div>
             <div class="la-title">Сеть live</div>
             <div class="la-sub">Все точки</div>
           </button>
           <button class="lk-action" onclick="historyEmployeeFilter=${empId};switchPage('history')">
-            <div class="la-ico">🧾</div>
+            <div class="la-ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 17V7" /> <path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8" /> <path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z" /> </svg></div>
             <div class="la-title">История продаж</div>
             <div class="la-sub">Твои продажи</div>
           </button>

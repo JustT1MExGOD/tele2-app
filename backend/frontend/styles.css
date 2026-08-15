@@ -2,6 +2,40 @@
        T2 Sales — Design System v11
        Tokens → Components → Layout
        ========================================================= */
+
+    /* Google Sans (п.18) — легально лицензированный OFL-дистрибутив
+       (fonts/OFL.txt), 4 начертания статикой, без курсивов (нигде не
+       используются). font-display: swap — не блокирует первую отрисовку
+       текста системным фолбэком, пока грузится файл. */
+    @font-face {
+      font-family: 'Google Sans';
+      src: url('/fonts/GoogleSans-Regular.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Google Sans';
+      src: url('/fonts/GoogleSans-Medium.woff2') format('woff2');
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Google Sans';
+      src: url('/fonts/GoogleSans-SemiBold.woff2') format('woff2');
+      font-weight: 600;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Google Sans';
+      src: url('/fonts/GoogleSans-Bold.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root, [data-theme="light"] {
@@ -73,7 +107,7 @@
       --sp-8: 32px;
 
       /* Type */
-      --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      --font: 'Google Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
       --fs-xs: 11px;
       --fs-sm: 13px;
       --fs-md: 15px;
@@ -140,11 +174,19 @@
       font-size: var(--fs-md);
       line-height: var(--lh);
       letter-spacing: var(--tracking-tight);
+      /* п.16: гасит нативный pull-to-refresh Android Chrome — иначе
+         конфликтует с собственным PTR-жестом (07-add-sale.js) */
+      overscroll-behavior-y: contain;
     }
 
     body {
       padding-bottom: 92px;
       min-height: 100vh;
+      /* 100dvh точнее на Android Chrome — адресная строка схлопывается/
+         разворачивается, 100vh всегда считает по максимальной высоте.
+         Второе объявление того же свойства просто переопределяет первое
+         там, где dvh поддерживается, игнорируется без ошибки там, где нет. */
+      min-height: 100dvh;
     }
 
     /* Selection */
@@ -230,6 +272,7 @@
       border-radius: var(--radius-xl) var(--radius-xl) 0 0;
       padding: var(--sp-4) var(--sp-3) var(--sp-5);
       min-height: calc(100vh - 120px);
+      min-height: calc(100dvh - 120px);
     }
 
     /* ===== Section card ===== */
@@ -650,9 +693,25 @@
       transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
       -webkit-tap-highlight-color: transparent;
     }
-    .nav-item .ico { font-size: 22px; line-height: 1; }
+    .nav-item .ico { font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; }
     .nav-item.active {
       color: var(--primary);
+    }
+
+    /* п.17: весь эмодзи-набор приложения заменён на line-иконки (Lucide,
+       ISC-лицензия). Инлайн SVG, stroke="currentColor" — берёт цвет из
+       того же места, где раньше был текстовый эмодзи-глиф (.row-icon,
+       .nav-item.active и т.д.), поэтому расцветка по состоянию (активная
+       вкладка, severity алерта) не потребовала отдельных правок. Размер —
+       1em, подстраивается под font-size контейнера, в котором раньше
+       рендерился сам эмодзи (тот же приём, что уже используют иконочные
+       шрифты). */
+    .ic { width: 1em; height: 1em; flex-shrink: 0; vertical-align: -0.15em; }
+    /* Цветные точки-статусы (был 🟢🔴🟠⚪) — это цвет, не пиктограмма,
+       поэтому не иконка, а простой CSS-кружок. */
+    .status-dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; flex-shrink: 0;
     }
     .nav-item:active { background: var(--surface-2); }
 

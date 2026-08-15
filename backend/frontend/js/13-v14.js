@@ -128,7 +128,7 @@
           </div>` : '';
         const aiBlock = data.ai_summary ? `
           <div class="progress-block" style="margin-bottom:12px;text-align:left;font-size:13px;line-height:1.5">
-            🤖 ${esc(data.ai_summary)}
+            <svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 8V4H8" /> <rect width="16" height="12" x="4" y="8" rx="2" /> <path d="M2 14h2" /> <path d="M20 14h2" /> <path d="M15 13v2" /> <path d="M9 13v2" /> </svg> ${esc(data.ai_summary)}
           </div>` : '';
         const cards = items.map(it => {
           const p = it.predicted||{};
@@ -163,7 +163,7 @@
         section.style.display = '';
         box.innerHTML = items.map(h => `
           <div class="sv-drop ${h.severity === 'critical' ? '' : 'warn'}" style="margin:8px 0 0">
-            <div class="ico">${h.severity === 'critical' ? '🚨' : '⚠️'}</div>
+            <div class="ico">${h.severity === 'critical' ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 18v-6a5 5 0 1 1 10 0v6" /> <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z" /> <path d="M21 12h1" /> <path d="M18.5 4.5 18 5" /> <path d="M2 12h1" /> <path d="M12 2v1" /> <path d="m4.929 4.929.707.707" /> <path d="M12 12v6" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /> </svg>'}</div>
             <div style="flex:1">
               <div class="t">${esc(h.store_name)} · ${h.date}</div>
               <div class="s">${esc(h.message)}</div>
@@ -389,7 +389,7 @@
         if (!items.length) { box.innerHTML = '<div class="empty">🍉 Нет объявлений</div>'; return; }
         box.innerHTML = items.map(a => `<div class="mt-card">
           <div class="mt-name">${esc(a.title||'')} ${a.required?'· обязательно':''}</div>
-          <div class="mt-meta">${a.is_read?'✓ прочитано':'не прочитано'} · ${String(a.created_at||'').slice(0,10)}</div>
+          <div class="mt-meta">${a.is_read?'<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> прочитано':'не прочитано'} · ${String(a.created_at||'').slice(0,10)}</div>
           <div style="padding:8px 0;font-size:14px;line-height:1.45">${esc(a.body||'')}</div>
           ${a.is_read?'':`<button class="btn-main" onclick="markAnnouncementRead(${a.id})">Прочитал</button>`}
           ${canManage() ? `<button class="mchip" style="margin-top:8px" onclick="showAnnouncementReads(${a.id})">Кто прочитал</button>` : ''}
@@ -410,7 +410,7 @@
         document.getElementById('modalBody').innerHTML = `
           <div class="section-title" style="margin-bottom:8px">Прочитали (${read.length}/${read.length + unread.length})</div>
           <div class="progress-block" style="margin-bottom:12px">
-            ${read.length ? read.map(e => `<div style="font-size:13px;padding:4px 0">✓ ${esc(e.full_name)}</div>`).join('') : '<div class="empty" style="padding:4px 0">Пока никто</div>'}
+            ${read.length ? read.map(e => `<div style="font-size:13px;padding:4px 0"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> ${esc(e.full_name)}</div>`).join('') : '<div class="empty" style="padding:4px 0">Пока никто</div>'}
           </div>
           ${unread.length ? `
             <div class="section-title" style="margin-bottom:8px">Ещё не прочитали</div>
@@ -503,7 +503,7 @@
         orgsAdminCache = Array.isArray(orgs) ? orgs : [];
         box.innerHTML = orgsAdminCache.map(o => `
           <button class="row" onclick="openEditOrg('${o.id}')">
-            <div class="row-icon">${o.is_active === false ? '⛔' : '🌐'}</div>
+            <div class="row-icon">${o.is_active === false ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M4.929 4.929 19.07 19.071" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" /> </svg>'}</div>
             <div class="row-body">
               <div class="row-title">${esc(o.name)}${o.is_active === false ? ' · выключена' : ''}</div>
               <div class="row-sub">${esc(o.id)} · сектор ${esc(o.sector_id || 'default')}${o.chat_id ? ' · чат подключён' : ' · чат не настроен'}</div>

@@ -200,7 +200,7 @@
       const gam = data.gamification || {};
       const missing = data.ideal_missing || [];
 
-      document.getElementById('modalTitle').textContent = data.ideal_shift ? '⭐ Идеальная смена' : 'Смена закрыта';
+      document.getElementById('modalTitle').textContent = data.ideal_shift ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /> </svg> Идеальная смена' : 'Смена закрыта';
       document.getElementById('modalBody').innerHTML = `
         <div style="text-align:center;padding:4px 0 16px">
           <div style="font-size:36px;font-weight:800;line-height:1">${data.score ?? 0}</div>
@@ -219,11 +219,11 @@
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
             <div>
               <div style="font-weight:700">${esc(gam.title || '')} · ур. ${gam.level || 1}</div>
-              <div style="font-size:12px;color:var(--hint)">${gam.xp || 0} XP${gam.next_level_xp != null ? ' / ' + gam.next_level_xp : ''}${gam.leveled_up ? ' · 🎉 новый уровень!' : ''}</div>
+              <div style="font-size:12px;color:var(--hint)">${gam.xp || 0} XP${gam.next_level_xp != null ? ' / ' + gam.next_level_xp : ''}${gam.leveled_up ? ' · <svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5.8 11.3 2 22l10.7-3.79" /> <path d="M4 3h.01" /> <path d="M22 8h.01" /> <path d="M15 2h.01" /> <path d="M22 20h.01" /> <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10" /> <path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17" /> <path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" /> <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" /> </svg> новый уровень!' : ''}</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-weight:700;color:var(--success)">+${gam.xp_gained || 0} XP</div>
-              ${gam.streak_days ? `<div style="font-size:12px;color:var(--hint)">🔥 ${gam.streak_days} дн.</div>` : ''}
+              ${gam.streak_days ? `<div style="font-size:12px;color:var(--hint)"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" /> </svg> ${gam.streak_days} дн.</div>` : ''}
             </div>
           </div>
           ${data.rewarded === false ? `<div style="font-size:12px;color:var(--hint);margin-top:8px">Смена на эту дату уже была закрыта и награждена сегодня — XP не начисляется повторно</div>` : ''}
@@ -304,7 +304,7 @@
               <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px">
                 <div class="lk-pill">lvl <strong>${g.level || 1}</strong> ${g.title || ''}</div>
                 <div class="lk-pill">XP <strong>${g.xp || 0}</strong>${g.next_level_xp != null ? ' / ' + g.next_level_xp : ''}</div>
-                <div class="lk-pill">🔥 <strong>${g.streak_days || 0}</strong> дн.</div>
+                <div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" /> </svg> <strong>${g.streak_days || 0}</strong> дн.</div>
               </div>
               ${best ? `<div style="margin-top:8px;font-size:12px;color:var(--hint)">Лучшая смена: ${best.date} · score ${best.score}</div>` : ''}
             </div>`;

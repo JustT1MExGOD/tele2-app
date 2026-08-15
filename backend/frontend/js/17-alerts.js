@@ -36,7 +36,7 @@ async function loadAlertsPage() {
       <div style="padding:0 16px 16px">
         ${items.length ? items.map(a => `
           <button class="row" onclick="openAlertDetail(${a.id})">
-            <div class="row-icon">${a.severity === 'critical' ? '🚨' : '⚠️'}</div>
+            <div class="row-icon">${a.severity === 'critical' ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 18v-6a5 5 0 1 1 10 0v6" /> <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z" /> <path d="M21 12h1" /> <path d="M18.5 4.5 18 5" /> <path d="M2 12h1" /> <path d="M12 2v1" /> <path d="m4.929 4.929.707.707" /> <path d="M12 12v6" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /> </svg>'}</div>
             <div class="row-body">
               <div class="row-title">${esc(a.title)}</div>
               <div class="row-sub">${esc(a.store_name || '')} · ${ALERT_STATUS_LABEL[a.status] || a.status}${a.task_id ? ' · есть задача' : ''}</div>
@@ -84,7 +84,7 @@ async function renderAlertDetail(id) {
         ${esc(a.store_name || '')} · ${ALERT_STATUS_LABEL[a.status] || a.status}${a.created_at ? ' · ' + new Date(a.created_at).toLocaleString('ru') : ''}
       </div>
       ${a.task_id ? `<button class="row" onclick="openTaskDetail(${a.task_id})">
-        <div class="row-icon">📋</div>
+        <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></div>
         <div class="row-body"><div class="row-title">Связанная задача</div><div class="row-sub">${a.task_status === 'done' ? 'Выполнена' : 'В работе'}</div></div>
         <div class="row-chevron">›</div>
       </button>` : ''}
