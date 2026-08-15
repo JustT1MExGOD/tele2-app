@@ -281,79 +281,168 @@ export async function buildStoryReportPngs(
   return { svgs, plan, fact, tomorrow };
 }
 
-/** Карточка-анонс версии в чат — тот же resvg-пайплайн, что и у отчётов. */
+const RELEASE_FONT = 'Google Sans';
+function resolveGoogleSansFontFiles(): string[] {
+  const candidates = [
+    path.join(process.cwd(), 'assets/fonts'),
+    path.join(__dirname, '../../assets/fonts'),
+    path.join(__dirname, '../assets/fonts')
+  ];
+  const files: string[] = [];
+  for (const dir of candidates) {
+    for (const name of ['GoogleSans-Regular.ttf', 'GoogleSans-SemiBold.ttf', 'GoogleSans-Bold.ttf']) {
+      const fp = path.join(dir, name);
+      if (fs.existsSync(fp)) files.push(fp);
+    }
+    if (files.length) break;
+  }
+  return files;
+}
+const RELEASE_FONT_FILES = resolveGoogleSansFontFiles();
+
+const RU_MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+function ruDateNow(): string {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
+  return `${now.getDate()} ${RU_MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+// SVG не переносит текст сам — режем длинные строки вручную по количеству
+// символов, иначе вылезают за карточку (560px). Грубая оценка ширины
+// символа, не honest text-metrics — но с большим запасом по краям карточки
+// (max-width строки заметно уже 560px), на кириллице Google Sans этого
+// достаточно, реальных переполнений на всех версиях в CHANGELOG не было.
+function wrapText(text: string, maxCharsPerLine: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of words) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (next.length > maxCharsPerLine && cur) {
+      lines.push(cur);
+      cur = w;
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+/**
+ * Карточка-анонс версии в чат — тот же resvg-пайплайн, что и у отчётов, но
+ * свой шрифт (Google Sans, не общий DejaVu Sans отчётов) и свой макет:
+ * цветной градиентный блок-заголовок с крупным номером версии + тёмное тело
+ * с буллетами — тот же язык, что уже используют промо-карточки T2 Retail
+ * (жирный цветной блок сверху, крупный номер/факт, скруглённая карточка),
+ * адаптированный под наш акцент и без фото людей — это генерируемая
+ * SVG→PNG картинка, не дизайн-макет с фотосессией.
+ */
 export async function buildReleaseCardSvg(
   entry: { version: string; title: string; bullets: string[] },
-  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string } }
+  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string; colorDeep?: string } }
 ) {
-  const brandName = opts?.brand?.name || opts?.name || 'T2 Sales';
+  const brandName = (opts?.brand?.name || opts?.name || 'T2 Sales').toUpperCase();
   const accent = opts?.brand?.color || opts?.color || '#2AABEE';
+  const accentDeep = opts?.brand?.colorDeep || '#1A8FD1';
 
-  // SVG не переносит текст сам — режем длинные строки вручную, иначе они
-  // вылезают за карточку (560px). Раньше это применялось только к буллетам —
-  // заголовок оставался одной строкой без переноса и обрезался по краю
-  // карточки на длинных названиях версий.
-  function wrapText(text: string, maxCharsPerLine: number): string[] {
-    const words = text.split(' ');
-    const lines: string[] = [];
-    let cur = '';
-    for (const w of words) {
-      const next = cur ? `${cur} ${w}` : w;
-      if (next.length > maxCharsPerLine && cur) {
-        lines.push(cur);
-        cur = w;
-      } else {
-        cur = next;
-      }
-    }
-    if (cur) lines.push(cur);
-    return lines;
-  }
+  const W = 560;
+  const PAD = 32;
+  const CONTENT_W = W - PAD * 2;
 
-  const TITLE_LINE_HEIGHT = 32;
-  const titleLines = wrapText(entry.title, 26);
-  const titleY = 84;
+  // "19.9.0" -> крупно "19.9", мельче ".0" (тот же приём, что в одобренном
+  // макете — последняя точка отделяет "патч", а не просто разбивка пополам).
+  const dotIdx = entry.version.lastIndexOf('.');
+  const versionMain = dotIdx === -1 ? entry.version : entry.version.slice(0, dotIdx);
+  const versionTail = dotIdx === -1 ? '' : entry.version.slice(dotIdx);
+
+  // --- Заголовок: сначала переносим строки и меряем высоту блока, сама
+  // разметка с абсолютными Y строится ниже, когда уже известно, откуда
+  // блок начинается по вертикали (зависит только от HEAD_H, известного
+  // заранее — а вот буллеты после заголовка зависят от числа его строк). ---
+  const TITLE_LINE_H = 28;
+  const titleLines = wrapText(entry.title, 34);
+  const titleBlockH = (titleLines.length - 1) * TITLE_LINE_H;
+
+  // --- Буллеты: та же логика — сначала разбиваем на строки и меряем
+  // суммарную высоту, координаты каждой строки посчитаем один раз ниже. ---
+  const BULLET_LINE_H = 23;
+  const BULLET_GAP = 8;
+  const bulletLineGroups = entry.bullets.map((b) => wrapText(b, 52));
+  let bulletsH = 0;
+  for (const lines of bulletLineGroups) bulletsH += lines.length * BULLET_LINE_H + BULLET_GAP;
+
+  // --- Геометрия по вертикали ---
+  const HEAD_H = 168;
+  const BODY_TOP = HEAD_H + 34;
+  const titleY0 = BODY_TOP + 20; // baseline первой строки заголовка
+  const dividerY = titleY0 + titleBlockH + 30;
+  const bulletsY0 = dividerY + 26;
+  const footY = bulletsY0 + bulletsH + 8;
+  const H = footY + 44;
+
+  const versionBaselineY = HEAD_H - 34;
+
   const titleBlock = titleLines
-    .map((line, i) => `<text x="40" y="${titleY + i * TITLE_LINE_HEIGHT}" fill="#FFFFFF" font-size="26" font-family="${FONT}" font-weight="700">${esc(line)}</text>`)
+    .map((line, i) => `<text x="${PAD}" y="${titleY0 + i * TITLE_LINE_H}" fill="#FFFFFF" font-size="20" font-family="${RELEASE_FONT}" font-weight="600">${esc(line)}</text>`)
     .join('\n');
-  const extraTitleHeight = (titleLines.length - 1) * TITLE_LINE_HEIGHT;
-  const versionY = 112 + extraTitleHeight;
 
-  let y = 150 + extraTitleHeight;
-  const parts: string[] = [];
-  for (const b of entry.bullets) {
-    const lines = wrapText(b, 46);
+  const bulletParts: string[] = [];
+  let by = bulletsY0;
+  for (const lines of bulletLineGroups) {
     lines.forEach((line, i) => {
-      const x = i === 0 ? 40 : 58;
-      const text = i === 0 ? `•  ${esc(line)}` : esc(line);
-      parts.push(`<text x="${x}" y="${y}" fill="#F3F4F6" font-size="16" font-family="${FONT}">${text}</text>`);
-      y += 26;
+      if (i === 0) bulletParts.push(`<circle cx="${PAD + 3}" cy="${by - 5}" r="3" fill="${esc(accent)}"/>`);
+      bulletParts.push(`<text x="${PAD + 15}" y="${by}" fill="#C9CDD8" font-size="14.5" font-family="${RELEASE_FONT}">${esc(line)}</text>`);
+      by += BULLET_LINE_H;
     });
-    y += 6;
+    by += BULLET_GAP;
   }
-  const height = Math.max(360, y + 60);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="560" height="${height}" viewBox="0 0 560 ${height}">
-  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0%" stop-color="#0A0A0B"/><stop offset="100%" stop-color="#14141A"/>
-  </linearGradient></defs>
-  <rect width="560" height="${height}" rx="24" fill="url(#bg)"/>
-  <rect width="560" height="6" fill="${esc(accent)}"/>
-  <text x="40" y="48" fill="${esc(accent)}" font-size="13" font-family="${FONT}" font-weight="700">${esc(brandName).toUpperCase()} · ОБНОВЛЕНИЕ</text>
-  ${titleBlock}
-  <text x="40" y="${versionY}" fill="#A1A1AA" font-size="14" font-family="${FONT}">версия ${esc(entry.version)}</text>
-  ${parts.join('\n')}
-  <text x="40" y="${height - 24}" fill="#6B7280" font-size="11" font-family="${FONT}">T2 Sales · Europe/Moscow</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs>
+    <linearGradient id="headGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${esc(accent)}"/>
+      <stop offset="100%" stop-color="${esc(accentDeep)}"/>
+    </linearGradient>
+    <clipPath id="cardClip"><rect width="${W}" height="${H}" rx="28"/></clipPath>
+    <filter id="soften" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+  </defs>
+  <g clip-path="url(#cardClip)">
+    <rect width="${W}" height="${H}" fill="#0B0E14"/>
+    <rect width="${W}" height="${HEAD_H}" fill="url(#headGrad)"/>
+    <circle cx="${W}" cy="0" r="130" fill="#FFFFFF" opacity="0.14" filter="url(#soften)"/>
+    <circle cx="${W - 60}" cy="${HEAD_H + 30}" r="90" fill="#FFFFFF" opacity="0.08" filter="url(#soften)"/>
+
+    <rect x="${PAD}" y="28" width="30" height="30" rx="9" fill="#FFFFFF" fill-opacity="0.22"/>
+    <svg x="${PAD + 6}" y="34" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>
+    </svg>
+    <text x="${PAD + 40}" y="47" fill="#FFFFFF" fill-opacity="0.92" font-size="12" font-family="${RELEASE_FONT}" font-weight="700" letter-spacing="1">${esc(brandName)} · ОБНОВЛЕНИЕ</text>
+
+    <text x="${PAD}" y="${versionBaselineY}" fill="#FFFFFF" font-size="52" font-family="${RELEASE_FONT}" font-weight="700" letter-spacing="-0.01em">${esc(versionMain)}<tspan font-size="22" font-weight="600" fill-opacity="0.75" dx="2">${esc(versionTail)}</tspan></text>
+
+    ${titleBlock}
+
+    <rect x="${PAD}" y="${dividerY}" width="${CONTENT_W}" height="1" fill="#FFFFFF" fill-opacity="0.09"/>
+
+    ${bulletParts.join('\n')}
+
+    <rect x="${PAD}" y="${footY}" width="${CONTENT_W}" height="1" fill="#FFFFFF" fill-opacity="0.07"/>
+    <text x="${PAD}" y="${footY + 26}" fill="#FFFFFF" fill-opacity="0.5" font-size="12" font-family="${RELEASE_FONT}" font-weight="700" letter-spacing="0.5">${esc(brandName)}</text>
+    <text x="${W - PAD}" y="${footY + 26}" fill="#FFFFFF" fill-opacity="0.35" font-size="12" font-family="${RELEASE_FONT}" text-anchor="end">${esc(ruDateNow())}</text>
+  </g>
 </svg>`;
 }
 
 export async function buildReleaseCardPng(
   entry: { version: string; title: string; bullets: string[] },
-  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string } }
+  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string; colorDeep?: string } }
 ) {
   const svg = await buildReleaseCardSvg(entry, opts);
-  return { svg, png: await svgToPng(svg) };
+  const png = await renderSvgToPng({ svg, fitWidth: 1120, fontFiles: RELEASE_FONT_FILES, defaultFontFamily: RELEASE_FONT });
+  return { svg, png };
 }
 
 export async function svgToPng(svg: string): Promise<Buffer> {
