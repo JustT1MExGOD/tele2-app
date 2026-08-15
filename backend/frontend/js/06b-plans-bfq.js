@@ -334,24 +334,14 @@
               </div>
               <div class="stats-row" style="padding:0 12px 12px">${chips}</div>
             </div>`;
-        }).join('') +
-        (canManage()
-          ? `<div style="padding:8px 12px 16px"><button class="btn-main" onclick="materializeDailyPlans()">Записать дневные планы в БД</button></div>`
-          : '');
+        }).join('');
+        // Кнопка «Записать дневные планы в БД» убрана (19.3) — оба случая,
+        // ради которых её нажимали, давно автоматизированы: ежедневный крон
+        // в 6:00 МСК (cron/reports.ts) и мгновенный пересчёт сразу при
+        // правке плана точки (routes-plans-v5.ts, PUT /plans/stores/:id/month).
       } catch {
         box.innerHTML = '<div class="empty">Дневные планы точек пока недоступны</div>';
       }
-    }
-
-    async function materializeDailyPlans() {
-      const res = await fetch(API + '/plans/stores/daily/materialize', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: '{}'
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
-      toast('Дневные планы записаны', 'ok');
-      loadStoreDailyPlans();
     }
 
     // План точки на месяц — вручную, независимо от планов сотрудников

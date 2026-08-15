@@ -20,7 +20,7 @@
       document.getElementById('modalTitle').textContent = 'Расчёт комбо';
       document.getElementById('modalBody').innerHTML = `
         <div class="empty" style="text-align:left;padding:0 0 12px;line-height:1.45">
-          Формула T2:<br><b>цена − скидка% + 28% от цены + 1900</b>
+          Формула T2:<br><b>цена − скидка% + 28% от цены + 1950</b>
         </div>
         <div class="field">
           <label>Цена телефона, ₽</label>
@@ -48,7 +48,7 @@
       const disc = Number(document.getElementById('comboDiscount')?.value) || 0;
       if (price <= 0) { toast('Укажи цену', 'err'); return; }
       const afterDisc = price * (1 - disc / 100);
-      const total = Math.round(afterDisc + price * 0.28 + 1900);
+      const total = Math.round(afterDisc + price * 0.28 + 1950);
       const el = document.getElementById('comboOut');
       if (!el) return;
       el.style.display = 'block';
@@ -56,7 +56,48 @@
         <div class="big">${total.toLocaleString('ru-RU')} ₽</div>
         <div class="hint">
           ${price.toLocaleString('ru-RU')} − ${disc}% = ${Math.round(afterDisc).toLocaleString('ru-RU')}<br>
-          + 28% (${Math.round(price * 0.28).toLocaleString('ru-RU')}) + 1 900
+          + 28% (${Math.round(price * 0.28).toLocaleString('ru-RU')}) + 1 950
+        </div>`;
+      try { tg?.HapticFeedback?.impactOccurred?.('light'); } catch (_) {}
+    }
+
+    function openSchoolCalc() {
+      document.getElementById('modalTitle').textContent = 'Калькулятор школа';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="empty" style="text-align:left;padding:0 0 12px;line-height:1.45">
+          Формула:<br><b>цена − 70% цены + 30% от цены + 3600 + 3490</b>
+        </div>
+        <div class="field">
+          <label>Цена телефона, ₽</label>
+          <input type="number" id="schoolPrice" placeholder="29990" inputmode="decimal">
+        </div>
+        <button type="button" class="btn-main" onclick="runSchoolCalc()">Посчитать</button>
+        <div id="schoolOut" style="display:none" class="combo-result"></div>
+      `;
+      try {
+        if (typeof openModal === 'function') openModal();
+        else document.getElementById('overlay')?.classList.add('show');
+      } catch (e) {
+        console.error(e);
+        document.getElementById('overlay')?.classList.add('show');
+      }
+      setTimeout(() => document.getElementById('schoolPrice')?.focus(), 200);
+    }
+
+    function runSchoolCalc() {
+      const price = Number(document.getElementById('schoolPrice')?.value) || 0;
+      if (price <= 0) { toast('Укажи цену', 'err'); return; }
+      const afterCut = price - price * 0.7;
+      const bonus = price * 0.3;
+      const total = Math.round(afterCut + bonus + 3600 + 3490);
+      const el = document.getElementById('schoolOut');
+      if (!el) return;
+      el.style.display = 'block';
+      el.innerHTML = `
+        <div class="big">${total.toLocaleString('ru-RU')} ₽</div>
+        <div class="hint">
+          ${price.toLocaleString('ru-RU')} − 70% = ${Math.round(afterCut).toLocaleString('ru-RU')}<br>
+          + 30% от цены (${Math.round(bonus).toLocaleString('ru-RU')}) + 3 600 + 3 490
         </div>`;
       try { tg?.HapticFeedback?.impactOccurred?.('light'); } catch (_) {}
     }

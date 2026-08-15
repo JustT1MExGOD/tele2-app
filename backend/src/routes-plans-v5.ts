@@ -82,13 +82,6 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     return computeStoreDailyPlans(date, orgId);
   });
 
-  // Записать дневные планы точек в БД на дату
-  app.post('/plans/stores/daily/materialize', async (request, reply) => {
-    if (!requireManager(request, reply)) return;
-    const body = (request.body as any) || {};
-    return materializeStoreDailyPlans(body.date);
-  });
-
   // План одной точки на месяц (вносится вручную, независимо от планов сотрудников)
   app.get('/plans/stores/:id/month', async (request, reply) => {
     if (!requireActive(request, reply)) return;
