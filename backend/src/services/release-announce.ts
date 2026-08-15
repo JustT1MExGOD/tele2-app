@@ -8,9 +8,32 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { query } from '../db/index.js';
-import { getChangelogEntry } from '../changelog.js';
+import { getChangelogEntry, ChangelogEntry } from '../changelog.js';
 import { buildReleaseCardPng } from './report-image.js';
 import { notifyChatPhoto } from '../bot/index.js';
+
+const CAPTION_LIMIT = 1024; // жёсткий лимит Telegram на подпись к фото
+
+/**
+ * Заголовок + все буллеты дословно, не просто "T2 Sales обновился до X" —
+ * по просьбе владельца продукта подпись должна нести полное описание
+ * апдейта, не отсылать читать картинку/канал отдельно. sendPhoto не
+ * передаёт parse_mode (notifyChatPhoto, bot/index.ts) — подпись голый
+ * текст, HTML/Markdown-разметка тут не отрендерится, поэтому без тегов.
+ */
+export function buildAnnounceCaption(version: string, entry: ChangelogEntry): string {
+  const bulletLines = entry.bullets.map((b) => `• ${b}`);
+  const full = [`🚀 T2 Sales обновился до ${version}`, '', entry.title, '', ...bulletLines].join('\n');
+  if (full.length <= CAPTION_LIMIT) return full;
+
+  // Обрезаем по границе слова, если она не слишком далеко от лимита —
+  // иначе просто режем по символу. В любом случае оставляем место под "…".
+  const cutAt = CAPTION_LIMIT - 1;
+  let cut = full.slice(0, cutAt);
+  const lastSpace = cut.lastIndexOf(' ');
+  if (lastSpace > cutAt - 40) cut = cut.slice(0, lastSpace);
+  return cut.trimEnd() + '…';
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,7 +82,7 @@ export async function announceReleaseIfNeeded() {
     if (!(await claimReleaseAnnouncement(version))) return;
 
     const { png } = await buildReleaseCardPng(entry);
-    const caption = `🚀 T2 Sales обновился до ${version}: ${entry.title}`;
+    const caption = buildAnnounceCaption(version, entry);
     const filename = `release_${version}.png`;
 
     // Анонсы версий уходят только в выделенный Telegram-канал, не в общий

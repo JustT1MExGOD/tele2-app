@@ -1,6 +1,44 @@
 import { describe, it, expect, afterAll } from 'vitest';
-import { claimReleaseAnnouncement } from '../../src/services/release-announce.js';
+import { claimReleaseAnnouncement, buildAnnounceCaption } from '../../src/services/release-announce.js';
 import { query } from '../../src/db/index.js';
+
+// Подпись к анонсу теперь несёт полное описание (заголовок + все буллеты),
+// не короткую строку "T2 Sales обновился до X" — по прямому запросу
+// владельца продукта. Telegram режет подпись к фото на 1024 символах на
+// своей стороне посреди слова — buildAnnounceCaption должен обрезать сам,
+// аккуратнее, заранее.
+describe('buildAnnounceCaption — подпись к анонсу', () => {
+  it('короткая запись — заголовок + все буллеты целиком, без обрезки', () => {
+    const caption = buildAnnounceCaption('19.9.0', {
+      version: '19.9.0',
+      title: 'Тестовый релиз',
+      bullets: ['Первый пункт', 'Второй пункт']
+    });
+    expect(caption).toContain('🚀 T2 Sales обновился до 19.9.0');
+    expect(caption).toContain('Тестовый релиз');
+    expect(caption).toContain('• Первый пункт');
+    expect(caption).toContain('• Второй пункт');
+    expect(caption.length).toBeLessThanOrEqual(1024);
+  });
+
+  it('длинная запись — обрезается до 1024 символов с многоточием, не посреди слова', () => {
+    const longBullet = 'Слово '.repeat(300); // заведомо длиннее лимита
+    const caption = buildAnnounceCaption('19.9.0', {
+      version: '19.9.0',
+      title: 'Большой релиз',
+      bullets: [longBullet]
+    });
+    expect(caption.length).toBeLessThanOrEqual(1024);
+    expect(caption.endsWith('…')).toBe(true);
+    // не обрывает слово на середине — предпоследний символ (перед "…") не часть "Слово"
+    expect(caption.slice(0, -1).endsWith(' ')).toBe(false); // trimEnd убрал хвостовой пробел
+  });
+
+  it('без буллетов — заголовок + title, без пустых лишних пунктов', () => {
+    const caption = buildAnnounceCaption('19.9.0', { version: '19.9.0', title: 'Без буллетов', bullets: [] });
+    expect(caption).toBe('🚀 T2 Sales обновился до 19.9.0\n\nБез буллетов\n');
+  });
+});
 
 // Регрессия: анонс релиза дублировался в реальный чат (18.1.0 ушёл дважды
 // подряд). SELECT-проверка и UPDATE-отметка были двумя отдельными шагами
