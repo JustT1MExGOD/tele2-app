@@ -114,7 +114,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     }
 
     const res = await query(
-      `SELECT t.*, e.full_name as assignee_name, st.name as store_name
+      `SELECT t.*, e.full_name as assignee_name, COALESCE(st.display_name, st.name) as store_name
        FROM tasks t
        LEFT JOIN employees e ON e.id = t.assigned_to
        LEFT JOIN stores st ON st.id = t.store_id
@@ -130,7 +130,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
   app.get('/tasks/my', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const res = await query(
-      `SELECT t.*, st.name as store_name
+      `SELECT t.*, COALESCE(st.display_name, st.name) as store_name
        FROM tasks t
        LEFT JOIN stores st ON st.id = t.store_id
        WHERE t.assigned_to = $1

@@ -318,13 +318,13 @@ export async function registerV8Routes(app: FastifyInstance) {
     const user = request.user!;
     if (user.role === 'manager' || user.role === 'admin') {
       const all = await query(
-        `SELECT id, name, code, color, plan_share FROM stores
-         WHERE is_active = true OR is_active IS NULL ORDER BY name`
+        `SELECT id, COALESCE(display_name, name) as name, code, color, plan_share FROM stores s
+         WHERE is_active = true OR is_active IS NULL ORDER BY s.name`
       );
       return all.rows;
     }
     const res = await query(
-      `SELECT st.id, st.name, st.code, st.color, st.plan_share
+      `SELECT st.id, COALESCE(st.display_name, st.name) as name, st.code, st.color, st.plan_share
        FROM supervisor_sectors ss
        JOIN organizations o ON o.sector_id = ss.sector_id
        JOIN stores st ON COALESCE(st.org_id, 'default') = o.id

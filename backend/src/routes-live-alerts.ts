@@ -28,7 +28,7 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, org_id);
     const statusFilter = status && VALID_ALERT_STATUSES.has(status) ? status : 'open';
     const res = await query(
-      `SELECT a.*, st.name as store_name,
+      `SELECT a.*, COALESCE(st.display_name, st.name) as store_name,
          t.id as task_id, t.status as task_status
        FROM smart_alerts a
        LEFT JOIN stores st ON st.id = a.store_id

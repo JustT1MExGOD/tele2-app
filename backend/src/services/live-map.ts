@@ -10,10 +10,10 @@ export async function getLiveNetworkMap(orgId = 'default') {
   const today = todayMoscow();
 
   const stores = await query(
-    `SELECT id, name, code, color, lat, lng, plan_share
-     FROM stores
+    `SELECT id, COALESCE(display_name, name) as name, code, color, lat, lng, plan_share
+     FROM stores s
      WHERE COALESCE(is_active, true) = true AND COALESCE(org_id,'default') = $1
-     ORDER BY hours NULLS LAST, name`,
+     ORDER BY hours NULLS LAST, s.name`,
     [orgId]
   );
 

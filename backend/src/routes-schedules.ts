@@ -23,7 +23,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     // иначе собственная смена пропадает из «Мой день»/формы продажи у
     // самого сотрудника, который её выполняет.
     const res = await query(
-      `SELECT sch.*, e.full_name, st.name as store_name, st.short_name as store_short
+      `SELECT sch.*, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.short_name as store_short
        FROM schedules sch
        JOIN employees e ON e.id = sch.employee_id
        JOIN stores st ON st.id = sch.store_id
@@ -77,7 +77,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     const res = await query(
       `SELECT sch.work_date, sch.shift_text, sch.hours, sch.store_id,
               e.id as employee_id, e.full_name, e.short_name,
-              st.name as store_name, st.short_name as store_short
+              COALESCE(st.display_name, st.name) as store_name, st.short_name as store_short
        FROM schedules sch
        JOIN employees e ON e.id = sch.employee_id
        LEFT JOIN stores st ON st.id = sch.store_id

@@ -60,7 +60,7 @@ export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
           [employeeId, from, date]
         ),
         query(
-          `SELECT ss.work_date::text as date, ss.store_id, st.name as store_name,
+          `SELECT ss.work_date::text as date, ss.store_id, COALESCE(st.display_name, st.name) as store_name,
                   ss.score, ss.ideal_shift, ss.mood
            FROM shift_sessions ss
            LEFT JOIN stores st ON st.id = ss.store_id

@@ -133,7 +133,7 @@ export async function registerMeRoutes(app: FastifyInstance) {
     const e = emp.rows[0];
 
     const sch = await query(
-      `SELECT sch.*, st.name as store_name, st.color, st.code as store_code, st.address as store_address
+      `SELECT sch.*, COALESCE(st.display_name, st.name) as store_name, st.color, st.code as store_code, st.address as store_address
        FROM schedules sch
        LEFT JOIN stores st ON st.id = sch.store_id
        WHERE sch.employee_id = $1
@@ -229,7 +229,7 @@ export async function registerMeRoutes(app: FastifyInstance) {
     // Незакрытые задачи (18.4) — «Мой день» уже единственный персональный
     // экран сотрудника, естественное место показать, что назначил менеджер.
     const tasks = await query(
-      `SELECT t.*, st.name as store_name
+      `SELECT t.*, COALESCE(st.display_name, st.name) as store_name
        FROM tasks t
        LEFT JOIN stores st ON st.id = t.store_id
        WHERE t.assigned_to = $1 AND t.status IN ('open', 'in_progress')

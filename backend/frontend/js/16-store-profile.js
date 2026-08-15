@@ -44,9 +44,14 @@ async function renderStoreProfile() {
     const trendHasData = trend.some(t => (t.units || 0) > 0);
     const trendMax = Math.max(1, ...trend.map(t => t.units || 0));
 
+    window.__storeProfileDisplayName = d.store?.display_name || '';
+
     box.innerHTML = `
       <div class="section">
-        <div class="section-title">${esc(d.store?.name || 'Точка')}</div>
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span>${esc(d.store?.name || 'Точка')}</span>
+          ${canManage() ? `<button class="mchip" onclick="editStoreDisplayName('${storeId}')">✏️ Название</button>` : ''}
+        </div>
         <div class="cc-row" style="padding:0 16px">
           <div class="cc-health ${tone}">${d.health?.score ?? 0}</div>
           <div class="cc-meta">
@@ -103,5 +108,27 @@ async function renderStoreProfile() {
   } catch (e) {
     console.error(e);
     box.innerHTML = '<div class="empty">Не удалось загрузить профиль точки</div>';
+  }
+}
+
+/* 7: кастомное название точки — перекрывает "сырое" name везде в мини-аппе
+   (см. COALESCE(display_name, name) на бэкенде). Простой prompt() — поле
+   одно текстовое, отдельная модалка была бы избыточной. */
+async function editStoreDisplayName(storeId) {
+  const current = window.__storeProfileDisplayName || '';
+  const next = prompt('Кастомное название точки (пусто — вернуть обычное имя):', current);
+  if (next === null) return;
+  const trimmed = next.trim();
+  try {
+    const res = await fetch(API + '/stores/' + encodeURIComponent(storeId), {
+      method: 'PATCH',
+      headers: authHeaders(true),
+      body: JSON.stringify({ display_name: trimmed || null })
+    });
+    if (!res.ok) throw new Error('fail');
+    toast('Название обновлено', 'ok');
+    renderStoreProfile();
+  } catch (e) {
+    toast('Ошибка сохранения', 'err');
   }
 }

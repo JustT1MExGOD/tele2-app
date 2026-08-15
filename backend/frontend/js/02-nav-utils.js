@@ -1,6 +1,20 @@
 /* 02-nav-utils.js — часть T2 Sales Mini App (см. index.html).
    Классический скрипт, общая глобальная область со всеми /js/*.js — порядок подключения важен. */
     // ===== Utils =====
+    // 19: кастомная аватарка. /avatars/:id отдаёт 404, если её нет —
+    // пробуем загрузить через Image(), чтобы никогда не показать битую
+    // картинку; при успехе подменяем содержимое элемента на <img>, при
+    // неудаче не трогаем то, что там уже отрендерено (буква-инициал).
+    function applyAvatarImg(elementId, employeeId) {
+      if (!employeeId) return;
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      const img = new Image();
+      img.onload = () => {
+        el.innerHTML = `<img src="${API}/avatars/${employeeId}" alt="">`;
+      };
+      img.src = `${API}/avatars/${employeeId}`;
+    }
     // todayMoscow() живёт в 01-core.js — она нужна там уже на верхнем уровне
     // (scheduleMonth/planMonth), а порядок подключения скриптов этого не ждёт.
     function formatDateRu(iso) {

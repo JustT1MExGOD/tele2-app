@@ -122,8 +122,11 @@
       document.getElementById('lkProfile').innerHTML = `
         <div class="lk-hero">
           <div class="lk-hero-top">
-            <div class="lk-avatar">
-              ${photo ? `<img src="${photo}" alt="">` : (fullName[0] || 'T')}
+            <div class="lk-avatar-wrap">
+              <div class="lk-avatar" id="lkAvatar">
+                ${photo ? `<img src="${photo}" alt="">` : (fullName[0] || 'T')}
+              </div>
+              <button type="button" class="lk-avatar-edit" onclick="pickAvatarFile()" title="Сменить аватарку">📷</button>
             </div>
             <div>
               <div class="lk-name">${fullName}</div>
@@ -136,6 +139,11 @@
             <div class="lk-pill">📅 <strong>${formatDateRu(today)}</strong></div>
           </div>
         </div>`;
+      // Кастомная аватарка (19) приоритетнее photo_url из Telegram —
+      // подменяет содержимое, только если реально есть (иначе остаётся то,
+      // что уже отрендерено выше: фото из Telegram или буква).
+      applyAvatarImg('lkAvatar', empId);
+      applyAvatarImg('userAvatar', empId);
 
       // --- Кольцо прогресса дня ---
       const tot = dayData?.total || progData?.total || {};
@@ -351,6 +359,64 @@
         loadMyPlan();
       } catch (e) {
         toast('Ошибка привязки', 'err');
+      }
+    }
+
+    // 19: кастомная аватарка. Открывает системный пикер файла, скрытый
+    // <input> создаётся один раз и переиспользуется.
+    function pickAvatarFile() {
+      let input = document.getElementById('avatarFileInput');
+      if (!input) {
+        input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.id = 'avatarFileInput';
+        input.style.display = 'none';
+        input.addEventListener('change', onAvatarFileChosen);
+        document.body.appendChild(input);
+      }
+      input.value = '';
+      input.click();
+    }
+
+    // Сжимаем на клиенте до ~256×256 перед загрузкой — держит bytea в базе
+    // маленьким, не тянем библиотеку ради этого (голый Canvas API хватает).
+    function resizeImageFile(file, maxSize = 256, quality = 0.85) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('toBlob fail')), 'image/jpeg', quality);
+          URL.revokeObjectURL(img.src);
+        };
+        img.onerror = () => reject(new Error('image load fail'));
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    async function onAvatarFileChosen(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const blob = await resizeImageFile(file);
+        const form = new FormData();
+        form.append('file', blob, 'avatar.jpg');
+        const res = await fetch(API + '/me/avatar', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: form
+        });
+        if (!res.ok) throw new Error('upload fail');
+        toast('Аватарка обновлена', 'ok');
+        loadMyPlan();
+      } catch (err) {
+        toast('Не удалось загрузить фото', 'err');
       }
     }
 

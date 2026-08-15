@@ -186,6 +186,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
       'code',
       'short_name',
       'address',
+      'display_name',
       'work_time',
       'hours',
       'color',

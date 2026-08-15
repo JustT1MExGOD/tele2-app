@@ -50,8 +50,15 @@ export async function orgIdForEmployee(employeeId: number): Promise<string> {
 
 export async function listStoresForOrg(orgId: string) {
   try {
+    // display_name (батч 3, п.7) перекрывает "сырое" name из * — при
+    // дублирующихся именах колонок в результирующей строке node-postgres
+    // берёт последнее значение, так что этот SELECT не ломает ни один
+    // существующий вызов, читающий store.name как обычно. ORDER BY s.name
+    // (не голое "name") — иначе неоднозначность с выходным алиасом того же
+    // имени валит запрос ("ORDER BY name неоднозначен"), молча съедаемая
+    // catch-ем ниже — вернулся бы просто пустой список без единой ошибки.
     const res = await query(
-      `SELECT * FROM stores WHERE COALESCE(org_id,'default') = $1 ORDER BY name`,
+      `SELECT *, COALESCE(display_name, name) AS name FROM stores s WHERE COALESCE(org_id,'default') = $1 ORDER BY s.name`,
       [orgId]
     );
     return res.rows;

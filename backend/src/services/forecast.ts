@@ -159,7 +159,7 @@ export async function forecastStore(storeId: string, fromDate: string, days = 7)
  */
 export async function getStaffingHints(days = 7, orgId = 'default') {
   const storesRes = await query(
-    `SELECT id, name FROM stores WHERE COALESCE(is_active,true)=true AND COALESCE(org_id,'default') = $1`,
+    `SELECT id, COALESCE(display_name, name) as name FROM stores WHERE COALESCE(is_active,true)=true AND COALESCE(org_id,'default') = $1`,
     [orgId]
   );
   const stores = storesRes.rows as { id: string; name: string }[];

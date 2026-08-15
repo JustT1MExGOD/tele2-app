@@ -344,11 +344,15 @@
             // таблице, не одна точка на лист, как в Excel-версии) — без
             // названия точки в самой ячейке непонятно, куда именно вышел
             // человек в этот день, особенно при подменах на чужой точке.
+            // Цвет ячейки — цвет точки, тот же язык, что уже у .sch-cell.work
+            // в календарной сетке ниже на этой же странице (было: статичный
+            // "warning"-жёлтый для всех точек сразу, несостыковка визуала).
             const col = storeColor(row.store_id);
+            const cellStyle = `style="background:${col}22;color:${col};border-color:${col}"`;
             const storeShort = esc((row.store_short || row.store_name || '').slice(0, 6));
-            modeCells += `<td class="sum-sch-cell work" title="${esc(row.store_name || '')}">
-              ${esc(row.shift_text || '')}<br><span class="sum-sch-store" style="color:${col}">${storeShort}</span></td>`;
-            hourCells += `<td class="sum-sch-cell work">${hours}</td>`;
+            modeCells += `<td class="sum-sch-cell work" ${cellStyle} title="${esc(row.store_name || '')}">
+              ${esc(row.shift_text || '')}<br><span class="sum-sch-store" style="color:inherit">${storeShort}</span></td>`;
+            hourCells += `<td class="sum-sch-cell work" ${cellStyle}>${hours}</td>`;
           }
         }
         return `

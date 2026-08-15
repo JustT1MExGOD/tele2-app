@@ -149,6 +149,14 @@
 
       <div class="section">
         <div class="section-title">Быстрые действия</div>
+        <button class="row" onclick="switchPage('cash')">
+          <div class="row-icon">💵</div>
+          <div class="row-body">
+            <div class="row-title">Касса</div>
+            <div class="row-sub">Факт / 1С / плюс-минус по точкам</div>
+          </div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="switchPage('monthplan')">
           <div class="row-icon">📊</div>
           <div class="row-body"><div class="row-title">Планы и факт за месяц</div><div class="row-sub">видно всей команде</div></div>
@@ -251,14 +259,6 @@
           <div class="row-chevron">›</div>
         </button>
 
-        <button class="row" onclick="switchPage('cash')">
-          <div class="row-icon">💵</div>
-          <div class="row-body">
-            <div class="row-title">Касса</div>
-            <div class="row-sub">Факт / 1С / плюс-минус по точкам</div>
-          </div>
-          <div class="row-chevron">›</div>
-        </button>
         <button class="row" onclick="switchPage('live')">
           <div class="row-icon">🗺</div>
           <div class="row-body">
@@ -542,11 +542,6 @@
 
     <!-- ===== CASH ===== -->
     <div id="page-cash" class="page">
-      <div class="section">
-        <div class="section-title">Касса по дням</div>
-        <div class="empty" style="text-align:left;padding:8px 16px" id="cashMeta">Δ = факт − (1С + 2000)</div>
-        <div id="cashTable" style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="skeleton"></div></div>
-      </div>
       <div class="section" id="cashEditSection" style="display:none">
         <div class="section-title">Внести кассу</div>
         <div class="progress-block">
@@ -557,6 +552,11 @@
           <div class="field"><label>Комментарий</label><input id="cashComment" placeholder="опционально"></div>
           <button class="btn-main" onclick="saveCash()">Сохранить</button>
         </div>
+      </div>
+      <div class="section">
+        <div class="section-title">Касса по дням</div>
+        <div class="empty" style="text-align:left;padding:8px 16px" id="cashMeta">Δ = факт − (1С + 2000)</div>
+        <div id="cashTable" style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="skeleton"></div></div>
       </div>
     </div>
 

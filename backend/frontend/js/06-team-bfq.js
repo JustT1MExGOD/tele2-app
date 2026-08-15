@@ -79,7 +79,7 @@
           return `
             <div>
               <button class="row" onclick="openEmployeeCard(${e.id})">
-                <div class="team-avatar${st.active ? ' active' : ''}">${initial}</div>
+                <div class="team-avatar${st.active ? ' active' : ''}" id="ta-${e.id}">${initial}</div>
                 <div class="row-body">
                   <div class="row-title">${esc(e.full_name)}${roleBadge}</div>
                   <div class="row-sub">SIM ${st.sim} · Комбо ${st.combo} · Тел ${st.phones} · ${roleLabel(e.role)}</div>
@@ -89,6 +89,7 @@
               ${adminBtns}
             </div>`;
         }).join('') || '<div class="empty">🍉 В команде пока никого нет</div>';
+        list.forEach(e => applyAvatarImg('ta-' + e.id, e.id));
       } catch {
         box.innerHTML = '<div class="empty">🍉 Не получилось загрузить команду, зайди чуть позже</div>';
       }

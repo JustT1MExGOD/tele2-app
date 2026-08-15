@@ -9,6 +9,7 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import multipart from '@fastify/multipart';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -41,6 +42,7 @@ import { registerCommandCenterRoutes } from './routes-command-center.js';
 import { registerTasksRoutes } from './routes-tasks.js';
 import { registerStoreProfileRoutes } from './routes-store-profile.js';
 import { registerEmployeeProfileRoutes } from './routes-employee-profile.js';
+import { registerAvatarRoutes } from './routes-avatar.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,6 +76,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Node fetch, тестовый набор — CORS вообще не касается, это чисто
   // браузерный механизм).
   await app.register(cors, { origin: false });
+  await app.register(multipart);
 
   // Единая точка резолва пользователя (telegram_id проверяется по подписи
   // Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.
@@ -120,6 +123,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     ['Tasks', registerTasksRoutes],
     ['Store Profile', registerStoreProfileRoutes],
     ['Employee Profile', registerEmployeeProfileRoutes],
+    ['Avatar', registerAvatarRoutes],
   ];
 
   for (const [label, register] of routeModules) {

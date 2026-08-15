@@ -23,7 +23,7 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, org_id);
 
     const res = await query(
-      `SELECT s.*, e.full_name, st.name as store_name
+      `SELECT s.*, e.full_name, COALESCE(st.display_name, st.name) as store_name
        FROM sales s
        JOIN employees e ON e.id = s.employee_id
        JOIN stores st ON st.id = s.store_id
@@ -122,7 +122,7 @@ export async function registerSalesRoutes(app: FastifyInstance) {
 
     try {
       const info = await query(
-        `SELECT e.full_name, st.name as store_name
+        `SELECT e.full_name, COALESCE(st.display_name, st.name) as store_name
          FROM employees e, stores st
          WHERE e.id = $1 AND st.id = $2`,
         [employee_id, store_id]

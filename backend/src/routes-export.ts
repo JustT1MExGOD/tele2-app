@@ -44,7 +44,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
     // всегда, даже если сегодня подменяешь в чужой сети.
     const params: any[] = [from, to, orgId, request.user!.employee_id];
     let sql = `
-      SELECT s.*, e.full_name, st.name as store_name
+      SELECT s.*, e.full_name, COALESCE(st.display_name, st.name) as store_name
       FROM sales s
       JOIN employees e ON e.id = s.employee_id
       JOIN stores st ON st.id = s.store_id
@@ -74,7 +74,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, q.org_id);
     const params: any[] = [from, to, orgId];
     let sql = `
-      SELECT a.*, e.full_name, st.name as store_name
+      SELECT a.*, e.full_name, COALESCE(st.display_name, st.name) as store_name
       FROM sales_audit a
       LEFT JOIN employees e ON e.id = a.employee_id
       LEFT JOIN stores st ON st.id = a.store_id
@@ -99,7 +99,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, q.org_id);
     const params: any[] = [from, to, orgId];
     let sql = `
-      SELECT s.sale_date, e.full_name, st.name as store_name, st.code,
+      SELECT s.sale_date, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.code,
              s.sim, s.mnp, s.pa, s.combo, s.phones, s.accessories,
              s.insurance, s.wink, s.shpd, s.focus, s.settings,
              s.credit_request, s.credit_issued, s.plotter, s.hb
@@ -188,7 +188,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
     const end = endDate.toISOString().slice(0, 10);
 
     const res = await query(
-      `SELECT sch.work_date, e.full_name, st.name as store_name, st.code,
+      `SELECT sch.work_date, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.code,
               sch.shift_text, sch.hours
        FROM schedules sch
        JOIN employees e ON e.id = sch.employee_id

@@ -195,7 +195,7 @@ export async function buildSupervisorDashboard(opts: {
   let storesRes;
   if (opts.scope === null) {
     storesRes = await query(
-      `SELECT s.id, s.name, s.code, COALESCE(s.color, '#2AABEE') as color,
+      `SELECT s.id, COALESCE(s.display_name, s.name) as name, s.display_name, s.code, COALESCE(s.color, '#2AABEE') as color,
               COALESCE(s.org_id, 'default') as org_id, COALESCE(o.name, 'default') as org_name
        FROM stores s LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
        WHERE COALESCE(s.is_active, true) = true ORDER BY s.name`
@@ -204,7 +204,7 @@ export async function buildSupervisorDashboard(opts: {
     return emptyDash(from, date, month);
   } else {
     storesRes = await query(
-      `SELECT s.id, s.name, s.code, COALESCE(s.color, '#2AABEE') as color,
+      `SELECT s.id, COALESCE(s.display_name, s.name) as name, s.display_name, s.code, COALESCE(s.color, '#2AABEE') as color,
               COALESCE(s.org_id, 'default') as org_id, COALESCE(o.name, 'default') as org_name
        FROM stores s LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
        WHERE s.id = ANY($1) AND COALESCE(s.is_active, true) = true ORDER BY s.name`,
@@ -389,6 +389,7 @@ export async function buildSupervisorDashboard(opts: {
     storeCards.push({
       store_id: st.id,
       name: st.name,
+      display_name: st.display_name,
       code: st.code,
       color: st.color || '#2AABEE',
       org_id: st.org_id,
@@ -551,7 +552,7 @@ export async function findUnderperformingEmployees(scope: StoreScope, date: stri
   if (scope !== null && !scope.length) return [];
 
   const res = await query(
-    `SELECT sch.employee_id, e.full_name, sch.store_id, st.name as store_name,
+    `SELECT sch.employee_id, e.full_name, sch.store_id, COALESCE(st.display_name, st.name) as store_name,
        COALESCE(SUM(s.sim + s.mnp + s.pa + s.combo), 0) as units
      FROM schedules sch
      JOIN employees e ON e.id = sch.employee_id
@@ -561,7 +562,7 @@ export async function findUnderperformingEmployees(scope: StoreScope, date: stri
      WHERE sch.work_date::date = $${scope !== null ? 2 : 1}::date
        AND COALESCE(sch.hours, 0) > 0
        ${filter.sql}
-     GROUP BY sch.employee_id, e.full_name, sch.store_id, st.name`,
+     GROUP BY sch.employee_id, e.full_name, sch.store_id, st.name, st.display_name`,
     scope !== null ? [...filter.params, date] : [date]
   ).catch(() => ({ rows: [] as any[] }));
 

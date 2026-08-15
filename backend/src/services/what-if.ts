@@ -54,8 +54,8 @@ export async function simulateScheduleMoves(opts: {
   // чужой сети просто не попадают в coverage, поэтому move на них ниже
   // естественно отбрасывается как unknown_store — без отдельного чека.
   const stores = await query(
-    `SELECT id, name, code, COALESCE(color, '#2AABEE') as color
-     FROM stores WHERE COALESCE(is_active, true) = true AND COALESCE(org_id,'default') = $1 ORDER BY name`,
+    `SELECT id, COALESCE(display_name, name) as name, code, COALESCE(color, '#2AABEE') as color
+     FROM stores s WHERE COALESCE(is_active, true) = true AND COALESCE(org_id,'default') = $1 ORDER BY s.name`,
     [opts.orgId]
   );
 

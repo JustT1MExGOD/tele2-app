@@ -35,7 +35,7 @@
           return;
         }
 
-        box.innerHTML = dates.map(d => {
+        const dayHtml = (d) => {
           const rows = stList.map(s => {
             const c = (cells[d] && cells[d][s.id]) || {};
             const fact = c.cash_fact;
@@ -56,7 +56,18 @@
             <div class="cash-day-h"><span>${label}</span></div>
             <div class="cash-cols"><div>Точка</div><div>Факт</div><div>1С</div><div>Δ (−2000)</div></div>
             ${rows}</div>`;
-        }).join('');
+        };
+
+        // 14: только 2 последних дня сразу, остальное — по клику
+        // (тот же .mt-toggle/.mt-extra паттерн, что «Прогресс за месяц» и
+        // «Планы и факт за месяц» — dates уже по возрастанию даты).
+        const recent = dates.slice(-2);
+        const rest = dates.slice(0, -2);
+        box.innerHTML = recent.map(dayHtml).join('') + (rest.length ? `
+          <div class="mt-more">
+            <button type="button" class="mt-toggle" onclick="toggleMonthExtra('cashExtraDays', this, 'Свернуть ▴', 'Ещё дни ▾')">Ещё дни ▾</button>
+            <div class="sv-extra" id="cashExtraDays">${rest.slice().reverse().map(dayHtml).join('')}</div>
+          </div>` : '');
       } catch (e) {
         console.error(e);
         if (box) box.innerHTML = '<div class="empty">🍉 Касса сейчас недоступна, зайди чуть позже</div>';

@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "19.6.0",
+  "version": "19.7.0",
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
+    "@fastify/multipart": "^10.1.1",
     "@fastify/static": "^8.0.2",
     "@resvg/resvg-js": "^2.6.2",
     "dotenv": "^16.4.5",

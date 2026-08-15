@@ -25,13 +25,13 @@ export async function registerStatsRoutes(app: FastifyInstance) {
     const res = await query(
       `SELECT
          st.id as store_id,
-         st.name,
+         COALESCE(st.display_name, st.name) as name,
          st.code,
          ${sumSelect}
        FROM stores st
        LEFT JOIN sales s ON s.store_id = st.id AND s.sale_date = $1
        WHERE COALESCE(st.org_id, 'default') = $2
-       GROUP BY st.id, st.name, st.code, st.hours
+       GROUP BY st.id, st.name, st.display_name, st.code, st.hours
        ORDER BY st.hours`,
       [d, orgId]
     );

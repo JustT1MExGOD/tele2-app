@@ -48,13 +48,13 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
       const alertsRes =
         scope === null
           ? await query(
-              `SELECT a.*, st.name as store_name FROM smart_alerts a
+              `SELECT a.*, COALESCE(st.display_name, st.name) as store_name FROM smart_alerts a
                LEFT JOIN stores st ON st.id = a.store_id
                WHERE a.status = 'open' ORDER BY a.created_at DESC LIMIT 50`
             )
           : scope.length
             ? await query(
-                `SELECT a.*, st.name as store_name FROM smart_alerts a
+                `SELECT a.*, COALESCE(st.display_name, st.name) as store_name FROM smart_alerts a
                  LEFT JOIN stores st ON st.id = a.store_id
                  WHERE a.status = 'open' AND a.store_id = ANY($1)
                  ORDER BY a.created_at DESC LIMIT 50`,

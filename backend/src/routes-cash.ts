@@ -20,9 +20,9 @@ export async function registerCashRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, q.org_id);
 
     const storesRes = await query(
-      `SELECT id, name, code FROM stores
+      `SELECT id, COALESCE(display_name, name) as name, code FROM stores s
        WHERE COALESCE(is_active, true) = true AND COALESCE(org_id, 'default') = $1
-       ORDER BY hours NULLS LAST, name`,
+       ORDER BY hours NULLS LAST, s.name`,
       [orgId]
     );
     const stList = storesRes.rows;
@@ -117,7 +117,7 @@ export async function registerCashRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, q.org_id);
     const params: any[] = [from, to, orgId];
     let sql = `
-      SELECT c.*, st.name as store_name
+      SELECT c.*, COALESCE(st.display_name, st.name) as store_name
       FROM store_cash c
       LEFT JOIN stores st ON st.id = c.store_id
       WHERE c.cash_date >= $1::date AND c.cash_date <= $2::date AND COALESCE(st.org_id, 'default') = $3`;

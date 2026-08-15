@@ -502,7 +502,7 @@ export async function computeStoreDailyPlans(date?: string, orgId?: string) {
   const org = orgId || 'default';
 
   const storesRes = await query(
-    `SELECT id, name, code FROM stores WHERE COALESCE(org_id, 'default') = $1 ORDER BY name`,
+    `SELECT id, COALESCE(display_name, name) as name, code FROM stores s WHERE COALESCE(org_id, 'default') = $1 ORDER BY s.name`,
     [org]
   );
   const storeList = storesRes.rows;

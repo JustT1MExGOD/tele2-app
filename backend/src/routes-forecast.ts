@@ -27,7 +27,7 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     // точку (кэш в ai_audit) — не дёргает Groq при каждом открытии страницы.
     let aiSummary = await getLatestForecastSummary(storeId, from);
     if (!aiSummary && fc.history_days >= 7) {
-      const storeRow = await query(`SELECT name FROM stores WHERE id = $1`, [storeId]);
+      const storeRow = await query(`SELECT COALESCE(display_name, name) as name FROM stores WHERE id = $1`, [storeId]);
       aiSummary = await generateForecastSummary({
         storeId,
         storeName: storeRow.rows[0]?.name || storeId,
@@ -78,7 +78,7 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, org_id);
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
     const sales = await query(
-      `SELECT s.*, e.full_name, st.name as store_name, st.code
+      `SELECT s.*, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.code
        FROM sales s
        JOIN employees e ON e.id = s.employee_id
        JOIN stores st ON st.id = s.store_id

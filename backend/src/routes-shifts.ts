@@ -99,7 +99,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
         [store_id]
       ),
       query(
-        `SELECT t.*, st.name as store_name
+        `SELECT t.*, COALESCE(st.display_name, st.name) as store_name
          FROM tasks t
          LEFT JOIN stores st ON st.id = t.store_id
          WHERE t.assigned_to = $1 AND t.status IN ('open', 'in_progress')
@@ -247,7 +247,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   app.get('/shifts/current', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const res = await query(
-      `SELECT ss.*, st.name as store_name, st.color
+      `SELECT ss.*, COALESCE(st.display_name, st.name) as store_name, st.color
        FROM shift_sessions ss
        LEFT JOIN stores st ON st.id = ss.store_id
        WHERE ss.employee_id = $1 AND ss.status = 'open'
@@ -341,7 +341,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // тут не было: быстрый ввод происходил невидимо для команды в чате.
     try {
       const info = await query(
-        `SELECT e.full_name, st.name as store_name FROM employees e, stores st WHERE e.id = $1 AND st.id = $2`,
+        `SELECT e.full_name, COALESCE(st.display_name, st.name) as store_name FROM employees e, stores st WHERE e.id = $1 AND st.id = $2`,
         [employee_id, store_id]
       );
       if (info.rows[0] && applied.length) {

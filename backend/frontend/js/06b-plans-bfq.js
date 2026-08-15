@@ -241,11 +241,11 @@
       }
     }
 
-    function toggleMonthExtra(id, btn) {
+    function toggleMonthExtra(id, btn, openLabel, closedLabel) {
       const el = document.getElementById(id);
       if (!el) return;
       const open = el.classList.toggle('open');
-      if (btn) btn.textContent = open ? 'Свернуть ▴' : 'Ещё метрики ▾';
+      if (btn) btn.textContent = open ? (openLabel || 'Свернуть ▴') : (closedLabel || 'Ещё метрики ▾');
     }
 
     async function editEmployeeMonthPlan(employeeId, name) {
