@@ -69,34 +69,39 @@ Google Sheets + переписка в Telegram живут на одной точ
 
 ## 2. Кому и что даёт
 
-### Сотрудник (`employee`)
-- Личный кабинет: смена, дневной и месячный план, BFQ  
-- Продажи только за себя, мульти-метрики  
-- Быстрый ввод: «две симки и одно mnp»  
-- Смена-сессия: open / close + гео + самоотчёт  
-- График, план точек, промокоды РТК  
-- Офлайн-очередь продаж  
-- Обязательное обучение (без skip в первый раз)  
-- Поддержка / FAQ  
+### Сотрудник (`employee`, `trainee`, `senior`)
+- Профиль: смена, дневной/месячный план, BFQ, геймификация (XP/уровень/стрик), история смен
+- Продажи только за себя, мульти-метрики, дельты
+- Быстрый ввод текстом: «две симки и одно mnp» (NLP-разбор)
+- Смена-сессия: open/close + гео + план/факт живьём, пока смена открыта, заметка-передача следующему на этой точке
+- Свои задачи (назначает manager) — принять в работу / закрыть
+- График, план точек (дневной план — теперь считается от месячного плана точки, не от долей сотрудников), промокоды РТК, калькуляторы (комбо/школа)
+- Кастомная аватарка (видна и в «Команде»)
+- Офлайн-очередь продаж (без сети — уходит при появлении Wi‑Fi)
+- Обязательное обучение с персонажем-маскотом (без skip в первый раз)
+- Поддержка / FAQ
 
-### Управляющий (`manager`)
-- Всё employee +  
-- График (bulk), месячные планы, materialize дневных планов точек  
-- Чужие продажи и дельты  
-- Касса, BFQ, заявки на доступ  
-- Live-карта, алерты  
-- Отдельный курс обучения manager  
+### Управляющий (`manager`, `senior` — операционно то же самое)
+- Всё сотрудника +
+- **Command Center** — единый экран «что происходит / где проблема / что делать» вместо трёх разрозненных мест
+- **Задачи** — создать/назначить с контекстом прямо из просадки или алерта, тред комментариев
+- **Профиль точки** / **Профиль сотрудника** — план/факт/прогноз/тренд/Health Score на одном экране
+- **Алерты 2.0** — полный жизненный цикл (open→in_progress→acked/dismissed), включая аномалии (z-score против прогноза, не только план)
+- График (bulk, сводная таблица месяца по всей команде), месячные планы сотрудников и точек, кастомные названия точек
+- Чужие продажи и дельты, касса, BFQ, заявки на доступ, CSV-экспорты
+- Live-карта сети
+- Отдельный курс обучения manager
 
 ### Admin
-- Всё manager + тикеты поддержки, роли  
+- Всё manager + тикеты поддержки (эскалация к разработчику), назначение ролей (только строго ниже своей), переключатель сети в UI, кабинет супервайзера в режиме просмотра, заведение новых сетей без SQL
 
 ### Supervisor
-- Срез только по своим точкам  
+- Свой сектор целиком (несколько сетей сразу) — отдельный визуал, 4 своих вкладки (Обзор/Точки/Люди/Тренд), выполнение и прогноз месячного плана по сектору
 
 ### Сеть
-- Единые микро/итог отчёты в чат  
-- Экспорт / BI  
-- Новые точки без новой «таблицы с нуля»  
+- Единые микро/итог отчёты в чат (расписание — по точке, не глобальное), автоанонс версий в отдельный Telegram-канал
+- Еженедельная/месячная сводка по сети (страница «Отчёты»), экспорт / BI
+- Новые сети и точки без единой строчки SQL — через UI
 
 ---
 
@@ -112,7 +117,7 @@ Google Sheets + переписка в Telegram живут на одной точ
 | AI | Groq API (`llama-3.3-70b-versatile`) | итог смены + гипотеза при просадке — бесплатно, без vendor lock-in |
 | Хостинг | Railway / Nixpacks | API + фронт |
 
-Клиент **не** ходит в БД: Mini App → `X-Telegram-Id` → API → Postgres.
+Клиент **не** ходит в БД: Mini App → подписанная `X-Telegram-Init-Data` → API → Postgres.
 
 ---
 
@@ -126,17 +131,17 @@ flowchart TB
     end
 
     subgraph BE["Fastify backend (backend/src)"]
-        AUTH["middleware-auth.ts<br/>initData HMAC"]
-        ROUTES["routes-core / sales / schedules /<br/>stats / cash / promos / reports /<br/>v3 / v8 / v13 / v14 / metrics / supervisor"]
-        SVC["services/<br/>plans · bfq · nlp · insights ·<br/>gamification · live-map · alerts ·<br/>forecast · ai.ts"]
-        CRON["cron/<br/>reports.ts · alerts.ts"]
+        AUTH["middleware-auth.ts<br/>authPlugin (preHandler) · initData HMAC"]
+        ROUTES["27 routes-*.ts<br/>core/employees/sales/schedules/stats/cash/<br/>command-center/tasks/store-profile/employee-profile/<br/>forecast/live-alerts/avatar/…"]
+        SVC["services/<br/>plans · bfq · sales-write · shift-pace ·<br/>gamification · live-map · alerts · anomaly ·<br/>forecast · supervisor-analytics · ai.ts"]
+        CRON["cron/<br/>reports.ts · digest.ts"]
         BOT["bot/ (Grammy)"]
     end
 
     PG[("PostgreSQL<br/>(Railway)")]
     GROQ["Groq API<br/>llama-3.3-70b-versatile"]
 
-    MA -- "X-Telegram-Id /<br/>X-Telegram-Init-Data" --> AUTH
+    MA -- "X-Telegram-Init-Data<br/>(подписанный, прод)" --> AUTH
     AUTH --> ROUTES --> SVC
     CRON --> SVC
     SVC --> PG
@@ -146,7 +151,7 @@ flowchart TB
     CRON --> BOT
 ```
 
-Клиент **не** ходит в БД напрямую — только через API. «Сегодня» всегда через `todayMoscow()` (`Europe/Moscow`), не UTC контейнера. AI Copilot (`services/ai.ts`) не в горячем пути запросов — вызывается только при закрытии смены и в cron итоговых отчётов, no-op без `GROQ_API_KEY`.
+Клиент **не** ходит в БД напрямую — только через API. «Сегодня» всегда через `todayMoscow()` (`Europe/Moscow`), не UTC контейнера. AI Copilot (`services/ai.ts`) не в горячем пути запросов — вызывается только при закрытии смены, в cron итоговых отчётов и при открытии страницы «Прогноз» (кэшируется на день), no-op без `GROQ_API_KEY`. Рендер SVG→PNG-картинок (отчёты, карточка анонса версии) — в отдельном пуле `worker_threads`, не блокирует основной event loop.
 
 ---
 
@@ -156,47 +161,67 @@ flowchart TB
 tele2-app/
 ├── README.md
 ├── docs/INTEGRATION-V13.md
-├── sql/                      (ручные миграции: railway-schema-data.sql, ai-copilot.sql, promos.sql)
+├── sql/                      (исторические ручные SQL-снимки, не источник схемы — см. §18)
 └── backend/                 ← Root Directory на Railway
     ├── package.json
     ├── tsconfig.json
     ├── railway.json
+    ├── migrations/              (пронумерованные .sql, применяются сами — см. §18; 0001_baseline.sql … 0010_employees_avatar.sql)
+    ├── assets/fonts/            (DejaVu Sans — рендер SVG-отчётов; Google Sans TTF — та же resvg-карточка анонса)
+    ├── tests/
+    │   ├── setup.ts             (жёсткая проверка: DATABASE_URL только localhost/127.0.0.1)
+    │   ├── helpers/              (app.ts → buildApp()+inject(), fixtures.ts → TestFixtures)
+    │   ├── unit/                 (чистые функции: forecast-модель, sales-write, caption-builder…)
+    │   ├── isolation/            (auth/multi-tenant регресс — org-scoping, race conditions, идемпотентность)
+    │   └── adversarial/          (security-регресс: auth bypass, unauth disclosure, cross-tenant IDOR, identity spoofing — 19.11.0)
     ├── src/
-    │   ├── index.ts                    (bootstrap: Fastify, cors, static, регистрация модулей, start)
-    │   ├── middleware-auth.ts
+    │   ├── index.ts                    (bootstrap: миграции → buildApp() → listen → бот/крон)
+    │   ├── app.ts                      (Fastify instance, cors: origin:false, static, регистрация routeModules)
+    │   ├── env.ts                      (dotenv, импортируется первым — гарантирует порядок)
+    │   ├── middleware-auth.ts          (authPlugin — глобальный preHandler, requireAuth/requireActive/requireManager/…, assertStoreInOrg/assertEmployeeInOrg, ROLE_LEVEL)
+    │   ├── changelog.ts                (список версий для автоанонса — только minor-эпики, не хотфиксы)
+    │   ├── db/                         (пул соединений, миграционный раннер)
     │   ├── services/telegram-auth.ts   (проверка initData HMAC)
-    │   ├── routes-core.ts              (/stores, /plans)
-    │   ├── routes-employees.ts         (CRUD сотрудников/точек)
+    │   ├── routes-core.ts              (/stores, /plans — org-scoped)
+    │   ├── routes-employees.ts         (CRUD сотрудников/точек, кастомные названия точек)
+    │   ├── routes-avatar.ts            (загрузка/раздача кастомной аватарки, bytea в Postgres)
     │   ├── routes-sales.ts             (/sales)
-    │   ├── routes-schedules.ts         (/schedules)
-    │   ├── routes-stats.ts             (/stats, /dashboard, прогресс)
+    │   ├── routes-schedules.ts         (/schedules, /schedules/bulk)
+    │   ├── routes-stats.ts             (/stats, /dashboard)
     │   ├── routes-cash.ts              (/cash)
     │   ├── routes-promos.ts            (промокоды RTK)
-    │   ├── routes-reports.ts           (SVG-отчёты по точке)
-    │   ├── routes-me.ts                (/me, /me/bind, /me/day, назначение роли)
-    │   ├── routes-bfq.ts               (/bfq полный: расчёт, ручной VMR/штраф, анкета)
+    │   ├── routes-reports.ts           (SVG-отчёты по точке, страница «Отчёты»)
+    │   ├── routes-me.ts                (/me, /me/bind, /me/day)
+    │   ├── routes-bfq.ts               (/bfq: расчёт, ручной VMR/штраф, анкета)
     │   ├── routes-export.ts            (история продаж, аудит, CSV-экспорты)
-    │   ├── routes-plans-v5.ts          (месячные планы сотрудников/точек, сводная таблица)
-    │   ├── routes-v8.ts                (заявки на доступ, супервайзер-сектор)
+    │   ├── routes-plans-v5.ts          (месячные/дневные планы сотрудников и точек, сводная таблица)
+    │   ├── routes-v8.ts                (заявки на доступ, назначение роли, кабинет супервайзера-доступа)
     │   ├── routes-support.ts
-    │   ├── routes-shifts.ts            (/shifts/*, NLP-разбор продажи, офлайн-очередь)
+    │   ├── routes-shifts.ts            (/shifts/*, NLP-разбор продажи, офлайн-очередь /sync/batch)
     │   ├── routes-insights.ts          (личная аналитика: /me/insight, /me/self-stats)
     │   ├── routes-live-alerts.ts       (живая карта, умные алерты, what-if)
     │   ├── routes-comms.ts             (объявления сети, каналы)
     │   ├── routes-forecast.ts          (прогноз, heatmap, когорты, BI-экспорт)
-    │   ├── routes-v14.ts               (branding, tenant)
+    │   ├── routes-v14.ts               (branding, org/stores)
     │   ├── routes-metrics.ts
-    │   ├── routes-supervisor.ts
-    │   ├── services/   (plans, bfq, nlp, insights, gamification, live-map, alerts, forecast, metrics-catalog,
-    │   │                supervisor-analytics, report-image, tenant, release-announce, ai.ts ← AI Copilot)
+    │   ├── routes-supervisor.ts        (кабинет супервайзера)
+    │   ├── routes-command-center.ts    (единый экран manager/supervisor/admin)
+    │   ├── routes-tasks.ts             (задачи из просадки/алерта)
+    │   ├── routes-store-profile.ts     (Store Intelligence, Health Score)
+    │   ├── routes-employee-profile.ts  (Employee 2.0, Health Score)
+    │   ├── services/   (plans, bfq, nlp(sales-nlp), sales-write, shift-pace, insights, gamification,
+    │   │                live-map, alerts, anomaly, forecast, metrics-catalog, heatmap, network-digest,
+    │   │                supervisor-analytics, report-image, svg-render-pool, tenant, release-announce,
+    │   │                what-if, ai.ts ← AI Copilot)
+    │   ├── workers/svg-render.worker.ts (resvg SVG→PNG в отдельном потоке — см. §12)
     │   ├── bot/        (index.ts, messages.ts)
-    │   ├── cron/       (reports.ts)
-    │   ├── db/
+    │   ├── cron/       (reports.ts, digest.ts)
     │   └── utils/date.ts
     └── frontend/
         ├── index.html   (разметка + подключение styles.css и js/*.js по порядку)
         ├── styles.css
-        ├── js/          (01-core → 13-v14, 16 файлов, классические <script>, общая глобальная область)
+        ├── fonts/       (Google Sans WOFF2 — фронтовый шрифт, отдельно от assets/fonts/ TTF для resvg)
+        ├── js/          (01-core → 19-reports, 21 файл, классические <script>, общая глобальная область — порядок подключения важен)
         └── offline-queue.js
 ```
 
@@ -206,42 +231,77 @@ tele2-app/
 
 | Таблица | Смысл |
 |--------|--------|
-| `stores` | точки: code, color, plan_share |
-| `employees` | FIO, telegram_id, role, access_status |
+| `organizations` | сеть точек — branding, `sector_id`, `chat_id`/`sales_thread_id`/`reports_thread_id` |
+| `sectors` | группа сетей, назначается супервайзеру целиком |
+| `stores` | точки: code, color, `org_id`, `display_name` (кастомное название, 19.7.0), micro-report расписание |
+| `employees` | FIO, telegram_id (UNIQUE), role, access_status, org_id, avatar_data/avatar_mime (19.7.0) |
 | `schedules` | смена на день (UNIQUE employee+date) |
-| `sales` | факт метрик |
+| `sales` | факт метрик (аддитивная запись, единая точка входа — `applySaleUpsert()`) |
+| `sales_audit` | аудит правок метрик (кто/когда/сколько) |
+| `sales_events` | сырые события продаж — источник точного heatmap по часу |
 | `employee_month_plans` | месячный план человека |
-| `store_plans` | дневной/шаблон плана точки |
+| `store_month_plans` | месячный план точки — независимый ручной ввод (не доля от планов сотрудников, с 15.13.0) |
+| `store_plans` | материализованный дневной снапшот плана точки (кэш для BFQ/live/отчётов, крон 6:00 МСК) |
+| `store_forecasts` | кэш прогноза (SES + сезонность по дню недели) |
 | `store_cash` | факт / 1С |
-| `shift_sessions` | open/close смены |
-| `rtk_promocodes` | пул промокодов |
-| `support_*` | тикеты, FAQ |
-| `sales_audit` | аудит правок |
-| `ai_audit` | лог AI Copilot: kind (`shift_summary`/`dip_comment`), employee/store, prompt, response, model |
+| `shift_sessions` | open/close смены, handover_note, гео |
+| `tasks` / `task_comments` | задачи из просадки/алерта, тред комментариев |
+| `smart_alerts` | Alerts 2.0 — полный жизненный цикл, включая `anomaly_vs_forecast` |
+| `rtk_promocodes` | пул промокодов, org-scoped |
+| `announcements` / `announcement_reads` | объявления сети + кто прочитал |
+| `channels` / `channel_messages` | внутренние каналы сети |
+| `access_requests` | заявки на доступ (org-scoped по выбору при регистрации) |
+| `support_*` | тикеты, FAQ, вложения, шаблоны (эскалация к разработчику, admin-only) |
+| `offline_sync_log` | идемпотентность офлайн-очереди по `client_id` |
+| `cron_send_log` | claim-защита от повторной отправки авто-отчётов/напоминаний |
+| `ai_audit` | лог AI Copilot: kind (`shift_summary`/`dip_comment`/`forecast_summary`), employee/store, prompt, response, model |
+| `app_settings` | служебные ключ-значение (напр. `last_announced_version`) |
 
-Критичные UNIQUE: `schedules(employee_id, work_date)`, `store_cash(store_id, cash_date)`, upsert-ключ sales.
+Критичные UNIQUE: `schedules(employee_id, work_date)`, `store_cash(store_id, cash_date)`,
+`employees.telegram_id`, upsert-ключ `sales`, partial unique на одну открытую
+`shift_sessions` на сотрудника.
 
 ---
 
 ## 7. Роли и доступ
 
+Полная лестница (с 15.9.0): `trainee < employee < senior < manager < supervisor < admin`
+(`ROLE_LEVEL` в `middleware-auth.ts`). Назначить можно только роль строго
+ниже своей (`canAssignRole()`) — admin без ограничений.
+
 | role | Права |
 |------|--------|
-| `employee` | свои продажи и план |
-| `manager` | график, планы, чужие продажи, касса, заявки |
-| `admin` | всё + поддержка, роли |
-| `supervisor` | только свои точки |
+| `trainee` | стажёр — минимум прав, растёт до `employee` |
+| `employee` | свои продажи, свой план, смена-сессия |
+| `senior` | операционно как `manager` (сотрудники/точки/график/касса/чужие продажи/экспорты), но намеренно **без** Command Center и кабинета супервайзера — разделены «операционные права» и «видимость аналитики» |
+| `manager` | всё senior + видит Command Center, Store/Employee Profile, алерты, задачи |
+| `admin` | всё manager + поддержка (эскалация), назначение ролей, переключатель сети, кабинет супервайзера |
+| `supervisor` | свой сектор (несколько сетей) целиком — отдельный визуал, отдельные 4 вкладки, не пересекается с обычными 5 |
 
 | access_status | UI |
 |---------------|-----|
-| `none` | регистрация |
-| `pending` | ожидание |
+| `none` | регистрация (пикер сети → форма заявки) |
+| `pending` | ожидание одобрения |
 | `rejected` / `blocked` | отказ |
-| `active` | полный доступ |
+| `active` | полный доступ по своей роли |
 
-Заголовок API: **`X-Telegram-Id`**.
+**Auth — только через подписанную Telegram initData**, не через голый
+заголовок (см. §24). `X-Telegram-Id` без initData работает лишь в
+локальной разработке или при явном `ALLOW_INSECURE_AUTH=true`.
 
-Вернуть себе доступ:
+Мультитенантность: `organizations` (= «сеть точек», с `sector_id`/`chat_id`/
+`sales_thread_id`/`reports_thread_id`) группируются в `sectors` — их видит
+целиком `supervisor` через `supervisor_sectors`. Почти все read/write роуты
+скоуплены по `org_id` через `resolveViewOrgId()`/`assertStoreInOrg()`/
+`assertEmployeeInOrg()`; admin может явно переключить сеть просмотра
+переключателем в UI (`?org_id=`/`body.org_id`), остальные роли — только
+своя сеть, с одним исключением: собственная запись (продажа/смена) видна
+всегда, даже если сегодня сотрудник работает на точке чужой сети внутри
+той же организации («подмена»).
+
+Вернуть себе доступ (только для локальной отладки/восстановления —
+на проде делать через миграцию или прямой SQL по read-only согласованию,
+не как рутинную операцию):
 
 ```sql
 UPDATE employees
@@ -253,17 +313,44 @@ WHERE telegram_id = <TG_ID>;
 
 ## 8. Функциональность по модулям
 
-- **Главное** — навигация, инструменты, FAB, Command Center (health-score сети + просадки с AI-гипотезой)  
-- **Мой** — кабинет, смена, план, инсайт, XP/стрик, разбор смены с AI-summary при закрытии  
-- **Продажи** — мульти-метрики, дельты, offline queue, notify  
-- **График** — месяц, цвета точек, bulk  
-- **Планы** — месяц с архивом ‹›, 6+«ещё» метрик, materialize точек  
-- **BFQ** — рейтинг качества  
-- **Касса** — факт / 1С / Δ  
-- **Live** — кто на смене, % плана, статус  
-- **Промо РТК** — скрытый список, used/keep  
-- **Поддержка** — FAQ + тикеты  
-- **Access** — заявки и approve  
+Нижняя навигация (5 вкладок): **Главная · План · График · Профиль · Команда**
+(для supervisor — отдельный набор из 4: Обзор · Точки · Люди · Тренд).
+
+- **Главная** — приветствие с живым индикатором смены (открыта/закрыта) и
+  «N дн. до выходного», код/адрес своей точки в шапке, свайп-панель «Мой
+  день» / «Сеть сегодня», Command Center (health-score сети + просадки с
+  AI-гипотезой), калькуляторы (комбо/школа), промокоды, быстрые действия
+- **Профиль** (бывш. «Мой») — смена (открыть/закрыть, живой план/факт,
+  заметка-передача), дневной план по всем ненулевым метрикам, «Прогресс за
+  месяц» тем же форматом, что карточка точки в «План», история своих
+  продаж, кастомная аватарка, обучение
+- **План** — все точки сети, карточки свёрнуты по умолчанию, план дня по
+  блокам (Блок GI / Товарка / Ростелеком / Кредиты)
+- **График** — месяц, календарная сетка с выравниванием по дням недели,
+  сводная таблица команды с точкой на каждый день (важно при подменах),
+  bulk-правка
+- **Касса** — факт / 1С / Δ, внести кассу наверху, последние 2 дня сразу
+  видны
+- **BFQ** — рейтинг качества, план берётся из живого источника
+  (`employee_month_plans`), не из фантомного нулевого шаблона
+- **Command Center** (`manager`/`supervisor`/`admin`) — единый экран: что
+  происходит / где проблема / что делать, кнопки действий ведут в задачи
+- **Задачи** — список по сети с фильтрами, тред комментариев, авто-закрытие
+  при выполнении связанного алерта
+- **Алерты** (Alerts 2.0) — open → in_progress → acked/dismissed,
+  `anomaly_vs_forecast` ловит и провалы, и необычные всплески (z-score)
+- **Профиль точки / Профиль сотрудника** — план/факт/прогноз/тренд + Health
+  Score, объяснимая композиция без выдуманных метрик
+- **Отчёты** — SVG-картинка точки, CSV-экспорты, авто-сводка по сети
+  (понедельник + 1-е число, 09:00 МСК)
+- **Прогноз** — SES-модель + сезонность по дню недели, AI-объяснение сверху
+  расчёта (Groq), «Кого куда поставить» (эвристика по нагрузке на смену)
+- **Live-карта** — кто на смене, % плана, статус, по всей сети
+- **Промо РТК** — скрытый список, used/keep, org-scoped
+- **Поддержка** — FAQ + тикеты (эскалация к разработчику, admin)
+- **Заявки на доступ** — пикер сети при регистрации, approve/reject
+- **Кабинет супервайзера** — свой визуал, весь сектор, выполнение и
+  прогноз месячного плана по сектору и по каждой точке
 
 ---
 
@@ -272,21 +359,32 @@ WHERE telegram_id = <TG_ID>;
 `sim`, `mnp`, `pa`, `combo`, `phones`, `accessories`, `settings`, `insurance`, `wink`, `shpd`, `focus`, `credit_request`, `credit_issued`, `plotter`, `hb`
 
 **Комбо (клиент):**  
-`цена×(1−скидка/100) + цена×0.28 + 1900`
+`цена×(1−скидка/100) + цена×0.28 + 1950`
+
+**Школа (клиент):**  
+`цена − цена×0.7 + цена×0.3 + 3600 + 3490`
 
 ---
 
 ## 10. Планирование
 
+Месячный план сотрудника и месячный план точки — **два независимых
+источника**, вводятся вручную (`employee_month_plans` / `store_month_plans`,
+с 15.13.0 — точка больше не считается как доля от сумм планов сотрудников).
+
 **День сотрудника:**  
-`ceil((план_месяца − факт) / max(1, оставшиеся_смены))`
+`ceil((план_месяца_сотрудника − факт_сотрудника_с_начала_месяца) / max(1, оставшиеся_смены))`
 
 **День точки:**  
-остатки всех сотрудников → / дни до конца месяца → × `plan_share`.
+`(план_месяца_точки − факт_точки_с_начала_месяца) / оставшиеся_дни_месяца`
+— та же формула, что у сотрудника, только на уровне точки, без долевого
+распределения.
 
-Доли по умолчанию: Космонавтов **55%**, Калинина 2 **25%**, Калинина 11 **20**.
-
-`POST /plans/stores/daily/materialize` пишет `store_plans` на дату.
+Дневной снапшот (`store_plans`) материализуется автоматически: кроном
+каждый день в 06:00 МСК и мгновенно при сохранении месячного плана точки
+(`PUT /plans/stores/:id/month`) — ручной кнопки для этого в интерфейсе
+больше нет, обе ситуации, ради которых её нажимали, автоматизированы
+(убрана как мёртвый код в 19.3.0).
 
 ---
 
@@ -300,15 +398,24 @@ WHERE telegram_id = <TG_ID>;
 
 ## 12. Telegram-бот и отчёты
 
-| Событие | Когда (МСК) |
-|---------|-------------|
-| Микро-отчёт | 10, 12, 14, 16, 18, 20 :00 |
-| Итог дня | 21:05 |
-| Напоминание смены | 20:00 → личка |
+Расписание — **по точке**, не глобальная константа: `stores.micro_report_times`
+(массив времён), `close_time_weekday`/`close_time_sunday` (когда слать итог),
+`skip_sunday_micro_times`. У каждой сети/точки может быть своё — например,
+круглосуточная точка РТТ Гуреева шлёт итог в 21:00, обычная точка — в своё
+время закрытия. Уведомления идут в чат и тему (`sales_thread_id`/
+`reports_thread_id`) конкретной сети, если она форум с темами.
 
-Итог: блоки GI · Товарка · Ростелеком · Кредиты · Прочее.
+Итог дня — альбом из 3 картинок (план дня → факт → фокус на завтра), тем же
+resvg-пайплайном, что и микро-отчёты, рендер — в отдельном `worker_threads`
+(не блокирует основной процесс, §17.4.0). Итог: блоки GI · Товарка ·
+Ростелеком · Кредиты · Прочее.
 
 **AI Copilot в итоговом отчёте** (`cron/reports.ts` → `generateDipComment`): если факт дня по точке < 85% от плана — в подпись к финальному кадру отчёта и в `ai_audit` уходит гипотеза от модели; если план закрыт — заготовленная фраза-похвала без вызова модели. Тот же комментарий подтягивается в Command Center через `/supervisor/health` (`drops[].ai_comment`).
+
+Все автоматические отправки (микро/итог-отчёты, напоминания, автоанонс
+версии) защищены atomic-claim паттерном (`cron_send_log`/`app_settings`,
+`INSERT ... ON CONFLICT DO NOTHING`) — deploy-окно Railway (старый контейнер
+живёт, пока новый не пройдёт healthcheck) не может задвоить отправку.
 
 **409 Conflict** = два polling на одном токене → 1 реплика Railway, без локального бота, `deleteWebhook`, опционально `BOT_POLLING=false`.
 
@@ -316,16 +423,24 @@ WHERE telegram_id = <TG_ID>;
 
 ## 13. Обучение
 
+Персонаж-маскот «Арбузыч» 🍉 — два визуальных режима: полноэкранные
+cutscene-главы (вступление/переходы/квиз/финал, с мини-праздником между
+главами) и coach-оверлей поверх реального UI («нажми сюда», подсветка
+конкретного элемента).
+
 ### Сотрудник
-Автостарт при первом входе. **Skip запрещён** до `t2_tutorial_done`.  
-Практика: тапы по nav/FAB, тесты, комбо, быстрый ввод.  
-Карточка сверху на tap-шагах, низ кликабелен.
+Автостарт при первом входе, 22 шага по главам. **Skip запрещён** до
+`t2_tutorial_done`. Практика — тапы по nav/FAB, тесты, калькулятор, быстрый
+ввод; добавление продажи тренируется на настоящей форме в dry-run режиме
+(ничего не пишется в базу и в чат). Прохождение начисляет XP и бейдж через
+`POST /me/tutorial-complete` — известно бэкенду, не только `localStorage`.
 
 ### Manager
-Инструменты → «Обучение manager»: заявки, график, планы, касса, live, роли.
+Отдельный курс, 17 шагов: заявки, график, планы, касса, live, роли.
 
 ```js
-localStorage.removeItem('t2_tutorial_done')
+localStorage.removeItem('t2_tutorial_done')       // сотрудник
+localStorage.removeItem('t2_tutorial_mgr_done')   // manager
 ```
 
 ---
@@ -333,18 +448,28 @@ localStorage.removeItem('t2_tutorial_done')
 ## 14. HTTP API
 
 База: `https://<app>.up.railway.app`  
-Header: `X-Telegram-Id`
+Auth: `X-Telegram-Init-Data` (подписанный, прод) — см. §24. `X-Telegram-Id`
+только в деве.
 
 | Группа | Примеры |
 |--------|---------|
 | System | `GET /health` |
-| Me / access | `/me`, `/me/day`, `/access/status`, `/access/request` |
-| Sales / shifts | `/sales`, `/sales/quick`, `/shifts/open|close`, `/sync/batch` |
-| Plans / schedule | `/plans/*`, `/schedules/*` |
-| BFQ / cash | `/bfq`, `/cash/table`, `PUT /cash` |
-| v13 | `/network/live`, `/me/insight`, `/alerts`, `/forecast/:id` |
-| Promo / support | `/promos`, `/support` |
-| Export | `/export/bi/daily`, CSV exports |
+| Me / access | `/me`, `/me/day`, `/me/bind`, `/me/insight`, `/me/self-stats`, `/access/status`, `/access/request`, `/access/orgs` |
+| Avatar | `POST /me/avatar`, `GET /avatars/:employeeId` |
+| Sales / shifts | `/sales`, `/sales/quick`, `/sales/:id/zero`, `/shifts/open\|close\|current`, `/sync/batch` |
+| Plans / schedule | `/plans/*`, `/plans/employees/*`, `/plans/stores/*`, `/schedules`, `/schedules/month`, `/schedules/bulk` |
+| BFQ / cash | `/bfq`, `/bfq/:employeeId`, `/cash/table`, `PUT /cash` |
+| Stores / org | `/stores`, `/org/stores`, `POST /employees`, `POST /stores` |
+| Command Center / Tasks / Alerts | `/command-center`, `/tasks`, `/tasks/:id`, `/alerts`, `/alerts/:id/ack` |
+| Profiles | `/stores/:id/profile`, `/employees/:id/profile` |
+| Forecast / analytics | `/forecast/:storeId`, `/heatmap/*`, `/staffing-hints`, `/cohorts/newbies`, `/network/live`, `/schedule/what-if(/apply)` |
+| Reports | `/reports/day/:storeId`, `/export/bi/daily` |
+| Promo / support / comms | `/promos`, `/support`, `/announcements`, `/channels/:id/messages` |
+| Supervisor | `/supervisor/dashboard`, `/supervisor/health`, `PUT /supervisor/:id/sector` |
+| Export | CSV: `/export/sales.csv`, `/export/bfq.csv`, `/export/schedules.csv` |
+
+Каждый роут, отдающий чужие/сетевые данные, гейтится `requireAuth`/
+`requireActive`/`requireManager`/`requireSupervisor` + org-scope — см. §7, §24.
 
 ---
 
@@ -356,7 +481,8 @@ Header: `X-Telegram-Id`
 | `BOT_TOKEN` | да | BotFather |
 | `PORT` | Railway | listen port |
 | `ADMIN_TELEGRAM_ID` | желательно | admin |
-| `REPORT_CHAT_ID` | желательно | чат отчётов |
+| `REPORT_CHAT_ID` | желательно | глобальный фолбэк-чат отчётов (по умолчанию — чат сети из `organizations.chat_id`) |
+| `RELEASE_CHANNEL_ID` | нет | отдельный Telegram-канал для автоанонса версий (с 18.11.0) — без него анонс тихо пропускается |
 | `BOT_POLLING` | нет | `false` отключает getUpdates |
 | `ALLOW_INSECURE_AUTH` | нет | `true` включает dev-фоллбэк на голый `X-Telegram-Id` без проверки initData (**не включать в проде**) |
 | `GROQ_API_KEY` | нет | ключ Groq (console.groq.com, free tier, без карты) — включает AI Copilot; без ключа обе функции no-op'ают |
@@ -406,7 +532,8 @@ npm test
 6. **Replicas = 1**  
 7. **Деплой ждёт зелёный CI** (с 17.3.0) — `checkSuites: true` на deployment trigger сервиса (Railway GraphQL API, `deploymentTriggerUpdate`, настройки нет в `railway.json` — только через API/дашборд). Красный `.github/workflows/ci.yml` теперь блокирует деплой, а не просто сигнализирует постфактум
 
-Лог успеха: `✅ V13 routes registered`, `🚀 Сервер на 0.0.0.0:…`
+Лог успеха: серия `✅ ... routes registered` (по одной на каждый модуль
+`routes-*.ts`), `📦 Применены миграции: ...` (если были новые), `🚀 Сервер на 0.0.0.0:…`, `🤖 Bot polling started`.
 
 ---
 
@@ -453,16 +580,16 @@ Menu Button → URL `https://<service>.up.railway.app/`
 
 | Симптом | Действие |
 |---------|----------|
-| 409 getUpdates | один инстанс бота |
-| Отказ в доступе | SQL access_status=active |
-| Комбо молчит | UI ≥ 13.2.1 (openModal) |
-| Планы-нули | month plan + materialize |
-| Касса «не та» | формула +2000 |
-| Tutorial перекрывает UI | ≥ 13.4.1 |
-| 404 на существующем роуте | модуль не в `routeModules` в index.ts — проверь регистрацию |
+| 409 getUpdates | два polling на одном `BOT_TOKEN` — один инстанс бота, `railway logs` на дубли реплик |
+| Отказ в доступе / `bound:false` | `access_status` не `active`, или сотрудник не привязан к `telegram_id` — SQL-проверка (§7) или approve заявки |
+| 401 на своих же данных из реального Telegram-клиента | initData не проходит HMAC (устаревший/битый `initData`, часы клиента, не тот `BOT_TOKEN`) — не путать с `ALLOW_INSECURE_AUTH`, в проде он должен быть выключен |
+| Планы-нули на «План дня» | нет месячного плана точки (`store_month_plans`) — снапшот материализуется из него автоматически, руками вносить не нужно (см. §10) |
+| Касса «не та» | формула Δ = факт − (1С + 2000), см. §11 |
+| 404 на существующем роуте | модуль не в `routeModules` в `app.ts` — проверь регистрацию |
+| Сервер не стартует после деплоя, `restartPolicyType: ON_FAILURE` ретраит | упавшая миграция — смотри `railway logs` на `❌ Миграции упали`, чини новым коммитом (§18), не полагайся на ретраи |
 
 ```powershell
-$h = @{ "X-Telegram-Id" = "ID" }
+$h = @{ "X-Telegram-Id" = "ID" }  # только для локальной разработки / ALLOW_INSECURE_AUTH=true
 Invoke-RestMethod "$base/health"
 Invoke-RestMethod "$base/access/status" -Headers $h
 Invoke-RestMethod "$base/me" -Headers $h
@@ -578,61 +705,109 @@ Invoke-RestMethod "$base/me" -Headers $h
 
 ## 22. Дорожная карта
 
-| Статус | Пункт |
-|--------|-------|
-| ✅ готово (15.7.0) | «Кого куда поставить» — подсказки на неделю вперёд на основе прогноза и графика |
-| ✅ готово (15.6.0) | Объявления сети — были полностью нерабочими; плюс «кто прочитал» для manager |
-| ✅ готово (15.5.0) | Единообразие метрик — один источник подписей на бэкенде и фронтенде вместо шести копий |
-| ✅ готово (15.4.0) | Действие из просадки — кнопка «Предложить перенос» ведёт прямо в What-if с выбранной точкой |
-| ✅ готово (15.3.0) | Прогноз на реальной модели (сглаживание + сезонность) вместо среднего по дню недели за 8 недель |
-| ✅ готово (15.0.0) | AI Copilot v1 — разбор смены + гипотеза при просадке, бесплатно через Groq |
-| ✅ готово (14.8.0) | What-if со сравнением сценариев A/B |
-| ✅ готово (13.x) | Точный heatmap по часу продажи (`sales_events`) |
-| ✅ готово (15.8.0-15.16.0) | Эпик мультитенанта — секторы/сети точек, чат-роутинг по точке и теме, супервайзер на сектор, все разделы (команда/график/касса/промокоды/объявления/каналы/заявки на доступ/Command Center/статистика/живая карта/прогноз/heatmap/BI-экспорт) изолированы по сети, переключатель сети у admin. Две реальные сети в проде (РТТ Бижонов, РТТ Гуреева) |
-| ✅ готово (17.4.0) | Картинка-отчёт на отдельном worker — resvg вынесен из основного процесса в `worker_threads` |  
+Крупные эпохи проекта — не текущий спринт, а последовательность уже
+пройденных и будущих этапов.
+
+### Эпоха 17 — «Надёжность перед деньгами» ✅ (17.0.0-17.17.0)
+CI на каждый push, тестовый слой авторизации/изоляции сети (149 тестов к
+концу эпохи), система миграций, аудит бизнес-корректности (гонки при
+открытии/закрытии смены, идемпотентность продажи, денежная точность,
+целостность при увольнении). Закрывает почву перед продуктовыми эпохами.
+
+### Эпоха 18 — Command Center suite ✅ (18.0.0-18.11.0)
+`18.0` Core Freeze (фиксация ядра под регресс-тестами) → `18.1` Command
+Center → `18.2` сводный график команды → `18.3` календарная сетка графика
+→ `18.4` Tasks/Action System → `18.5` Store Intelligence (Health Score) →
+`18.6` Alerts 2.0 → `18.7` Shift 2.0 (память смены) → `18.8` Employee 2.0
+(Health Score) → `18.9` Reports → `18.10` UX-полировка навигации →
+`18.11` анонсы версий в отдельный канал.
+
+### Эпоха 19 — Intelligence ✅ частично (19.1.0-19.2.0)
+`19.1` Forecast v2 (единая SES-модель + AI-объяснение) → `19.2` Anomaly
+Detection (z-score против прогноза). Дальше эпоха не продолжилась своим
+изначальным курсом — вместо следующих AI-фич владелец продукта переключился
+на большой список UX-правок и security-аудит (ниже), реальная ценность
+эпохи Intelligence на этом не закрыта, а поставлена на паузу.
+
+### После 19.2 — UX-батчи и security-аудит ✅ (19.3.0-19.13.0)
+22-пунктовый список UX-правок от владельца продукта, отгружен батчами:
+Главная/Профиль (19.4-19.5), навигация и жесты (19.6, позже часть — свайп
+между вкладками и pull-to-refresh — убрана обратно по отзыву, 19.12),
+кастомные названия точек/аватарки/график/касса (19.7), Google Sans + иконки
+Lucide вместо эмодзи + Android-hardening (19.8), новое оформление карточки
+анонса (19.9-19.10). Отдельно — аудит контроля доступа нашёл и закрыл
+реальные дыры авторизации (19.11.0, 26 регресс-тестов). Живая
+UX-полировка по ходу использования продолжается (19.13.0).
+
+### Дальше — эпоха 20, «Unified Platform»
+Ещё не начата, точный состав не определён. Известное ограничение от
+владельца продукта: **платёжные функции — вне скоупа**, не рассматриваются.
+Продолжится по мере поступления конкретных задач — тем же циклом
+исследование → план → реализация → верификация → отгрузка, что и весь
+предыдущий путь.
 
 ---
 
 ## 23. Соглашения по разработке
 
-1. Фичи — `routes-vN` + register в `index.ts`  
-2. Даты только МСК  
-3. `npm run build && npm run smoke:frontend` перед push — build ловит TS-ошибки бэкенда, smoke:frontend ловит ReferenceError от неправильного порядка `frontend/js/*.js` (см. 14.3.1)  
-4. Не коммитить `.env`  
-5. UI: мержить `index.html`, не накатывать старый кусок поверх v13  
-6. Один bot polling  
+1. Фичи — свой `routes-<имя>.ts` (по теме, не по версии — `routes-vN`
+   давно не используется) + добавить в `routeModules` в `app.ts`
+2. Даты только МСК (`todayMoscow()`, не `new Date()`/UTC контейнера)
+3. Изменение схемы БД — новый `backend/migrations/00NN_описание.sql`, не
+   ad hoc SQL на Railway (см. §18)
+4. Перед push: `npx tsc --noEmit`, `npm run smoke:frontend`, полный
+   `npx vitest run` на одноразовом локальном Postgres — build ловит
+   TS-ошибки бэкенда, smoke:frontend ловит ReferenceError от неправильного
+   порядка `frontend/js/*.js` (см. 14.3.1), тесты — регресс авторизации/
+   изоляции сети/бизнес-корректности/security
+5. Не коммитить `.env`
+6. Роуты, отдающие чужие/сетевые данные — всегда через `requireAuth`/
+   `requireActive`/… + org-scope (§7, §24), никогда голый заголовок в обход
+   `authPlugin`
+7. Один bot polling (`BOT_POLLING=false` для второй локальной копии)
+8. Версионирование — MINOR на каждую сущностную правку (фича, фикс,
+   рефактор), changelog-запись в `src/changelog.ts` только для эпиков,
+   не хотфиксов (см. §21 — история версий длиннее, чем changelog-анонсы)
 
 ---
 
 ## 24. Безопасность
 
-- Роли на сервере, не только в UI
-- Employee ≠ чужие продажи
-- Admin id в env
+- Роли и принадлежность сети проверяются на сервере (`middleware-auth.ts`),
+  не только скрываются в UI — `requireAuth`/`requireActive`/`requireManager`/
+  `requireSupervisor` + `assertStoreInOrg`/`assertEmployeeInOrg` на каждом
+  роуте, читающем или пишущем чужие данные.
 - **initData проверяется на сервере.** Mini App шлёт сырой `tg.WebApp.initData`
-  в заголовке `X-Telegram-Init-Data`; бэкенд пересчитывает HMAC по
-  `BOT_TOKEN` (`src/services/telegram-auth.ts`) и доверяет `telegram_id`
-  только если подпись сходится. Голый `X-Telegram-Id` без initData
-  принимается ТОЛЬКО если `BOT_TOKEN` не задан (локальная разработка)
-  либо явно включён `ALLOW_INSECURE_AUTH=true` — в проде так быть не должно.
-- CORS открыт (`origin: true`) намеренно — Mini App грузится внутри
-  Telegram WebView, откуда Origin не всегда предсказуем. Реальная защита —
-  проверка initData выше, а не CORS.
+  в заголовке `X-Telegram-Init-Data`; глобальный `preHandler`-хук `authPlugin`
+  (навешан один раз в `app.ts`, выполняется перед каждым роутом) пересчитывает
+  HMAC по `BOT_TOKEN` (`src/services/telegram-auth.ts`) и кладёт в
+  `request.user` подтверждённую identity — только если подпись сходится.
+  Голый `X-Telegram-Id` без initData принимается ТОЛЬКО если `BOT_TOKEN` не
+  задан (локальная разработка) либо явно включён `ALLOW_INSECURE_AUTH=true`
+  — в проде так быть не должно. `request.user` — единственный источник
+  identity во всех роутах; читать заголовок напрямую в обход `authPlugin`
+  считается багом (класс дыр, закрытый в 19.11.0).
+- CORS **закрыт** (`origin: false`, с 17.8.0) — Mini App всегда бьёт на API
+  своим же origin, легитимного кросс-origin браузерного вызова нет.
+- 26 регрессионных тестов на именно этот класс дыр (`backend/tests/adversarial/`)
+  — не проверка «работает ли», а фиксация конкретных прошлых инцидентов
+  (auth bypass, unauthenticated disclosure, cross-tenant IDOR, identity
+  spoofing), чтобы не повторились молча.
 
 ---
 
 ## 25. Чеклист запуска с нуля
 
-1. Postgres + SQL  
-2. Env: DATABASE_URL, BOT_TOKEN, chats  
-3. Deploy backend, 1 replica  
-4. BotFather Menu Button  
-5. Admin: active + telegram_id  
-6. Точки, сотрудники, график, месячные планы  
-7. Materialize дневных планов  
-8. Mini App → обучение → тестовая продажа  
+1. Postgres — схема накатывается сама миграциями при первом старте (§18), руками ничего не создавать
+2. Env: `DATABASE_URL`, `BOT_TOKEN`, `ADMIN_TELEGRAM_ID`, chat id/thread id сети
+3. Deploy backend, 1 реплика, деплой ждёт зелёный CI (§17)
+4. BotFather Menu Button → URL сервиса
+5. Admin: `access_status='active'` + свой `telegram_id` (§7)
+6. Завести сеть (если не default) прямо в приложении — «Команда» → «Управление» → «Сети», без SQL
+7. Точки, сотрудники, график, месячные планы сотрудников и точек — дневной снапшот материализуется сам (§10)
+8. Mini App → обучение → тестовая продажа
 
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v15.0.0 · август 2026*
+*README · актуально на v19.13.0 · август 2026*
