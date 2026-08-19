@@ -764,30 +764,6 @@
     .toast.ok { background: var(--success); border-color: transparent; }
     .toast.err { background: var(--danger); border-color: transparent; }
 
-    /* Pull-to-refresh — видимый индикатор вместо "невидимого" срабатывания:
-       появляется и растёт по мере протяжки, меняет текст на пороге, чтобы
-       было понятно, что вот-вот случится обновление, а не сюрприз. */
-    .ptr-indicator {
-      position: fixed;
-      top: calc(8px + env(safe-area-inset-top));
-      left: 50%;
-      transform: translateX(-50%) translateY(-48px);
-      background: var(--surface);
-      color: var(--hint);
-      padding: 8px 16px;
-      border-radius: var(--radius-md);
-      font-size: 12px;
-      font-weight: var(--fw-semi);
-      z-index: 2500;
-      opacity: 0;
-      pointer-events: none;
-      box-shadow: var(--shadow-md);
-      border: 1px solid var(--border);
-      transition: opacity 0.15s var(--ease-out);
-    }
-    .ptr-indicator.ready { color: var(--primary); }
-    .ptr-indicator.refreshing { color: var(--primary); opacity: 1 !important; transform: translateX(-50%) translateY(0) !important; }
-
     /* Modal bottom sheet */
     .overlay {
       display: none;
@@ -1412,13 +1388,6 @@
 
     .page { display: none; }
     .page.active { display: block; }
-
-    /* 12: свайп между вкладками нижней навигации — анимируем только
-       вошедшую страницу (см. initTabSwipe/switchPageWithSlide, 02-nav-utils.js) */
-    @keyframes pageSlideInLeft { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    @keyframes pageSlideInRight { from { transform: translateX(-24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    .page-slide-in-left { animation: pageSlideInLeft 0.18s ease; }
-    .page-slide-in-right { animation: pageSlideInRight 0.18s ease; }
 
     .link-row {
       display: flex;

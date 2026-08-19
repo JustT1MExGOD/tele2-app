@@ -294,83 +294,10 @@
       if (e.target.id === 'overlay') closeModal();
     });
 
-    // pull-to-refresh — раньше проверялись только начало/конец жеста: любой
-    // быстрый скролл к верху страницы, у которого естественный отскок
-    // (elastic bounce на границе) укладывался в "начали и закончили при
-    // scrollY===0, палец сместился вниз на 80px+", засчитывался как
-    // осознанная протяжка и незаметно триггерил обновление — жалобы на
-    // "выбешивающее" обновление при обычном скролле. Теперь жест
-    // отслеживается целиком (touchmove, не только start/end): если в любой
-    // момент scrollY отошёл от 0, это была прокрутка/отскок, а не протяжка,
-    // и жест сбрасывается. Плюс видимый индикатор (растёт с протяжкой,
-    // меняет текст на пороге) — обновление больше не происходит "невидимо
-    // из ниоткуда", и короткий cooldown, чтобы дребезг на границе не мог
-    // выстрелить дважды подряд.
-    const PTR_THRESHOLD = 100;
-    const PTR_COOLDOWN_MS = 3000;
-    let ptrStartY = 0;
-    let ptrTracking = false;
-    let ptrLastFireAt = 0;
-    const ptrEl = document.getElementById('ptrIndicator');
-
-    function ptrReset() {
-      ptrTracking = false;
-      ptrStartY = 0;
-      if (ptrEl) {
-        ptrEl.classList.remove('ready');
-        ptrEl.style.opacity = '';
-        ptrEl.style.transform = '';
-      }
-    }
-
-    document.addEventListener('touchstart', (e) => {
-      // Модалка открыта поверх страницы, проскроленной в 0, — свайп по
-      // модалке (см. initModalSwipeClose ниже) не должен ещё и триггерить
-      // фоновый refreshAll() от pull-to-refresh.
-      if (document.getElementById('overlay')?.classList.contains('show')) return;
-      if (window.scrollY === 0) {
-        ptrStartY = e.touches[0].clientY;
-        ptrTracking = true;
-      }
-    }, { passive: true });
-
-    document.addEventListener('touchmove', (e) => {
-      if (!ptrTracking) return;
-      if (window.scrollY !== 0) { ptrReset(); return; }
-      const delta = e.touches[0].clientY - ptrStartY;
-      if (!ptrEl) return;
-      if (delta <= 0) {
-        ptrEl.style.opacity = '0';
-        ptrEl.style.transform = 'translateX(-50%) translateY(-48px)';
-        ptrEl.classList.remove('ready');
-        return;
-      }
-      const progress = Math.min(1, delta / PTR_THRESHOLD);
-      ptrEl.style.opacity = String(progress);
-      ptrEl.style.transform = `translateX(-50%) translateY(${-48 + progress * 48}px)`;
-      const ready = delta >= PTR_THRESHOLD;
-      ptrEl.classList.toggle('ready', ready);
-      ptrEl.textContent = ready ? 'Отпусти, чтобы обновить' : 'Потяни, чтобы обновить';
-    }, { passive: true });
-
-    document.addEventListener('touchend', (e) => {
-      if (!ptrTracking) return;
-      const delta = e.changedTouches[0].clientY - ptrStartY;
-      const now = Date.now();
-      const shouldFire =
-        delta >= PTR_THRESHOLD && window.scrollY === 0 && now - ptrLastFireAt > PTR_COOLDOWN_MS;
-      ptrReset();
-      if (shouldFire) {
-        ptrLastFireAt = now;
-        refreshAll();
-      }
-    }, { passive: true });
-
     /* 15: свайп-вниз для закрытия модалки продажи. Жест ловим только на
-       .sheet-modal (не на document, как PTR выше) — и только если начался
-       на ручке/заголовке, а не внутри #modalBody: иначе обычный скролл
-       формы вниз тоже закрывал бы её. Порог ниже, чем у свайпа вкладок
-       (initTabSwipe, 02-nav-utils.js) — модалка физически ближе к пальцу. */
+       .sheet-modal (не на document) — и только если начался на ручке/
+       заголовке, а не внутри #modalBody: иначе обычный скролл формы вниз
+       тоже закрывал бы её. */
     function initModalSwipeClose() {
       const sheet = document.querySelector('.sheet-modal');
       if (!sheet) return;
