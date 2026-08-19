@@ -32,6 +32,19 @@
               </div>`
             : `<div style="padding:0 16px 10px"><div style="font-size:15px;font-weight:700">Выходной</div></div>`;
         }
+        // Тот же код/адрес — ещё и в шапке приложения, той же плашкой, что
+        // «Сегодня»: видно на любой вкладке, не только на Главной, пока не
+        // перейдёшь на Главную заново (обновляется вместе с «Мой день»).
+        const headerPill = document.getElementById('headerStorePill');
+        if (headerPill) {
+          if (shift && (shift.store_code || shift.store_address)) {
+            document.getElementById('headerStoreCode').textContent = shift.store_code || shift.store_name || '';
+            document.getElementById('headerStoreAddr').textContent = shift.store_address || '';
+            headerPill.style.display = '';
+          } else {
+            headerPill.style.display = 'none';
+          }
+        }
         box.innerHTML = `
           <div class="progress-block">
             ${shift ? `
@@ -146,32 +159,79 @@
       }
     }
 
+    /* Карточка приветствия: динамический индикатор смены (top-right угол,
+       по факту из /shifts/current, а не догадка) + бейдж «N дн. до
+       выходного» вместо статичного стрика — считаем по /schedules/month:
+       первый день от сегодня, которого нет в графике (или hours=0). Обе
+       вещи асинхронные — карточка уже отрисована синхронно с фолбэком
+       («Внеси продажу…»/бейдж скрыт), эта функция патчит их по готовности. */
+    async function loadGreetShiftAndDaysOff() {
+      const empId = me?.employee_id;
+      const badgeEl = document.getElementById('greetShiftBadge');
+      const daysEl = document.getElementById('greetDaysOffBadge');
+      if (!empId) return;
+      try {
+        const today = todayMoscow();
+        const [curRes, schRes] = await Promise.all([
+          fetch(API + '/shifts/current', { headers: authHeaders() }).catch(() => null),
+          fetch(API + '/schedules/month?month=' + today.slice(0, 7), { headers: authHeaders() }).catch(() => null)
+        ]);
+
+        if (badgeEl) {
+          const cur = curRes && curRes.ok ? await curRes.json() : null;
+          const open = !!cur?.session;
+          badgeEl.innerHTML = `<span class="dot"></span>${open ? 'Смена открыта' : 'Смена закрыта'}`;
+          badgeEl.classList.toggle('open', open);
+          badgeEl.style.display = '';
+        }
+
+        if (daysEl) {
+          const sch = schRes && schRes.ok ? await schRes.json() : null;
+          const rows = Array.isArray(sch) ? sch : (sch?.items || sch?.schedules || []);
+          const workDates = new Set(
+            rows
+              .filter((s) => String(s.employee_id) === String(empId) && Number(s.hours) > 0)
+              .map((s) => String(s.work_date || s.date || '').slice(0, 10))
+          );
+          let daysUntil = null;
+          for (let i = 0; i <= 31; i++) {
+            const d = new Date(today + 'T12:00:00');
+            d.setDate(d.getDate() + i);
+            if (!workDates.has(d.toISOString().slice(0, 10))) { daysUntil = i; break; }
+          }
+          daysEl.textContent = daysUntil === 0
+            ? 'Сегодня выходной'
+            : daysUntil === null
+              ? 'Внеси продажу — начни стрик'
+              : `${daysUntil} дн. до выходного`;
+        }
+      } catch (e) {
+        console.warn('loadGreetShiftAndDaysOff', e);
+      }
+    }
+
     async function loadHome() {
       document.getElementById('headerDate').textContent = formatDateRu(todayMoscow());
 
       // Приветствие
       const user = tgUser();
       const firstName = me?.full_name?.split(' ')[1] || me?.full_name?.split(' ')[0] || user?.first_name || 'команда';
-      const streak = Number(localStorage.getItem('t2_streak') || 0);
-      const lastSaleDay = localStorage.getItem('t2_last_sale_day') || '';
       const today = todayMoscow();
-      let showStreak = streak;
-      if (lastSaleDay && lastSaleDay !== today) {
-        // streak не сбрасываем на главной — только показываем
-      }
       const greetEl = document.getElementById('greetingCard');
       if (greetEl) {
         greetEl.innerHTML = `
           <div class="greet-card">
+            <div class="greet-shift-badge" id="greetShiftBadge" style="display:none"></div>
             <div class="greet-hi">${greetingByHour()}</div>
             <div class="greet-name">${firstName}</div>
             <div class="greet-badges">
               <span class="greet-badge">T2 Sales v${APP_VERSION}</span>
-              ${showStreak > 0 ? `<span class="greet-badge fire"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" /> </svg> ${showStreak} дн. подряд</span>` : `<span class="greet-badge">Внеси продажу — начни стрик</span>`}
+              <span class="greet-badge" id="greetDaysOffBadge">Внеси продажу — начни стрик</span>
               ${me?.role ? `<span class="greet-badge">${esc(roleLabel(me.role))}</span>` : ''}
             </div>
           </div>`;
       }
+      loadGreetShiftAndDaysOff();
 
       loadMyDay();
       loadCommandCenter();

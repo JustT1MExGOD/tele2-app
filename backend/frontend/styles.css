@@ -240,6 +240,11 @@
       transform: scale(0.94);
     }
 
+    .header-pills {
+      display: flex;
+      gap: var(--sp-3);
+      align-items: flex-start;
+    }
     .store-pill {
       display: inline-block;
       background: var(--surface);
@@ -249,6 +254,11 @@
       box-shadow: var(--shadow-md);
       max-width: 72%;
       border: 1px solid var(--border);
+    }
+    .header-pills .store-pill {
+      max-width: none;
+      flex: 1 1 0;
+      min-width: 0;
     }
     .store-pill .label {
       font-size: var(--fs-xs);
@@ -263,6 +273,17 @@
       font-weight: var(--fw-black);
       letter-spacing: -0.03em;
       line-height: var(--lh-tight);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .store-pill-addr {
+      font-size: 11px;
+      color: var(--hint);
+      margin-top: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     /* ===== Sheet ===== */
@@ -1289,6 +1310,41 @@
       background: rgba(255,149,0,0.25);
       border-color: rgba(255,149,0,0.3);
       color: #ffb340;
+    }
+    .greet-shift-badge {
+      position: absolute;
+      top: var(--sp-4);
+      right: var(--sp-4);
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 5px 10px 5px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.75);
+    }
+    .greet-shift-badge .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: rgba(255,255,255,0.35);
+      flex-shrink: 0;
+    }
+    .greet-shift-badge.open {
+      background: rgba(52,199,89,0.2);
+      border-color: rgba(52,199,89,0.32);
+      color: #34c759;
+    }
+    .greet-shift-badge.open .dot {
+      background: #34c759;
+      animation: greetShiftPulse 2s infinite;
+    }
+    @keyframes greetShiftPulse {
+      0% { box-shadow: 0 0 0 0 rgba(52,199,89,0.5); }
+      70% { box-shadow: 0 0 0 6px rgba(52,199,89,0); }
+      100% { box-shadow: 0 0 0 0 rgba(52,199,89,0); }
     }
     .pulse-row {
       display: flex; gap: 8px; flex-wrap: wrap;
