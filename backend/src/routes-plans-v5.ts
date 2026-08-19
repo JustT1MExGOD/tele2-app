@@ -68,10 +68,20 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
   });
 
   // Дневной план сотрудника (остаток / оставшиеся смены)
-  app.get('/plans/employees/:id/daily', async (request) => {
+  // Раньше вообще без авторизации (в отличие от /month-соседа выше) — план+
+  // факт дня любого сотрудника любой сети был виден по id кому угодно.
+  app.get('/plans/employees/:id/daily', async (request, reply) => {
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
-    const { date } = request.query as { date?: string };
-    return getEmployeeDailyPlan(Number(id), date || todayMoscow());
+    const { date, org_id } = request.query as { date?: string; org_id?: string };
+    const empId = Number(id);
+    if (empId !== request.user!.employee_id) {
+      const orgId = resolveViewOrgId(request.user!, org_id);
+      if (!(await assertEmployeeInOrg(empId, orgId))) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
+      }
+    }
+    return getEmployeeDailyPlan(empId, date || todayMoscow());
   });
 
   // Вычисленные дневные планы точек своей сети (остаток месячного плана точки / дни)

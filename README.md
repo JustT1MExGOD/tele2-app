@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-19.10.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-19.11.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `19.10.0`  
+**Актуальная версия клиента:** `19.11.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -570,6 +570,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **19.8.0** | **Google Sans, иконки вместо эмодзи, Android-hardening.** Шрифт приложения — Google Sans (легально лицензированный OFL-дистрибутив). Весь эмодзи-набор (119 вхождений, 62 уникальных) заменён на line-иконки Lucide — маскот «Арбузыч» и типографские стрелки в тексте оставлены как есть, цветные точки-статусы переведены на CSS-кружки. Android-hardening без привязки к конкретным багам: viewport-fit=cover, overscroll-behavior против конфликта с pull-to-refresh, 100dvh точнее 100vh |
 | **19.9.0** | Подпись к картинке анонса версии в Telegram-канале теперь несёт заголовок и все пункты обновления целиком, а не короткую строку — не нужно отдельно открывать картинку, чтобы прочитать, что изменилось. Длинные релизы аккуратно обрезаются по границе слова под лимит Telegram в 1024 символа |
 | **19.10.0** | Новое оформление карточки анонса — цветной градиентный блок-заголовок с крупным номером версии, скруглённая карточка, список изменений снизу, шрифт Google Sans. Все прошлые анонсы перегенерированы и переотправлены в канал в новом виде |
+| **19.11.0** | Аудит контроля доступа: усилена авторизация на ряде эндпоинтов (identity — только из подтверждённой Telegram-подписи, запись/чтение — строго в рамках своей сети), аккуратные ответы об ошибке вместо падения сервера на некорректных входных данных. 26 новых регрессионных тестов (`tests/adversarial/`), итого 255 |
 
 ---
 

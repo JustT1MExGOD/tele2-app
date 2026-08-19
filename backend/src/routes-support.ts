@@ -187,9 +187,16 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     const message = String(b.message || '').trim();
     if (!message) return reply.code(400).send({ error: 'message required' });
 
-    const telegram_id = b.telegram_id || request.user?.telegram_id || null;
-    const employee_id = request.user?.employee_id || b.employee_id || null;
-    const full_name = request.user?.full_name || b.full_name || 'Гость';
+    // identity — ТОЛЬКО из подтверждённого request.user (Telegram initData),
+    // никогда из тела запроса: раньше b.telegram_id/b.employee_id принимались
+    // от кого угодно (роут намеренно доступен гостю без карточки) — любой
+    // неаутентифицированный вызывающий мог создать тикет от имени чужого
+    // employee_id/telegram_id. full_name — не identity-поле само по себе
+    // (не даёт доступа ни к чему), гостю без request.user можно представиться
+    // самому — но и тут в приоритете подтверждённое имя, если оно есть.
+    const telegram_id = request.user?.telegram_id || null;
+    const employee_id = request.user?.employee_id || null;
+    const full_name = request.user?.full_name || String(b.full_name || '').trim() || 'Гость';
     const category = b.category || 'other';
 
     let autoAnswer: string | null = null;
@@ -213,7 +220,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       `INSERT INTO support_tickets
          (employee_id, telegram_id, full_name, category, message, status, admin_reply, answered_at,
           priority, sla_minutes, sla_due_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now() + ($10 || 240) * interval '1 minute')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now() + ($10::int * interval '1 minute'))
        RETURNING *`,
       [
         employee_id,

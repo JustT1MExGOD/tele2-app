@@ -7,7 +7,7 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
-import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
+import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg } from './middleware-auth.js';
 
 export async function registerSchedulesRoutes(app: FastifyInstance) {
   // График — по точкам своей сети. Сотрудник может быть на смене в чужой
@@ -46,6 +46,13 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, body.org_id);
     if (!(await assertStoreInOrg(store_id, orgId))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
+    // Раньше проверялась только точка, не сотрудник — manager чужой сети
+    // мог назначить НА СВОЮ точку сотрудника чужой сети (угадав его id), и
+    // ON CONFLICT (employee_id, work_date) DO UPDATE молча перезаписывал
+    // уже существующую смену жертвы на её собственной точке.
+    if (!(await assertEmployeeInOrg(Number(employee_id), orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
     }
 
     const res = await query(
@@ -113,6 +120,9 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
 
       if (!employee_id || !store_id || !work_date) continue;
       if (!(await assertStoreInOrg(store_id, orgId))) continue;
+      // Тот же пробел, что в одиночном POST /schedules — точка проверялась,
+      // сотрудник нет.
+      if (!(await assertEmployeeInOrg(employee_id, orgId))) continue;
 
       if (hours <= 0) {
         // удалить смену

@@ -14,6 +14,21 @@ import { query } from '../db/index.js';
 import { logSaleEvents } from './heatmap.js';
 
 const SAFE_COLUMN = /^[a-z][a-z0-9_]{0,29}$/;
+// Границы integer в Postgres — часть колонок метрик (sim/mnp/pa/combo/hb)
+// именно такого типа. Раньше значение вроде 1e12 без проверки диапазона
+// улетало прямо в INSERT и Postgres кидал необработанное исключение 22003
+// "value out of range for type integer" (голый 500 вместо аккуратного 400).
+// Единый потолок для всех метрик, не только integer-колонок — абсурдное
+// число (1e15 аксессуаров) бессмысленно как бизнес-факт независимо от
+// типа колонки в БД.
+const MAX_METRIC_VALUE = 2_147_483_647;
+
+export class SaleMetricRangeError extends Error {
+  constructor(public metric: string, public value: number) {
+    super(`Значение метрики "${metric}" (${value}) вне допустимого диапазона`);
+    this.name = 'SaleMetricRangeError';
+  }
+}
 
 export type SaleSource = 'api' | 'quick' | 'sync';
 
@@ -53,6 +68,10 @@ export async function applySaleUpsert(opts: {
     const v = Number(opts.metrics[k]);
     return SAFE_COLUMN.test(k) && Number.isFinite(v) && v !== 0;
   });
+  for (const f of fields) {
+    const v = Number(opts.metrics[f]);
+    if (Math.abs(v) > MAX_METRIC_VALUE) throw new SaleMetricRangeError(f, v);
+  }
   if (!fields.length) return { row: null, applied: [] };
 
   const insertCols = ['employee_id', 'store_id', 'sale_date', ...fields];

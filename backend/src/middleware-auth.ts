@@ -124,7 +124,14 @@ function resolveTelegramId(request: FastifyRequest): number | null {
       (request.headers['x-telegram-id'] as string) ||
       (request.headers['x-telegram-user-id'] as string) ||
       '';
-    if (raw) return Number(raw);
+    // Голый Number(raw) пропускал дробные ("123.456") и переполняющие
+    // bigint значения ("1e+29" в экспоненциальной записи) как "валидные" —
+    // они падали только позже, на ::bigint в SQL, необработанным
+    // исключением (500) на любом роуте, читающем request.user. Реальные
+    // Telegram id — целые положительные числа, максимум ~15 цифр с
+    // огромным запасом.
+    if (raw && /^\d{1,15}$/.test(raw)) return Number(raw);
+    return null;
   }
 
   return null;

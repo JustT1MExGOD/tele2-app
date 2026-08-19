@@ -35,7 +35,19 @@ describe('Изоляция продаж (/sales)', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('employee может вносить СВОЮ продажу даже на точке чужой сети (подмена легитимна)', async () => {
+  it('employee может вносить СВОЮ продажу на другой точке СВОЕЙ сети (подмена легитимна внутри сети)', async () => {
+    const app = await getApp();
+    const storeB2 = await fx.createStore(orgB, 'Store B2 (подмена)');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/sales',
+      headers: { ...authAs(employeeB.telegramId), 'content-type': 'application/json' },
+      payload: { employee_id: employeeB.id, store_id: storeB2, sim: 1, sale_date: '2026-06-20' }
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('employee НЕ может вносить СВОЮ продажу на точке СОВСЕМ ДРУГОЙ сети (подмена ограничена своей сетью)', async () => {
     const app = await getApp();
     const res = await app.inject({
       method: 'POST',
@@ -43,7 +55,7 @@ describe('Изоляция продаж (/sales)', () => {
       headers: { ...authAs(employeeB.telegramId), 'content-type': 'application/json' },
       payload: { employee_id: employeeB.id, store_id: storeA, sim: 1, sale_date: '2026-06-20' }
     });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(403);
   });
 
   it('manager не может внести продажу ЗА ДРУГОГО сотрудника на точке чужой сети', async () => {

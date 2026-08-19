@@ -111,21 +111,25 @@ export async function registerMeRoutes(app: FastifyInstance) {
 
   /** Мой день: смена + факт + дневной план */
   app.get('/me/day', async (request, reply) => {
-    const telegramId =
-      (request.headers['x-telegram-id'] as string) ||
-      (request.query as any)?.telegram_id;
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
 
-    if (!telegramId) {
-      return reply.code(401).send({ error: 'X-Telegram-Id required' });
+    // Раньше identity бралась из голого X-Telegram-Id заголовка/?telegram_id=
+    // query-параметра — в обход authPlugin/verifyTelegramInitData, то есть
+    // без единой проверки подписи. Любой внешний вызывающий, знающий чужой
+    // telegram_id, читал чужой факт/график/задачи. request.user уже
+    // проставлен глобальным preHandler (authPlugin, app.ts) и подтверждён
+    // подписью Telegram initData — единственный источник identity здесь,
+    // как и у /me выше.
+    if (!request.user?.employee_id) {
+      return { bound: false, message: 'Привяжите аккаунт во вкладке Профиль' };
     }
 
     const emp = await query(
       `SELECT id, full_name, short_name, role, telegram_id
        FROM employees
-       WHERE telegram_id = $1 AND COALESCE(is_active, true) = true
+       WHERE id = $1 AND COALESCE(is_active, true) = true
        LIMIT 1`,
-      [Number(telegramId)]
+      [request.user.employee_id]
     );
     if (!emp.rows[0]) {
       return { bound: false, message: 'Привяжите аккаунт во вкладке Профиль' };

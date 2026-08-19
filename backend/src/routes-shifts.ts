@@ -10,7 +10,7 @@ import { parseSalePhrase } from './services/sales-nlp.js';
 import { evaluateAfterSale, evaluateShiftClose, getGamificationProfile } from './services/gamification.js';
 import { generateShiftSummary } from './services/ai.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
-import { applySaleUpsert, claimIdempotencyKey } from './services/sales-write.js';
+import { applySaleUpsert, claimIdempotencyKey, SaleMetricRangeError } from './services/sales-write.js';
 import { notifyChat } from './bot/index.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
 import { computeDayPlanFact } from './services/shift-pace.js';
@@ -40,6 +40,12 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     }
     if (!store_id) {
       return reply.code(400).send({ error: 'store_id required (нет смены в графике)' });
+    }
+    // Раньше store_id из body принимался без проверки — любой сотрудник мог
+    // открыть смену на точке совершенно чужой сети. "Подмена" на другой
+    // точке легитимна, но только внутри своей же сети.
+    if (!(await assertStoreInOrg(store_id, request.user!.org_id))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
 
     // закрыть висящие open
@@ -297,14 +303,16 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     }
     if (!store_id) return reply.code(400).send({ error: 'store_id required' });
 
-    // Manager, вносящий продажу ЗА ДРУГОГО сотрудника — точка должна быть в
-    // его сети (тот же чек, что в основном POST /sales); свою продажу на
-    // чужой точке (подмена) вносить по-прежнему можно.
-    if (isManagerRole && employee_id !== request.user!.employee_id) {
-      const orgId = resolveViewOrgId(request.user!, body.org_id);
-      if (!(await assertStoreInOrg(store_id, orgId))) {
-        return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-      }
+    // Точка должна быть в той же сети, что и пишущий — и когда manager
+    // вносит продажу ЗА ДРУГОГО, и когда КТО УГОДНО вносит СВОЮ продажу на
+    // другой точке ("подмена" легитимна, но только внутри своей сети).
+    // Раньше проверка запускалась только в ветке "manager за другого".
+    const writingForSelfQuick = employee_id === request.user!.employee_id;
+    const orgIdQuick = isManagerRole && !writingForSelfQuick
+      ? resolveViewOrgId(request.user!, body.org_id)
+      : request.user!.org_id;
+    if (!(await assertStoreInOrg(store_id, orgIdQuick))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
 
     const tg = request.user!.telegram_id ? Number(request.user!.telegram_id) : null;
@@ -326,14 +334,22 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // отдельный INSERT без GREATEST(0, ...) (мог уйти в минус) и без
     // sales_audit/sales_events: продажи через быстрый ввод были невидимы
     // и в истории правок, и в heatmap.
-    const { row, applied } = await applySaleUpsert({
-      employee_id,
-      store_id,
-      sale_date,
-      metrics: parsed.metrics,
-      source: 'quick',
-      createdByTelegramId: tg
-    });
+    let row: any, applied: any[];
+    try {
+      ({ row, applied } = await applySaleUpsert({
+        employee_id,
+        store_id,
+        sale_date,
+        metrics: parsed.metrics,
+        source: 'quick',
+        createdByTelegramId: tg
+      }));
+    } catch (e: any) {
+      if (e instanceof SaleMetricRangeError) {
+        return reply.code(400).send({ error: 'metric_out_of_range', message: e.message });
+      }
+      throw e;
+    }
 
     await evaluateAfterSale(employee_id, parsed.metrics);
 
@@ -402,14 +418,16 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
           // сотрудник", ни "своя ли сеть", employee_id/store_id брались из
           // тела как есть. Один плохой op не должен рушить весь batch —
           // кидаем Error, его ловит try/catch ниже и помечает just этот op.
-          if (employee_id !== request.user!.employee_id) {
-            if (!isManager(request.user)) {
-              throw new Error('можно синхронизировать только свои продажи');
-            }
-            const orgId = resolveViewOrgId(request.user!, op.org_id);
-            if (!store_id || !(await assertStoreInOrg(store_id, orgId))) {
-              throw new Error('точка не принадлежит вашей сети');
-            }
+          // "Своя" продажа (employee_id === себя) тоже проверяется — раньше
+          // проверка сети запускалась только для "manager пишет за другого".
+          if (employee_id !== request.user!.employee_id && !isManager(request.user)) {
+            throw new Error('можно синхронизировать только свои продажи');
+          }
+          const orgIdSync = employee_id !== request.user!.employee_id
+            ? resolveViewOrgId(request.user!, op.org_id)
+            : request.user!.org_id;
+          if (!store_id || !(await assertStoreInOrg(store_id, orgIdSync))) {
+            throw new Error('точка не принадлежит вашей сети');
           }
 
           // Тот же путь записи, что у POST /sales и /sales/quick — раньше

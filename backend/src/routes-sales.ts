@@ -9,7 +9,7 @@ import { todayMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
-import { applySaleUpsert, claimIdempotencyKey } from './services/sales-write.js';
+import { applySaleUpsert, claimIdempotencyKey, SaleMetricRangeError } from './services/sales-write.js';
 
 export async function registerSalesRoutes(app: FastifyInstance) {
   // Раньше эндпоинт вообще не проверял авторизацию и не фильтровал по сети —
@@ -50,20 +50,23 @@ export async function registerSalesRoutes(app: FastifyInstance) {
 
     // employee может писать только за себя; manager/admin — за всех
     const isManagerRole = user.role === 'manager' || user.role === 'admin';
-    if (!isManagerRole && Number(user.employee_id) !== employee_id) {
+    const writingForSelf = Number(user.employee_id) === employee_id;
+    if (!isManagerRole && !writingForSelf) {
       return reply.code(403).send({
         error: 'forbidden',
         message: 'Можно вносить продажи только за себя'
       });
     }
-    // Manager, вносящий продажу ЗА ДРУГОГО сотрудника — точка должна быть
-    // в его сети (или сети, выбранной admin-переключателем). Свою продажу
-    // на чужой точке (подмена) вносить по-прежнему можно — это легитимно.
-    if (isManagerRole && Number(user.employee_id) !== employee_id) {
-      const orgId = resolveViewOrgId(user, body.org_id);
-      if (!(await assertStoreInOrg(store_id, orgId))) {
-        return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-      }
+    // Точка должна быть в той же сети, что и пишущий — и когда manager
+    // вносит продажу ЗА ДРУГОГО (тогда сеть может быть выбрана
+    // admin-переключателем, resolveViewOrgId), и когда КТО УГОДНО вносит
+    // СВОЮ продажу на другой точке ("подмена" — легитимный сценарий), но
+    // только внутри своей же сети. Раньше эта проверка запускалась ТОЛЬКО
+    // в ветке "manager пишет за другого" — свою продажу можно было указать
+    // на точке вообще любой чужой сети без единой проверки принадлежности.
+    const orgId = isManagerRole && !writingForSelf ? resolveViewOrgId(user, body.org_id) : user.org_id;
+    if (!(await assertStoreInOrg(store_id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
     const tg = user.telegram_id ? Number(user.telegram_id) : null;
 
@@ -111,14 +114,22 @@ export async function registerSalesRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'no metrics', message: 'Не выбраны метрики или колонка отсутствует в sales' });
     }
 
-    const { row, applied } = await applySaleUpsert({
-      employee_id,
-      store_id,
-      sale_date,
-      metrics,
-      source: 'api',
-      createdByTelegramId: tg
-    });
+    let row: any, applied: any[];
+    try {
+      ({ row, applied } = await applySaleUpsert({
+        employee_id,
+        store_id,
+        sale_date,
+        metrics,
+        source: 'api',
+        createdByTelegramId: tg
+      }));
+    } catch (e: any) {
+      if (e instanceof SaleMetricRangeError) {
+        return reply.code(400).send({ error: 'metric_out_of_range', message: e.message });
+      }
+      throw e;
+    }
 
     try {
       const info = await query(

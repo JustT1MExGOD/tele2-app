@@ -37,9 +37,13 @@ export async function registerV8Routes(app: FastifyInstance) {
   // подтянуть user на каждый запрос
   // ===== ACCESS STATUS (гость может) =====
   app.get('/access/status', async (request) => {
-    const raw = request.headers['x-telegram-id'] as string;
-    if (!raw) return { status: 'anonymous' };
-    const user = request.user || (await loadUser(Number(raw)));
+    // request.user уже проставлен глобальным authPlugin и подтверждён
+    // подписью Telegram initData (или явным ALLOW_INSECURE_AUTH в деве) —
+    // раньше при отсутствующем request.user роут тихо доверял голому
+    // X-Telegram-Id заголовку напрямую (loadUser(Number(raw))), сводя на
+    // нет всю проверку подписи даже в "боевом" режиме.
+    if (!request.user?.telegram_id) return { status: 'anonymous' };
+    const user = request.user;
 
     // pending request without employee row?
     if (user.access_status === 'none') {
@@ -93,9 +97,10 @@ export async function registerV8Routes(app: FastifyInstance) {
 
   // Заявка на доступ
   app.post('/access/request', async (request, reply) => {
-    const raw = request.headers['x-telegram-id'] as string;
-    if (!raw) return reply.code(401).send({ error: 'X-Telegram-Id required' });
-    const telegramId = Number(raw);
+    // Та же поправка, что /me/bind — telegram_id только из подтверждённого
+    // request.user, не из спуфабельного заголовка напрямую.
+    const telegramId = Number(request.user?.telegram_id || 0);
+    if (!telegramId) return reply.code(401).send({ error: 'unauthorized', message: 'Telegram initData не подтверждён' });
     const b = request.body as any;
     const full_name = String(b.full_name || '').trim();
     if (!full_name || full_name.length < 3) {
@@ -395,10 +400,8 @@ export async function registerV8Routes(app: FastifyInstance) {
 
   // Удобный /me с access
   app.get('/me/access', async (request, reply) => {
-    const raw = request.headers['x-telegram-id'] as string;
-    if (!raw) return reply.code(401).send({ error: 'no telegram id' });
-    const user = request.user || (await loadUser(Number(raw)));
-    return user;
+    if (!request.user?.telegram_id) return reply.code(401).send({ error: 'no telegram id' });
+    return request.user;
   });
 }
 
