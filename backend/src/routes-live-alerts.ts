@@ -9,6 +9,7 @@ import { getLiveNetworkMap } from './services/live-map.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { simulateScheduleMoves } from './services/what-if.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
+import { serverError } from './utils/http-errors.js';
 
 export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   // ========== LIVE MAP + ALERTS ==========
@@ -113,7 +114,7 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     try {
       return await simulateScheduleMoves({ date: body.date, moves, orgId });
     } catch (e: any) {
-      return reply.code(500).send({ error: 'what_if_failed', message: e?.message || String(e) });
+      return serverError(request, reply, 'what_if_failed', e);
     }
   });
 

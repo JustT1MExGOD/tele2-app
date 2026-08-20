@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency vulnerability audit
+        run: npm audit --audit-level=high
+
       - name: Apply migrations to test database
         run: npm run migrate
 

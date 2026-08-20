@@ -9,6 +9,7 @@ import { query } from './db/index.js';
 import { requireAuth, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { buildSupervisorDashboard } from './services/supervisor-analytics.js';
 import { todayMoscow } from './utils/date.js';
+import { serverError } from './utils/http-errors.js';
 
 function canViewStoreProfile(user: { role?: string } | null | undefined): boolean {
   if (!user?.role) return false;
@@ -115,8 +116,7 @@ export async function registerStoreProfileRoutes(app: FastifyInstance) {
         generated_at: new Date().toISOString()
       };
     } catch (e: any) {
-      console.error('store-profile failed:', e?.message || e);
-      return reply.code(500).send({ error: 'store_profile_failed', message: e?.message || String(e) });
+      return serverError(request, reply, 'store_profile_failed', e);
     }
   });
 }

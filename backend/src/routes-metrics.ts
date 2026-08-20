@@ -8,6 +8,7 @@ import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
 import { invalidateMetricsCache, getMetricDefs } from './services/metrics-catalog.js';
+import { serverError } from './utils/http-errors.js';
 
 function slugify(label: string, short?: string) {
   const base = (short || label)
@@ -107,7 +108,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
           [id, label, short, unit, sort]
         );
       } else {
-        return reply.code(500).send({ error: 'db_error', message: e?.message || String(e) });
+        return serverError(request, reply, 'db_error', e);
       }
     }
 
@@ -151,7 +152,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
     try {
       await query(`UPDATE plan_metrics SET is_active = false WHERE id = $1`, [id]);
     } catch (e: any) {
-      return reply.code(500).send({ error: 'db_error', message: e?.message || String(e) });
+      return serverError(request, reply, 'db_error', e);
     }
     return { ok: true, id, active: false };
   });

@@ -25,6 +25,7 @@ import {
   buildSupervisorDashboard
 } from './services/supervisor-analytics.js';
 import { todayMoscow } from './utils/date.js';
+import { serverError } from './utils/http-errors.js';
 
 /** Полный кабинет супервайзера — только supervisor/admin. Раньше сюда же
  * пускали manager, но кабинет теперь изолирован от manager/senior (свой
@@ -88,12 +89,7 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
       }
       return await buildSupervisorDashboard({ scope, date, days });
     } catch (e: any) {
-      request.log?.error?.(e);
-      console.error('supervisor/dashboard failed:', e?.message || e);
-      return reply.code(500).send({
-        error: 'dashboard_failed',
-        message: e?.message || String(e)
-      });
+      return serverError(request, reply, 'dashboard_failed', e);
     }
   });
 
@@ -124,11 +120,7 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
         date: dash.date
       };
     } catch (e: any) {
-      console.error('supervisor/health failed:', e?.message || e);
-      return reply.code(500).send({
-        error: 'health_failed',
-        message: e?.message || String(e)
-      });
+      return serverError(request, reply, 'health_failed', e);
     }
   });
 }

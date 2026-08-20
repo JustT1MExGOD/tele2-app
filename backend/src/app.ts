@@ -67,8 +67,28 @@ function findFrontendDir(): string | null {
   return null;
 }
 
+/** Известные коды ошибок Postgres → стабильный HTTP-ответ вместо голого 500
+ * с сырым текстом драйвера (может содержать имена колонок/constraint'ов). */
+const PG_ERROR_MAP: Record<string, { statusCode: number; error: string; message: string }> = {
+  '23505': { statusCode: 409, error: 'conflict', message: 'Запись уже существует' },
+  '23503': { statusCode: 400, error: 'invalid_reference', message: 'Ссылка на несуществующую запись' },
+  '23514': { statusCode: 400, error: 'invalid_input', message: 'Некорректные данные' },
+  '22003': { statusCode: 400, error: 'invalid_input', message: 'Значение вне допустимого диапазона' },
+  '22P02': { statusCode: 400, error: 'invalid_input', message: 'Некорректный формат данных' }
+};
+
 export async function buildApp(): Promise<FastifyInstance> {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: {
+      // initData/токены никогда не должны попасть в логи — сериализаторы
+      // pino по умолчанию и так не включают headers, redact здесь просто
+      // страховка на случай, если это когда-нибудь изменится.
+      redact: {
+        paths: ['req.headers["x-telegram-init-data"]', 'req.headers["x-telegram-initdata"]', 'req.headers.authorization'],
+        censor: '[redacted]'
+      }
+    }
+  });
   // origin: true (было) отражал ЛЮБОЙ Origin — но фронтенд всегда бьёт на
   // API тем же доменом, с которого сам загружен (API = window.location.origin
   // в 01-core.js), а бот открывает Mini App той же ссылкой (MINI_APP_URL —
@@ -132,6 +152,23 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Единая точка резолва пользователя (telegram_id проверяется по подписи
   // Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.
   app.addHook('preHandler', authPlugin);
+
+  // Сеть роутов, где ошибка не поймана вручную (throw/reject без try/catch),
+  // раньше уходила клиенту через дефолтный Fastify-хендлер как есть — с
+  // сырым err.message (для ошибок pg это может быть текст с именами колонок/
+  // constraint'ов). Отдельные роуты с собственным catch это не затрагивает —
+  // они уже отвечают через serverError() (src/utils/http-errors.ts).
+  app.setErrorHandler((err: any, request, reply) => {
+    request.log.error(err);
+    const mapped = typeof err?.code === 'string' ? PG_ERROR_MAP[err.code] : undefined;
+    if (mapped) {
+      return reply.code(mapped.statusCode).send({ error: mapped.error, message: mapped.message });
+    }
+    if (typeof err?.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 500) {
+      return reply.code(err.statusCode).send({ error: 'bad_request', message: err.message });
+    }
+    return reply.code(500).send({ error: 'internal_error', message: 'Внутренняя ошибка сервера' });
+  });
 
   const frontendDir = findFrontendDir();
   if (frontendDir) {

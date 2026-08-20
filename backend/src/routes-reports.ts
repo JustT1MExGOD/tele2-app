@@ -15,6 +15,7 @@ import { todayMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { buildDailyReportSvg, buildStoryReportSvgs } from './services/report-image.js';
 import { sendNetworkDigest } from './services/network-digest.js';
+import { serverError } from './utils/http-errors.js';
 
 export async function registerReportsRoutes(app: FastifyInstance) {
   app.get('/reports/day/:storeId', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
@@ -40,8 +41,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
       const svg = await buildDailyReportSvg(storeId, date, { kind });
       return { ok: true, store_id: storeId, date, kind, content_type: 'image/svg+xml', svg };
     } catch (e: any) {
-      request.log.error(e);
-      return reply.code(500).send({ error: 'report_failed', message: e?.message || String(e) });
+      return serverError(request, reply, 'report_failed', e);
     }
   });
 
@@ -58,7 +58,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
       const result = await sendMicroReports(date, hour);
       return result;
     } catch (e: any) {
-      return reply.code(500).send({ error: 'send_failed', message: e?.message || String(e) });
+      return serverError(request, reply, 'send_failed', e);
     }
   });
 
@@ -71,7 +71,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
       const result = await sendFinalReports(date);
       return result;
     } catch (e: any) {
-      return reply.code(500).send({ error: 'send_failed', message: e?.message || String(e) });
+      return serverError(request, reply, 'send_failed', e);
     }
   });
 
@@ -87,7 +87,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
       await sendNetworkDigest(kind, { orgId, bypassClaim: true });
       return { ok: true, kind };
     } catch (e: any) {
-      return reply.code(500).send({ error: 'send_failed', message: e?.message || String(e) });
+      return serverError(request, reply, 'send_failed', e);
     }
   });
 }

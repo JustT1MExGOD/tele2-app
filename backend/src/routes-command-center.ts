@@ -13,6 +13,7 @@ import {
   findUnderperformingEmployees
 } from './services/supervisor-analytics.js';
 import { todayMoscow } from './utils/date.js';
+import { serverError } from './utils/http-errors.js';
 
 /** Тот же доступ, что у /supervisor/health — это его расширенная версия. */
 function canViewCommandCenter(user: { role?: string } | null | undefined): boolean {
@@ -118,8 +119,7 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
         generated_at: new Date().toISOString()
       };
     } catch (e: any) {
-      console.error('command-center failed:', e?.message || e);
-      return reply.code(500).send({ error: 'command_center_failed', message: e?.message || String(e) });
+      return serverError(request, reply, 'command_center_failed', e);
     }
   });
 }

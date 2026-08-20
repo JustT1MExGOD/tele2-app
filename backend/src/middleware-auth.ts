@@ -153,6 +153,12 @@ export async function authPlugin(request: FastifyRequest, _reply: FastifyReply) 
   // Хук вешается в нескольких route-модулях; выполняем резолв один раз.
   if (request.user !== undefined) return;
   request.user = await resolveUser(request);
+  // employee_id/org_id на все последующие log-строки этого запроса — без
+  // этого разбор инцидента по логам Railway сводится к тому, чтобы грепать
+  // reqId и вручную сопоставлять его с БД, лишь бы понять, чей это был запрос.
+  if (request.user?.employee_id) {
+    request.log = request.log.child({ employee_id: request.user.employee_id, org_id: request.user.org_id });
+  }
 }
 
 export function requireAuth(request: FastifyRequest, reply: FastifyReply) {

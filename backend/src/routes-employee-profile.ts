@@ -10,6 +10,7 @@ import { requireAuth, resolveViewOrgId, assertEmployeeInOrg } from './middleware
 import { calculateEmployeeBFQ } from './services/bfq.js';
 import { getGamificationProfile } from './services/gamification.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
+import { serverError } from './utils/http-errors.js';
 
 function canViewEmployeeProfile(user: { role?: string } | null | undefined): boolean {
   if (!user?.role) return false;
@@ -128,8 +129,7 @@ export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
         generated_at: new Date().toISOString()
       };
     } catch (e: any) {
-      console.error('employee-profile failed:', e?.message || e);
-      return reply.code(500).send({ error: 'employee_profile_failed', message: e?.message || String(e) });
+      return serverError(request, reply, 'employee_profile_failed', e);
     }
   });
 }

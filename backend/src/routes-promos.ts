@@ -5,6 +5,7 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { resolveViewOrgId } from './middleware-auth.js';
+import { serverError } from './utils/http-errors.js';
 
 function maskPromoCode(code: string) {
   const s = String(code || '');
@@ -48,11 +49,7 @@ export async function registerPromosRoutes(app: FastifyInstance) {
         }))
       };
     } catch (e: any) {
-      return reply.code(500).send({
-        error: 'db_error',
-        message: e?.message || String(e),
-        hint: 'CREATE TABLE rtk_promocodes — sql/promos.sql'
-      });
+      return serverError(request, reply, 'db_error', e);
     }
   });
 
@@ -70,7 +67,7 @@ export async function registerPromosRoutes(app: FastifyInstance) {
       if (!res.rows[0]) return reply.code(404).send({ error: 'not_found' });
       return res.rows[0];
     } catch (e: any) {
-      return reply.code(500).send({ error: 'db_error', message: e?.message || String(e) });
+      return serverError(request, reply, 'db_error', e);
     }
   });
 
@@ -91,11 +88,7 @@ export async function registerPromosRoutes(app: FastifyInstance) {
       );
       return { ok: true, item: res.rows[0] };
     } catch (e: any) {
-      return reply.code(500).send({
-        error: 'db_error',
-        message: e?.message || String(e),
-        hint: 'Таблица rtk_promocodes не создана'
-      });
+      return serverError(request, reply, 'db_error', e);
     }
   });
 
@@ -115,7 +108,7 @@ export async function registerPromosRoutes(app: FastifyInstance) {
       if (!res.rows[0]) return reply.code(404).send({ error: 'not_found' });
       return { ok: true, used: true };
     } catch (e: any) {
-      return reply.code(500).send({ error: 'db_error', message: e?.message || String(e) });
+      return serverError(request, reply, 'db_error', e);
     }
   });
 
