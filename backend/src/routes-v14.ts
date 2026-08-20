@@ -3,10 +3,24 @@
  * Отчёты /reports/day — в index.ts (не дублировать)
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { authPlugin, requireAuth, requireManager, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from './services/tenant.js';
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
 import { serverError } from './utils/http-errors.js';
+
+// upsertOrg(body: Partial<Org> & {id}) принимает произвольный поднабор
+// полей organizations (name/brand_name/primary_color/logo_url/sector_id/
+// chat_id/sales_thread_id/reports_thread_id/is_active) — не перечисляем
+// каждое поимённо (та же логика, что у динамических тел метрик/планов),
+// требуем только гарантированно NOT NULL name.
+const UpsertOrgBody = Type.Object(
+  {
+    name: Type.String({ minLength: 1 })
+  },
+  { additionalProperties: true }
+);
+type UpsertOrgBody = Static<typeof UpsertOrgBody>;
 
 export async function registerV14Routes(app: FastifyInstance) {
   app.get('/branding', async (request) => {
@@ -47,15 +61,19 @@ export async function registerV14Routes(app: FastifyInstance) {
     return listOrgs();
   });
 
-  app.put('/admin/org/:id', async (request, reply) => {
+  app.put(
+    '/admin/org/:id',
+    { schema: { body: UpsertOrgBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     if (request.user?.role !== 'admin') {
       return reply.code(403).send({ error: 'admin only' });
     }
     const id = (request.params as any).id;
-    const body = (request.body || {}) as any;
+    const body = request.body as any;
     return upsertOrg({ id, ...body });
-  });
+    }
+  );
 
   // Точки своей сети — единый источник для всех пикеров точек во фронтенде
   // (см. fetchOrgStores() в 01-core.js). admin может явно затребовать другую

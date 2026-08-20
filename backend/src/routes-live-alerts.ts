@@ -3,6 +3,7 @@
  * Выделено из routes-v13.ts.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getLiveNetworkMap } from './services/live-map.js';
@@ -10,6 +11,32 @@ import { runSmartAlertsTick } from './services/alerts.js';
 import { simulateScheduleMoves } from './services/what-if.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
+
+const AlertOrgBody = Type.Object({
+  org_id: Type.Optional(Type.String())
+});
+type AlertOrgBody = Static<typeof AlertOrgBody>;
+
+const AlertStatusBody = Type.Object({
+  org_id: Type.Optional(Type.String()),
+  status: Type.Optional(Type.String())
+});
+type AlertStatusBody = Static<typeof AlertStatusBody>;
+
+// moves — гетерогенные объекты сценария (employee_id/from_store/to_store/
+// work_date), from_store фронтенд реально шлёт как null («откуда» не
+// выбрано — см. 13-v14.js:285) — additionalProperties: true вместо жёсткой
+// типизации каждого поля, тот же принцип, что у SyncOp (routes-shifts.ts).
+const WhatIfMove = Type.Object({}, { additionalProperties: true });
+const WhatIfBody = Type.Object({
+  date: Type.Optional(Type.String()),
+  moves: Type.Optional(Type.Array(WhatIfMove)),
+  employee_id: Type.Optional(Type.Number()),
+  from_store: Type.Optional(Type.Union([Type.Null(), Type.String()])),
+  to_store: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String())
+});
+type WhatIfBody = Static<typeof WhatIfBody>;
 
 export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   // ========== LIVE MAP + ALERTS ==========
@@ -41,10 +68,13 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     return res.rows;
   });
 
-  app.post('/alerts/:id/ack', async (request, reply) => {
+  app.post(
+    '/alerts/:id/ack',
+    { schema: { body: AlertOrgBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    const { org_id } = (request.body || {}) as { org_id?: string };
+    const { org_id } = (request.body || {}) as AlertOrgBody;
     const orgId = resolveViewOrgId(request.user!, org_id);
     const alert = await query(`SELECT store_id FROM smart_alerts WHERE id = $1`, [Number(id)]);
     if (!alert.rows[0]) return reply.code(404).send({ error: 'not found' });
@@ -60,15 +90,19 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
       [request.user!.employee_id, Number(id)]
     );
     return res.rows[0];
-  });
+    }
+  );
 
   // 18.6 — полный жизненный цикл алерта (не только open->acked). /ack
   // остаётся отдельным эндпоинтом для обратной совместимости, но теперь
   // это частный случай той же логики.
-  app.post('/alerts/:id/status', async (request, reply) => {
+  app.post(
+    '/alerts/:id/status',
+    { schema: { body: AlertStatusBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    const body = (request.body || {}) as { org_id?: string; status?: string };
+    const body = (request.body || {}) as AlertStatusBody;
     const orgId = resolveViewOrgId(request.user!, body.org_id);
     const alert = await query(`SELECT store_id FROM smart_alerts WHERE id = $1`, [Number(id)]);
     if (!alert.rows[0]) return reply.code(404).send({ error: 'not found' });
@@ -89,7 +123,8 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
       [status, request.user!.employee_id, Number(id)]
     );
     return res.rows[0];
-  });
+    }
+  );
 
   app.post('/alerts/run', async (request, reply) => {
     if (!requireManager(request, reply)) return;
@@ -97,9 +132,12 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   });
 
   // ========== WHAT-IF ==========
-  app.post('/schedule/what-if', async (request, reply) => {
+  app.post(
+    '/schedule/what-if',
+    { schema: { body: WhatIfBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = (request.body || {}) as WhatIfBody;
     const moves = Array.isArray(body.moves) ? body.moves : [];
     // одиночный шорткат
     if (!moves.length && body.employee_id && body.to_store) {
@@ -112,16 +150,20 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     }
     const orgId = resolveViewOrgId(request.user!, body.org_id);
     try {
-      return await simulateScheduleMoves({ date: body.date, moves, orgId });
+      return await simulateScheduleMoves({ date: body.date, moves: moves as any, orgId });
     } catch (e: any) {
       return serverError(request, reply, 'what_if_failed', e);
     }
-  });
+    }
+  );
 
   /** Применить what-if сдвиги в schedules (реальная запись) */
-  app.post('/schedule/what-if/apply', async (request, reply) => {
+  app.post(
+    '/schedule/what-if/apply',
+    { schema: { body: WhatIfBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = (request.body || {}) as WhatIfBody;
     const date = toDateISO(body.date || todayMoscow());
     const moves = Array.isArray(body.moves) ? body.moves : [];
     if (!moves.length && body.employee_id && body.to_store) {
@@ -139,7 +181,7 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     // (coverage строится только по своей сети) — moves на них уже придут
     // сюда как skipped: 'unknown_store', реальной записи в schedules не будет.
     const orgId = resolveViewOrgId(request.user!, body.org_id);
-    const sim = await simulateScheduleMoves({ date, moves, orgId });
+    const sim = await simulateScheduleMoves({ date, moves: moves as any, orgId });
     const applied = [];
     for (const m of sim.moves_applied || []) {
       if (m.skipped) continue;
@@ -176,5 +218,6 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
       items: applied,
       simulation: sim
     };
-  });
+    }
+  );
 }

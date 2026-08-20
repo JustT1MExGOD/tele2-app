@@ -5,7 +5,20 @@
  */
 
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
+
+// Метрики — динамический набор из METRICS (каталог), не перечисляем
+// поимённо в схеме (та же логика, что PostSaleBody в routes-sales.ts) —
+// additionalProperties: true, схема гарантирует только month/org_id.
+const MonthPlanBody = Type.Object(
+  {
+    month: Type.Optional(Type.String()),
+    org_id: Type.Optional(Type.String())
+  },
+  { additionalProperties: true }
+);
+type MonthPlanBody = Static<typeof MonthPlanBody>;
 import {
   getMonthSummaryTable,
   upsertEmployeeMonthPlan,
@@ -53,7 +66,10 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     '/plans/employees/:id/month',
     // Раньше без проверки — manager любой сети мог задать план сотруднику
     // вообще любой другой сети по угаданному id.
-    { preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })] },
+    {
+      preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })],
+      schema: { body: MonthPlanBody }
+    },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
@@ -105,11 +121,14 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
   // Manager: задать / обновить месячный план точки (только своей сети)
   app.put(
     '/plans/stores/:id/month',
-    { preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })] },
+    {
+      preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })],
+      schema: { body: MonthPlanBody }
+    },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    const body = (request.body as any) || {};
+    const body = request.body as any;
     const month = body.month || currentMonthMoscow();
     const data: Record<string, number> = {};
     for (const m of METRICS) {

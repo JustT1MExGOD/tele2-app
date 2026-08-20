@@ -3,6 +3,7 @@
  * сети/сотруднику, ручной VMR+штраф, анкета VMR. Выделено из routes-v3.ts.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import {
   calculateAllBFQ,
@@ -12,6 +13,23 @@ import {
 } from './services/bfq.js';
 import { requireActive, requireManager, resolveViewOrgId, assertEmployeeInOrg, requireEmployeeInOrg } from './middleware-auth.js';
 import { currentMonthMoscow } from './utils/date.js';
+
+const BFQManualBody = Type.Object({
+  employee_id: Type.Number(),
+  month: Type.Optional(Type.String()),
+  vmr_avg: Type.Optional(Type.Number()),
+  penalty: Type.Optional(Type.Number()),
+  org_id: Type.Optional(Type.String())
+});
+type BFQManualBody = Static<typeof BFQManualBody>;
+
+const BFQQuestionnaireBody = Type.Object({
+  employee_id: Type.Number(),
+  score: Type.Number(),
+  comment: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String())
+});
+type BFQQuestionnaireBody = Static<typeof BFQQuestionnaireBody>;
 
 export async function registerBfqRoutes(app: FastifyInstance) {
   // Раньше оба GET были вообще без авторизации — кто угодно без токена мог
@@ -45,10 +63,13 @@ export async function registerBfqRoutes(app: FastifyInstance) {
   // VMR + штраф (manager)
   app.post(
     '/bfq/manual',
-    { preHandler: [requireEmployeeInOrg('body', 'employee_id', { allowOrgOverride: true })] },
+    {
+      preHandler: [requireEmployeeInOrg('body', 'employee_id', { allowOrgOverride: true })],
+      schema: { body: BFQManualBody }
+    },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const body = request.body as any;
+    const body = request.body as BFQManualBody;
     const employee_id = Number(body.employee_id);
     const month = String(body.month || currentMonthMoscow());
     const vmr_avg = Number(body.vmr_avg) || 0;
@@ -61,10 +82,13 @@ export async function registerBfqRoutes(app: FastifyInstance) {
   // Анкета VMR
   app.post(
     '/bfq/questionnaire',
-    { preHandler: [requireEmployeeInOrg('body', 'employee_id', { allowOrgOverride: true })] },
+    {
+      preHandler: [requireEmployeeInOrg('body', 'employee_id', { allowOrgOverride: true })],
+      schema: { body: BFQQuestionnaireBody }
+    },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const body = request.body as any;
+    const body = request.body as BFQQuestionnaireBody;
     const employee_id = Number(body.employee_id);
     const score = Number(body.score);
     const comment = String(body.comment || '');

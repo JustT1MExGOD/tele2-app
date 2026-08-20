@@ -42,13 +42,23 @@ describe('Изоляция алертов (POST /alerts/:id/ack) и what-if (/sc
   // Регрессия: раньше можно было погасить чужой алерт, зная/угадав его id.
   it('POST /alerts/:id/ack — чужая сеть получает 403', async () => {
     const app = await getApp();
-    const res = await app.inject({ method: 'POST', url: `/alerts/${alertId}/ack`, headers: authAs(managerB.telegramId) });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/alerts/${alertId}/ack`,
+      headers: { ...authAs(managerB.telegramId), 'content-type': 'application/json' },
+      payload: {}
+    });
     expect(res.statusCode).toBe(403);
   });
 
   it('POST /alerts/:id/ack — своя сеть может погасить алерт', async () => {
     const app = await getApp();
-    const res = await app.inject({ method: 'POST', url: `/alerts/${alertId}/ack`, headers: authAs(managerA.telegramId) });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/alerts/${alertId}/ack`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: {}
+    });
     expect(res.statusCode).toBe(200);
   });
 

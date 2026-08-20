@@ -3,11 +3,17 @@
  * план по часам, завершение обучения. Выделено из routes-v13.ts.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireAuth } from './middleware-auth.js';
 import { buildShiftInsight, selfComparison, splitDayPlanByHours } from './services/insights.js';
 import { getGamificationProfile, addXp, grantBadge } from './services/gamification.js';
 import { todayMoscow } from './utils/date.js';
+
+const TutorialCompleteBody = Type.Object({
+  mode: Type.Optional(Type.String())
+});
+type TutorialCompleteBody = Static<typeof TutorialCompleteBody>;
 
 function num(v: any) {
   return Number(v) || 0;
@@ -77,10 +83,13 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
   // Идемпотентно: повторный вызов (например, перезапуск курса вручную)
   // не начисляет XP снова — grantBadge сам по себе ON CONFLICT DO NOTHING,
   // но addXp нет, поэтому проверяем бейдж заранее.
-  app.post('/me/tutorial-complete', async (request, reply) => {
+  app.post(
+    '/me/tutorial-complete',
+    { schema: { body: TutorialCompleteBody } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const employeeId = request.user!.employee_id!;
-    const isManagerMode = (request.body as any)?.mode === 'manager';
+    const isManagerMode = (request.body as TutorialCompleteBody)?.mode === 'manager';
     const code = isManagerMode ? 'tutorial_mgr_done' : 'tutorial_done';
     const title = isManagerMode ? 'Обучение управляющего пройдено' : 'Обучение пройдено';
 
@@ -93,7 +102,8 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
       await grantBadge(employeeId, code, title);
     }
     return { ok: true };
-  });
+    }
+  );
 
   app.get('/me/day-plan-split', async (request, reply) => {
     if (!requireAuth(request, reply)) return;

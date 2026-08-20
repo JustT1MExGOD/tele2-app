@@ -5,10 +5,20 @@
  * DELETE /metrics/:id    soft: is_active=false
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
 import { invalidateMetricsCache, getMetricDefs } from './services/metrics-catalog.js';
 import { serverError } from './utils/http-errors.js';
+
+const PostMetricBody = Type.Object({
+  label: Type.String({ minLength: 1 }),
+  short_label: Type.Optional(Type.String()),
+  short: Type.Optional(Type.String()),
+  unit: Type.Optional(Type.String()),
+  id: Type.Optional(Type.String())
+});
+type PostMetricBody = Static<typeof PostMetricBody>;
 
 function slugify(label: string, short?: string) {
   const base = (short || label)
@@ -56,9 +66,12 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post('/metrics', async (request, reply) => {
+  app.post(
+    '/metrics',
+    { schema: { body: PostMetricBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = request.body as PostMetricBody;
     const label = String(body.label || '').trim();
     if (!label) return reply.code(400).send({ error: 'label_required' });
 
@@ -132,7 +145,8 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
         unit_type: unit
       }
     };
-  });
+    }
+  );
 
   app.delete('/metrics/:id', async (request, reply) => {
     if (!requireManager(request, reply)) return;
