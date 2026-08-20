@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-19.15.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-19.16.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `19.15.0`  
+**Актуальная версия клиента:** `19.16.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -166,7 +166,7 @@ tele2-app/
     ├── package.json
     ├── tsconfig.json
     ├── railway.json
-    ├── migrations/              (пронумерованные .sql, применяются сами — см. §18; 0001_baseline.sql … 0010_employees_avatar.sql)
+    ├── migrations/              (пронумерованные .sql, применяются сами — см. §18; 0001_baseline.sql … 0011_stores_id_primary_key.sql)
     ├── assets/fonts/            (DejaVu Sans — рендер SVG-отчётов; Google Sans TTF — та же resvg-карточка анонса)
     ├── tests/
     │   ├── setup.ts             (жёсткая проверка: DATABASE_URL только localhost/127.0.0.1)
@@ -702,6 +702,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **19.13.0** | Код точки и адрес в шапке приложения (рядом с датой). Живой индикатор «Смена открыта/закрыта» и бейдж «N дн. до выходного» на карточке приветствия. «Промокоды РТК» продублированы широкой кнопкой в блоке «Калькуляторы». Убран дублирующий пункт «План дня по точкам» из Быстрых действий, «Сеть за месяц» переименована в «Динамика выполнения по сотрудникам» |
 | **19.14.0** | **Rate limiting, security headers, прод-гварды.** `@fastify/rate-limit` на всё API (общий потолок + жёсткие лимиты на публичную аватарку/отчёты/заявку на доступ), `@fastify/helmet` (CSP и другие заголовки, подобрано под встраивание в Telegram и под onclick/style-атрибутную вёрстку фронтенда). Сервер отказывается стартовать в проде без `BOT_TOKEN` или с `ALLOW_INSECURE_AUTH=true`. Срок жизни Telegram-сессии — 1 час вместо суток, при истечении понятное сообщение вместо голого 401. Загрузка аватарки проверяется по magic bytes реального файла, а не по заголовку от клиента; SVG больше не принимается. `@fastify/static` обновлён до версии, закрывающей несколько известных уязвимостей обхода пути |
 | **19.15.0** | **Единый обработчик ошибок, аудит в CI, контекстные логи.** Глобальный Fastify `setErrorHandler` мапит известные коды ошибок Postgres (дубликат → 409, некорректный формат → 400 и т.п.) в стабильный JSON вместо голого 500 с сырым текстом драйвера; 16 роутов, отвечавших клиенту тем же сырым текстом вручную, переведены на общий безопасный хелпер. CI падает при известной уязвимости высокой критичности в зависимостях (`npm audit --audit-level=high`). Логи сервера несут `employee_id`/`org_id` на каждой строке запроса |
+| **19.16.0** | `stores.id` получил настоящий `PRIMARY KEY` — найдено живой проверкой нового error handler (19.15.0): дубликат id точки тихо создавал вторую строку вместо ошибки. В проде дублей не было, миграция накатилась без изменения данных |
 
 ---
 
