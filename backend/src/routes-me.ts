@@ -3,9 +3,15 @@
  * дневной план сегодня), назначение роли. Выделено из routes-v3.ts.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { isManager } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
+
+const MeBindBody = Type.Object({
+  employee_id: Type.Number()
+});
+type MeBindBody = Static<typeof MeBindBody>;
 
 export async function registerMeRoutes(app: FastifyInstance) {
   // ========== ME / ROLE ==========
@@ -32,7 +38,10 @@ export async function registerMeRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post('/me/bind', async (request, reply) => {
+  app.post(
+    '/me/bind',
+    { schema: { body: MeBindBody } },
+    async (request, reply) => {
     // Раньше telegram_id брался из тела запроса (или вообще из спуфабельного
     // заголовка) — любой мог отвязать чужой telegram_id от его карточки и
     // привязать СВОЙ к произвольному employee_id, включая admin. Полный
@@ -44,7 +53,7 @@ export async function registerMeRoutes(app: FastifyInstance) {
     if (!telegram_id) {
       return reply.code(401).send({ error: 'unauthorized', message: 'Telegram initData не подтверждён' });
     }
-    const body = request.body as any;
+    const body = request.body as MeBindBody;
     const employee_id = Number(body?.employee_id);
     if (!employee_id) {
       return reply.code(400).send({ error: 'employee_id required' });
@@ -107,7 +116,8 @@ export async function registerMeRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: 'employee not found' });
     }
     return { bound: true, ...res.rows[0] };
-  });
+    }
+  );
 
   /** Мой день: смена + факт + дневной план */
   app.get('/me/day', async (request, reply) => {

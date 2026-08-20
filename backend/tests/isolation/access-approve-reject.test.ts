@@ -56,7 +56,8 @@ describe('Изоляция одобрения/отклонения заявок 
     const res = await app.inject({
       method: 'POST',
       url: `/access/requests/${requestIdB}/reject`,
-      headers: authAs(managerA.telegramId)
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: {}
     });
     expect(res.statusCode).toBe(403);
   });

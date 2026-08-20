@@ -9,6 +9,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import {
   requireActive,
@@ -25,6 +26,43 @@ import {
 import { todayMoscow } from './utils/date.js';
 import { bot } from './bot/index.js';
 import { listActiveOrgsPublic } from './services/tenant.js';
+
+const AccessRequestBody = Type.Object({
+  full_name: Type.String({ minLength: 1 }),
+  // Фронт (08-access-supervisor.js) шлёт claimed_employee_id как null, когда
+  // гость не выбрал существующую карточку — обработчик уже трактует это
+  // через truthy-check (0 тоже "нет claim"), так что null→0 (ajv coerceTypes)
+  // здесь не ломает поведение, но Null в Union — честнее и на будущее не
+  // зависит от того, что 0 никогда не будет валидным employee_id.
+  claimed_employee_id: Type.Optional(Type.Union([Type.Null(), Type.Number()])),
+  org_id: Type.Optional(Type.String()),
+  username: Type.Optional(Type.String()),
+  message: Type.Optional(Type.String())
+});
+type AccessRequestBody = Static<typeof AccessRequestBody>;
+
+const AccessApproveBody = Type.Object({
+  role: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String())
+});
+type AccessApproveBody = Static<typeof AccessApproveBody>;
+
+const AccessRejectBody = Type.Object({
+  org_id: Type.Optional(Type.String())
+});
+type AccessRejectBody = Static<typeof AccessRejectBody>;
+
+const SupervisorSectorBody = Type.Object({
+  sector_id: Type.String({ minLength: 1 })
+});
+type SupervisorSectorBody = Static<typeof SupervisorSectorBody>;
+
+const EmployeeRoleBody = Type.Object({
+  role: Type.String({ minLength: 1 }),
+  org_id: Type.Optional(Type.String()),
+  sector_id: Type.Optional(Type.String())
+});
+type EmployeeRoleBody = Static<typeof EmployeeRoleBody>;
 
 function esc(s: any) {
   return String(s ?? '')
@@ -96,12 +134,15 @@ export async function registerV8Routes(app: FastifyInstance) {
   });
 
   // Заявка на доступ
-  app.post('/access/request', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.post(
+    '/access/request',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: AccessRequestBody } },
+    async (request, reply) => {
     // Та же поправка, что /me/bind — telegram_id только из подтверждённого
     // request.user, не из спуфабельного заголовка напрямую.
     const telegramId = Number(request.user?.telegram_id || 0);
     if (!telegramId) return reply.code(401).send({ error: 'unauthorized', message: 'Telegram initData не подтверждён' });
-    const b = request.body as any;
+    const b = request.body as AccessRequestBody;
     const full_name = String(b.full_name || '').trim();
     if (!full_name || full_name.length < 3) {
       return reply.code(400).send({ error: 'full_name required' });
@@ -176,7 +217,8 @@ export async function registerV8Routes(app: FastifyInstance) {
     }
 
     return { ok: true, status: 'pending', request: res.rows[0] };
-  });
+    }
+  );
 
   // Очередь заявок — manager + supervisor. Приоритет сети: прямой org_id на
   // заявке (эпик 16.0, гость выбрал сеть в пикере при регистрации) → сеть
@@ -198,12 +240,15 @@ export async function registerV8Routes(app: FastifyInstance) {
   });
 
   // Approve
-  app.post('/access/requests/:id/approve', async (request, reply) => {
+  app.post(
+    '/access/requests/:id/approve',
+    { schema: { body: AccessApproveBody } },
+    async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { id } = request.params as { id: string };
-    const b = (request.body as any) || {};
+    const b = (request.body as AccessApproveBody) || {};
     const ALL_ROLES: Role[] = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
-    const requestedRole: Role = ALL_ROLES.includes(b.role) ? b.role : 'employee';
+    const requestedRole: Role = ALL_ROLES.includes(b.role as Role) ? (b.role as Role) : 'employee';
     // Каскад: одобряющий может выдать только роль строго ниже своей (admin — без ограничений).
     const role: Role = canAssignRole(request.user!.role, requestedRole) ? requestedRole : 'employee';
 
@@ -278,10 +323,14 @@ export async function registerV8Routes(app: FastifyInstance) {
     }
 
     return { ok: true, employee_id: employeeId, role };
-  });
+    }
+  );
 
   // Reject
-  app.post('/access/requests/:id/reject', async (request, reply) => {
+  app.post(
+    '/access/requests/:id/reject',
+    { schema: { body: AccessRejectBody } },
+    async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { id } = request.params as { id: string };
     const reqRes = await query(
@@ -293,7 +342,7 @@ export async function registerV8Routes(app: FastifyInstance) {
     );
     const req = reqRes.rows[0];
     if (!req) return reply.code(404).send({ error: 'not found' });
-    const orgId = resolveViewOrgId(request.user!, (request.body as any)?.org_id);
+    const orgId = resolveViewOrgId(request.user!, (request.body as AccessRejectBody)?.org_id);
     if (req.effective_org_id !== orgId) {
       return reply.code(403).send({ error: 'forbidden', message: 'Заявка не принадлежит вашей сети' });
     }
@@ -313,7 +362,8 @@ export async function registerV8Routes(app: FastifyInstance) {
         .catch(() => {});
     }
     return { ok: true };
-  });
+    }
+  );
 
   // ===== SUPERVISOR: точки =====
   // Супервайзер = руководитель сектора: видит все точки всех сетей своего
@@ -340,7 +390,10 @@ export async function registerV8Routes(app: FastifyInstance) {
     return res.rows;
   });
 
-  app.put('/supervisor/:id/sector', async (request, reply) => {
+  app.put(
+    '/supervisor/:id/sector',
+    { schema: { body: SupervisorSectorBody } },
+    async (request, reply) => {
     // Назначение сектора — это доступ ко ВСЕМ сетям сектора разом, а не
     // одной сети. requireManager (обычный manager сети) раньше мог назначить
     // ЛЮБОГО сотрудника (любой сети, по угаданному id) супервайзером ЛЮБОГО
@@ -351,8 +404,7 @@ export async function registerV8Routes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Назначение сектора — только admin' });
     }
     const { id } = request.params as { id: string };
-    const { sector_id } = request.body as { sector_id: string };
-    if (!sector_id) return reply.code(400).send({ error: 'sector_id required' });
+    const { sector_id } = request.body as SupervisorSectorBody;
     await query(`DELETE FROM supervisor_sectors WHERE supervisor_id = $1`, [Number(id)]);
     await query(
       `INSERT INTO supervisor_sectors (supervisor_id, sector_id) VALUES ($1,$2)
@@ -360,19 +412,23 @@ export async function registerV8Routes(app: FastifyInstance) {
       [Number(id), sector_id]
     );
     return { ok: true, sector_id };
-  });
+    }
+  );
 
   // Назначить роль (+ сектор, если роль — supervisor)
   app.patch(
     '/employees/:id/role',
     // Раньше без проверки — manager любой сети мог поменять роль (вплоть до
     // admin) вообще любому сотруднику любой другой сети по угаданному id.
-    { preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })] },
+    {
+      preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })],
+      schema: { body: EmployeeRoleBody }
+    },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    const b = request.body as any;
-    const role = b.role;
+    const b = request.body as EmployeeRoleBody;
+    const role = b.role as Role;
     const ALL_ROLES: Role[] = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
     if (!ALL_ROLES.includes(role)) {
       return reply.code(400).send({ error: 'bad role' });

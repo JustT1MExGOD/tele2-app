@@ -20,18 +20,27 @@ function num(v: any) {
   return Number(v) || 0;
 }
 
+// geoCoords() на фронте (11-v13.js) отдаёт {lat:null,lng:null,accuracy_m:null}
+// целиком, когда геолокация недоступна/запрещена — это реальный, регулярный
+// случай (не редкий edge case), не просто "поле не пришло". Null ДОЛЖЕН идти
+// первым в Union — ajv (coerceTypes: true, дефолт Fastify) иначе тихо
+// коэрсит null → 0 для типа number, что тут значило бы реальную (неверную)
+// координату "0,0" вместо честного "геолокации нет" — обнаружено живым
+// тестом на реальном фронтенд-сценарии, не гипотетически.
+const NullableNumber = Type.Optional(Type.Union([Type.Null(), Type.Number()]));
+
 const ShiftOpenBody = Type.Object({
   work_date: Type.Optional(Type.String()),
   store_id: Type.Optional(Type.String()),
-  lat: Type.Optional(Type.Number()),
-  lng: Type.Optional(Type.Number()),
-  accuracy_m: Type.Optional(Type.Number())
+  lat: NullableNumber,
+  lng: NullableNumber,
+  accuracy_m: NullableNumber
 });
 type ShiftOpenBody = Static<typeof ShiftOpenBody>;
 
 const ShiftCloseBody = Type.Object({
-  lat: Type.Optional(Type.Number()),
-  lng: Type.Optional(Type.Number()),
+  lat: NullableNumber,
+  lng: NullableNumber,
   self_report: Type.Optional(Type.String()),
   mood: Type.Optional(Type.Integer()),
   blockers: Type.Optional(Type.String()),

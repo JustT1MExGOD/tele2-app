@@ -7,8 +7,59 @@
  * доступ). Вынесено сюда и подключено.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireActive, requireManager, canAssignRole, resolveViewOrgId, requireEmployeeInOrg, requireStoreInOrg, Role } from './middleware-auth.js';
+
+const PostEmployeeBody = Type.Object({
+  full_name: Type.String({ minLength: 1 }),
+  short_name: Type.Optional(Type.String()),
+  role: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String())
+});
+type PostEmployeeBody = Static<typeof PostEmployeeBody>;
+
+const PatchEmployeeBody = Type.Object({
+  full_name: Type.Optional(Type.String()),
+  short_name: Type.Optional(Type.String()),
+  is_active: Type.Optional(Type.Boolean()),
+  org_id: Type.Optional(Type.String())
+});
+type PatchEmployeeBody = Static<typeof PatchEmployeeBody>;
+
+const StoreWriteFields = {
+  name: Type.Optional(Type.String()),
+  code: Type.Optional(Type.String()),
+  short_name: Type.Optional(Type.String()),
+  address: Type.Optional(Type.String()),
+  // Единственное поле, которое фронтенд явно шлёт как null (сброс кастомного
+  // названия обратно на «сырое» name — см. 16-store-profile.js) — Optional
+  // сам по себе разрешает ТОЛЬКО отсутствие поля, не null, поэтому нужен
+  // отдельный Union с Null(). Null ДОЛЖЕН идти первым в Union — ajv
+  // (coerceTypes: true, Fastify-дефолт) перебирает варианты по порядку и при
+  // String() первым тихо коэрсит null → "" ещё ДО того, как дойдёт до
+  // Null()-варианта, поэтому реальный null никогда не доживает до записи в
+  // БД (проверено: {display_name: null} превращалось в {display_name: ""}).
+  display_name: Type.Optional(Type.Union([Type.Null(), Type.String()])),
+  work_time: Type.Optional(Type.String()),
+  hours: Type.Optional(Type.Number()),
+  color: Type.Optional(Type.String()),
+  is_active: Type.Optional(Type.Boolean()),
+  micro_report_times: Type.Optional(Type.Array(Type.String())),
+  skip_sunday_micro_times: Type.Optional(Type.Array(Type.String())),
+  close_time_weekday: Type.Optional(Type.String()),
+  close_time_sunday: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String())
+};
+
+const PostStoreBody = Type.Object({
+  id: Type.String({ minLength: 1 }),
+  ...StoreWriteFields
+});
+type PostStoreBody = Static<typeof PostStoreBody>;
+
+const PatchStoreBody = Type.Object(StoreWriteFields);
+type PatchStoreBody = Static<typeof PatchStoreBody>;
 
 export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.get('/employees', async (request, reply) => {
@@ -32,14 +83,17 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
   });
 
   // ===== EMPLOYEES CRUD =====
-  app.post('/employees', async (request, reply) => {
+  app.post(
+    '/employees',
+    { schema: { body: PostEmployeeBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const b = request.body as any;
+    const b = request.body as PostEmployeeBody;
     const full_name = String(b.full_name || '').trim();
     if (!full_name) return reply.code(400).send({ error: 'full_name required' });
     const short_name = b.short_name || full_name.split(/\s+/)[1] || full_name;
     const ALL_ROLES: Role[] = ['trainee', 'employee', 'senior', 'manager', 'supervisor', 'admin'];
-    const requested = ALL_ROLES.includes(b.role) ? (b.role as Role) : 'employee';
+    const requested = ALL_ROLES.includes(b.role as Role) ? (b.role as Role) : 'employee';
     // Каскад: можно завести сотрудника только с ролью строго ниже своей (admin — без ограничений).
     const role: Role = canAssignRole(request.user!.role, requested) ? requested : 'employee';
 
@@ -53,17 +107,21 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
       [full_name, short_name, role, org_id]
     );
     return res.rows[0];
-  });
+    }
+  );
 
   app.patch(
     '/employees/:id',
     // Раньше без проверки — manager любой сети мог переименовать/деактивировать
     // сотрудника вообще любой другой сети по угаданному (маленькому, последовательному) id.
-    { preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })] },
+    {
+      preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })],
+      schema: { body: PatchEmployeeBody }
+    },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    const b = request.body as any;
+    const b = request.body as PatchEmployeeBody;
     const sets: string[] = [];
     const vals: any[] = [];
     let i = 1;
@@ -122,9 +180,12 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
   );
 
   // ===== STORES CRUD =====
-  app.post('/stores', async (request, reply) => {
+  app.post(
+    '/stores',
+    { schema: { body: PostStoreBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const b = request.body as any;
+    const b = request.body as PostStoreBody;
     const id = String(b.id || '')
       .trim()
       .toLowerCase()
@@ -171,15 +232,19 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     ).catch(() => null);
 
     return res.rows[0];
-  });
+    }
+  );
 
   app.patch(
     '/stores/:id',
-    { preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })] },
+    {
+      preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })],
+      schema: { body: PatchStoreBody }
+    },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    const b = request.body as any;
+    const b = request.body as PatchStoreBody;
     const allowed = [
       'name',
       'code',
