@@ -96,7 +96,7 @@ export async function registerV8Routes(app: FastifyInstance) {
   });
 
   // Заявка на доступ
-  app.post('/access/request', async (request, reply) => {
+  app.post('/access/request', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request, reply) => {
     // Та же поправка, что /me/bind — telegram_id только из подтверждённого
     // request.user, не из спуфабельного заголовка напрямую.
     const telegramId = Number(request.user?.telegram_id || 0);

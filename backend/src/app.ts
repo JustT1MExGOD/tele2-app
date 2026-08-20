@@ -10,6 +10,8 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -77,6 +79,55 @@ export async function buildApp(): Promise<FastifyInstance> {
   // браузерный механизм).
   await app.register(cors, { origin: false });
   await app.register(multipart);
+
+  // Заголовки безопасности. CSP собрана под реальную структуру фронтенда
+  // (без CSP-соответствующей автоматической проверки один раз в начале):
+  // 6400+ строк JS рендерят разметку через innerHTML с onclick="" / style=""
+  // прямо в атрибутах (74 onclick в index.html, 284 style-атрибута в js/*.js) —
+  // это отдельная, более крупная переделка (см. заметку в чате), не тут.
+  // Поэтому script-src-attr/style-src-attr разрешены как 'unsafe-inline' —
+  // без этого перестанут работать вообще все клики в приложении. Инлайновых
+  // <script>/<style> БЛОКОВ (не атрибутов) в разметке нет — тем script-src/
+  // style-src самих себя 'unsafe-inline' не нужен.
+  // frame-ancestors вместо xFrameOptions: Telegram Web открывает Mini App
+  // в iframe с web.telegram.org — X-Frame-Options: SAMEORIGIN это бы сломал;
+  // современные браузеры отдают приоритет CSP frame-ancestors, поэтому сам
+  // X-Frame-Options просто выключен, а не выставлен пермиссивно (легаси-
+  // браузеры внутри Telegram-клиентов не ожидаются).
+  // crossOriginEmbedderPolicy выключен — иначе блокируется кросс-доменный
+  // <script src="https://telegram.org/js/telegram-web-app.js"> (у него нет
+  // Cross-Origin-Resource-Policy заголовка).
+  await app.register(helmet, {
+    xFrameOptions: false,
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://telegram.org'],
+        scriptSrcAttr: ["'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrcAttr: ["'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        fontSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'", 'https://web.telegram.org', 'https://*.telegram.org']
+      }
+    }
+  });
+
+  // Глобальный лимит на IP — защита от долбёжки API (в т.ч. с невалидным
+  // initData, который до auth-проверки ещё не даёт request.user для более
+  // точного ключа). Отдельные чувствительные роуты (заявка на доступ,
+  // аватарки, генерация отчётов) получают свой более жёсткий лимит через
+  // config.rateLimit в самом роуте — этот просто общий потолок.
+  await app.register(rateLimit, {
+    max: 300,
+    timeWindow: '1 minute'
+  });
 
   // Единая точка резолва пользователя (telegram_id проверяется по подписи
   // Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.

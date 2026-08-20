@@ -36,7 +36,7 @@ export async function registerSalesRoutes(app: FastifyInstance) {
   });
 
   // Прибавление метрик (+ правка через delta отрицательный)
-  app.post('/sales', async (request, reply) => {
+  app.post('/sales', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireActive(request, reply)) return;
     const user = request.user!;
     const body = request.body as any;

@@ -24,8 +24,10 @@ export interface VerifiedInitData {
   reason?: string;
 }
 
-/** Максимальный возраст initData, после которого просим переоткрыть Mini App. */
-const DEFAULT_MAX_AGE_SEC = 24 * 60 * 60;
+/** Максимальный возраст initData, после которого просим переоткрыть Mini App.
+ * Telegram рекомендует ~1 час — initData переиздаётся при каждом открытии
+ * Mini App, дольше держать бессмысленно и увеличивает окно кражи заголовка. */
+const DEFAULT_MAX_AGE_SEC = 60 * 60;
 
 export function verifyTelegramInitData(
   initData: string,

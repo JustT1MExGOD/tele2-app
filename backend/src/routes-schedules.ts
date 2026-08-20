@@ -35,7 +35,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     return res.rows;
   });
 
-  app.post('/schedules', async (request, reply) => {
+  app.post('/schedules', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const body = request.body as any;
     const { employee_id, store_id, work_date, shift_text, hours } = body;
@@ -103,7 +103,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
    * принадлежность своей сети — раньше (в routes-v3.ts) эта проверка тут
    * отсутствовала вообще, хотя одиночный POST /schedules её уже делал.
    */
-  app.post('/schedules/bulk', async (request, reply) => {
+  app.post('/schedules/bulk', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const body = request.body as any;
     const items = Array.isArray(body?.items) ? body.items : [];

@@ -21,7 +21,7 @@ function num(v: any) {
 
 export async function registerShiftsRoutes(app: FastifyInstance) {
   // ========== SHIFT SESSIONS ==========
-  app.post('/shifts/open', async (request, reply) => {
+  app.post('/shifts/open', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const body = (request.body || {}) as any;
     const employee_id = request.user!.employee_id!;
@@ -278,7 +278,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     return parsed;
   });
 
-  app.post('/sales/quick', async (request, reply) => {
+  app.post('/sales/quick', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const body = (request.body || {}) as any;
     const parsed = parseSalePhrase(String(body.text || ''));
@@ -376,7 +376,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   });
 
   // ========== OFFLINE SYNC ==========
-  app.post('/sync/batch', async (request, reply) => {
+  app.post('/sync/batch', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const body = (request.body || {}) as any;
     const ops = Array.isArray(body.ops) ? body.ops : [];

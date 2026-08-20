@@ -49,6 +49,9 @@ export type AppUser = AuthUser;
 declare module 'fastify' {
   interface FastifyRequest {
     user?: AuthUser | null;
+    /** Причина, по которой user остался null — 'expired' даёт понятное
+     * сообщение вместо голого 401 (см. requireAuth/requireActive). */
+    authError?: string | null;
   }
 }
 
@@ -115,7 +118,10 @@ function resolveTelegramId(request: FastifyRequest): number | null {
       return verified.user.id;
     }
     // initData присутствует, но не проходит проверку — не откатываемся
-    // на голый заголовок, иначе проверка теряет смысл.
+    // на голый заголовок, иначе проверка теряет смысл. reason прокидываем
+    // на request, чтобы requireAuth/requireActive могли ответить понятнее
+    // голого 401 — особенно для 'expired' (переоткрыть Mini App чинит это).
+    request.authError = verified.reason || 'invalid';
     return null;
   }
 
@@ -151,6 +157,13 @@ export async function authPlugin(request: FastifyRequest, _reply: FastifyReply) 
 
 export function requireAuth(request: FastifyRequest, reply: FastifyReply) {
   if (!request.user?.employee_id) {
+    if (request.authError === 'expired') {
+      reply.code(401).send({
+        error: 'session_expired',
+        message: 'Сессия истекла. Переоткройте Mini App через Telegram.'
+      });
+      return false;
+    }
     reply.code(401).send({
       error: 'unauthorized',
       message: 'Привяжите Telegram в разделе «Мой»'
@@ -163,6 +176,13 @@ export function requireAuth(request: FastifyRequest, reply: FastifyReply) {
 export function requireActive(request: FastifyRequest, reply: FastifyReply) {
   const u = request.user;
   if (!u || u.access_status === 'none' || !u.employee_id) {
+    if (request.authError === 'expired') {
+      reply.code(401).send({
+        error: 'session_expired',
+        message: 'Сессия истекла. Переоткройте Mini App через Telegram.'
+      });
+      return false;
+    }
     reply.code(401).send({
       error: 'not_registered',
       message: 'Нужна регистрация. Отправьте заявку на доступ.'

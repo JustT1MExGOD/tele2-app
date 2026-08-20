@@ -17,7 +17,7 @@ import { buildDailyReportSvg, buildStoryReportSvgs } from './services/report-ima
 import { sendNetworkDigest } from './services/network-digest.js';
 
 export async function registerReportsRoutes(app: FastifyInstance) {
-  app.get('/reports/day/:storeId', async (request, reply) => {
+  app.get('/reports/day/:storeId', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireActive(request, reply)) return;
     const storeId = String((request.params as any).storeId || '');
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
@@ -46,7 +46,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
   });
 
   /** Ручная отправка микро/итога в REPORT_CHAT_ID (для теста) */
-  app.post('/reports/send-micro', async (request, reply) => {
+  app.post('/reports/send-micro', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireManager(request, reply)) return;
     try {
       const { sendMicroReports } = await import('./cron/reports.js');
@@ -62,7 +62,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/reports/send-final', async (request, reply) => {
+  app.post('/reports/send-final', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireManager(request, reply)) return;
     try {
       const { sendFinalReports } = await import('./cron/reports.js');
@@ -78,7 +78,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
   /** Ручная отправка недельной/месячной сводки по сети (18.9) — тот же
    * тест-триггер, что send-micro/send-final; ручная кнопка намеренно не
    * участвует в cron-claim, тот же осознанный выбор, что уже сделан там. */
-  app.post('/reports/send-digest', async (request, reply) => {
+  app.post('/reports/send-digest', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const body = (request.body || {}) as any;
     const kind = body.kind === 'monthly' ? 'monthly' : 'weekly';

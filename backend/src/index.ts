@@ -29,6 +29,27 @@ async function alertAndExit(prefix: string, err: unknown): Promise<never> {
   process.exit(1);
 }
 
+// Прод-гварды — до всего остального: раньше отсутствие BOT_TOKEN в проде
+// тихо переводило auth в insecure-режим (голый X-Telegram-Id без проверки
+// подписи), а ALLOW_INSECURE_AUTH=true в проде вообще не имел никакого
+// стоппера. RAILWAY_ENVIRONMENT ставится самим Railway (значение — имя
+// окружения, 'production' для прод-сервиса) — тем самым сюда не попадает
+// `npm run dev` на машине разработчика, где обеих переменных обычно нет.
+if (process.env.RAILWAY_ENVIRONMENT === 'production') {
+  if (process.env.ALLOW_INSECURE_AUTH === 'true') {
+    await alertAndExit(
+      '❌ ALLOW_INSECURE_AUTH=true в production, сервер не стартует',
+      new Error('ALLOW_INSECURE_AUTH must not be true in production')
+    );
+  }
+  if (!process.env.BOT_TOKEN) {
+    await alertAndExit(
+      '❌ Нет BOT_TOKEN в production, сервер не стартует',
+      new Error('BOT_TOKEN is required in production')
+    );
+  }
+}
+
 // Непримененные миграции — перед подъёмом приложения, не после: если схема
 // не готова, сервер не должен успеть принять ни одного запроса.
 try {
