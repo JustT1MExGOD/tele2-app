@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-19.21.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-19.22.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `19.21.0`  
+**Актуальная версия клиента:** `19.22.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -132,8 +132,9 @@ flowchart TB
 
     subgraph BE["Fastify backend (backend/src)"]
         AUTH["middleware-auth.ts<br/>authPlugin (preHandler) · initData HMAC"]
-        ROUTES["27 routes-*.ts<br/>core/employees/sales/schedules/stats/cash/<br/>command-center/tasks/store-profile/employee-profile/<br/>forecast/live-alerts/avatar/…"]
+        ROUTES["28 routes-*.ts<br/>core/employees/stores/sales/schedules/stats/cash/<br/>command-center/tasks/store-profile/employee-profile/<br/>forecast/live-alerts/avatar/…"]
         SVC["services/<br/>plans · bfq · sales-write · shift-pace ·<br/>gamification · live-map · alerts · anomaly ·<br/>forecast · supervisor-analytics · ai.ts"]
+        REPO["repositories/<br/>stores.ts (Data Access Layer, 19.22.0+)"]
         CRON["cron/<br/>reports.ts · digest.ts"]
         BOT["bot/ (Grammy)"]
     end
@@ -143,6 +144,7 @@ flowchart TB
 
     MA -- "X-Telegram-Init-Data<br/>(подписанный, прод)" --> AUTH
     AUTH --> ROUTES --> SVC
+    ROUTES --> REPO --> PG
     CRON --> SVC
     SVC --> PG
     SVC -- "shift summary /<br/>dip hypothesis" --> GROQ
@@ -181,9 +183,11 @@ tele2-app/
     │   ├── middleware-auth.ts          (authPlugin — глобальный preHandler, requireAuth/requireActive/requireManager/…, assertStoreInOrg/assertEmployeeInOrg, ROLE_LEVEL)
     │   ├── changelog.ts                (список версий для автоанонса — только minor-эпики, не хотфиксы)
     │   ├── db/                         (пул соединений, миграционный раннер)
+    │   ├── repositories/stores.ts      (Data Access Layer, 19.22.0 — единственное место с SQL по stores, orgId обязательным первым параметром; Employees/Sales/Schedules следующими заходами)
     │   ├── services/telegram-auth.ts   (проверка initData HMAC)
-    │   ├── routes-core.ts              (/stores, /plans — org-scoped)
-    │   ├── routes-employees.ts         (CRUD сотрудников/точек, кастомные названия точек)
+    │   ├── routes-core.ts              (/plans — org-scoped)
+    │   ├── routes-stores.ts            (CRUD точек — только через repositories/stores.ts, без прямого SQL)
+    │   ├── routes-employees.ts         (CRUD сотрудников, кастомные названия точек)
     │   ├── routes-avatar.ts            (загрузка/раздача кастомной аватарки, bytea в Postgres)
     │   ├── routes-sales.ts             (/sales)
     │   ├── routes-schedules.ts         (/schedules, /schedules/bulk)
@@ -708,6 +712,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **19.19.0** | TypeBox-схемы на роутах доступа/ролей и CRUD сотрудников/точек (`/access/request`, approve/reject, назначение роли и сектора, `/employees`, `/stores`, `/me/bind`). Попутно найден и исправлен реальный регресс, который сам процесс подключения схем чуть не внёс: `ajv` (встроен в Fastify, `coerceTypes: true`) по умолчанию тихо превращает `null` в `0` для числовых полей — открытие/закрытие смены без геолокации едва не начало писать координаты `0,0` вместо честного «геолокации нет». Пойман до продакшена живой проверкой, не постфактум |
 | **19.20.0** | TypeBox-схемы на задачах (создание/комментарии/статус/переназначение), тикетах поддержки, промокодах РТК, объявлениях и каналах сети — на этот раз все места, где фронтенд намеренно шлёт `null` (сброс дедлайна задачи), проверены заранее по урокам 19.19.0 |
 | **19.21.0** | **Переход на TypeBox завершён.** Последний заход — алерты, what-if сценарии, кастомные метрики, месячные планы, ручная отправка отчётов, сеть/бренд (админ), обучение; попутно найдены и закрыты два роута (BFQ: VMR+штраф, анкета), пропущенные более ранним заходом. `request.body as any` в write-роутах закрыт по всему API |
+| **19.22.0** | **Data Access Layer — старт.** Первый repository (`src/repositories/stores.ts`) — доступ к таблице `stores` только через него, `orgId` первым обязательным параметром каждой функции (не «не забыть проверить», а физически невозможно вызвать без сети). Роуты точек выделены в `routes-stores.ts`, CI проверяет, что этот файл не откатился на прямой SQL. Пилот на одной сущности — Employees/Sales/Schedules следующими заходами |
 
 ---
 
@@ -760,15 +765,35 @@ Postgres, аудит зависимостей как gate в CI, контекс�
 геолокации), задачи/поддержка/промокоды/объявления (19.20.0), алерты/what-if/
 метрики/планы/отчёты/бренд сети (19.21.0, попутно найдены и закрыты два
 BFQ-роута, пропущенных ранним заходом) — `request.body as any` в write-роутах
-закрыт по всему API, весь эффект **готов** ✅. Оставшиеся пункты того же
-ревью — слой доступа к данным, frontend TypeScript+Vite, полный audit trail,
-кэш supervisor-scope и т.п. — крупнее по объёму и ждут отдельного
-приоритетного захода, не сделаны одним махом умышленно.
+закрыт по всему API, весь эффект **готов** ✅.
 
-### Дальше — эпоха 20, «Unified Platform»
-Ещё не начата, точный состав не определён. Известное ограничение от
-владельца продукта: **платёжные функции — вне скоупа**, не рассматриваются.
-Продолжится по мере поступления конкретных задач — тем же циклом
+### Data/Frontend Foundation — roadmap задан владельцем продукта (19.22.0 → 20.0.0) 🔄
+Оставшиеся крупные пункты того же ревью получили явный план вперёд, не
+разбираются по одному без сквозной цели:
+
+- **19.22.0 Data Access Layer** ✅ старт — `src/repositories/`, org-scoped
+  queries (`orgId` обязательным первым параметром — структурная гарантия, не
+  дисциплина), запрет прямого SQL из migrated-роутов (CI-скрипт,
+  ratchet-список). Пилот на одной сущности (Stores — `routes-stores.ts`),
+  Employees/Sales/Schedules следующими заходами той же схемой
+- **19.23.0 Audit Trail** — не начато. Схема аудита, события чувствительных
+  действий, request_id correlation, транзакционная запись аудита, экран
+  просмотра истории
+- **19.24.0 Concurrency & Workflow Integrity** — не начато. DB constraints,
+  транзакции, optimistic locking где нужен, idempotency keys для
+  критичных POST (частично уже есть — `claimIdempotencyKey`, см. §14),
+  adversarial-тесты на race conditions
+- **19.25.0 Supervisor Scope Cache** — не начато. Кэш-слой (Redis или
+  альтернатива) для `getUserStoreIds`, инвалидация, метрики hit/miss,
+  fail-safe поведение при недоступности кэша
+- **20.0.0 Frontend Foundation** (**major** — по решению владельца продукта,
+  граница эпохи) — не начато. Vite, миграция на TypeScript, общие
+  API-контракты между бэком и фронтом, типизированный API-клиент,
+  нормальная модульная структура вместо 27 `<script>` в порядке подключения,
+  фундамент для frontend-тестов
+
+Известное ограничение от владельца продукта на весь этот участок:
+**платёжные функции — вне скоупа**, не рассматриваются. Тот же цикл
 исследование → план → реализация → верификация → отгрузка, что и весь
 предыдущий путь.
 
@@ -794,6 +819,9 @@ BFQ-роута, пропущенных ранним заходом) — `request
 8. Версионирование — MINOR на каждую сущностную правку (фича, фикс,
    рефактор), changelog-запись в `src/changelog.ts` только для эпиков,
    не хотфиксов (см. §21 — история версий длиннее, чем changelog-анонсы)
+9. Сущности, уже переехавшие на Data Access Layer (§24, `src/repositories/`)
+   — доступ к ним из роутов только через репозиторий, не собственным
+   `query()`; CI (`npm run check:no-direct-sql`) на этом ловит откат
 
 ---
 
@@ -876,6 +904,17 @@ BFQ-роута, пропущенных ранним заходом) — `request
   (не просто «поле пропущено») — соответствующий тип обязан быть
   `Type.Union([Type.Null(), ...])`, иначе баг тихий и не даёт о себе знать,
   пока кто-то не заметит испорченные данные в проде.
+- **Data Access Layer** (`src/repositories/`, 19.22.0+) — org-scoping
+  переведён из «не забыть проверить в каждом SELECT» в структурную гарантию:
+  каждая функция репозитория берёт `orgId` первым обязательным (не
+  optional) параметром, без него функцию физически нельзя вызвать, и каждый
+  SQL внутри уже несёт `WHERE COALESCE(org_id,'default') = $orgId`. Роуты,
+  переехавшие на репозиторий (пока только `routes-stores.ts`), обязаны не
+  импортировать `query`/`pool` напрямую — проверяется в CI
+  (`npm run check:no-direct-sql`, ratchet-список файлов в
+  `scripts/check-no-direct-sql.mjs`, растёт по мере переноса следующих
+  сущностей). Пилот на одной сущности (Stores) — Employees/Sales/Schedules
+  следующими заходами той же схемой.
 
 ---
 
@@ -893,4 +932,4 @@ BFQ-роута, пропущенных ранним заходом) — `request
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v19.21.0 · август 2026*
+*README · актуально на v19.22.0 · август 2026*

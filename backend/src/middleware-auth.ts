@@ -5,6 +5,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
 import { verifyTelegramInitData } from './services/telegram-auth.js';
+import * as storesRepo from './repositories/stores.js';
 
 export type Role = 'trainee' | 'employee' | 'senior' | 'manager' | 'supervisor' | 'admin' | 'guest';
 export type AccessStatus = 'pending' | 'active' | 'rejected' | 'blocked' | 'none';
@@ -258,8 +259,12 @@ export function resolveViewOrgId(user: AuthUser, override?: string | null): stri
  */
 export async function assertStoreInOrg(storeId: string, orgId: string): Promise<boolean> {
   try {
-    const res = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM stores WHERE id = $1`, [storeId]);
-    return !!res.rows[0] && res.rows[0].org_id === orgId;
+    // 19.22.0 (Data Access Layer): делегирует в repositories/stores.ts —
+    // сигнатура/имя не меняются (декоратор requireStoreInOrg ниже и 5
+    // fetch-then-check роутов зовут именно эту функцию), меняется только
+    // то, что доступ к stores теперь идёт через один репозиторий, а не
+    // через свой SELECT здесь же.
+    return await storesRepo.belongsToOrg(orgId, storeId);
   } catch {
     return false;
   }

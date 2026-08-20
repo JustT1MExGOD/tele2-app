@@ -20,6 +20,7 @@ import { authPlugin } from './middleware-auth.js';
 
 import { registerCoreRoutes } from './routes-core.js';
 import { registerEmployeesRoutes } from './routes-employees.js';
+import { registerStoresRoutes } from './routes-stores.js';
 import { registerSalesRoutes } from './routes-sales.js';
 import { registerSchedulesRoutes } from './routes-schedules.js';
 import { registerStatsRoutes } from './routes-stats.js';
@@ -195,8 +196,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   // ===== Регистрация всех модулей с роутами =====
   // Каждый модуль отвечает за свой домен — что где искать, см. README §5.
   const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
-    ['Core (stores/plans)', registerCoreRoutes],
+    ['Core (plans)', registerCoreRoutes],
     ['Employees', registerEmployeesRoutes],
+    ['Stores', registerStoresRoutes],
     ['Sales', registerSalesRoutes],
     ['Schedules', registerSchedulesRoutes],
     ['Stats/Dashboard', registerStatsRoutes],

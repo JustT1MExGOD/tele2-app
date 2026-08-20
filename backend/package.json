@@ -1,12 +1,13 @@
 {
   "name": "backend",
-  "version": "19.21.0",
+  "version": "19.22.0",
   "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "smoke:frontend": "node scripts/smoke-frontend.mjs",
+    "check:no-direct-sql": "node scripts/check-no-direct-sql.mjs",
     "test": "vitest run",
     "migrate": "tsx src/migrate-cli.ts"
   },

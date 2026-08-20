@@ -1,5 +1,5 @@
 /**
- * Справочные данные: точки и шаблоны планов.
+ * Справочные данные: шаблоны планов (точки — см. routes-stores.ts).
  * Вынесено из index.ts при разбиении монолита на модули.
  */
 import { FastifyInstance } from 'fastify';
@@ -7,21 +7,7 @@ import { query } from './db/index.js';
 import { requireActive, resolveViewOrgId } from './middleware-auth.js';
 
 export async function registerCoreRoutes(app: FastifyInstance) {
-  // ===== STORES =====
-  // Раньше вообще без auth-проверки — любой анонимный запрос отдавал точки
-  // всех сетей разом (адрес/координаты/org_id/часы работы). requireActive +
-  // фильтр по своей сети — тот же уровень защиты, что уже у /org/stores
-  // (fetchOrgStores() во фронте использует именно его, не этот роут).
-  app.get('/stores', async (request, reply) => {
-    if (!requireActive(request, reply)) return;
-    const { org_id } = request.query as { org_id?: string };
-    const orgId = resolveViewOrgId(request.user!, org_id);
-    const res = await query(
-      `SELECT * FROM stores WHERE COALESCE(org_id, 'default') = $1 ORDER BY hours`,
-      [orgId]
-    );
-    return res.rows;
-  });
+  // GET /stores переехал в routes-stores.ts (19.22.0, Data Access Layer).
 
   // ===== PLANS =====
   // ?date=YYYY-MM-DD → дневные планы на дату (если есть), иначе шаблон plan_date IS NULL

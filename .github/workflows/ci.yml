@@ -46,6 +46,9 @@ jobs:
       - name: Dependency vulnerability audit
         run: npm audit --audit-level=high
 
+      - name: Data Access Layer — no direct SQL in migrated routes
+        run: npm run check:no-direct-sql
+
       - name: Apply migrations to test database
         run: npm run migrate
 
