@@ -7,7 +7,7 @@
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
-import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg } from './middleware-auth.js';
+import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
 
 export async function registerSchedulesRoutes(app: FastifyInstance) {
   // График — по точкам своей сети. Сотрудник может быть на смене в чужой
@@ -35,25 +35,26 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     return res.rows;
   });
 
-  app.post('/schedules', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.post(
+    '/schedules',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      // Точка должна принадлежать своей сети (или сети, которую явно выбрал
+      // admin переключателем) — иначе руководитель одной сети мог бы
+      // расставлять смены на точках чужой сети. Раньше проверялась только
+      // точка, не сотрудник — manager чужой сети мог назначить НА СВОЮ точку
+      // сотрудника чужой сети (угадав его id), и ON CONFLICT (employee_id,
+      // work_date) DO UPDATE молча перезаписывал уже существующую смену
+      // жертвы на её собственной точке.
+      preHandler: [
+        requireStoreInOrg('body', 'store_id', { allowOrgOverride: true }),
+        requireEmployeeInOrg('body', 'employee_id', { allowOrgOverride: true })
+      ]
+    },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const body = request.body as any;
     const { employee_id, store_id, work_date, shift_text, hours } = body;
-
-    // Точка должна принадлежать своей сети (или сети, которую явно
-    // выбрал admin переключателем) — иначе руководитель одной сети мог бы
-    // расставлять смены на точках чужой сети.
-    const orgId = resolveViewOrgId(request.user!, body.org_id);
-    if (!(await assertStoreInOrg(store_id, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-    }
-    // Раньше проверялась только точка, не сотрудник — manager чужой сети
-    // мог назначить НА СВОЮ точку сотрудника чужой сети (угадав его id), и
-    // ON CONFLICT (employee_id, work_date) DO UPDATE молча перезаписывал
-    // уже существующую смену жертвы на её собственной точке.
-    if (!(await assertEmployeeInOrg(Number(employee_id), orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
-    }
 
     const res = await query(
       `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours)
@@ -67,7 +68,8 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
       [employee_id, store_id, work_date, shift_text, hours]
     );
     return res.rows[0];
-  });
+    }
+  );
 
   app.get('/schedules/month', async (request, reply) => {
     if (!requireActive(request, reply)) return;

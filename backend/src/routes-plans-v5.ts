@@ -5,7 +5,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg } from './middleware-auth.js';
+import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
 import {
   getMonthSummaryTable,
   upsertEmployeeMonthPlan,
@@ -49,23 +49,23 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
   });
 
   // Manager: задать / обновить месячный план сотрудника
-  app.put('/plans/employees/:id/month', async (request, reply) => {
+  app.put(
+    '/plans/employees/:id/month',
+    // Раньше без проверки — manager любой сети мог задать план сотруднику
+    // вообще любой другой сети по угаданному id.
+    { preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = request.body as any;
-    // Раньше без проверки — manager любой сети мог задать план сотруднику
-    // вообще любой другой сети по угаданному id.
-    const orgId = resolveViewOrgId(request.user!, body.org_id);
-    if (!(await assertEmployeeInOrg(Number(id), orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
-    }
     const month = body.month || currentMonthMoscow();
     const data: Record<string, number> = {};
     for (const m of METRICS) {
       if (body[m] !== undefined) data[m] = Number(body[m]) || 0;
     }
     return upsertEmployeeMonthPlan(Number(id), month, data);
-  });
+    }
+  );
 
   // Дневной план сотрудника (остаток / оставшиеся смены)
   // Раньше вообще без авторизации (в отличие от /month-соседа выше) — план+
@@ -103,14 +103,13 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
   });
 
   // Manager: задать / обновить месячный план точки (только своей сети)
-  app.put('/plans/stores/:id/month', async (request, reply) => {
+  app.put(
+    '/plans/stores/:id/month',
+    { preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = (request.body as any) || {};
-    const orgId = resolveViewOrgId(request.user!, body.org_id);
-    if (!(await assertStoreInOrg(id, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-    }
     const month = body.month || currentMonthMoscow();
     const data: Record<string, number> = {};
     for (const m of METRICS) {
@@ -135,5 +134,6 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     }
 
     return plan;
-  });
+    }
+  );
 }

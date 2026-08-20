@@ -12,7 +12,8 @@ import {
   requireManagerOrSupervisor,
   resolveViewOrgId,
   assertEmployeeInOrg,
-  assertStoreInOrg
+  requireEmployeeInOrg,
+  requireStoreInOrg
 } from './middleware-auth.js';
 import { notifyUser } from './bot/index.js';
 
@@ -46,7 +47,15 @@ async function addSystemComment(taskId: number, authorId: number, body: string) 
 }
 
 export async function registerTasksRoutes(app: FastifyInstance) {
-  app.post('/tasks', async (request, reply) => {
+  app.post(
+    '/tasks',
+    {
+      preHandler: [
+        requireEmployeeInOrg('body', 'assigned_to', { allowOrgOverride: true }),
+        requireStoreInOrg('body', 'store_id', { allowOrgOverride: true, optional: true })
+      ]
+    },
+    async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const b = (request.body || {}) as any;
     const title = String(b.title || '').trim();
@@ -55,13 +64,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     if (!assignedTo) return reply.code(400).send({ error: 'assigned_to required' });
 
     const orgId = resolveViewOrgId(request.user!, b.org_id);
-    if (!(await assertEmployeeInOrg(assignedTo, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
-    }
     const storeId = b.store_id ? String(b.store_id) : null;
-    if (storeId && !(await assertStoreInOrg(storeId, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-    }
     const priority = VALID_PRIORITIES.has(b.priority) ? b.priority : 'normal';
     const dueAt = b.due_at ? new Date(b.due_at) : null;
 
@@ -94,7 +97,8 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     } catch (_) {}
 
     return task;
-  });
+    }
+  );
 
   // Список задач сети (менеджер/супервайзер/admin) — фильтры status/assigned_to.
   app.get('/tasks', async (request, reply) => {

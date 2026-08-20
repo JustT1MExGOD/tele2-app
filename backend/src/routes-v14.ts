@@ -3,9 +3,10 @@
  * Отчёты /reports/day — в index.ts (не дублировать)
  */
 import { FastifyInstance } from 'fastify';
-import { authPlugin, requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
+import { authPlugin, requireAuth, requireManager, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from './services/tenant.js';
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
+import { serverError } from './utils/http-errors.js';
 
 export async function registerV14Routes(app: FastifyInstance) {
   app.get('/branding', async (request) => {
@@ -67,24 +68,20 @@ export async function registerV14Routes(app: FastifyInstance) {
     return { org_id: orgId, stores: await listStoresForOrg(orgId) };
   });
 
-  app.get('/heatmap/precise/:storeId', async (request, reply) => {
+  app.get(
+    '/heatmap/precise/:storeId',
+    { preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const storeId = (request.params as any).storeId;
-    const { org_id } = request.query as { org_id?: string };
-    if (!(await assertStoreInOrg(storeId, resolveViewOrgId(request.user!, org_id)))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-    }
     const weeks = Math.min(Number((request.query as any)?.weeks) || 4, 12);
     try {
       return await salesHeatmap(storeId, weeks);
     } catch (e: any) {
-      return reply.code(500).send({
-        error: 'heatmap_failed',
-        message: e?.message || 'heatmap error',
-        hint: 'Накати sql/v14-roadmap.sql (sales_events)'
-      });
+      return serverError(request, reply, 'heatmap_failed', e);
     }
-  });
+    }
+  );
   // POST /admin/rebuild-hour-profiles — уже в routes-forecast.ts, не дублировать
 
   // Раньше тут был POST /internal/log-sale-events — публичный HTTP-роут

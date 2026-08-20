@@ -6,7 +6,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireAuth, resolveViewOrgId, assertEmployeeInOrg } from './middleware-auth.js';
+import { requireAuth, requireEmployeeInOrg } from './middleware-auth.js';
 import { calculateEmployeeBFQ } from './services/bfq.js';
 import { getGamificationProfile } from './services/gamification.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
@@ -22,7 +22,10 @@ function clamp(v: number, lo: number, hi: number) {
 }
 
 export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
-  app.get('/employees/:id/profile', async (request, reply) => {
+  app.get(
+    '/employees/:id/profile',
+    { preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     if (!canViewEmployeeProfile(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });
@@ -30,10 +33,6 @@ export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const employeeId = Number(id);
     const q = (request.query || {}) as { org_id?: string; days?: string };
-    const orgId = resolveViewOrgId(request.user!, q.org_id);
-    if (!(await assertEmployeeInOrg(employeeId, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
-    }
 
     let days = Number(q.days);
     if (!Number.isFinite(days) || days < 7) days = 30;
@@ -131,5 +130,6 @@ export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
     } catch (e: any) {
       return serverError(request, reply, 'employee_profile_failed', e);
     }
-  });
+  }
+  );
 }

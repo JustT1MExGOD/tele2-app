@@ -12,25 +12,25 @@
  */
 import { FastifyInstance } from 'fastify';
 import { todayMoscow } from './utils/date.js';
-import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
+import { requireActive, requireManager, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
 import { buildDailyReportSvg, buildStoryReportSvgs } from './services/report-image.js';
 import { sendNetworkDigest } from './services/network-digest.js';
 import { serverError } from './utils/http-errors.js';
 
 export async function registerReportsRoutes(app: FastifyInstance) {
-  app.get('/reports/day/:storeId', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.get(
+    '/reports/day/:storeId',
+    // Раньше любой активный сотрудник мог запросить превью отчёта чужой
+    // точки, зная/угадав её id (слаги вроде "kalinina2" несложно угадать).
+    {
+      config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+      preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })]
+    },
+    async (request, reply) => {
     if (!requireActive(request, reply)) return;
     const storeId = String((request.params as any).storeId || '');
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
     const kind = ((request.query as any)?.kind === 'micro' ? 'micro' : 'final') as 'micro' | 'final';
-    if (!storeId) return reply.code(400).send({ error: 'store_id_required' });
-    // Раньше любой активный сотрудник мог запросить превью отчёта чужой
-    // точки, зная/угадав её id (слаги вроде "kalinina2" несложно угадать).
-    const { org_id } = request.query as { org_id?: string };
-    const orgId = resolveViewOrgId(request.user!, org_id);
-    if (!(await assertStoreInOrg(storeId, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-    }
     try {
       // 'final' в проде уходит в чат как story из 3 кадров (14.7.0) — превью
       // должно показывать то же самое, а не одиночную старую картинку.
@@ -43,7 +43,8 @@ export async function registerReportsRoutes(app: FastifyInstance) {
     } catch (e: any) {
       return serverError(request, reply, 'report_failed', e);
     }
-  });
+    }
+  );
 
   /** Ручная отправка микро/итога в REPORT_CHAT_ID (для теста) */
   app.post('/reports/send-micro', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {

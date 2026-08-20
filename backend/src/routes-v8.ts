@@ -19,7 +19,7 @@ import {
   authPlugin,
   canAssignRole,
   resolveViewOrgId,
-  assertEmployeeInOrg,
+  requireEmployeeInOrg,
   Role
 } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
@@ -363,7 +363,12 @@ export async function registerV8Routes(app: FastifyInstance) {
   });
 
   // Назначить роль (+ сектор, если роль — supervisor)
-  app.patch('/employees/:id/role', async (request, reply) => {
+  app.patch(
+    '/employees/:id/role',
+    // Раньше без проверки — manager любой сети мог поменять роль (вплоть до
+    // admin) вообще любому сотруднику любой другой сети по угаданному id.
+    { preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const b = request.body as any;
@@ -375,12 +380,6 @@ export async function registerV8Routes(app: FastifyInstance) {
     // Каскад: можно назначить только роль строго ниже своей (admin — без ограничений).
     if (!canAssignRole(request.user!.role, role)) {
       return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
-    }
-    // Раньше без проверки — manager любой сети мог поменять роль (вплоть до
-    // admin) вообще любому сотруднику любой другой сети по угаданному id.
-    const orgId = resolveViewOrgId(request.user!, b.org_id);
-    if (!(await assertEmployeeInOrg(Number(id), orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
     }
     const res = await query(
       `UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`,
@@ -394,7 +393,8 @@ export async function registerV8Routes(app: FastifyInstance) {
       );
     }
     return res.rows[0];
-  });
+    }
+  );
 
   // /supervisor/dashboard → routes-supervisor.ts (premium analytics)
 

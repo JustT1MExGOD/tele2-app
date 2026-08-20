@@ -4,7 +4,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
+import { requireAuth, requireManager, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
 import { forecastStore, salesHeatmap, newbieCohorts, getStaffingHints } from './services/forecast.js';
 import { rebuildHourProfiles } from './services/insights.js';
 import { getLiveNetworkMap } from './services/live-map.js';
@@ -12,13 +12,12 @@ import { generateForecastSummary, getLatestForecastSummary } from './services/ai
 import { todayMoscow } from './utils/date.js';
 
 export async function registerForecastRoutes(app: FastifyInstance) {
-  app.get('/forecast/:storeId', async (request, reply) => {
+  app.get(
+    '/forecast/:storeId',
+    { preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const { storeId } = request.params as { storeId: string };
-    const { org_id } = request.query as { org_id?: string };
-    if (!(await assertStoreInOrg(storeId, resolveViewOrgId(request.user!, org_id)))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-    }
     const from = String((request.query as any)?.from || todayMoscow()).slice(0, 10);
     const days = Math.min(Number((request.query as any)?.days) || 7, 14);
     const fc = await forecastStore(storeId, from, days);
@@ -37,7 +36,8 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     }
 
     return { store_id: storeId, ...fc, ai_summary: aiSummary };
-  });
+    }
+  );
 
   // «Кого куда поставить» — эвристика на основе прогноза + текущего графика,
   // не точный расчёт (абсолютной меры «нужно N человек» у нас нет).
@@ -48,15 +48,15 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     return { items: await getStaffingHints(days, resolveViewOrgId(request.user!, org_id)) };
   });
 
-  app.get('/heatmap/:storeId', async (request, reply) => {
+  app.get(
+    '/heatmap/:storeId',
+    { preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const { storeId } = request.params as { storeId: string };
-    const { org_id } = request.query as { org_id?: string };
-    if (!(await assertStoreInOrg(storeId, resolveViewOrgId(request.user!, org_id)))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-    }
     return salesHeatmap(storeId);
-  });
+    }
+  );
 
   app.get('/cohorts/newbies', async (request, reply) => {
     if (!requireManager(request, reply)) return;

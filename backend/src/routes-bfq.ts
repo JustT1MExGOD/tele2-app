@@ -10,7 +10,7 @@ import {
   upsertBFQManual,
   addVMRQuestionnaire
 } from './services/bfq.js';
-import { requireActive, requireManager, resolveViewOrgId, assertEmployeeInOrg } from './middleware-auth.js';
+import { requireActive, requireManager, resolveViewOrgId, assertEmployeeInOrg, requireEmployeeInOrg } from './middleware-auth.js';
 import { currentMonthMoscow } from './utils/date.js';
 
 export async function registerBfqRoutes(app: FastifyInstance) {
@@ -43,7 +43,10 @@ export async function registerBfqRoutes(app: FastifyInstance) {
   });
 
   // VMR + штраф (manager)
-  app.post('/bfq/manual', async (request, reply) => {
+  app.post(
+    '/bfq/manual',
+    { preHandler: [requireEmployeeInOrg('body', 'employee_id', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const body = request.body as any;
     const employee_id = Number(body.employee_id);
@@ -51,15 +54,15 @@ export async function registerBfqRoutes(app: FastifyInstance) {
     const vmr_avg = Number(body.vmr_avg) || 0;
     const penalty = Number(body.penalty) || 0;
     if (!employee_id) return reply.code(400).send({ error: 'employee_id required' });
-    const orgId = resolveViewOrgId(request.user!, body.org_id);
-    if (!(await assertEmployeeInOrg(employee_id, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
-    }
     return upsertBFQManual(employee_id, month, vmr_avg, penalty);
-  });
+    }
+  );
 
   // Анкета VMR
-  app.post('/bfq/questionnaire', async (request, reply) => {
+  app.post(
+    '/bfq/questionnaire',
+    { preHandler: [requireEmployeeInOrg('body', 'employee_id', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const body = request.body as any;
     const employee_id = Number(body.employee_id);
@@ -68,12 +71,9 @@ export async function registerBfqRoutes(app: FastifyInstance) {
     if (!employee_id || !score) {
       return reply.code(400).send({ error: 'employee_id and score required' });
     }
-    const orgId = resolveViewOrgId(request.user!, body.org_id);
-    if (!(await assertEmployeeInOrg(employee_id, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
-    }
     return addVMRQuestionnaire(employee_id, score, comment);
-  });
+    }
+  );
 
   app.get('/bfq/questionnaires', async (request, reply) => {
     if (!requireManager(request, reply)) return;

@@ -276,6 +276,84 @@ export async function assertEmployeeInOrg(employeeId: number, orgId: string): Pr
   }
 }
 
+type ParamSource = 'params' | 'body' | 'query';
+
+function readField(request: FastifyRequest, source: ParamSource, field: string): unknown {
+  const bag = (source === 'params' ? request.params : source === 'body' ? request.body : request.query) as any;
+  return bag?.[field];
+}
+
+/** org_id для сравнения — своя сеть по умолчанию, override (тело/query)
+ * учитывается только если явно разрешён и звонящий admin (см. resolveViewOrgId). */
+function resolveDecoratorOrgId(request: FastifyRequest, allowOrgOverride: boolean | undefined): string {
+  const override = allowOrgOverride
+    ? ((request.body as any)?.org_id ?? (request.query as any)?.org_id)
+    : undefined;
+  return resolveViewOrgId(request.user!, override);
+}
+
+/** Декоратору достаточно, чтобы request.user вообще существовал (чтобы
+ * безопасно прочитать .org_id/.role) — КАКОЙ именно уровень доступа
+ * (requireAuth/requireActive/requireManager/canView...) нужен для самого
+ * роута, решает и проверяет сам роут, как и раньше; декоратор в эту
+ * логику не лезет, только добавляет проверку сети поверх неё. */
+function requireUserPresent(request: FastifyRequest, reply: FastifyReply): boolean {
+  if (!request.user) {
+    reply.code(401).send({ error: 'unauthorized', message: 'Привяжите Telegram' });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * preHandler-декоратор для assertStoreInOrg — то же самое, что ручной
+ * `if (!(await assertStoreInOrg(...))) return reply.code(403)...`,
+ * но регистрируется в опциях роута, а значит не может быть случайно забыт
+ * в новом обработчике (именно так были упущены дыры, закрытые в 19.11.0).
+ *
+ * НЕ подходит там, где store_id узнаётся только после fetch внутри самого
+ * обработчика (например «чья была эта продажа») — на этапе preHandler id
+ * ещё не известен, ручной assertStoreInOrg там остаётся правильным
+ * инструментом. Не подходит и для проверки внутри цикла по массиву
+ * операций (bulk/batch-роуты) — там каждый элемент проверяется отдельно.
+ */
+export function requireStoreInOrg(
+  source: ParamSource,
+  field: string,
+  opts: { allowOrgOverride?: boolean; optional?: boolean } = {}
+) {
+  return async function (request: FastifyRequest, reply: FastifyReply) {
+    if (!requireUserPresent(request, reply)) return;
+    const storeId = readField(request, source, field);
+    if (!storeId) {
+      if (opts.optional) return;
+      reply.code(400).send({ error: 'store_id_required' });
+      return;
+    }
+    const orgId = resolveDecoratorOrgId(request, opts.allowOrgOverride);
+    if (!(await assertStoreInOrg(String(storeId), orgId))) {
+      reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
+  };
+}
+
+/** Тот же декоратор, но для assertEmployeeInOrg — см. requireStoreInOrg. */
+export function requireEmployeeInOrg(source: ParamSource, field: string, opts: { allowOrgOverride?: boolean } = {}) {
+  return async function (request: FastifyRequest, reply: FastifyReply) {
+    if (!requireUserPresent(request, reply)) return;
+    const raw = readField(request, source, field);
+    const employeeId = Number(raw);
+    if (!raw || !Number.isFinite(employeeId)) {
+      reply.code(400).send({ error: 'employee_id_required' });
+      return;
+    }
+    const orgId = resolveDecoratorOrgId(request, opts.allowOrgOverride);
+    if (!(await assertEmployeeInOrg(employeeId, orgId))) {
+      reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
+    }
+  };
+}
+
 export function isManager(user?: AuthUser | null) {
   return user?.role === 'manager' || user?.role === 'admin' || user?.role === 'senior';
 }

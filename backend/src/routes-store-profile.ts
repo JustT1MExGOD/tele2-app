@@ -6,7 +6,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { query } from './db/index.js';
-import { requireAuth, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
+import { requireAuth, requireStoreInOrg } from './middleware-auth.js';
 import { buildSupervisorDashboard } from './services/supervisor-analytics.js';
 import { todayMoscow } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
@@ -21,17 +21,16 @@ function clamp(v: number, lo: number, hi: number) {
 }
 
 export async function registerStoreProfileRoutes(app: FastifyInstance) {
-  app.get('/stores/:id/profile', async (request, reply) => {
+  app.get(
+    '/stores/:id/profile',
+    { preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })] },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     if (!canViewStoreProfile(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });
     }
     const { id } = request.params as { id: string };
     const q = (request.query || {}) as { org_id?: string; days?: string };
-    const orgId = resolveViewOrgId(request.user!, q.org_id);
-    if (!(await assertStoreInOrg(id, orgId))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
-    }
 
     let days = Number(q.days);
     if (!Number.isFinite(days) || days < 7) days = 30;
@@ -118,5 +117,6 @@ export async function registerStoreProfileRoutes(app: FastifyInstance) {
     } catch (e: any) {
       return serverError(request, reply, 'store_profile_failed', e);
     }
-  });
+  }
+  );
 }
