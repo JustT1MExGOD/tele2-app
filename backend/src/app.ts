@@ -160,6 +160,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   // они уже отвечают через serverError() (src/utils/http-errors.ts).
   app.setErrorHandler((err: any, request, reply) => {
     request.log.error(err);
+    // TypeBox/Fastify schema-валидация (эпик 19.18+) — err.validation несёт
+    // структурированный список того, что именно не сошлось (instancePath +
+    // message от ajv), полезнее голого err.message с одной первой ошибкой.
+    if (err?.code === 'FST_ERR_VALIDATION' && Array.isArray(err.validation)) {
+      return reply.code(400).send({
+        error: 'validation_failed',
+        message: 'Некорректные данные запроса',
+        details: err.validation.map((v: any) => ({ path: v.instancePath || v.schemaPath, message: v.message }))
+      });
+    }
     const mapped = typeof err?.code === 'string' ? PG_ERROR_MAP[err.code] : undefined;
     if (mapped) {
       return reply.code(mapped.statusCode).send({ error: mapped.error, message: mapped.message });

@@ -3,9 +3,20 @@
  * Вынесено из index.ts при разбиении монолита на модули.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
 import { requireManager, requireActive, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
+
+const PutCashBody = Type.Object({
+  store_id: Type.String({ minLength: 1 }),
+  cash_date: Type.Optional(Type.String()),
+  cash_fact: Type.Optional(Type.Number()),
+  cash_1c: Type.Optional(Type.Number()),
+  comment: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String())
+});
+type PutCashBody = Static<typeof PutCashBody>;
 
 export async function registerCashRoutes(app: FastifyInstance) {
   // Кассу смотрят и вносят все активные сотрудники на точке, не только
@@ -78,10 +89,13 @@ export async function registerCashRoutes(app: FastifyInstance) {
     // Точка должна принадлежать своей сети (или сети, которую явно выбрал
     // admin переключателем) — раньше этой проверки не было вообще (в отличие
     // от /schedules и /sales), кассу можно было вписать на точку любой сети.
-    { preHandler: [requireStoreInOrg('body', 'store_id', { allowOrgOverride: true })] },
+    {
+      preHandler: [requireStoreInOrg('body', 'store_id', { allowOrgOverride: true })],
+      schema: { body: PutCashBody }
+    },
     async (request, reply) => {
     if (!requireActive(request, reply)) return;
-    const body = request.body as any;
+    const body = request.body as PutCashBody;
     const store_id = body.store_id;
     const cash_date = String(body.cash_date || todayMoscow()).slice(0, 10);
     const cash_fact = Number(body.cash_fact) || 0;

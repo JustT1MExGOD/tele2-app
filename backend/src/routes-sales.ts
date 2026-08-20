@@ -3,6 +3,7 @@
  * Вынесено из index.ts при разбиении монолита на модули.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { notifyChat } from './bot/index.js';
 import { todayMoscow } from './utils/date.js';
@@ -10,6 +11,28 @@ import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } fro
 import { getSalesSumColumns } from './services/metrics-catalog.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
 import { applySaleUpsert, claimIdempotencyKey, SaleMetricRangeError } from './services/sales-write.js';
+
+// employee_id/store_id — единственные поля, форма которых реально важна на
+// границе API; сами метрики (sim/mnp/... + произвольные кастомные) остаются
+// additionalProperties — их набор задаётся динамически через каталог метрик
+// (services/metrics-catalog.ts), схема на уровне HTTP их не перечисляет, это
+// уже корректно фильтрует сам обработчик (regex + Number()) ниже по коду.
+const PostSaleBody = Type.Object(
+  {
+    employee_id: Type.Number(),
+    store_id: Type.String({ minLength: 1 }),
+    sale_date: Type.Optional(Type.String()),
+    client_id: Type.Optional(Type.String()),
+    org_id: Type.Optional(Type.String())
+  },
+  { additionalProperties: true }
+);
+type PostSaleBody = Static<typeof PostSaleBody>;
+
+const ZeroSaleBody = Type.Object({
+  metric: Type.String({ minLength: 1 })
+});
+type ZeroSaleBody = Static<typeof ZeroSaleBody>;
 
 export async function registerSalesRoutes(app: FastifyInstance) {
   // Раньше эндпоинт вообще не проверял авторизацию и не фильтровал по сети —
@@ -36,7 +59,10 @@ export async function registerSalesRoutes(app: FastifyInstance) {
   });
 
   // Прибавление метрик (+ правка через delta отрицательный)
-  app.post('/sales', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.post(
+    '/sales',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } }, schema: { body: PostSaleBody } },
+    async (request, reply) => {
     if (!requireActive(request, reply)) return;
     const user = request.user!;
     const body = request.body as any;
@@ -151,17 +177,20 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     } catch (_) {}
 
     return row;
-  });
+    }
+  );
 
   // Отменить ошибочно внесённую метрику за день (manager/admin).
   // sales — одна строка на employee+store+day, метрики аддитивные, поэтому
   // "удаление" — это обнуление конкретной колонки в этой строке, а не удаление
   // всей строки (другие метрики за этот день могли быть внесены верно).
-  app.put('/sales/:id/zero', async (request, reply) => {
+  app.put(
+    '/sales/:id/zero',
+    { schema: { body: ZeroSaleBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    const { metric } = (request.body || {}) as { metric?: string };
-    if (!metric) return reply.code(400).send({ error: 'metric required' });
+    const { metric } = request.body as ZeroSaleBody;
 
     const validCols = await getSalesSumColumns();
     if (!validCols.includes(metric)) {
@@ -204,5 +233,6 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     }
 
     return res.rows[0];
-  });
+    }
+  );
 }

@@ -4,6 +4,7 @@
  * NLP, offline sync, live map, insights, alerts, what-if, forecast разом.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireAuth, isManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { parseSalePhrase } from './services/sales-nlp.js';
@@ -19,11 +20,65 @@ function num(v: any) {
   return Number(v) || 0;
 }
 
+const ShiftOpenBody = Type.Object({
+  work_date: Type.Optional(Type.String()),
+  store_id: Type.Optional(Type.String()),
+  lat: Type.Optional(Type.Number()),
+  lng: Type.Optional(Type.Number()),
+  accuracy_m: Type.Optional(Type.Number())
+});
+type ShiftOpenBody = Static<typeof ShiftOpenBody>;
+
+const ShiftCloseBody = Type.Object({
+  lat: Type.Optional(Type.Number()),
+  lng: Type.Optional(Type.Number()),
+  self_report: Type.Optional(Type.String()),
+  mood: Type.Optional(Type.Integer()),
+  blockers: Type.Optional(Type.String()),
+  handover_note: Type.Optional(Type.String())
+});
+type ShiftCloseBody = Static<typeof ShiftCloseBody>;
+
+const SalesParseBody = Type.Object({
+  text: Type.Optional(Type.String())
+});
+type SalesParseBody = Static<typeof SalesParseBody>;
+
+const SalesQuickBody = Type.Object({
+  text: Type.Optional(Type.String()),
+  employee_id: Type.Optional(Type.Number()),
+  store_id: Type.Optional(Type.String()),
+  sale_date: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String()),
+  client_id: Type.Optional(Type.String())
+});
+type SalesQuickBody = Static<typeof SalesQuickBody>;
+
+// ops — гетерогенный массив (сейчас с фронта уходят только type:'sale', но
+// offline-очередь исторически задумана расширяемой, см. комментарий ниже
+// про shift_open/close) — additionalProperties: true, схема не должна быть
+// строже, чем обработчик: один плохой op помечается rejected в результатах,
+// не роняя остальные валидные операции того же батча.
+const SyncOp = Type.Object(
+  {
+    client_id: Type.Optional(Type.String()),
+    type: Type.Optional(Type.String())
+  },
+  { additionalProperties: true }
+);
+const SyncBatchBody = Type.Object({
+  ops: Type.Optional(Type.Array(SyncOp))
+});
+type SyncBatchBody = Static<typeof SyncBatchBody>;
+
 export async function registerShiftsRoutes(app: FastifyInstance) {
   // ========== SHIFT SESSIONS ==========
-  app.post('/shifts/open', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.post(
+    '/shifts/open',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: ShiftOpenBody } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = (request.body || {}) as ShiftOpenBody;
     const employee_id = request.user!.employee_id!;
     const date = String(body.work_date || todayMoscow()).slice(0, 10);
 
@@ -122,11 +177,15 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       handover: handoverRes.rows[0] || null,
       open_tasks: tasksRes.rows
     };
-  });
+    }
+  );
 
-  app.post('/shifts/close', async (request, reply) => {
+  app.post(
+    '/shifts/close',
+    { schema: { body: ShiftCloseBody } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = (request.body || {}) as ShiftCloseBody;
     const employee_id = request.user!.employee_id!;
 
     const open = await query(
@@ -248,7 +307,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       rewarded,
       ai_summary: aiSummary
     };
-  });
+    }
+  );
 
   app.get('/shifts/current', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
@@ -271,16 +331,23 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   });
 
   // ========== NLP PARSE + OPTIONAL APPLY ==========
-  app.post('/sales/parse', async (request, reply) => {
+  app.post(
+    '/sales/parse',
+    { schema: { body: SalesParseBody } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = (request.body || {}) as SalesParseBody;
     const parsed = parseSalePhrase(String(body.text || ''));
     return parsed;
-  });
+    }
+  );
 
-  app.post('/sales/quick', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.post(
+    '/sales/quick',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } }, schema: { body: SalesQuickBody } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = (request.body || {}) as SalesQuickBody;
     const parsed = parseSalePhrase(String(body.text || ''));
     if (!Object.keys(parsed.metrics).length) {
       return reply.code(400).send({ error: 'не удалось разобрать', parsed });
@@ -373,16 +440,20 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     } catch (_) {}
 
     return { ok: true, parsed, sale: row };
-  });
+    }
+  );
 
   // ========== OFFLINE SYNC ==========
-  app.post('/sync/batch', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.post(
+    '/sync/batch',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: SyncBatchBody } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = (request.body || {}) as SyncBatchBody;
     const ops = Array.isArray(body.ops) ? body.ops : [];
     const results = [];
 
-    for (const op of ops) {
+    for (const op of ops as any[]) {
       const client_id = String(op.client_id || '');
       if (!client_id) {
         results.push({ client_id, status: 'rejected', error: 'no client_id' });
@@ -458,5 +529,6 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     }
 
     return { ok: true, results };
-  });
+    }
+  );
 }

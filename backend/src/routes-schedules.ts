@@ -5,9 +5,38 @@
  * графика были раскиданы по двум файлам.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
+
+const PostScheduleBody = Type.Object({
+  employee_id: Type.Number(),
+  store_id: Type.String({ minLength: 1 }),
+  work_date: Type.String({ minLength: 1 }),
+  shift_text: Type.Optional(Type.String()),
+  hours: Type.Optional(Type.Number()),
+  org_id: Type.Optional(Type.String())
+});
+type PostScheduleBody = Static<typeof PostScheduleBody>;
+
+// Поля намеренно все Optional — обработчик ниже уже сам пропускает
+// (`continue`) отдельные элементы с недостающими employee_id/store_id/
+// work_date, не роняя весь батч. Схема здесь не должна быть строже
+// обработчика — иначе один плохой элемент в массиве отклонял бы всю пачку
+// целиком вместо того, чтобы сохранить остальные валидные смены.
+const ScheduleBulkItem = Type.Object({
+  employee_id: Type.Optional(Type.Number()),
+  store_id: Type.Optional(Type.String()),
+  work_date: Type.Optional(Type.String()),
+  shift_text: Type.Optional(Type.String()),
+  hours: Type.Optional(Type.Number())
+});
+const PostScheduleBulkBody = Type.Object({
+  items: Type.Optional(Type.Array(ScheduleBulkItem)),
+  org_id: Type.Optional(Type.String())
+});
+type PostScheduleBulkBody = Static<typeof PostScheduleBulkBody>;
 
 export async function registerSchedulesRoutes(app: FastifyInstance) {
   // График — по точкам своей сети. Сотрудник может быть на смене в чужой
@@ -49,11 +78,12 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
       preHandler: [
         requireStoreInOrg('body', 'store_id', { allowOrgOverride: true }),
         requireEmployeeInOrg('body', 'employee_id', { allowOrgOverride: true })
-      ]
+      ],
+      schema: { body: PostScheduleBody }
     },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const body = request.body as any;
+    const body = request.body as PostScheduleBody;
     const { employee_id, store_id, work_date, shift_text, hours } = body;
 
     const res = await query(
@@ -105,9 +135,12 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
    * принадлежность своей сети — раньше (в routes-v3.ts) эта проверка тут
    * отсутствовала вообще, хотя одиночный POST /schedules её уже делал.
    */
-  app.post('/schedules/bulk', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.post(
+    '/schedules/bulk',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: PostScheduleBulkBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const body = request.body as any;
+    const body = request.body as PostScheduleBulkBody;
     const items = Array.isArray(body?.items) ? body.items : [];
     if (!items.length) return reply.code(400).send({ error: 'items required' });
 
@@ -151,7 +184,8 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     }
 
     return { ok: true, count: saved.length, items: saved };
-  });
+    }
+  );
 
   /** Удалить одну смену */
   app.delete('/schedules', async (request, reply) => {
