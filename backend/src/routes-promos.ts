@@ -3,9 +3,17 @@
  * Вынесено из index.ts при разбиении монолита на модули.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { resolveViewOrgId } from './middleware-auth.js';
 import { serverError } from './utils/http-errors.js';
+
+const PostPromoBody = Type.Object({
+  code: Type.String({ minLength: 1 }),
+  note: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String())
+});
+type PostPromoBody = Static<typeof PostPromoBody>;
 
 function maskPromoCode(code: string) {
   const s = String(code || '');
@@ -71,10 +79,13 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/promos', async (request, reply) => {
+  app.post(
+    '/promos',
+    { schema: { body: PostPromoBody } },
+    async (request, reply) => {
     const user = resolveEmployeeFromRequest(request);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
-    const body = (request.body as any) || {};
+    const body = request.body as PostPromoBody;
     const code = String(body.code || '').trim();
     if (!code) return reply.code(400).send({ error: 'code_required' });
     const note = body.note ? String(body.note).slice(0, 200) : null;
@@ -90,7 +101,8 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     } catch (e: any) {
       return serverError(request, reply, 'db_error', e);
     }
-  });
+    }
+  );
 
   app.post('/promos/:id/use', async (request, reply) => {
     const user = resolveEmployeeFromRequest(request);

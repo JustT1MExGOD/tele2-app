@@ -6,8 +6,25 @@
  * и мог читать/писать в каналы вообще всех сетей.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireAuth, requireManager, resolveViewOrgId } from './middleware-auth.js';
+
+const PostAnnouncementBody = Type.Object({
+  title: Type.String({ minLength: 1 }),
+  body: Type.String({ minLength: 1 }),
+  required: Type.Optional(Type.Boolean()),
+  org_id: Type.Optional(Type.String())
+});
+type PostAnnouncementBody = Static<typeof PostAnnouncementBody>;
+
+const PostChannelMessageBody = Type.Object({
+  body: Type.Optional(Type.String()),
+  message: Type.Optional(Type.String()),
+  due_at: Type.Optional(Type.String()),
+  org_id: Type.Optional(Type.String())
+});
+type PostChannelMessageBody = Static<typeof PostChannelMessageBody>;
 
 export async function registerCommsRoutes(app: FastifyInstance) {
   app.get('/announcements', async (request, reply) => {
@@ -30,9 +47,12 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     return res.rows;
   });
 
-  app.post('/announcements', async (request, reply) => {
+  app.post(
+    '/announcements',
+    { schema: { body: PostAnnouncementBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
-    const body = (request.body || {}) as any;
+    const body = request.body as PostAnnouncementBody;
     const orgId = resolveViewOrgId(request.user!, body.org_id);
     const res = await query(
       `INSERT INTO announcements (title, body, required, created_by, org_id)
@@ -40,7 +60,8 @@ export async function registerCommsRoutes(app: FastifyInstance) {
       [body.title, body.body, body.required, request.user!.employee_id, orgId]
     );
     return res.rows[0];
-  });
+    }
+  );
 
   app.post('/announcements/:id/read', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
@@ -113,10 +134,13 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     return res.rows.reverse();
   });
 
-  app.post('/channels/:id/messages', async (request, reply) => {
+  app.post(
+    '/channels/:id/messages',
+    { schema: { body: PostChannelMessageBody } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
-    const body = (request.body || {}) as any;
+    const body = request.body as PostChannelMessageBody;
     if (!(await assertChannelInOrg(id, resolveViewOrgId(request.user!, body.org_id)))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Канал не принадлежит вашей сети' });
     }
@@ -128,5 +152,6 @@ export async function registerCommsRoutes(app: FastifyInstance) {
       [id, request.user!.employee_id, text, body.due_at || null]
     );
     return res.rows[0];
-  });
+    }
+  );
 }

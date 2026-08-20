@@ -3,10 +3,30 @@
  * Список тикетов и ответы — только role = admin
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireActive, requireAuth } from './middleware-auth.js';
 import { notifyAdmin, notifyUser } from './bot/index.js';
 import { supportTicketAdmin } from './bot/messages.js';
+
+const TicketMessageBody = Type.Object({
+  message: Type.Optional(Type.String()),
+  text: Type.Optional(Type.String())
+});
+type TicketMessageBody = Static<typeof TicketMessageBody>;
+
+const CreateTicketBody = Type.Object({
+  message: Type.String({ minLength: 1 }),
+  full_name: Type.Optional(Type.String()),
+  category: Type.Optional(Type.String()),
+  priority: Type.Optional(Type.String())
+});
+type CreateTicketBody = Static<typeof CreateTicketBody>;
+
+const TicketReplyBody = Type.Object({
+  reply: Type.String({ minLength: 1 })
+});
+type TicketReplyBody = Static<typeof TicketReplyBody>;
 
 function requireAdmin(request: any, reply: any) {
   if (!requireActive(request, reply)) return false;
@@ -96,10 +116,13 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   });
 
   /** Новое сообщение в тикет (сотрудник или admin) */
-  app.post('/support/tickets/:id/messages', async (request, reply) => {
+  app.post(
+    '/support/tickets/:id/messages',
+    { schema: { body: TicketMessageBody } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
-    const body = request.body as any;
+    const body = request.body as TicketMessageBody;
     const text = String(body.message || body.text || '').trim();
     if (!text) return reply.code(400).send({ error: 'message required' });
 
@@ -179,11 +202,15 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     }
 
     return msg.rows[0];
-  });
+    }
+  );
 
   /** Создать тикет */
-  app.post('/support', async (request, reply) => {
-    const b = (request.body || {}) as any;
+  app.post(
+    '/support',
+    { schema: { body: CreateTicketBody } },
+    async (request, reply) => {
+    const b = (request.body || {}) as CreateTicketBody;
     const message = String(b.message || '').trim();
     if (!message) return reply.code(400).send({ error: 'message required' });
 
@@ -268,7 +295,8 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       auto_reply: autoAnswer,
       message: autoAnswer || 'Сообщение отправлено администратору.'
     };
-  });
+    }
+  );
 
   /** Очередь — только admin */
   app.get('/support/tickets', async (request, reply) => {
@@ -282,11 +310,13 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     return res.rows;
   });
 
-  app.post('/support/tickets/:id/reply', async (request, reply) => {
+  app.post(
+    '/support/tickets/:id/reply',
+    { schema: { body: TicketReplyBody } },
+    async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
     const { id } = request.params as { id: string };
-    const { reply: text } = (request.body || {}) as any;
-    if (!text) return reply.code(400).send({ error: 'reply required' });
+    const { reply: text } = request.body as TicketReplyBody;
 
     const res = await query(
       `UPDATE support_tickets
@@ -316,7 +346,8 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       await notifyUser(t.telegram_id, `💬 <b>Ответ поддержки</b>\n\n${text}`);
     }
     return t;
-  });
+    }
+  );
 
   /** Закрыть тикет (admin) */
   app.post('/support/tickets/:id/resolve', async (request, reply) => {
