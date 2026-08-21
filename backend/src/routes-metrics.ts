@@ -4,13 +4,13 @@
  * POST /metrics          { label, short_label?, unit?: count|money }
  * DELETE /metrics/:id    soft: is_active=false
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
 import { invalidateMetricsCache, getMetricDefs } from './services/metrics-catalog.js';
 import { serverError } from './utils/http-errors.js';
-import type { MetricsResponse } from './shared/api-types.js';
+import type { MetricsResponse, CreateMetricResponse, DeleteMetricResponse } from './shared/api-types.js';
 
 const PostMetricBody = Type.Object({
   label: Type.String({ minLength: 1 }),
@@ -70,7 +70,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
   app.post(
     '/metrics',
     { schema: { body: PostMetricBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<CreateMetricResponse | FastifyReply> => {
     if (!requireManager(request, reply)) return;
     const body = request.body as PostMetricBody;
     const label = String(body.label || '').trim();
@@ -149,7 +149,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
     }
   );
 
-  app.delete('/metrics/:id', async (request, reply) => {
+  app.delete('/metrics/:id', async (request, reply): Promise<DeleteMetricResponse | FastifyReply> => {
     if (!requireManager(request, reply)) return;
     const id = String((request.params as any).id || '');
     if (!/^[a-z][a-z0-9_]{0,29}$/.test(id)) {

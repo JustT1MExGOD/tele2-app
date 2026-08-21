@@ -23,9 +23,7 @@
 
         const from = todayMoscow().slice(0, 8) + '01';
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const res = await fetch(API + '/cash/table?from=' + from + '&to=' + todayMoscow() + orgParam, { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
+        const data = await window.apiClient.getCashTable(authHeaders(), from, todayMoscow(), orgParam);
         const stList = data.stores || stores;
         const dates = data.dates || [];
         const cells = data.cells || {};
@@ -94,12 +92,12 @@
         comment: document.getElementById('cashComment').value || ''
       };
       if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
-      const res = await fetch(API + '/cash', {
-        method: 'PUT',
-        headers: authHeaders(true),
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.saveCash(authHeaders(true), body);
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
+        return;
+      }
       toast('Касса сохранена', 'ok');
       loadCash();
     }
@@ -152,14 +150,10 @@
     async function deleteMetric(id, label) {
       if (!canManage()) return;
       if (!confirm(`Удалить метрику «${label}»? Она перестанет показываться в формах — уже внесённые по ней данные останутся в базе.`)) return;
-      const res = await fetch(API + '/metrics/' + id, {
-        method: 'DELETE',
-        headers: authHeaders()
-      });
-      if (!res.ok) {
-        let msg = 'Ошибка';
-        try { const j = await res.json(); msg = j.message || j.error || msg; } catch (_) {}
-        toast(msg, 'err');
+      try {
+        await window.apiClient.deleteMetric(authHeaders(), id);
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
         return;
       }
       toast('Метрика удалена', 'ok');
@@ -169,22 +163,17 @@
     async function saveMetric() {
       const label = document.getElementById('nm_label').value.trim();
       if (!label) { toast('Укажи название', 'err'); return; }
-      const res = await fetch(API + '/metrics', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: JSON.stringify({
+      let data;
+      try {
+        data = await window.apiClient.createMetric(authHeaders(true), {
           label,
           short_label: document.getElementById('nm_short').value.trim() || label.slice(0, 8),
           unit: document.getElementById('nm_unit').value
-        })
-      });
-      if (!res.ok) {
-        let msg = 'Ошибка';
-        try { const j = await res.json(); msg = j.message || j.error || msg; } catch (_) {}
-        toast(msg, 'err');
+        });
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
         return;
       }
-      const data = await res.json().catch(() => ({}));
       toast('Метрика «' + (data.item?.label || label) + '» добавлена', 'ok');
       closeModal();
       await loadMetricsCatalog();

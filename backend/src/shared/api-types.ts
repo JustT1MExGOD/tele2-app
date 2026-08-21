@@ -58,3 +58,63 @@ export interface PromoActionResponse {
   ok: true;
   used: boolean;
 }
+
+export interface CashTableEntry {
+  cash_fact: number;
+  cash_1c: number;
+  delta: number;
+  comment: string | null;
+}
+
+export interface CashTableStore {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface CashTableResponse {
+  from: string;
+  to: string;
+  stores: CashTableStore[];
+  dates: string[];
+  cells: Record<string, Record<string, CashTableEntry>>;
+}
+
+export interface CashRow {
+  id: number;
+  store_id: string;
+  cash_date: string;
+  cash_fact: number;
+  cash_1c: number;
+  comment: string | null;
+  created_by: number | null;
+  updated_at: string;
+}
+
+export interface SaveCashRequest {
+  store_id: string;
+  cash_date: string;
+  cash_fact: number;
+  cash_1c: number;
+  comment?: string;
+  org_id?: string;
+}
+
+export interface CreateMetricRequest {
+  label: string;
+  short_label?: string;
+  short?: string;
+  unit?: string;
+  id?: string;
+}
+
+export interface CreateMetricResponse {
+  ok: true;
+  item: MetricDef;
+}
+
+export interface DeleteMetricResponse {
+  ok: true;
+  id: string;
+  active: false;
+}

@@ -1,10 +1,11 @@
 /**
- * Typed API client (20.0.0+) — покрывает getOrgStores/getMetrics (01-core.js)
- * и промокоды РТК (12-promos.js, 20.1.0): верный URL/метод/заголовки/тело,
- * проброс org_id-квери-параметра, throw на не-ok ответе с серверным
- * {error/message} вместо голого статус-кода (клиент сам не глотает ошибку
- * и не подставляет фолбэк — это остаётся задачей вызывающего кода, см.
- * api-client.ts).
+ * Typed API client (20.0.0+) — покрывает getOrgStores/getMetrics (01-core.js),
+ * промокоды РТК (12-promos.js, 20.1.0) и кассу + кастомные метрики
+ * (09-cash-metrics.js, 20.2.0): верный URL/метод/заголовки/тело, проброс
+ * org_id-квери-параметра, throw на не-ok ответе с серверным
+ * {error/message} вместо голого статус-кода — message ПЕРВЫМ (не error;
+ * поменяно в 20.2.0, см. api-client.ts) — клиент сам не глотает ошибку и
+ * не подставляет фолбэк, это остаётся задачей вызывающего кода.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
@@ -14,7 +15,11 @@ import {
   getPromoCard,
   createPromo,
   markPromoUsed,
-  keepPromo
+  keepPromo,
+  getCashTable,
+  saveCash,
+  createMetric,
+  deleteMetric
 } from '../src/api-client.js';
 
 function fetchOk(body: unknown) {
@@ -132,5 +137,68 @@ describe('api-client', () => {
     );
 
     await expect(createPromo({}, { code: '' })).rejects.toThrow('code_required');
+  });
+
+  it('getCashTable — верный URL с from/to и org_id-квери', async () => {
+    const fetchMock = fetchOk({ from: '2026-01-01', to: '2026-01-31', stores: [], dates: [], cells: {} });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getCashTable(headers, '2026-01-01', '2026-01-31', '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/cash/table?from=2026-01-01&to=2026-01-31&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('saveCash — PUT с телом', async () => {
+    const fetchMock = fetchOk({ id: 1, store_id: 's1', cash_date: '2026-01-01', cash_fact: 100, cash_1c: 90, comment: null, created_by: null, updated_at: '2026-01-01' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+    const body = { store_id: 's1', cash_date: '2026-01-01', cash_fact: 100, cash_1c: 90 };
+
+    await saveCash(headers, body);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/cash`, {
+      headers, method: 'PUT', body: JSON.stringify(body)
+    });
+  });
+
+  it('createMetric — POST с телом', async () => {
+    const fetchMock = fetchOk({ ok: true, item: { id: 'esim', label: 'eSIM', short_label: 'eSIM', unit: 'шт', unit_type: 'count' } });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+    const body = { label: 'eSIM', short_label: 'eSIM', unit: 'count' };
+
+    await createMetric(headers, body);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/metrics`, {
+      headers, method: 'POST', body: JSON.stringify(body)
+    });
+  });
+
+  it('deleteMetric — DELETE без тела', async () => {
+    const fetchMock = fetchOk({ ok: true, id: 'esim', active: false });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await deleteMetric(headers, 'esim');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/metrics/esim`, {
+      headers, method: 'DELETE'
+    });
+  });
+
+  it('deleteMetric — на не-ok бросает message, не error (message-first)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false, status: 400,
+        json: async () => ({ error: 'locked', message: 'Базовую метрику нельзя удалить' })
+      })) as unknown as typeof fetch
+    );
+
+    await expect(deleteMetric({}, 'sim')).rejects.toThrow('Базовую метрику нельзя удалить');
   });
 });

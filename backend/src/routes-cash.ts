@@ -7,6 +7,7 @@ import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
 import { requireManager, requireActive, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
+import type { CashTableResponse, CashRow } from './shared/api-types.js';
 
 const PutCashBody = Type.Object({
   store_id: Type.String({ minLength: 1 }),
@@ -23,7 +24,7 @@ export async function registerCashRoutes(app: FastifyInstance) {
   // manager — фронтенд (09-cash-metrics.js) всегда показывал форму всем,
   // но эти два роута ошибочно остались за requireManager (403 для employee).
   // Таблица — по точкам своей сети, не всех сетей вперемешку.
-  app.get('/cash/table', async (request, reply) => {
+  app.get('/cash/table', async (request, reply): Promise<CashTableResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const q = request.query as { from?: string; to?: string; org_id?: string };
     const from = (q.from || todayMoscow().slice(0, 8) + '01').slice(0, 10);
@@ -93,7 +94,7 @@ export async function registerCashRoutes(app: FastifyInstance) {
       preHandler: [requireStoreInOrg('body', 'store_id', { allowOrgOverride: true })],
       schema: { body: PutCashBody }
     },
-    async (request, reply) => {
+    async (request, reply): Promise<CashRow | undefined> => {
     if (!requireActive(request, reply)) return;
     const body = request.body as PutCashBody;
     const store_id = body.store_id;

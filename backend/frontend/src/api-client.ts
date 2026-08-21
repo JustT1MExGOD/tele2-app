@@ -6,7 +6,8 @@
  *
  * Растёт по мере миграции очередного frontend-файла на TypeScript (см.
  * README §22): 20.0.0 — /org/stores, /metrics (01-core.js); 20.1.0 —
- * промокоды РТК (12-promos.js).
+ * промокоды РТК (12-promos.js); 20.2.0 — касса + кастомные метрики
+ * (09-cash-metrics.js).
  *
  * Сознательно бросает на не-ok/сетевой ошибке, не глотает и не
  * подставляет фолбэк сам — это остаётся ответственностью вызывающего
@@ -20,29 +21,35 @@ import type {
   PromoCard,
   CreatePromoRequest,
   CreatePromoResponse,
-  PromoActionResponse
+  PromoActionResponse,
+  CashTableResponse,
+  CashRow,
+  SaveCashRequest,
+  CreateMetricRequest,
+  CreateMetricResponse,
+  DeleteMetricResponse
 } from '../../src/shared/api-types.js';
 
 /**
- * Бэкенд по всему API (глобальный setErrorHandler, 19.15.0) отвечает
- * ошибкой как {error, message?} — на не-ok разбираем тело и бросаем
- * именно этот текст, а не голый статус-код. Нужно для промокодов
- * (12-promos.js показывает серверное сообщение прямо в toast); для
- * getOrgStores/getMetrics ничего не меняет — их вызывающий код (01-core.js)
- * читает только e, не e.message, и так же молча уходит в свой фолбэк.
+ * Бэкенд по всему API (глобальный setErrorHandler, 19.15.0) системно
+ * кладёт машинный код в error и человекочитаемый текст в message
+ * ({error:'locked', message:'Базовую метрику нельзя удалить'}) — на
+ * не-ok разбираем тело и бросаем message первым (не error), иначе toast
+ * показал бы код вместо текста (09-cash-metrics.js::saveMetric/
+ * deleteMetric уже так делали до миграции — j.message || j.error).
  */
 async function request<T>(
   path: string,
   headers: Record<string, string>,
-  init?: { method: string; body: unknown }
+  init?: { method: string; body?: unknown }
 ): Promise<T> {
   const res = await fetch(window.location.origin + path, {
     headers,
-    ...(init ? { method: init.method, body: JSON.stringify(init.body) } : {})
+    ...(init ? { method: init.method, ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}) } : {})
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}) as Record<string, unknown>);
-    const message = (data.error as string) || (data.message as string) || `api_error:${path}:${res.status}`;
+    const message = (data.message as string) || (data.error as string) || `api_error:${path}:${res.status}`;
     throw new Error(message);
   }
   return res.json() as Promise<T>;
@@ -87,6 +94,33 @@ export async function keepPromo(headers: Record<string, string>, id: number): Pr
   return request(`/promos/${id}/keep`, headers, { method: 'POST', body: {} });
 }
 
+export async function getCashTable(
+  headers: Record<string, string>,
+  from: string,
+  to: string,
+  orgQuery: string
+): Promise<CashTableResponse> {
+  return request(`/cash/table?from=${from}&to=${to}${orgQuery}`, headers);
+}
+
+export async function saveCash(
+  headers: Record<string, string>,
+  body: SaveCashRequest
+): Promise<CashRow> {
+  return request('/cash', headers, { method: 'PUT', body });
+}
+
+export async function createMetric(
+  headers: Record<string, string>,
+  body: CreateMetricRequest
+): Promise<CreateMetricResponse> {
+  return request('/metrics', headers, { method: 'POST', body });
+}
+
+export async function deleteMetric(headers: Record<string, string>, id: string): Promise<DeleteMetricResponse> {
+  return request(`/metrics/${id}`, headers, { method: 'DELETE' });
+}
+
 declare global {
   interface Window {
     apiClient: {
@@ -97,6 +131,10 @@ declare global {
       createPromo: typeof createPromo;
       markPromoUsed: typeof markPromoUsed;
       keepPromo: typeof keepPromo;
+      getCashTable: typeof getCashTable;
+      saveCash: typeof saveCash;
+      createMetric: typeof createMetric;
+      deleteMetric: typeof deleteMetric;
     };
   }
 }
@@ -108,5 +146,9 @@ window.apiClient = {
   getPromoCard,
   createPromo,
   markPromoUsed,
-  keepPromo
+  keepPromo,
+  getCashTable,
+  saveCash,
+  createMetric,
+  deleteMetric
 };
