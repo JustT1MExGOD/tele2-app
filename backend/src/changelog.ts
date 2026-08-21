@@ -806,6 +806,15 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Кэш автоматически сбрасывается сразу при смене сектора супервайзера или переносе сети между секторами — не нужно ждать, пока устареет',
       'Этим заходом закрыт весь 5-пунктовый план владельца продукта — Data Access Layer, Audit Trail, Concurrency & Workflow Integrity, Supervisor Scope Cache'
     ]
+  },
+  {
+    version: '20.0.0',
+    title: 'Frontend Foundation — старт эпохи 20',
+    bullets: [
+      'Первый бандл на Vite/TypeScript — типизированный API-клиент для выбора точек и каталога метрик, с общим контрактом типов между сервером и фронтендом',
+      'Фундамент для frontend-тестов (vitest + jsdom) — первые тесты покрывают новый клиент',
+      'Закрывает весь заданный владельцем продукта roadmap 19.22.0→20.0.0 (Data Access Layer, Audit Trail, Concurrency & Workflow Integrity, Supervisor Scope Cache, Frontend Foundation) — пилот на узком срезе, остальные 19 файлов фронтенда переезжают на TypeScript следующими версиями той же схемой'
+    ]
   }
 ];
 

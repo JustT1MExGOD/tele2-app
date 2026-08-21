@@ -1,14 +1,16 @@
 {
   "name": "backend",
-  "version": "19.25.0",
+  "version": "20.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:frontend",
+    "build:frontend": "vite build --config frontend/vite.config.ts",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "smoke:frontend": "node scripts/smoke-frontend.mjs",
     "check:no-direct-sql": "node scripts/check-no-direct-sql.mjs",
     "test": "vitest run",
+    "test:frontend": "vitest run --config frontend/vitest.config.ts",
     "migrate": "tsx src/migrate-cli.ts"
   },
   "dependencies": {
@@ -29,8 +31,10 @@
     "@types/node": "^22.10.0",
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.11.10",
+    "jsdom": "^30.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "vite": "^8.2.2",
     "vitest": "^4.1.10"
   }
 }

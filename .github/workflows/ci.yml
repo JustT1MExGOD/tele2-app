@@ -55,8 +55,17 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Type check (frontend)
+        run: npx tsc --noEmit -p frontend/tsconfig.json
+
+      - name: Build frontend bundle
+        run: npm run build:frontend
+
       - name: Frontend smoke test
         run: npm run smoke:frontend
+
+      - name: Frontend test suite
+        run: npm run test:frontend
 
       - name: Test suite
         run: npm test

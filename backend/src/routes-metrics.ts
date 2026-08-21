@@ -10,6 +10,7 @@ import { query } from './db/index.js';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
 import { invalidateMetricsCache, getMetricDefs } from './services/metrics-catalog.js';
 import { serverError } from './utils/http-errors.js';
+import type { MetricsResponse } from './shared/api-types.js';
 
 const PostMetricBody = Type.Object({
   label: Type.String({ minLength: 1 }),
@@ -53,7 +54,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
   // который дублировал (и потихоньку разошёлся по деталям с) FALLBACK в
   // services/metrics-catalog.ts. Теперь один источник правды: getMetricDefs()
   // сам решает БД/кеш/фолбэк, роут только приводит форму ответа под фронтенд.
-  app.get('/metrics', async (_request, reply) => {
+  app.get('/metrics', async (_request, reply): Promise<MetricsResponse> => {
     const defs = await getMetricDefs();
     return {
       items: defs.map((m) => ({

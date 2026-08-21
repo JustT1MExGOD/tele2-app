@@ -9,6 +9,7 @@ import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from 
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
 import { serverError } from './utils/http-errors.js';
 import { invalidateAll as invalidateAllScopes } from './services/scope-cache.js';
+import type { OrgStoresResponse } from './shared/api-types.js';
 
 // upsertOrg(body: Partial<Org> & {id}) принимает произвольный поднабор
 // полей organizations (name/brand_name/primary_color/logo_url/sector_id/
@@ -87,7 +88,7 @@ export async function registerV14Routes(app: FastifyInstance) {
   // (см. fetchOrgStores() в 01-core.js). admin может явно затребовать другую
   // сеть тем же переключателем, что и везде (resolveViewOrgId) — остальные
   // роли override игнорируют и всегда видят только свою сеть.
-  app.get('/org/stores', async (request, reply) => {
+  app.get('/org/stores', async (request, reply): Promise<OrgStoresResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id) || 'default';

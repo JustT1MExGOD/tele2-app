@@ -149,9 +149,8 @@
      * никогда не попадают чужие точки. */
     async function fetchOrgStores() {
       try {
-        const q = orgQueryParam();
-        const res = await fetch(API + '/org/stores' + (q ? '?' + q.slice(1) : ''), { headers: authHeaders() });
-        if (res.ok) return (await res.json()).stores || [];
+        const { stores } = await window.apiClient.getOrgStores(authHeaders(), orgQueryParam());
+        return stores || [];
       } catch (_) {}
       return [];
     }
@@ -206,9 +205,7 @@
 
     async function loadMetricsCatalog() {
       try {
-        const res = await fetch(API + '/metrics', { headers: authHeaders() });
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await window.apiClient.getMetrics(authHeaders());
         const items = data.items || [];
         if (items.length) {
           METRICS = items.map(m => ({
