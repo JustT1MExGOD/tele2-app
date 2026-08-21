@@ -27,6 +27,7 @@ import { todayMoscow } from './utils/date.js';
 import { bot } from './bot/index.js';
 import { listActiveOrgsPublic } from './services/tenant.js';
 import { recordAudit } from './services/audit.js';
+import { invalidate as invalidateScope } from './services/scope-cache.js';
 
 const AccessRequestBody = Type.Object({
   full_name: Type.String({ minLength: 1 }),
@@ -412,6 +413,7 @@ export async function registerV8Routes(app: FastifyInstance) {
        ON CONFLICT DO NOTHING`,
       [Number(id), sector_id]
     );
+    invalidateScope(Number(id));
     return { ok: true, sector_id };
     }
   );
@@ -471,6 +473,12 @@ export async function registerV8Routes(app: FastifyInstance) {
       });
       return res.rows[0];
     });
+
+    // Инвалидация вне транзакции намеренно — кэш только про производительность
+    // чтения, не про целостность данных (в отличие от withTransaction выше);
+    // если после успешного коммита процесс упадёт ровно тут, худший случай —
+    // кэш доживёт до TTL (5 мин), не бесконечно устаревшие данные.
+    invalidateScope(Number(id));
 
     return row;
     }

@@ -19,13 +19,14 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { authPlugin, requireAuth, resolveViewOrgId } from './middleware-auth.js';
+import { authPlugin, requireAuth, requireManager, resolveViewOrgId } from './middleware-auth.js';
 import {
   resolveSupervisorStores,
   buildSupervisorDashboard
 } from './services/supervisor-analytics.js';
 import { todayMoscow } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
+import { getStats as getScopeCacheStats } from './services/scope-cache.js';
 
 /** Полный кабинет супервайзера — только supervisor/admin. Раньше сюда же
  * пускали manager, но кабинет теперь изолирован от manager/senior (свой
@@ -122,5 +123,15 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
     } catch (e: any) {
       return serverError(request, reply, 'health_failed', e);
     }
+  });
+
+  // Ops/debug-метрика (19.25.0, Supervisor Scope Cache) — не бизнес-функция,
+  // голый JSON для проверки эффективности кэша, не отдельный UI-экран.
+  app.get('/admin/cache-stats', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    if (request.user!.role !== 'admin') {
+      return reply.code(403).send({ error: 'admin only' });
+    }
+    return { supervisor_scope: getScopeCacheStats() };
   });
 }

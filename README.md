@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-19.24.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-19.25.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `19.24.0`  
+**Актуальная версия клиента:** `19.25.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -717,6 +717,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **19.22.0** | **Data Access Layer — старт.** Первый repository (`src/repositories/stores.ts`) — доступ к таблице `stores` только через него, `orgId` первым обязательным параметром каждой функции (не «не забыть проверить», а физически невозможно вызвать без сети). Роуты точек выделены в `routes-stores.ts`, CI проверяет, что этот файл не откатился на прямой SQL. Пилот на одной сущности — Employees/Sales/Schedules следующими заходами |
 | **19.23.0** | **Audit Trail.** Новая таблица `audit_log` — единая лента чувствительных действий (смена роли, деактивация сотрудника, правка продажи, изменение плана, экспорт CSV), экран «История действий» для admin. Первое появление транзакций (`withTransaction()`, `db/index.ts`) в прикладном коде — смена роли и правка продажи теперь либо коммитятся целиком вместе с записью в историю, либо откатываются целиком |
 | **19.24.0** | **Concurrency & Workflow Integrity.** Перед тем как писать код, проверено, что уже реально защищено (смена — partial unique index, закрытие смены — CAS, `/sync/batch`/`/sales/quick` — UNIQUE на `client_id`) — всё оказалось надёжным с прошлых версий, закреплено новыми adversarial-тестами, которые реально стреляют параллельными запросами. Найдена и закрыта одна настоящая гонка: `materializeStoreDailyPlans()` (крон 6:00 + ручное сохранение плана точки) могла оставить задвоенные строки — теперь `UNIQUE(store_id, plan_date)` + per-store upsert вместо delete-then-insert |
+| **19.25.0** | **Supervisor Scope Cache.** Кабинет супервайзера и Command Center больше не пересчитывают заново JOIN `supervisor_sectors → organizations → stores` на каждую загрузку — держится в памяти сервера 5 минут (`services/scope-cache.ts`). Redis сознательно не взят — прод на 1 реплике Railway (бот на long-polling физически не может жить на двух), in-memory даёт ту же корректность без новой инфраструктуры. Автосброс при смене сектора супервайзера (точечно) и при переносе сети между секторами (весь кэш). `GET /admin/cache-stats` — hit/miss метрики. Этим закрыт весь 5-пунктовый roadmap владельца продукта перед 20.0.0 |
 
 ---
 
@@ -773,7 +774,8 @@ BFQ-роута, пропущенных ранним заходом) — `request
 
 ### Data/Frontend Foundation — roadmap задан владельцем продукта (19.22.0 → 20.0.0) 🔄
 Оставшиеся крупные пункты того же ревью получили явный план вперёд, не
-разбираются по одному без сквозной цели:
+разбираются по одному без сквозной цели. 5 из 6 пунктов закрыты —
+остаётся только 20.0.0:
 
 - **19.22.0 Data Access Layer** ✅ старт — `src/repositories/`, org-scoped
   queries (`orgId` обязательным первым параметром — структурная гарантия, не
@@ -798,9 +800,15 @@ BFQ-роута, пропущенных ранним заходом) — `request
   (`services/plans.ts`), см. §24. Optimistic locking нигде не добавлен —
   ни одного места с конкретным риском lost-update не нашлось, добавлять
   спекулятивно не стали
-- **19.25.0 Supervisor Scope Cache** — не начато. Кэш-слой (Redis или
-  альтернатива) для `getUserStoreIds`, инвалидация, метрики hit/miss,
-  fail-safe поведение при недоступности кэша
+- **19.25.0 Supervisor Scope Cache** ✅ — `services/scope-cache.ts`,
+  in-memory TTL-кэш (5 мин) для `resolveSupervisorStores()` — реальный hot
+  path кабинета супервайзера/Command Center (`getUserStoreIds`, названный в
+  исходном ревью, на поверку оказался мёртвым кодом — нигде не
+  вызывается). Redis сознательно не взят — прод на 1 реплике Railway
+  (long-polling бота физически не переживает 2 инстанса), in-memory даёт
+  ту же корректность без новой инфраструктуры (см. §24). Точечная
+  инвалидация при смене сектора супервайзера/роли, полный сброс при
+  переносе сети между секторами, `GET /admin/cache-stats` — hit/miss
 - **20.0.0 Frontend Foundation** (**major** — по решению владельца продукта,
   граница эпохи) — не начато. Vite, миграция на TypeScript, общие
   API-контракты между бэком и фронтом, типизированный API-клиент,
@@ -967,6 +975,29 @@ BFQ-роута, пропущенных ранним заходом) — `request
   классический lost-update сценарий физически не возникает; добавлять
   версионирование под гипотетическую, не обнаруженную на практике
   проблему не стали.
+- **Supervisor Scope Cache** (`services/scope-cache.ts`, 19.25.0) —
+  `resolveSupervisorStores()` (реальный hot path кабинета супервайзера и
+  Command Center — JOIN `supervisor_sectors → organizations → stores` на
+  каждую загрузку) теперь кэшируется в памяти процесса на 5 минут для
+  роли `supervisor`; ветка admin/manager (дешёвый индексированный
+  `SELECT id FROM stores WHERE org_id=$1`) намеренно не кэшируется —
+  кэшировать нечего. `getUserStoreIds()` (`middleware-auth.ts`), названная
+  в исходном ревью как «ходит в БД на каждый запрос», на проверку —
+  мёртвый код, нигде не вызывается; кэш вокруг несуществующего вызова не
+  строили. Redis рассмотрен и отклонён не из экономии, а по топологии:
+  прод — 1 реплика Railway (`grammy`-бот на long-polling физически не
+  живёт на двух инстансах одного `BOT_TOKEN` без `409 Conflict`), при
+  одной реплике in-memory `Map` даёт ровно ту же корректность, что Redis,
+  без нового сервиса и сетевого failure mode — понадобится Redis только
+  если/когда прод перейдёт на несколько реплик (не запланировано, бот
+  всё равно не переживёт это без отдельного перехода на webhook).
+  Инвалидация точечная (`invalidate(supervisorId)`) при `PUT
+  /supervisor/:id/sector` и `PATCH /employees/:id/role`, полная
+  (`invalidateAll()`) при `PUT /admin/org/:id` (смена сектора сети задевает
+  сразу всех супервайзеров и старого, и нового сектора — точечно
+  разрешить дорого, полный сброс на редкой операции не создаёт заметной
+  нагрузки). `GET /admin/cache-stats` (admin-only) — `{hits, misses, size,
+  hitRate}`, ops/debug-метрика, не отдельный UI-экран.
 
 ---
 
@@ -984,4 +1015,4 @@ BFQ-роута, пропущенных ранним заходом) — `request
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v19.24.0 · август 2026*
+*README · актуально на v19.25.0 · август 2026*

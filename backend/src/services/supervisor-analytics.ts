@@ -9,6 +9,7 @@
 import { query } from '../db/index.js';
 import { todayMoscow, currentMonthMoscow } from '../utils/date.js';
 import { buildSesModel, projectDay } from './forecast.js';
+import { getCached, setCached } from './scope-cache.js';
 
 // Тот же полный список, что METRICS в services/plans.ts — держим локальную
 // копию (не импортируем, чтобы не тянуть весь plans.ts) для дневных и
@@ -150,6 +151,10 @@ export async function resolveSupervisorStores(
   }
   // supervisor = руководитель сектора: видит все точки всех сетей своего
   // сектора (назначение — на сектор целиком, не по отдельным точкам).
+  // Кэшировано (19.25.0, scope-cache.ts) — этот JOIN раньше гонялся заново
+  // на каждую загрузку Command Center/кабинета супервайзера.
+  const cached = getCached(employeeId);
+  if (cached !== undefined) return cached;
   try {
     const res = await query(
       `SELECT s.id as store_id
@@ -159,7 +164,9 @@ export async function resolveSupervisorStores(
        WHERE ss.supervisor_id = $1`,
       [employeeId]
     );
-    return res.rows.map((r: any) => String(r.store_id));
+    const stores = res.rows.map((r: any) => String(r.store_id));
+    setCached(employeeId, stores);
+    return stores;
   } catch {
     return [];
   }

@@ -8,6 +8,7 @@ import { authPlugin, requireAuth, requireManager, resolveViewOrgId, requireStore
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from './services/tenant.js';
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
 import { serverError } from './utils/http-errors.js';
+import { invalidateAll as invalidateAllScopes } from './services/scope-cache.js';
 
 // upsertOrg(body: Partial<Org> & {id}) принимает произвольный поднабор
 // полей organizations (name/brand_name/primary_color/logo_url/sector_id/
@@ -71,7 +72,14 @@ export async function registerV14Routes(app: FastifyInstance) {
     }
     const id = (request.params as any).id;
     const body = request.body as any;
-    return upsertOrg({ id, ...body });
+    const org = await upsertOrg({ id, ...body });
+    // upsertOrg может переставить organizations.sector_id — это меняет
+    // набор точек ВСЕХ супервайзеров затронутых секторов (и старого, и
+    // нового), точечная инвалидация по одному employee_id не применима
+    // здесь. Операция редкая (админ правит сеть) — полный сброс не создаёт
+    // заметной нагрузки.
+    invalidateAllScopes();
+    return org;
     }
   );
 
