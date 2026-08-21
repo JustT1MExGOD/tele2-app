@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.0.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-20.0.1-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.0.0`  
+**Актуальная версия клиента:** `20.0.1`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -719,6 +719,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **19.24.0** | **Concurrency & Workflow Integrity.** Перед тем как писать код, проверено, что уже реально защищено (смена — partial unique index, закрытие смены — CAS, `/sync/batch`/`/sales/quick` — UNIQUE на `client_id`) — всё оказалось надёжным с прошлых версий, закреплено новыми adversarial-тестами, которые реально стреляют параллельными запросами. Найдена и закрыта одна настоящая гонка: `materializeStoreDailyPlans()` (крон 6:00 + ручное сохранение плана точки) могла оставить задвоенные строки — теперь `UNIQUE(store_id, plan_date)` + per-store upsert вместо delete-then-insert |
 | **19.25.0** | **Supervisor Scope Cache.** Кабинет супервайзера и Command Center больше не пересчитывают заново JOIN `supervisor_sectors → organizations → stores` на каждую загрузку — держится в памяти сервера 5 минут (`services/scope-cache.ts`). Redis сознательно не взят — прод на 1 реплике Railway (бот на long-polling физически не может жить на двух), in-memory даёт ту же корректность без новой инфраструктуры. Автосброс при смене сектора супервайзера (точечно) и при переносе сети между секторами (весь кэш). `GET /admin/cache-stats` — hit/miss метрики. Этим закрыт весь 5-пунктовый roadmap владельца продукта перед 20.0.0 |
 | **20.0.0** | **Frontend Foundation — старт эпохи 20.** Первый Vite-билд: типизированный API-клиент (`frontend/src/api-client.ts`, TypeScript ES-модуль, собирается в один classic-script бандл) для выбора точек (`/org/stores`) и каталога метрик (`/metrics`) — общий контракт типов (`backend/src/shared/api-types.ts`) переиспользуется и роутами, и фронтендом, без дублирования. `01-core.js` делегирует оба вызова новому клиенту, поведение снаружи не изменилось. Фундамент для frontend-тестов (vitest + jsdom, `frontend/tests/`). Пилот на двух эндпоинтах — остальные 19 файлов `frontend/js/` переезжают на TypeScript следующими версиями той же схемой, что уже работала для Data Access Layer и TypeBox |
+| **20.0.1** | Хотфикс сразу вслед за 20.0.0 — прод-деплой упал на билде: Railway/Nixpacks собирает контейнер на Node.js 18.20.5, а Vite 8 требует `^20.19.0 \|\| >=22.12.0` (внутри зависит от `util.styleText`, которого в Node 18 нет). Версия Node для деплоя нигде не была закреплена. Добавлено `"engines": {"node": "22.x"}` в `backend/package.json` — тот же Node 22, что уже использует CI (`actions/setup-node`) |
 
 ---
 
@@ -1068,4 +1069,4 @@ TypeScript/ES-модули той же пилотной схемой, посте
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v20.0.0 · август 2026*
+*README · актуально на v20.0.1 · август 2026*

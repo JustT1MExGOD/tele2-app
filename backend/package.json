@@ -1,7 +1,10 @@
 {
   "name": "backend",
-  "version": "20.0.0",
+  "version": "20.0.1",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "build": "tsc && npm run build:frontend",
     "build:frontend": "vite build --config frontend/vite.config.ts",
