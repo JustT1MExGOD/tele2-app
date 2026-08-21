@@ -1,14 +1,21 @@
 /**
- * Автоанонс версии в чат. При старте сервера сверяем package.json с
- * app_settings.last_announced_version; если это новая версия и для неё
- * есть запись в CHANGELOG (см. changelog.ts — там только minor-эпики,
- * не хотфиксы), шлём картинку и запоминаем версию, чтобы не повторяться.
+ * Автоанонс версии в чат. При старте сервера сверяем последнюю запись
+ * CHANGELOG с app_settings.last_announced_version; если она новее — шлём
+ * картинку и запоминаем версию, чтобы не повторяться.
+ *
+ * Раньше источником версии для анонса был package.json запущенного
+ * процесса, а не сам CHANGELOG — это молча теряло анонс, если версия с
+ * записью в CHANGELOG падала на деплое (билд/healthcheck), а следующий
+ * пуш был хотфиксом без своей записи: currentVersion() отдавал версию
+ * хотфикса, getChangelogEntry() для неё не находил ничего, функция тихо
+ * выходила (см. 20.0.1 — Vite не завёлся на Node 18 в билде Railway,
+ * анонс 20.0.0 из-за этого не ушёл вообще). CHANGELOG сам по себе уже
+ * список "версий, достойных анонса" (хотфиксы туда и не попадают) —
+ * последняя его запись и есть то, что нужно анонсировать, независимо от
+ * того, какая именно версия сейчас фактически запущена.
  */
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { query } from '../db/index.js';
-import { getChangelogEntry, ChangelogEntry } from '../changelog.js';
+import { CHANGELOG, ChangelogEntry } from '../changelog.js';
 import { buildReleaseCardPng } from './report-image.js';
 import { notifyChatPhoto } from '../bot/index.js';
 
@@ -33,19 +40,6 @@ export function buildAnnounceCaption(version: string, entry: ChangelogEntry): st
   const lastSpace = cut.lastIndexOf(' ');
   if (lastSpace > cutAt - 40) cut = cut.slice(0, lastSpace);
   return cut.trimEnd() + '…';
-}
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function currentVersion(): string {
-  try {
-    const pkgPath = path.join(__dirname, '../../package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    return String(pkg.version || '0.0.0');
-  } catch {
-    return '0.0.0';
-  }
 }
 
 /**
@@ -74,9 +68,9 @@ export async function claimReleaseAnnouncement(version: string): Promise<boolean
 }
 
 export async function announceReleaseIfNeeded() {
-  const version = currentVersion();
-  const entry = getChangelogEntry(version);
-  if (!entry) return; // хотфикс или версия без записи в CHANGELOG — тихо
+  const entry = CHANGELOG[CHANGELOG.length - 1];
+  if (!entry) return;
+  const version = entry.version;
 
   try {
     if (!(await claimReleaseAnnouncement(version))) return;

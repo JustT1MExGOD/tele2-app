@@ -817,7 +817,3 @@ export const CHANGELOG: ChangelogEntry[] = [
     ]
   }
 ];
-
-export function getChangelogEntry(version: string): ChangelogEntry | null {
-  return CHANGELOG.find((c) => c.version === version) || null;
-}
