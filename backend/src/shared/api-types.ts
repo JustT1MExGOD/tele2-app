@@ -118,3 +118,13 @@ export interface DeleteMetricResponse {
   id: string;
   active: false;
 }
+
+export interface SendDigestRequest {
+  kind: 'weekly' | 'monthly';
+  org_id?: string;
+}
+
+export interface SendDigestResponse {
+  ok: true;
+  kind: 'weekly' | 'monthly';
+}

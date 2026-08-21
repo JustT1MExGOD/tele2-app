@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.2.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-20.3.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.2.0`  
+**Актуальная версия клиента:** `20.3.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -723,6 +723,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **20.0.2** | Из-за 20.0.1 не ушёл анонс 20.0.0 в канал — `announceReleaseIfNeeded()` сверял `CHANGELOG` со своим же `package.json.version`, а тот на первом успешном старте контейнера был уже `20.0.1` (хотфикс, сознательно без записи в `CHANGELOG`) — функция тихо выходила. Переписано на сверку с последней записью `CHANGELOG` напрямую, не с версией запущенного процесса — тот же класс защиты, что не даст молча потерять анонс, если версия с записью в `CHANGELOG` ещё раз упадёт на деплое |
 | **20.1.0** | **Второй срез Frontend Foundation.** Промокоды РТК (`12-promos.js`) переехали на typed API-клиент — 5 функций (`getPromos`/`getPromoCard`/`createPromo`/`markPromoUsed`/`keepPromo`) в `frontend/src/api-client.ts`, общий контракт расширен в `backend/src/shared/api-types.ts`. Заодно клиент научился разбирать серверное `{error, message}` на не-ok ответе вместо голого статус-кода — нужно было, чтобы toast с ошибкой сохранения промокода показывал прежний осмысленный текст, не изменившееся поведение для двух прежних эндпоинтов (01-core.js их не читает). Живой прогон нашёл не связанную с этим заходом мелочь: `code_required` в `routes-promos.ts` недостижим — TypeBox-схема (`minLength: 1`) перехватывает пустой код раньше и всегда отвечает `validation_failed` |
 | **20.2.0** | **Третий срез Frontend Foundation.** Касса (`GET /cash/table`, `PUT /cash`) и кастомные метрики плана (`POST /metrics`, `DELETE /metrics/:id`) — на typed-клиент. Найдено и исправлено реальное расхождение приоритета сообщения об ошибке: клиент с 20.1.0 бросал `error`-код первым, а `09-cash-metrics.js` исторически показывал в toast `message` первым (человекочитаемый текст, не машинный код) — `request()` переведён на `message`-first глобально; для промокодов это тоже улучшение, не регресс |
+| **20.3.0** | **Четвёртый срез Frontend Foundation.** Ручная отправка недельной/месячной сводки по сети (`POST /reports/send-digest`, `19-reports.js`) — на typed-клиент, самый маленький срез на сегодня (один эндпоинт) |
 
 ---
 
@@ -842,10 +843,11 @@ BFQ-роута, пропущенных ранним заходом) — `request
 эндпоинтов). `20.2` — третий срез: касса + кастомные метрики
 (`09-cash-metrics.js`, 4 эндпоинта), попутно найден и закрыт реальный
 разнобой в приоритете error/message между файлами — унифицирован на
-message-first. Каждый заход — один `frontend/js/*.js`-файл, его API-слой
-на typed-клиент, контракт в `shared/api-types.ts`, DOM/UI-оркестрация
-остаётся legacy JS как есть. Остаётся 17 файлов — переезжают следующими
-версиями той же схемой.
+message-first. `20.3` — четвёртый срез: сводка по сети
+(`19-reports.js`, 1 эндпоинт). Каждый заход — один
+`frontend/js/*.js`-файл, его API-слой на typed-клиент, контракт в
+`shared/api-types.ts`, DOM/UI-оркестрация остаётся legacy JS как есть.
+Остаётся 16 файлов — переезжают следующими версиями той же схемой.
 
 ---
 
@@ -1077,4 +1079,4 @@ message-first. Каждый заход — один `frontend/js/*.js`-файл,
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v20.2.0 · август 2026*
+*README · актуально на v20.3.0 · август 2026*

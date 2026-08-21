@@ -7,7 +7,7 @@
  * Растёт по мере миграции очередного frontend-файла на TypeScript (см.
  * README §22): 20.0.0 — /org/stores, /metrics (01-core.js); 20.1.0 —
  * промокоды РТК (12-promos.js); 20.2.0 — касса + кастомные метрики
- * (09-cash-metrics.js).
+ * (09-cash-metrics.js); 20.3.0 — сводка по сети (19-reports.js).
  *
  * Сознательно бросает на не-ok/сетевой ошибке, не глотает и не
  * подставляет фолбэк сам — это остаётся ответственностью вызывающего
@@ -27,7 +27,9 @@ import type {
   SaveCashRequest,
   CreateMetricRequest,
   CreateMetricResponse,
-  DeleteMetricResponse
+  DeleteMetricResponse,
+  SendDigestRequest,
+  SendDigestResponse
 } from '../../src/shared/api-types.js';
 
 /**
@@ -121,6 +123,13 @@ export async function deleteMetric(headers: Record<string, string>, id: string):
   return request(`/metrics/${id}`, headers, { method: 'DELETE' });
 }
 
+export async function sendNetworkDigest(
+  headers: Record<string, string>,
+  body: SendDigestRequest
+): Promise<SendDigestResponse> {
+  return request('/reports/send-digest', headers, { method: 'POST', body });
+}
+
 declare global {
   interface Window {
     apiClient: {
@@ -135,6 +144,7 @@ declare global {
       saveCash: typeof saveCash;
       createMetric: typeof createMetric;
       deleteMetric: typeof deleteMetric;
+      sendNetworkDigest: typeof sendNetworkDigest;
     };
   }
 }
@@ -150,5 +160,6 @@ window.apiClient = {
   getCashTable,
   saveCash,
   createMetric,
-  deleteMetric
+  deleteMetric,
+  sendNetworkDigest
 };

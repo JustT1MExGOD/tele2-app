@@ -61,13 +61,7 @@ async function sendNetworkDigestNow(kind, btnEl) {
   if (btnEl?.disabled) return;
   if (btnEl) btnEl.disabled = true;
   try {
-    const res = await fetch(API + '/reports/send-digest', {
-      method: 'POST',
-      headers: authHeaders(true),
-      body: JSON.stringify({ kind })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || data.error || 'fail');
+    await window.apiClient.sendNetworkDigest(authHeaders(true), { kind });
     toast(kind === 'monthly' ? 'Месячная сводка отправлена' : 'Недельная сводка отправлена', 'ok');
   } catch (e) {
     toast(e.message || 'Не удалось отправить сводку', 'err');

@@ -19,7 +19,8 @@ import {
   getCashTable,
   saveCash,
   createMetric,
-  deleteMetric
+  deleteMetric,
+  sendNetworkDigest
 } from '../src/api-client.js';
 
 function fetchOk(body: unknown) {
@@ -200,5 +201,18 @@ describe('api-client', () => {
     );
 
     await expect(deleteMetric({}, 'sim')).rejects.toThrow('Базовую метрику нельзя удалить');
+  });
+
+  it('sendNetworkDigest — POST с телом {kind}', async () => {
+    const fetchMock = fetchOk({ ok: true, kind: 'weekly' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+
+    const result = await sendNetworkDigest(headers, { kind: 'weekly' });
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/reports/send-digest`, {
+      headers, method: 'POST', body: JSON.stringify({ kind: 'weekly' })
+    });
+    expect(result.kind).toBe('weekly');
   });
 });

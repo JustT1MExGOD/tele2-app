@@ -10,13 +10,14 @@
  * это одна и та же БД и один и тот же путь до данных, второй самописный
  * рендерер её не спасёт, только даёт красивую иллюзию отказоустойчивости.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { todayMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
 import { buildDailyReportSvg, buildStoryReportSvgs } from './services/report-image.js';
 import { sendNetworkDigest } from './services/network-digest.js';
 import { serverError } from './utils/http-errors.js';
+import type { SendDigestResponse } from './shared/api-types.js';
 
 const SendMicroBody = Type.Object({
   date: Type.Optional(Type.String()),
@@ -108,7 +109,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
   app.post(
     '/reports/send-digest',
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { body: SendDigestBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<SendDigestResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const body = (request.body || {}) as SendDigestBody;
     const kind = body.kind === 'monthly' ? 'monthly' : 'weekly';
