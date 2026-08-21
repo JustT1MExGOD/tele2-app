@@ -146,6 +146,7 @@
       if (name === 'employee-profile') { renderEmployeeProfile(); }
       if (name === 'reports') { loadReportsPage(); }
       if (name === 'orgs') { loadOrgsAdmin(); }
+      if (name === 'audit') { loadAuditLog(); }
     }
 
     async function refreshAll() {

@@ -8,8 +8,9 @@
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
+import { query, withTransaction } from './db/index.js';
 import { requireActive, requireManager, canAssignRole, resolveViewOrgId, requireEmployeeInOrg, Role } from './middleware-auth.js';
+import { recordAudit } from './services/audit.js';
 
 const PostEmployeeBody = Type.Object({
   full_name: Type.String({ minLength: 1 }),
@@ -108,6 +109,36 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // которые дополнительно назначают точки супервайзеру.
     if (!sets.length) return reply.code(400).send({ error: 'no fields' });
     vals.push(Number(id));
+
+    // Аудит — только когда реально меняется is_active (деактивация/
+    // восстановление — чувствительное действие), не на каждый rename.
+    if (b.is_active !== undefined) {
+      const orgId = resolveViewOrgId(request.user!, b.org_id);
+      const before = await query(`SELECT is_active FROM employees WHERE id = $1`, [Number(id)]);
+      const row = await withTransaction(async (q) => {
+        const res = await q(
+          `UPDATE employees SET ${sets.join(', ')} WHERE id = $${i}
+           RETURNING id, full_name, short_name, role, is_active, telegram_id`,
+          vals
+        );
+        if (res.rows[0]) {
+          await recordAudit(q, {
+            orgId,
+            actorEmployeeId: request.user!.employee_id,
+            actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+            action: 'employee.deactivate',
+            targetType: 'employee',
+            targetId: id,
+            before: { is_active: before.rows[0]?.is_active ?? null },
+            after: { is_active: !!b.is_active },
+            requestId: request.id
+          });
+        }
+        return res.rows[0];
+      });
+      return row || reply.code(404).send({ error: 'not found' });
+    }
+
     const res = await query(
       `UPDATE employees SET ${sets.join(', ')} WHERE id = $${i}
        RETURNING id, full_name, short_name, role, is_active, telegram_id`,
@@ -123,25 +154,48 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
-    // soft delete — отвязываем telegram, но продажи/историю не трогаем
-    const res = await query(
-      `UPDATE employees SET is_active = false, telegram_id = NULL WHERE id = $1
-       RETURNING id, full_name, is_active`,
-      [Number(id)]
-    );
-    if (!res.rows[0]) return reply.code(404).send({ error: 'not found' });
+    const { org_id } = (request.query || {}) as { org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id);
+
+    const row = await withTransaction(async (q) => {
+      // soft delete — отвязываем telegram, но продажи/историю не трогаем
+      const res = await q(
+        `UPDATE employees SET is_active = false, telegram_id = NULL WHERE id = $1
+         RETURNING id, full_name, is_active`,
+        [Number(id)]
+      );
+      if (!res.rows[0]) return null;
+
+      await recordAudit(q, {
+        orgId,
+        actorEmployeeId: request.user!.employee_id,
+        actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+        action: 'employee.deactivate',
+        targetType: 'employee',
+        targetId: id,
+        before: { is_active: true },
+        after: { is_active: false },
+        requestId: request.id
+      });
+
+      return res.rows[0];
+    });
+
+    if (!row) return reply.code(404).send({ error: 'not found' });
 
     // Будущие смены — не история, а обещание, что человек выйдет на
     // работу. GET /schedules/live-map их не фильтрует по is_active — без
     // очистки уволенный сотрудник продолжал бы висеть в завтрашнем графике
     // и учитываться в покрытии точки, будто он реально выйдет. Прошлые
-    // смены (реальная история — кто фактически работал) не трогаем.
+    // смены (реальная история — кто фактически работал) не трогаем. Вне
+    // транзакции сознательно — best-effort очистка, не обязана откатывать
+    // уже подтверждённое увольнение при своей неудаче.
     await query(
       `DELETE FROM schedules WHERE employee_id = $1 AND work_date::date >= (now() AT TIME ZONE 'Europe/Moscow')::date`,
       [Number(id)]
     ).catch((e: any) => console.error('cleanup future schedules on employee delete:', e?.message || e));
 
-    return { ok: true, ...res.rows[0] };
+    return { ok: true, ...row };
     }
   );
 }

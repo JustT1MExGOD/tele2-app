@@ -46,6 +46,7 @@ import { registerTasksRoutes } from './routes-tasks.js';
 import { registerStoreProfileRoutes } from './routes-store-profile.js';
 import { registerEmployeeProfileRoutes } from './routes-employee-profile.js';
 import { registerAvatarRoutes } from './routes-avatar.js';
+import { registerAuditRoutes } from './routes-audit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -224,6 +225,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     ['Store Profile', registerStoreProfileRoutes],
     ['Employee Profile', registerEmployeeProfileRoutes],
     ['Avatar', registerAvatarRoutes],
+    ['Audit', registerAuditRoutes],
   ];
 
   for (const [label, register] of routeModules) {

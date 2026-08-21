@@ -4,13 +4,14 @@
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
+import { query, withTransaction } from './db/index.js';
 import { notifyChat } from './bot/index.js';
 import { todayMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
 import { applySaleUpsert, claimIdempotencyKey, SaleMetricRangeError } from './services/sales-write.js';
+import { recordAudit } from './services/audit.js';
 
 // employee_id/store_id — единственные поля, форма которых реально важна на
 // границе API; сами метрики (sim/mnp/... + произвольные кастомные) остаются
@@ -210,29 +211,49 @@ export async function registerSalesRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
     const prevVal = Number(before.rows[0].val) || 0;
+    const user = request.user!;
 
-    const res = await query(
-      `UPDATE sales SET ${metric} = 0, updated_at = now() WHERE id = $1 RETURNING *`,
-      [id]
-    );
+    // 19.23.0 (Audit Trail): UPDATE + sales_audit + audit_log — одна
+    // транзакция. Раньше запись в sales_audit была best-effort (.catch(()
+    // => {}) — обнуление метрики могло пройти без единого следа в истории
+    // правок при сбое второго запроса). Теперь либо обе записи, либо
+    // обнуления не было вообще — то самое "transactional audit".
+    const row = await withTransaction(async (q) => {
+      const res = await q(
+        `UPDATE sales SET ${metric} = 0, updated_at = now() WHERE id = $1 RETURNING *`,
+        [id]
+      );
 
-    if (prevVal !== 0) {
-      const user = request.user!;
-      await query(
-        `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source, created_by)
-         VALUES ($1,$2,$3,$4,$5,'correction',$6)`,
-        [
-          before.rows[0].employee_id,
-          before.rows[0].store_id,
-          before.rows[0].sale_date,
-          metric,
-          -prevVal,
-          user.telegram_id ? Number(user.telegram_id) : null
-        ]
-      ).catch(() => {});
-    }
+      if (prevVal !== 0) {
+        await q(
+          `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source, created_by)
+           VALUES ($1,$2,$3,$4,$5,'correction',$6)`,
+          [
+            before.rows[0].employee_id,
+            before.rows[0].store_id,
+            before.rows[0].sale_date,
+            metric,
+            -prevVal,
+            user.telegram_id ? Number(user.telegram_id) : null
+          ]
+        );
+        await recordAudit(q, {
+          orgId,
+          actorEmployeeId: user.employee_id,
+          actorTelegramId: user.telegram_id ? Number(user.telegram_id) : null,
+          action: 'sales.correction',
+          targetType: 'sale',
+          targetId: id,
+          before: { [metric]: prevVal },
+          after: { [metric]: 0 },
+          requestId: request.id
+        });
+      }
 
-    return res.rows[0];
+      return res.rows[0];
+    });
+
+    return row;
     }
   );
 }

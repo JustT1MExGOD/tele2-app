@@ -438,6 +438,11 @@
           <div class="row-body"><div class="row-title">Сети</div></div>
           <div class="row-chevron">›</div>
         </button>
+        <button class="row" onclick="switchPage('audit')" id="btnAudit" style="display:none">
+          <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /> </svg></div>
+          <div class="row-body"><div class="row-title">История действий</div></div>
+          <div class="row-chevron">›</div>
+        </button>
         <button class="row" onclick="openAddMetric()">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z" /> </svg></div>
           <div class="row-body"><div class="row-title">Новая метрика плана</div><div class="row-sub">SIM, MNP… + свои пункты</div></div>
@@ -485,6 +490,14 @@
           <div class="row-chevron">›</div>
         </button>
         <div id="orgsList"><div class="skeleton"></div></div>
+      </div>
+    </div>
+
+    <!-- ===== AUDIT LOG (19.23.0, admin-only) ===== -->
+    <div id="page-audit" class="page">
+      <div class="section">
+        <div class="section-title">История действий</div>
+        <div id="auditList"><div class="skeleton"></div></div>
       </div>
     </div>
 

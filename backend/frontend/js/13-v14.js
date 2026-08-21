@@ -515,6 +515,45 @@
       }
     }
 
+    const AUDIT_ACTION_LABEL = {
+      'employee.role_change': 'Смена роли',
+      'employee.deactivate': 'Изменение статуса сотрудника',
+      'sales.correction': 'Правка продажи',
+      'plan.update': 'Изменение плана',
+      'export.csv': 'Экспорт CSV'
+    };
+
+    function auditDiffHTML(item) {
+      const before = item.before ? JSON.stringify(item.before) : null;
+      const after = item.after ? JSON.stringify(item.after) : null;
+      if (before && after) return `${esc(before)} → ${esc(after)}`;
+      if (after) return esc(after);
+      return '';
+    }
+
+    async function loadAuditLog() {
+      const box = document.getElementById('auditList');
+      if (!box) return;
+      box.innerHTML = '<div class="skeleton"></div>';
+      try {
+        const res = await fetch(API + '/audit' + orgQueryParam(), { headers: authHeaders() });
+        if (!res.ok) throw new Error('fail');
+        const data = await res.json();
+        const items = Array.isArray(data.items) ? data.items : [];
+        box.innerHTML = items.map(item => `
+          <div class="row" style="cursor:default">
+            <div class="row-body">
+              <div class="row-title">${esc(AUDIT_ACTION_LABEL[item.action] || item.action)}</div>
+              <div class="row-sub">${esc(item.actor_name || 'Система')} · ${esc(item.target_type)}${item.target_id ? ' #' + esc(item.target_id) : ''}</div>
+              <div class="row-sub" style="font-family:ui-monospace,monospace;font-size:11px">${auditDiffHTML(item)}</div>
+            </div>
+            <div class="row-sub">${new Date(item.created_at).toLocaleString('ru')}</div>
+          </div>`).join('') || '<div class="empty">🍉 Действий пока нет</div>';
+      } catch {
+        box.innerHTML = '<div class="empty">🍉 Не получилось загрузить историю</div>';
+      }
+    }
+
     function orgFormHTML(o) {
       o = o || {};
       return `

@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-19.22.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-19.23.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `19.22.0`  
+**Актуальная версия клиента:** `19.23.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -168,7 +168,7 @@ tele2-app/
     ├── package.json
     ├── tsconfig.json
     ├── railway.json
-    ├── migrations/              (пронумерованные .sql, применяются сами — см. §18; 0001_baseline.sql … 0011_stores_id_primary_key.sql)
+    ├── migrations/              (пронумерованные .sql, применяются сами — см. §18; 0001_baseline.sql … 0012_audit_log.sql)
     ├── assets/fonts/            (DejaVu Sans — рендер SVG-отчётов; Google Sans TTF — та же resvg-карточка анонса)
     ├── tests/
     │   ├── setup.ts             (жёсткая проверка: DATABASE_URL только localhost/127.0.0.1)
@@ -182,11 +182,13 @@ tele2-app/
     │   ├── env.ts                      (dotenv, импортируется первым — гарантирует порядок)
     │   ├── middleware-auth.ts          (authPlugin — глобальный preHandler, requireAuth/requireActive/requireManager/…, assertStoreInOrg/assertEmployeeInOrg, ROLE_LEVEL)
     │   ├── changelog.ts                (список версий для автоанонса — только minor-эпики, не хотфиксы)
-    │   ├── db/                         (пул соединений, миграционный раннер)
+    │   ├── db/                         (пул соединений, миграционный раннер, withTransaction() — 19.23.0)
     │   ├── repositories/stores.ts      (Data Access Layer, 19.22.0 — единственное место с SQL по stores, orgId обязательным первым параметром; Employees/Sales/Schedules следующими заходами)
     │   ├── services/telegram-auth.ts   (проверка initData HMAC)
+    │   ├── services/audit.ts           (Audit Trail, 19.23.0 — recordAudit(), пишущая сторона audit_log)
     │   ├── routes-core.ts              (/plans — org-scoped)
     │   ├── routes-stores.ts            (CRUD точек — только через repositories/stores.ts, без прямого SQL)
+    │   ├── routes-audit.ts             (GET /audit, admin-only — читающая сторона audit_log)
     │   ├── routes-employees.ts         (CRUD сотрудников, кастомные названия точек)
     │   ├── routes-avatar.ts            (загрузка/раздача кастомной аватарки, bytea в Postgres)
     │   ├── routes-sales.ts             (/sales)
@@ -713,6 +715,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **19.20.0** | TypeBox-схемы на задачах (создание/комментарии/статус/переназначение), тикетах поддержки, промокодах РТК, объявлениях и каналах сети — на этот раз все места, где фронтенд намеренно шлёт `null` (сброс дедлайна задачи), проверены заранее по урокам 19.19.0 |
 | **19.21.0** | **Переход на TypeBox завершён.** Последний заход — алерты, what-if сценарии, кастомные метрики, месячные планы, ручная отправка отчётов, сеть/бренд (админ), обучение; попутно найдены и закрыты два роута (BFQ: VMR+штраф, анкета), пропущенные более ранним заходом. `request.body as any` в write-роутах закрыт по всему API |
 | **19.22.0** | **Data Access Layer — старт.** Первый repository (`src/repositories/stores.ts`) — доступ к таблице `stores` только через него, `orgId` первым обязательным параметром каждой функции (не «не забыть проверить», а физически невозможно вызвать без сети). Роуты точек выделены в `routes-stores.ts`, CI проверяет, что этот файл не откатился на прямой SQL. Пилот на одной сущности — Employees/Sales/Schedules следующими заходами |
+| **19.23.0** | **Audit Trail.** Новая таблица `audit_log` — единая лента чувствительных действий (смена роли, деактивация сотрудника, правка продажи, изменение плана, экспорт CSV), экран «История действий» для admin. Первое появление транзакций (`withTransaction()`, `db/index.ts`) в прикладном коде — смена роли и правка продажи теперь либо коммитятся целиком вместе с записью в историю, либо откатываются целиком |
 
 ---
 
@@ -776,9 +779,14 @@ BFQ-роута, пропущенных ранним заходом) — `request
   дисциплина), запрет прямого SQL из migrated-роутов (CI-скрипт,
   ratchet-список). Пилот на одной сущности (Stores — `routes-stores.ts`),
   Employees/Sales/Schedules следующими заходами той же схемой
-- **19.23.0 Audit Trail** — не начато. Схема аудита, события чувствительных
-  действий, request_id correlation, транзакционная запись аудита, экран
-  просмотра истории
+- **19.23.0 Audit Trail** ✅ — новая таблица `audit_log`, `services/audit.ts`
+  (writer), 5 инструментированных действий (смена роли, деактивация
+  сотрудника, правка продажи, изменение плана, экспорт CSV), `request_id`
+  correlation, `GET /audit` (admin-only) + экран «История действий».
+  Смена роли и правка продажи — по-настоящему транзакционны
+  (`withTransaction()`, первое появление транзакций в прикладном коде);
+  изменение плана — намеренно нет (см. §24, `services/plans.ts` сложнее
+  для безопасного встраивания в общую транзакцию, не трогали ради этого)
 - **19.24.0 Concurrency & Workflow Integrity** — не начато. DB constraints,
   транзакции, optimistic locking где нужен, idempotency keys для
   критичных POST (частично уже есть — `claimIdempotencyKey`, см. §14),
@@ -915,6 +923,19 @@ BFQ-роута, пропущенных ранним заходом) — `request
   `scripts/check-no-direct-sql.mjs`, растёт по мере переноса следующих
   сущностей). Пилот на одной сущности (Stores) — Employees/Sales/Schedules
   следующими заходами той же схемой.
+- **Audit Trail** (`audit_log`, `services/audit.ts`, 19.23.0) — единая лента
+  чувствительных действий вместо разрозненных `sales_audit`/`ai_audit`.
+  `withTransaction()` (`db/index.ts`) — первое переиспользование
+  BEGIN/COMMIT/ROLLBACK в прикладном коде (паттерн раньше был только в
+  `db/migrate.ts`): смена роли и правка продажи коммитят мутацию и
+  audit-запись одним махом или откатывают обе. Изменение плана намеренно
+  вне транзакции — `upsertEmployeeMonthPlan`/`upsertStoreMonthPlan`
+  (`services/plans.ts`) несут собственную ветку восстановления при сбое
+  INSERT..ON CONFLICT, встраивать это в общую транзакцию отдельным
+  неаккуратным рефакторингом не стали; ошибку `recordAudit()` там не
+  глушат (не `.catch(()=>{})`) — если она упадёт, ответ будет 500, но план
+  к этому моменту уже сохранён. Экспорт CSV — вообще не мутация, аудит
+  пишется fire-and-forget после того, как файл уже готов к отдаче.
 
 ---
 
@@ -932,4 +953,4 @@ BFQ-роута, пропущенных ранним заходом) — `request
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v19.22.0 · август 2026*
+*README · актуально на v19.23.0 · август 2026*

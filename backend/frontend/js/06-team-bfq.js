@@ -45,6 +45,8 @@
       if (ticketsBtn) ticketsBtn.style.display = canAdmin() ? '' : 'none';
       const netBtn = document.getElementById('btnNetworks');
       if (netBtn) netBtn.style.display = canAdmin() ? '' : 'none';
+      const auditBtn = document.getElementById('btnAudit');
+      if (auditBtn) auditBtn.style.display = canAdmin() ? '' : 'none';
       renderOrgSwitcher();
       try {
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';

@@ -6,7 +6,9 @@
 
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
+import { query } from './db/index.js';
 import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
+import { recordAudit } from './services/audit.js';
 
 // Метрики — динамический набор из METRICS (каталог), не перечисляем
 // поимённо в схеме (та же логика, что PostSaleBody в routes-sales.ts) —
@@ -79,7 +81,27 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     for (const m of METRICS) {
       if (body[m] !== undefined) data[m] = Number(body[m]) || 0;
     }
-    return upsertEmployeeMonthPlan(Number(id), month, data);
+    const plan = await upsertEmployeeMonthPlan(Number(id), month, data);
+
+    // 19.23.0 (Audit Trail): не в withTransaction — upsertEmployeeMonthPlan
+    // сама по себе на pool.query() с собственной веткой восстановления
+    // (INSERT..ON CONFLICT → фолбэк на UPDATE/INSERT при сбое) — заворачивать
+    // это в общую транзакцию с audit-записью значило бы трогать эту логику
+    // отдельным неаккуратным рефакторингом ради одного роута. Ошибку
+    // recordAudit не глушим (не .catch(()=>{})) — если она упадёт, ответ
+    // будет 500, но сам план к этому моменту уже сохранён.
+    await recordAudit(query, {
+      orgId: resolveViewOrgId(request.user!, body.org_id),
+      actorEmployeeId: request.user!.employee_id,
+      actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+      action: 'plan.update',
+      targetType: 'employee_plan',
+      targetId: id,
+      after: data,
+      requestId: request.id
+    });
+
+    return plan;
     }
   );
 
@@ -151,6 +173,21 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     } catch (e: any) {
       console.error('re-materialize after store plan edit failed:', e?.message || e);
     }
+
+    // 19.23.0 (Audit Trail) — та же логика, что у плана сотрудника выше:
+    // best-effort по transaction wrapping (upsertStoreMonthPlan простая, но
+    // после неё уже идёт материализация store_plans — общую транзакцию на
+    // всё это не строим), ошибку recordAudit не глушим.
+    await recordAudit(query, {
+      orgId: resolveViewOrgId(request.user!, body.org_id),
+      actorEmployeeId: request.user!.employee_id,
+      actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+      action: 'plan.update',
+      targetType: 'store_plan',
+      targetId: id,
+      after: data,
+      requestId: request.id
+    });
 
     return plan;
     }

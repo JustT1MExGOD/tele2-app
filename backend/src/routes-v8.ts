@@ -10,7 +10,7 @@
 
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
+import { query, withTransaction } from './db/index.js';
 import {
   requireActive,
   requireManager,
@@ -26,6 +26,7 @@ import {
 import { todayMoscow } from './utils/date.js';
 import { bot } from './bot/index.js';
 import { listActiveOrgsPublic } from './services/tenant.js';
+import { recordAudit } from './services/audit.js';
 
 const AccessRequestBody = Type.Object({
   full_name: Type.String({ minLength: 1 }),
@@ -437,18 +438,41 @@ export async function registerV8Routes(app: FastifyInstance) {
     if (!canAssignRole(request.user!.role, role)) {
       return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
     }
-    const res = await query(
-      `UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`,
-      [role, Number(id)]
-    );
-    if (role === 'supervisor' && b.sector_id) {
-      await query(`DELETE FROM supervisor_sectors WHERE supervisor_id = $1`, [Number(id)]);
-      await query(
-        `INSERT INTO supervisor_sectors (supervisor_id, sector_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-        [Number(id), b.sector_id]
+
+    const before = await query(`SELECT role FROM employees WHERE id = $1`, [Number(id)]);
+    const orgId = resolveViewOrgId(request.user!, b.org_id);
+
+    // 19.23.0 (Audit Trail): смена роли + пересборка supervisor_sectors +
+    // запись в audit_log — одна транзакция. Раньше это были три независимых
+    // pool.query() — упасть между ними означало роль сменилась, а сектор
+    // остался старым (или наоборот), без какого-либо следа в логах.
+    const row = await withTransaction(async (q) => {
+      const res = await q(
+        `UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`,
+        [role, Number(id)]
       );
-    }
-    return res.rows[0];
+      if (role === 'supervisor' && b.sector_id) {
+        await q(`DELETE FROM supervisor_sectors WHERE supervisor_id = $1`, [Number(id)]);
+        await q(
+          `INSERT INTO supervisor_sectors (supervisor_id, sector_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [Number(id), b.sector_id]
+        );
+      }
+      await recordAudit(q, {
+        orgId,
+        actorEmployeeId: request.user!.employee_id,
+        actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+        action: 'employee.role_change',
+        targetType: 'employee',
+        targetId: id,
+        before: { role: before.rows[0]?.role ?? null },
+        after: { role },
+        requestId: request.id
+      });
+      return res.rows[0];
+    });
+
+    return row;
     }
   );
 

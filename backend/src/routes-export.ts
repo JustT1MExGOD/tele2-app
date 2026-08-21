@@ -2,11 +2,29 @@
  * История продаж, аудит правок, CSV-экспорты (продажи/BFQ/график).
  * Выделено из routes-v3.ts.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 import { query } from './db/index.js';
 import { calculateAllBFQ } from './services/bfq.js';
 import { requireAuth, requireManager, isManager, resolveViewOrgId } from './middleware-auth.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
+import { recordAudit } from './services/audit.js';
+
+// 19.23.0 (Audit Trail) — экспорт не мутация, просто фиксируем факт "кто
+// когда что выгрузил" (data exfiltration угол из исходного ревью). Ошибку
+// не глушим намеренно, но и не блокируем ответ — файл уже готов к этому
+// моменту, отдаём его синхронно, аудит пишем fire-and-forget с логом сбоя.
+function auditExport(request: FastifyRequest, orgId: string, targetId: string, filters: Record<string, unknown>) {
+  recordAudit(query, {
+    orgId,
+    actorEmployeeId: request.user!.employee_id,
+    actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+    action: 'export.csv',
+    targetType: 'export',
+    targetId,
+    after: filters,
+    requestId: request.id
+  }).catch((e: any) => request.log.error(e, 'audit write failed for export.csv'));
+}
 
 function csvEscape(v: any) {
   const s = String(v ?? '');
@@ -133,6 +151,8 @@ export async function registerExportRoutes(app: FastifyInstance) {
       ].map(csvEscape).join(';'));
     }
 
+    auditExport(request, orgId, 'sales', { from, to, store_id: q.store_id || null });
+
     reply
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="sales_${from}_${to}.csv"`)
@@ -171,6 +191,8 @@ export async function registerExportRoutes(app: FastifyInstance) {
       ].map(csvEscape).join(';'));
     }
 
+    auditExport(request, orgId, 'bfq', { month: m });
+
     reply
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="bfq_${m}.csv"`)
@@ -206,6 +228,8 @@ export async function registerExportRoutes(app: FastifyInstance) {
         r.full_name, r.store_name, r.code, r.shift_text, r.hours
       ].map(csvEscape).join(';'));
     }
+
+    auditExport(request, orgId, 'schedules', { month: m });
 
     reply
       .header('Content-Type', 'text/csv; charset=utf-8')
