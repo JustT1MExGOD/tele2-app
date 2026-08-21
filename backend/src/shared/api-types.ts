@@ -1,9 +1,8 @@
 /**
- * Общий контракт бэкенд↔фронтенд (20.0.0, Frontend Foundation). Пока
- * покрывает только два GET-эндпоинта, реально используемых пилотным
- * typed API-клиентом (frontend/src/api-client.ts) — остальные роуты
- * переезжают сюда по мере миграции соответствующих frontend-файлов на
- * TypeScript (см. README §22).
+ * Общий контракт бэкенд↔фронтенд (20.0.0, Frontend Foundation). Покрывает
+ * только эндпоинты, реально используемые typed API-клиентом
+ * (frontend/src/api-client.ts) — растёт по мере миграции очередного
+ * frontend-файла на TypeScript (см. README §22).
  */
 import type { StoreRecord } from '../repositories/stores.js';
 
@@ -22,4 +21,40 @@ export interface MetricDef {
 
 export interface MetricsResponse {
   items: MetricDef[];
+}
+
+export interface PromoListItem {
+  id: number;
+  mask: string;
+  note: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface PromosListResponse {
+  items: PromoListItem[];
+}
+
+export interface PromoCard {
+  id: number;
+  code: string;
+  note: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface CreatePromoRequest {
+  code: string;
+  note?: string;
+  org_id?: string;
+}
+
+export interface CreatePromoResponse {
+  ok: true;
+  item: { id: number; code: string; note: string | null; created_at: string };
+}
+
+export interface PromoActionResponse {
+  ok: true;
+  used: boolean;
 }

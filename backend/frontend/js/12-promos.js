@@ -19,10 +19,8 @@
       const box = document.getElementById('promoList');
       if (!box) return;
       try {
-        const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const res = await fetch(API + '/promos' + orgParam, { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
+        const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
+        const data = await window.apiClient.getPromos(authHeaders(), orgParam);
         const items = data.items || [];
         if (!items.length) {
           box.innerHTML = '<div class="empty">Пока пусто — добавь первый код</div>';
@@ -63,12 +61,7 @@
       try {
         const body = { code, note };
         if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
-        const res = await fetch(API + '/promos', {
-          method: 'POST', headers: authHeaders(true),
-          body: JSON.stringify(body)
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'fail');
+        await window.apiClient.createPromo(authHeaders(true), body);
         toast('Добавлено', 'ok');
         openPromos();
       } catch (e) {
@@ -78,9 +71,7 @@
 
     async function openPromoCard(id) {
       try {
-        const res = await fetch(API + '/promos/' + id, { headers: authHeaders() });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'not found');
+        const data = await window.apiClient.getPromoCard(authHeaders(), id);
         document.getElementById('modalTitle').textContent = 'Промокод РТК';
         document.getElementById('modalBody').innerHTML = `
           <div class="empty" style="text-align:left;padding:0">Полный код (можно выделить):</div>
@@ -97,10 +88,7 @@
 
     async function promoMarkUsed(id) {
       try {
-        const res = await fetch(API + '/promos/' + id + '/use', {
-          method: 'POST', headers: authHeaders(true), body: '{}'
-        });
-        if (!res.ok) throw new Error('fail');
+        await window.apiClient.markPromoUsed(authHeaders(true), id);
         toast('Списан из пула', 'ok');
         openPromos();
       } catch {
@@ -110,9 +98,7 @@
 
     async function promoKeep(id) {
       try {
-        await fetch(API + '/promos/' + id + '/keep', {
-          method: 'POST', headers: authHeaders(true), body: '{}'
-        });
+        await window.apiClient.keepPromo(authHeaders(true), id);
       } catch (_) {}
       openPromos();
     }

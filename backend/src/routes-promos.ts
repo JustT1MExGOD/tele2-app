@@ -2,11 +2,17 @@
  * Промокоды RTK.
  * Вынесено из index.ts при разбиении монолита на модули.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { resolveViewOrgId } from './middleware-auth.js';
 import { serverError } from './utils/http-errors.js';
+import type {
+  PromosListResponse,
+  PromoCard,
+  CreatePromoResponse,
+  PromoActionResponse
+} from './shared/api-types.js';
 
 const PostPromoBody = Type.Object({
   code: Type.String({ minLength: 1 }),
@@ -33,7 +39,7 @@ function resolveEmployeeFromRequest(request: any): {
 }
 
 export async function registerPromosRoutes(app: FastifyInstance) {
-  app.get('/promos', async (request, reply) => {
+  app.get('/promos', async (request, reply): Promise<PromosListResponse | FastifyReply> => {
     const user = resolveEmployeeFromRequest(request);
     if (!user) return reply.code(401).send({ error: 'unauthorized', message: 'Привяжите Telegram' });
     const { org_id } = request.query as { org_id?: string };
@@ -61,7 +67,7 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/promos/:id', async (request, reply) => {
+  app.get('/promos/:id', async (request, reply): Promise<PromoCard | FastifyReply> => {
     const user = resolveEmployeeFromRequest(request);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
     const id = Number((request.params as any).id);
@@ -82,7 +88,7 @@ export async function registerPromosRoutes(app: FastifyInstance) {
   app.post(
     '/promos',
     { schema: { body: PostPromoBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<CreatePromoResponse | FastifyReply> => {
     const user = resolveEmployeeFromRequest(request);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
     const body = request.body as PostPromoBody;
@@ -104,7 +110,7 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     }
   );
 
-  app.post('/promos/:id/use', async (request, reply) => {
+  app.post('/promos/:id/use', async (request, reply): Promise<PromoActionResponse | FastifyReply> => {
     const user = resolveEmployeeFromRequest(request);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
     const id = Number((request.params as any).id);
@@ -124,7 +130,7 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/promos/:id/keep', async (request, reply) => {
+  app.post('/promos/:id/keep', async (request, reply): Promise<PromoActionResponse | FastifyReply> => {
     const user = resolveEmployeeFromRequest(request);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
     return { ok: true, used: false };

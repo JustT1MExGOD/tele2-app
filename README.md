@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.0.2-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-20.1.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.0.2`  
+**Актуальная версия клиента:** `20.1.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -721,6 +721,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **20.0.0** | **Frontend Foundation — старт эпохи 20.** Первый Vite-билд: типизированный API-клиент (`frontend/src/api-client.ts`, TypeScript ES-модуль, собирается в один classic-script бандл) для выбора точек (`/org/stores`) и каталога метрик (`/metrics`) — общий контракт типов (`backend/src/shared/api-types.ts`) переиспользуется и роутами, и фронтендом, без дублирования. `01-core.js` делегирует оба вызова новому клиенту, поведение снаружи не изменилось. Фундамент для frontend-тестов (vitest + jsdom, `frontend/tests/`). Пилот на двух эндпоинтах — остальные 19 файлов `frontend/js/` переезжают на TypeScript следующими версиями той же схемой, что уже работала для Data Access Layer и TypeBox |
 | **20.0.1** | Хотфикс сразу вслед за 20.0.0 — прод-деплой упал на билде: Railway/Nixpacks собирает контейнер на Node.js 18.20.5, а Vite 8 требует `^20.19.0 \|\| >=22.12.0` (внутри зависит от `util.styleText`, которого в Node 18 нет). Версия Node для деплоя нигде не была закреплена. Добавлено `"engines": {"node": "22.x"}` в `backend/package.json` — тот же Node 22, что уже использует CI (`actions/setup-node`) |
 | **20.0.2** | Из-за 20.0.1 не ушёл анонс 20.0.0 в канал — `announceReleaseIfNeeded()` сверял `CHANGELOG` со своим же `package.json.version`, а тот на первом успешном старте контейнера был уже `20.0.1` (хотфикс, сознательно без записи в `CHANGELOG`) — функция тихо выходила. Переписано на сверку с последней записью `CHANGELOG` напрямую, не с версией запущенного процесса — тот же класс защиты, что не даст молча потерять анонс, если версия с записью в `CHANGELOG` ещё раз упадёт на деплое |
+| **20.1.0** | **Второй срез Frontend Foundation.** Промокоды РТК (`12-promos.js`) переехали на typed API-клиент — 5 функций (`getPromos`/`getPromoCard`/`createPromo`/`markPromoUsed`/`keepPromo`) в `frontend/src/api-client.ts`, общий контракт расширен в `backend/src/shared/api-types.ts`. Заодно клиент научился разбирать серверное `{error, message}` на не-ok ответе вместо голого статус-кода — нужно было, чтобы toast с ошибкой сохранения промокода показывал прежний осмысленный текст, не изменившееся поведение для двух прежних эндпоинтов (01-core.js их не читает). Живой прогон нашёл не связанную с этим заходом мелочь: `code_required` в `routes-promos.ts` недостижим — TypeBox-схема (`minLength: 1`) перехватывает пустой код раньше и всегда отвечает `validation_failed` |
 
 ---
 
@@ -836,9 +837,11 @@ BFQ-роута, пропущенных ранним заходом) — `request
 ### Эпоха 20 — Frontend Foundation 🔄 (20.0.0-...)
 `20.0` — билд-инструментарий (Vite), первый typed-модуль, общий контракт
 типов, фундамент тестов; пилот на узком срезе (два эндпоинта), не полная
-миграция. Следующие версии — перенос остальных 19 `frontend/js/*.js` на
-TypeScript/ES-модули той же пилотной схемой, постепенное расширение
-`shared/api-types.ts` по мере переезда очередного модуля.
+миграция. `20.1` — второй срез той же схемой: промокоды РТК
+(`12-promos.js`, 5 эндпоинтов). Каждый заход — один
+`frontend/js/*.js`-файл, его API-слой на typed-клиент, контракт в
+`shared/api-types.ts`, DOM/UI-оркестрация остаётся legacy JS как есть.
+Остаётся 18 файлов — переезжают следующими версиями той же схемой.
 
 ---
 
@@ -1070,4 +1073,4 @@ TypeScript/ES-модули той же пилотной схемой, посте
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v20.0.2 · август 2026*
+*README · актуально на v20.1.0 · август 2026*
