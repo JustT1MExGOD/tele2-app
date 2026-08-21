@@ -534,9 +534,19 @@ export async function computeStoreDailyPlans(date?: string, orgId?: string) {
   };
 }
 
+/**
+ * 19.24.0 — раньше начиналась с DELETE FROM store_plans WHERE plan_date=$1,
+ * затем голые INSERT в цикле. Вызывается и кроном в 6:00 МСК, и синхронно
+ * из PUT /plans/stores/:id/month сразу после правки — конкурентный вызов
+ * (правка ровно в момент cron-прогона, или два сохранения планов разных
+ * точек одновременно) мог либо оставить дубликаты строк на одну точку/дату
+ * (без UNIQUE-constraint'а), либо дать читателям кратковременное окно
+ * "плана нет" между DELETE и повторным INSERT. Теперь per-store UPSERT
+ * (UNIQUE(store_id, plan_date), миграция 0013) — атомарно на уровне строки,
+ * без пустого окна: читатель либо видит старое значение, либо новое.
+ */
 export async function materializeStoreDailyPlans(date?: string) {
   const d = date || todayMoscow();
-  await query(`DELETE FROM store_plans WHERE plan_date = $1::date`, [d]);
 
   // Пул считается ОТДЕЛЬНО на каждую сеть — иначе план одной сети размывался
   // бы остатками другой (и делился бы между чужими точками).
@@ -561,7 +571,13 @@ export async function materializeStoreDailyPlans(date?: string) {
            $1,$2::date,
            $3,$4,$5,$6,$7,$8,$9,$10,
            $11,$12,$13,$14,$15,$16,$17
-         )`,
+         )
+         ON CONFLICT (store_id, plan_date) DO UPDATE SET
+           sim = EXCLUDED.sim, mnp = EXCLUDED.mnp, pa = EXCLUDED.pa, combo = EXCLUDED.combo,
+           phones = EXCLUDED.phones, accessories = EXCLUDED.accessories, focus = EXCLUDED.focus,
+           settings = EXCLUDED.settings, wink = EXCLUDED.wink, shpd = EXCLUDED.shpd,
+           insurance = EXCLUDED.insurance, credit_request = EXCLUDED.credit_request,
+           credit_issued = EXCLUDED.credit_issued, plotter = EXCLUDED.plotter, hb = EXCLUDED.hb`,
         [
           st.store_id,
           d,
@@ -583,7 +599,7 @@ export async function materializeStoreDailyPlans(date?: string) {
         ]
       );
     } catch (e: any) {
-      // fallback без новых колонок
+      // fallback без новых колонок (более старая схема)
       console.error('materialize insert', st.store_id, e?.message || e);
       await query(
         `INSERT INTO store_plans (
@@ -594,7 +610,12 @@ export async function materializeStoreDailyPlans(date?: string) {
            $1,$2::date,
            $3,$4,$5,$6,$7,$8,$9,$10,
            $11,$12,$13,$14
-         )`,
+         )
+         ON CONFLICT (store_id, plan_date) DO UPDATE SET
+           sim = EXCLUDED.sim, mnp = EXCLUDED.mnp, pa = EXCLUDED.pa, combo = EXCLUDED.combo,
+           phones = EXCLUDED.phones, accessories = EXCLUDED.accessories, focus = EXCLUDED.focus,
+           settings = EXCLUDED.settings, wink = EXCLUDED.wink, shpd = EXCLUDED.shpd,
+           insurance = EXCLUDED.insurance, credit_issued = EXCLUDED.credit_issued`,
         [
           st.store_id,
           d,

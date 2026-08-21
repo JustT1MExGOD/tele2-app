@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-19.23.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-19.24.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `19.23.0`  
+**Актуальная версия клиента:** `19.24.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -168,7 +168,7 @@ tele2-app/
     ├── package.json
     ├── tsconfig.json
     ├── railway.json
-    ├── migrations/              (пронумерованные .sql, применяются сами — см. §18; 0001_baseline.sql … 0012_audit_log.sql)
+    ├── migrations/              (пронумерованные .sql, применяются сами — см. §18; 0001_baseline.sql … 0013_store_plans_unique.sql)
     ├── assets/fonts/            (DejaVu Sans — рендер SVG-отчётов; Google Sans TTF — та же resvg-карточка анонса)
     ├── tests/
     │   ├── setup.ts             (жёсткая проверка: DATABASE_URL только localhost/127.0.0.1)
@@ -716,6 +716,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **19.21.0** | **Переход на TypeBox завершён.** Последний заход — алерты, what-if сценарии, кастомные метрики, месячные планы, ручная отправка отчётов, сеть/бренд (админ), обучение; попутно найдены и закрыты два роута (BFQ: VMR+штраф, анкета), пропущенные более ранним заходом. `request.body as any` в write-роутах закрыт по всему API |
 | **19.22.0** | **Data Access Layer — старт.** Первый repository (`src/repositories/stores.ts`) — доступ к таблице `stores` только через него, `orgId` первым обязательным параметром каждой функции (не «не забыть проверить», а физически невозможно вызвать без сети). Роуты точек выделены в `routes-stores.ts`, CI проверяет, что этот файл не откатился на прямой SQL. Пилот на одной сущности — Employees/Sales/Schedules следующими заходами |
 | **19.23.0** | **Audit Trail.** Новая таблица `audit_log` — единая лента чувствительных действий (смена роли, деактивация сотрудника, правка продажи, изменение плана, экспорт CSV), экран «История действий» для admin. Первое появление транзакций (`withTransaction()`, `db/index.ts`) в прикладном коде — смена роли и правка продажи теперь либо коммитятся целиком вместе с записью в историю, либо откатываются целиком |
+| **19.24.0** | **Concurrency & Workflow Integrity.** Перед тем как писать код, проверено, что уже реально защищено (смена — partial unique index, закрытие смены — CAS, `/sync/batch`/`/sales/quick` — UNIQUE на `client_id`) — всё оказалось надёжным с прошлых версий, закреплено новыми adversarial-тестами, которые реально стреляют параллельными запросами. Найдена и закрыта одна настоящая гонка: `materializeStoreDailyPlans()` (крон 6:00 + ручное сохранение плана точки) могла оставить задвоенные строки — теперь `UNIQUE(store_id, plan_date)` + per-store upsert вместо delete-then-insert |
 
 ---
 
@@ -787,10 +788,16 @@ BFQ-роута, пропущенных ранним заходом) — `request
   (`withTransaction()`, первое появление транзакций в прикладном коде);
   изменение плана — намеренно нет (см. §24, `services/plans.ts` сложнее
   для безопасного встраивания в общую транзакцию, не трогали ради этого)
-- **19.24.0 Concurrency & Workflow Integrity** — не начато. DB constraints,
-  транзакции, optimistic locking где нужен, idempotency keys для
-  критичных POST (частично уже есть — `claimIdempotencyKey`, см. §14),
-  adversarial-тесты на race conditions
+- **19.24.0 Concurrency & Workflow Integrity** ✅ — разведка перед кодом
+  показала, что большая часть уже была защищена ещё в эпоху 17.0: partial
+  unique index на открытую смену, CAS на закрытии, UNIQUE на
+  `client_id` для `/sync/batch`/`/sales/quick`, UNIQUE на
+  `(employee_id, store_id, sale_date)` для продаж — ни одного бага, только
+  не было тестов, реально стреляющих ПАРАЛЛЕЛЬНО (добавлены). Найдена и
+  закрыта одна настоящая гонка — `materializeStoreDailyPlans()`
+  (`services/plans.ts`), см. §24. Optimistic locking нигде не добавлен —
+  ни одного места с конкретным риском lost-update не нашлось, добавлять
+  спекулятивно не стали
 - **19.25.0 Supervisor Scope Cache** — не начато. Кэш-слой (Redis или
   альтернатива) для `getUserStoreIds`, инвалидация, метрики hit/miss,
   fail-safe поведение при недоступности кэша
@@ -936,6 +943,30 @@ BFQ-роута, пропущенных ранним заходом) — `request
   глушат (не `.catch(()=>{})`) — если она упадёт, ответ будет 500, но план
   к этому моменту уже сохранён. Экспорт CSV — вообще не мутация, аудит
   пишется fire-and-forget после того, как файл уже готов к отдаче.
+- **Concurrency & Workflow Integrity** (19.24.0) — перед кодом проверено,
+  что уже реально защищено (не предположение, а факт по схеме и коду):
+  `idx_shift_sessions_one_open_per_employee` (partial UNIQUE INDEX, эпоха
+  17.0) физически не даёт двух открытых смен одному сотруднику; закрытие
+  смены — `UPDATE ... WHERE id=$X AND status='open'`, честный
+  compare-and-swap; `offline_sync_log.client_id` — настоящий UNIQUE
+  constraint + `ON CONFLICT DO NOTHING`, не только логика в коде; `sales`
+  — `UNIQUE(employee_id, store_id, sale_date)`. Всё это закреплено новыми
+  тестами, которые реально стреляют `Promise.all()` из двух одновременных
+  запросов, а не проверяют последовательные сценарии. Найденная и
+  закрытая настоящая гонка — `materializeStoreDailyPlans()`
+  (`services/plans.ts`): раньше `DELETE FROM store_plans WHERE
+  plan_date=$1` + голые `INSERT` в цикле без `ON CONFLICT` и без
+  уникального constraint'а на `(store_id, plan_date)` — вызывается и
+  кроном в 6:00 МСК, и синхронно из `PUT /plans/stores/:id/month` сразу
+  после правки, реальное совпадение по времени возможно. Теперь
+  `UNIQUE(store_id, plan_date)` (миграция 0013) + per-store `INSERT ...
+  ON CONFLICT DO UPDATE` — без окна "плана нет" между delete и insert, без
+  риска дублей. Optimistic locking (версионирование строк) нигде не
+  добавлен — `PATCH /stores/:id` и подобные уже делают частичный `UPDATE
+  SET <только присланные поля>`, не перезапись всей строки, поэтому
+  классический lost-update сценарий физически не возникает; добавлять
+  версионирование под гипотетическую, не обнаруженную на практике
+  проблему не стали.
 
 ---
 
@@ -953,4 +984,4 @@ BFQ-роута, пропущенных ранним заходом) — `request
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v19.23.0 · август 2026*
+*README · актуально на v19.24.0 · август 2026*
