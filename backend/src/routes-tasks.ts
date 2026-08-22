@@ -21,7 +21,8 @@ import type {
   TasksListResponse,
   TaskDetailResponse,
   ChangeTaskStatusResponse,
-  AddTaskCommentResponse
+  AddTaskCommentResponse,
+  CreateTaskResponse
 } from './shared/api-types.js';
 
 // Null первым в каждом Union — ajv (coerceTypes) иначе коэрсит null на
@@ -98,7 +99,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
       ],
       schema: { body: PostTaskBody }
     },
-    async (request, reply) => {
+    async (request, reply): Promise<CreateTaskResponse | FastifyReply | undefined> => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const b = request.body as PostTaskBody;
     const title = String(b.title || '').trim();

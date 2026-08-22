@@ -852,5 +852,12 @@ export const CHANGELOG: ChangelogEntry[] = [
     bullets: [
       'Шестой срез Frontend Foundation: список задач, карточка задачи, смена статуса и комментарии теперь идут через typed-клиент'
     ]
+  },
+  {
+    version: '20.6.0',
+    title: 'Command Center — на typed API-клиент',
+    bullets: [
+      'Седьмой срез Frontend Foundation: главный экран Command Center (что происходит/где проблема/что делать), список сотрудников для назначения и создание задачи из проблемы теперь идут через typed-клиент'
+    ]
   }
 ];

@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.5.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-20.6.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.5.0`  
+**Актуальная версия клиента:** `20.6.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -726,6 +726,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **20.3.0** | **Четвёртый срез Frontend Foundation.** Ручная отправка недельной/месячной сводки по сети (`POST /reports/send-digest`, `19-reports.js`) — на typed-клиент, самый маленький срез на сегодня (один эндпоинт) |
 | **20.4.0** | **Пятый срез Frontend Foundation.** Алерты (`GET /alerts`, `POST /alerts/:id/status`, `17-alerts.js`) — на typed-клиент: список, карточка алерта, смена статуса жизненного цикла |
 | **20.5.0** | **Шестой срез Frontend Foundation.** Задачи (`GET /tasks`, `GET /tasks/:id`, `POST /tasks/:id/status`, `POST /tasks/:id/comments`, `15-tasks.js`) — на typed-клиент: список, карточка, смена статуса, комментарии |
+| **20.6.0** | **Седьмой срез Frontend Foundation.** Command Center (`GET /command-center`, `GET /employees`, `POST /tasks`, `14-command-center.js`) — на typed-клиент. `GET /command-center` собирается из нетипизированной внутренней функции (`buildSupervisorDashboard`) — контракт описывает то, что реально читает фронтенд, не весь внутренний ответ; аннотация на `problems` поймала настоящую type-narrowing ошибку (строка вместо литерального union) прямо на этапе типизации |
 
 ---
 
@@ -849,10 +850,12 @@ message-first. `20.3` — четвёртый срез: сводка по сет�
 (`19-reports.js`, 1 эндпоинт). `20.4` — пятый срез: алерты
 (`17-alerts.js`, список/карточка/смена статуса). `20.5` — шестой срез:
 задачи (`15-tasks.js`, список/карточка/смена статуса/комментарии — тот
-же паттерн, что алерты). Каждый заход — один `frontend/js/*.js`-файл,
-его API-слой на typed-клиент, контракт в `shared/api-types.ts`,
-DOM/UI-оркестрация остаётся legacy JS как есть. Остаётся 14 файлов —
-переезжают следующими версиями той же схемой.
+же паттерн, что алерты). `20.6` — седьмой срез: Command Center
+(`14-command-center.js`, главный экран + создание задачи из проблемы,
+переиспользует `changeAlertStatus` из 20.4.0 напрямую). Каждый заход —
+один `frontend/js/*.js`-файл, его API-слой на typed-клиент, контракт в
+`shared/api-types.ts`, DOM/UI-оркестрация остаётся legacy JS как есть.
+Остаётся 13 файлов — переезжают следующими версиями той же схемой.
 
 ---
 
@@ -1084,4 +1087,4 @@ DOM/UI-оркестрация остаётся legacy JS как есть. Ост
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v20.5.0 · август 2026*
+*README · актуально на v20.6.0 · август 2026*

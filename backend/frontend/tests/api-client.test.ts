@@ -2,8 +2,8 @@
  * Typed API client (20.0.0+) — покрывает getOrgStores/getMetrics (01-core.js),
  * промокоды РТК (12-promos.js, 20.1.0), кассу + кастомные метрики
  * (09-cash-metrics.js, 20.2.0), сводку по сети (19-reports.js, 20.3.0),
- * алерты (17-alerts.js, 20.4.0) и задачи (15-tasks.js, 20.5.0): верный
- * URL/метод/заголовки/тело, проброс
+ * алерты (17-alerts.js, 20.4.0), задачи (15-tasks.js, 20.5.0) и Command
+ * Center (14-command-center.js, 20.6.0): верный URL/метод/заголовки/тело, проброс
  * org_id-квери-параметра, throw на не-ok ответе с серверным
  * {error/message} вместо голого статус-кода — message ПЕРВЫМ (не error;
  * поменяно в 20.2.0, см. api-client.ts) — клиент сам не глотает ошибку и
@@ -28,7 +28,10 @@ import {
   getTasks,
   getTask,
   changeTaskStatus,
-  addTaskComment
+  addTaskComment,
+  getCommandCenter,
+  getEmployees,
+  createTask
 } from '../src/api-client.js';
 
 function fetchOk(body: unknown) {
@@ -294,6 +297,45 @@ describe('api-client', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/tasks/3/comments`, {
       headers, method: 'POST', body: JSON.stringify({ body: 'привет' })
+    });
+  });
+
+  it('getCommandCenter — верный URL с cache-bust и org_id-квери', async () => {
+    const fetchMock = fetchOk({ date: '2026-01-01', network: {}, stores: [], problems: [], underperforming_count: 0, alerts_count: 0, generated_at: '2026-01-01' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getCommandCenter(headers, '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/command-center?_=1&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('getEmployees — принимает уже собранную query-строку как есть', async () => {
+    const fetchMock = fetchOk([]);
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getEmployees(headers, '?org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/employees?org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('createTask — POST с телом', async () => {
+    const fetchMock = fetchOk({ id: 9, title: 'X', status: 'open' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+    const body = { title: 'X', assigned_to: 1 };
+
+    await createTask(headers, body);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/tasks`, {
+      headers, method: 'POST', body: JSON.stringify(body)
     });
   });
 });

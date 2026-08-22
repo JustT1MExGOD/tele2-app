@@ -9,9 +9,7 @@ async function loadCommandCenterPage() {
   if (!box) return;
   box.innerHTML = '<div class="skeleton"></div>';
   try {
-    const res = await fetch(API + '/command-center?_=1' + orgQueryParam(), { headers: authHeaders() });
-    if (!res.ok) throw new Error('fail');
-    const d = await res.json();
+    const d = await window.apiClient.getCommandCenter(authHeaders(), orgQueryParam());
 
     const health = Number(d.network?.health) || 0;
     const tone = commandCenterTone(health);
@@ -85,12 +83,7 @@ async function loadCommandCenterPage() {
    без похода на отдельную страницу «Алерты». */
 async function ccAckAlert(alertId) {
   try {
-    const res = await fetch(API + '/alerts/' + alertId + '/status', {
-      method: 'POST',
-      headers: authHeaders(true),
-      body: JSON.stringify({ status: 'in_progress' })
-    });
-    if (!res.ok) throw new Error('fail');
+    await window.apiClient.changeAlertStatus(authHeaders(true), alertId, { status: 'in_progress' });
     toast('Взято в работу', 'ok');
     loadCommandCenterPage();
   } catch (e) {
@@ -129,8 +122,7 @@ async function openCreateTaskModal(ctx) {
   const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
   let employees = [];
   try {
-    const res = await fetch(API + '/employees' + empParam, { headers: authHeaders() });
-    employees = await res.json();
+    employees = await window.apiClient.getEmployees(authHeaders(), empParam);
   } catch (_) {}
 
   document.getElementById('modalTitle').textContent = 'Новая задача';
@@ -193,15 +185,7 @@ async function submitCreateTask(ctx) {
   if (me?.role === 'admin' && adminViewOrgId) payload.org_id = adminViewOrgId;
 
   try {
-    const res = await fetch(API + '/tasks', {
-      method: 'POST',
-      headers: authHeaders(true),
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'fail');
-    }
+    await window.apiClient.createTask(authHeaders(true), payload);
     closeModal();
     toast('Задача создана', 'ok');
     if (typeof page !== 'undefined' && page === 'command-center') loadCommandCenterPage();

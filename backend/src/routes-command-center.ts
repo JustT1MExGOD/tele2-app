@@ -4,7 +4,7 @@
  * источники (buildSupervisorDashboard, smart_alerts) в один ответ вместо
  * трёх отдельных походов с фронта.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
 import { requireAuth, resolveViewOrgId } from './middleware-auth.js';
 import {
@@ -14,6 +14,7 @@ import {
 } from './services/supervisor-analytics.js';
 import { todayMoscow } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
+import type { CommandCenterResponse, CommandCenterProblem } from './shared/api-types.js';
 
 /** Тот же доступ, что у /supervisor/health — это его расширенная версия. */
 function canViewCommandCenter(user: { role?: string } | null | undefined): boolean {
@@ -22,7 +23,7 @@ function canViewCommandCenter(user: { role?: string } | null | undefined): boole
 }
 
 export async function registerCommandCenterRoutes(app: FastifyInstance) {
-  app.get('/command-center', async (request, reply) => {
+  app.get('/command-center', async (request, reply): Promise<CommandCenterResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     if (!canViewCommandCenter(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });
@@ -69,42 +70,42 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
       // create_task (18.4) добавляется КАЖДОЙ проблеме отдельным действием —
       // фронту не нужно знать источник, только что в контексте есть
       // (store_id/employee_id/alert_id), чтобы предзаполнить форму задачи.
-      const problems = [
-        ...dash.drops.map((d: any) => ({
+      const problems: CommandCenterProblem[] = [
+        ...dash.drops.map((d: any): CommandCenterProblem => ({
           severity: d.severity,
           message: d.message,
           store_id: d.store_id,
           store_name: d.store_name,
           ai_comment: d.ai_comment,
           actions: [
-            ...(d.store_id ? [{ type: 'open_store', id: d.store_id }] : []),
-            { type: 'create_task', store_id: d.store_id || null, employee_id: null, message: d.message }
+            ...(d.store_id ? [{ type: 'open_store' as const, id: d.store_id }] : []),
+            { type: 'create_task' as const, store_id: d.store_id || null, employee_id: null, message: d.message }
           ]
         })),
-        ...underperforming.map((u) => ({
+        ...underperforming.map((u): CommandCenterProblem => ({
           severity: 'warn' as const,
           message: `${u.full_name} — 0 продаж сегодня при работающих коллегах`,
           store_id: u.store_id,
           store_name: u.store_name,
           actions: [
-            { type: 'open_employee', id: u.employee_id },
+            { type: 'open_employee' as const, id: u.employee_id },
             {
-              type: 'create_task',
+              type: 'create_task' as const,
               store_id: u.store_id || null,
               employee_id: u.employee_id,
               message: `${u.full_name} — 0 продаж сегодня`
             }
           ]
         })),
-        ...alertsRes.rows.map((a: any) => ({
+        ...alertsRes.rows.map((a: any): CommandCenterProblem => ({
           severity: a.severity,
           message: a.title,
           store_id: a.store_id,
           store_name: a.store_name,
           alert_id: a.id,
           actions: [
-            ...(a.store_id ? [{ type: 'open_store', id: a.store_id }] : []),
-            { type: 'create_task', store_id: a.store_id || null, employee_id: null, alert_id: a.id, message: a.title }
+            ...(a.store_id ? [{ type: 'open_store' as const, id: a.store_id }] : []),
+            { type: 'create_task' as const, store_id: a.store_id || null, employee_id: null, alert_id: a.id, message: a.title }
           ]
         }))
       ];

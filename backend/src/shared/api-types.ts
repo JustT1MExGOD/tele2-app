@@ -210,3 +210,90 @@ export interface AddTaskCommentRequest {
 }
 
 export type AddTaskCommentResponse = TaskComment;
+
+export interface EmployeeListItem {
+  id: number;
+  full_name: string;
+  short_name: string | null;
+  // Только manager-tier (manager/senior/admin) — обычный сотрудник его не видит.
+  telegram_id?: number | null;
+  is_active: boolean;
+  role: string;
+}
+
+export type EmployeesListResponse = EmployeeListItem[];
+
+export interface CreateTaskRequest {
+  title: string;
+  assigned_to: number;
+  description?: string;
+  store_id?: string | null;
+  alert_id?: number | null;
+  priority?: string;
+  due_at?: string | null;
+  org_id?: string;
+}
+
+export type CreateTaskResponse = TaskItem;
+
+/**
+ * GET /command-center — ответ собирается из buildSupervisorDashboard()
+ * (services/supervisor-analytics.ts), у которой нет собственного типа
+ * возврата (большая инференсная функция, общая для нескольких роутов).
+ * Ниже — не полный внутренний контракт того дашборда, а только поля,
+ * которые реально читает 14-command-center.js. Аннотация на самом
+ * роуте (routes-command-center.ts) поэтому декларативная, не
+ * компилируемая гарантия — dash.network/dash.stores остаются `any`
+ * изнутри, TS не проверяет их форму на месте присвоения.
+ */
+export interface CommandCenterNetwork {
+  health: number;
+  overall_pct: number;
+  pace_delta: number;
+  staff_on_shift: number;
+  stores_count: number;
+}
+
+export interface CommandCenterStoreToday {
+  overall?: number;
+  sim?: number;
+  plan_sim?: number;
+  mnp?: number;
+  plan_mnp?: number;
+}
+
+export interface CommandCenterStoreSummary {
+  name: string;
+  color?: string | null;
+  staff_count?: number;
+  today?: CommandCenterStoreToday;
+}
+
+export interface CommandCenterAction {
+  type: 'open_employee' | 'open_store' | 'create_task';
+  id?: number | string;
+  store_id?: string | null;
+  employee_id?: number | null;
+  alert_id?: number | null;
+  message?: string;
+}
+
+export interface CommandCenterProblem {
+  severity: string;
+  message: string;
+  store_id?: string | null;
+  store_name?: string | null;
+  ai_comment?: string | null;
+  alert_id?: number;
+  actions: CommandCenterAction[];
+}
+
+export interface CommandCenterResponse {
+  date: string;
+  network: CommandCenterNetwork;
+  stores: CommandCenterStoreSummary[];
+  problems: CommandCenterProblem[];
+  underperforming_count: number;
+  alerts_count: number;
+  generated_at: string;
+}

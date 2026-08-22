@@ -11,6 +11,7 @@ import { Type, Static } from '@sinclair/typebox';
 import { query, withTransaction } from './db/index.js';
 import { requireActive, requireManager, canAssignRole, resolveViewOrgId, requireEmployeeInOrg, Role } from './middleware-auth.js';
 import { recordAudit } from './services/audit.js';
+import type { EmployeesListResponse } from './shared/api-types.js';
 
 const PostEmployeeBody = Type.Object({
   full_name: Type.String({ minLength: 1 }),
@@ -29,7 +30,7 @@ const PatchEmployeeBody = Type.Object({
 type PatchEmployeeBody = Static<typeof PatchEmployeeBody>;
 
 export async function registerEmployeesRoutes(app: FastifyInstance) {
-  app.get('/employees', async (request, reply) => {
+  app.get('/employees', async (request, reply): Promise<EmployeesListResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     // telegram_id отдаём только manager-tier (manager/senior/admin) — рядовым сотрудникам он не нужен
     const canSeeTelegramId =
