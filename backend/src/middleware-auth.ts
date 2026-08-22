@@ -3,9 +3,10 @@
  * employee / manager / admin / supervisor
  */
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { query } from './db/index.js';
 import { verifyTelegramInitData } from './services/telegram-auth.js';
 import * as storesRepo from './repositories/stores.js';
+import * as employeesRepo from './repositories/employees.js';
+import * as supervisorSectorsRepo from './repositories/supervisor-sectors.js';
 
 export type Role = 'trainee' | 'employee' | 'senior' | 'manager' | 'supervisor' | 'admin' | 'guest';
 export type AccessStatus = 'pending' | 'active' | 'rejected' | 'blocked' | 'none';
@@ -68,15 +69,9 @@ export async function loadUser(telegramId: number): Promise<AuthUser> {
     };
   }
 
-  const res = await query(
-    `SELECT id as employee_id, full_name, role, telegram_id, access_status, is_active, org_id
-     FROM employees
-     WHERE telegram_id = $1::bigint
-     LIMIT 1`,
-    [telegramId]
-  );
+  const e = await employeesRepo.findByTelegramId(telegramId);
 
-  if (!res.rows[0]) {
+  if (!e) {
     return {
       telegram_id: telegramId,
       employee_id: null,
@@ -87,7 +82,6 @@ export async function loadUser(telegramId: number): Promise<AuthUser> {
     };
   }
 
-  const e = res.rows[0];
   const active = e.is_active !== false;
   return {
     telegram_id: Number(e.telegram_id) || telegramId,
@@ -274,8 +268,9 @@ export async function assertStoreInOrg(storeId: string, orgId: string): Promise<
  * нужен там, где по чужому employee_id можно достучаться до BFQ/анкет/etc. */
 export async function assertEmployeeInOrg(employeeId: number, orgId: string): Promise<boolean> {
   try {
-    const res = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM employees WHERE id = $1`, [employeeId]);
-    return !!res.rows[0] && res.rows[0].org_id === orgId;
+    // 20.8.0 (Full DAL): делегирует в repositories/employees.ts — та же
+    // причина, что assertStoreInOrg → storesRepo.belongsToOrg (19.22.0).
+    return await employeesRepo.belongsToOrg(orgId, employeeId);
   } catch {
     return false;
   }
@@ -374,15 +369,7 @@ export async function getUserStoreIds(user: AuthUser): Promise<string[] | null> 
   if (user.role === 'manager' || user.role === 'admin' || user.role === 'senior') return null;
   if (user.role === 'supervisor') {
     try {
-      const res = await query(
-        `SELECT s.id as store_id
-         FROM supervisor_sectors ss
-         JOIN organizations o ON o.sector_id = ss.sector_id
-         JOIN stores s ON COALESCE(s.org_id, 'default') = o.id
-         WHERE ss.supervisor_id = $1`,
-        [user.employee_id]
-      );
-      return res.rows.map((r: any) => r.store_id);
+      return await supervisorSectorsRepo.listStoreIdsForSupervisor(user.employee_id);
     } catch {
       return [];
     }

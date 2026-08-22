@@ -5,7 +5,7 @@
  * 05-my-plan.js) — лимит здесь просто страховка от чужого клиента.
  */
 import { FastifyInstance } from 'fastify';
-import { query } from './db/index.js';
+import * as employeesRepo from './repositories/employees.js';
 import { requireAuth } from './middleware-auth.js';
 
 const MAX_AVATAR_BYTES = 1.5 * 1024 * 1024;
@@ -53,10 +53,7 @@ export async function registerAvatarRoutes(app: FastifyInstance) {
     if (!realMime) {
       return reply.code(400).send({ error: 'bad_type', message: 'Нужна картинка (JPEG/PNG/WebP/GIF)' });
     }
-    await query(
-      `UPDATE employees SET avatar_data = $1, avatar_mime = $2 WHERE id = $3`,
-      [buffer, realMime, request.user!.employee_id]
-    );
+    await employeesRepo.setAvatar(request.user!.employee_id!, buffer, realMime);
     return { ok: true };
   });
 
@@ -67,11 +64,7 @@ export async function registerAvatarRoutes(app: FastifyInstance) {
   // перебора id — ограничение скорости запросов с одного IP.
   app.get('/avatars/:employeeId', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     const { employeeId } = request.params as { employeeId: string };
-    const res = await query(
-      `SELECT avatar_data, avatar_mime FROM employees WHERE id = $1`,
-      [Number(employeeId)]
-    );
-    const row = res.rows[0];
+    const row = await employeesRepo.getAvatar(Number(employeeId));
     if (!row?.avatar_data) {
       return reply.code(404).send();
     }

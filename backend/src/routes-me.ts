@@ -4,9 +4,13 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { isManager } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
+import * as employeesRepo from './repositories/employees.js';
+import * as schedulesRepo from './repositories/schedules.js';
+import * as salesRepo from './repositories/sales.js';
+import * as plansRepo from './repositories/plans.js';
+import * as tasksRepo from './repositories/tasks.js';
 import type { MeResponse, BindMeResponse, MeDayResponse } from './shared/api-types.js';
 
 const MeBindBody = Type.Object({
@@ -63,8 +67,8 @@ export async function registerMeRoutes(app: FastifyInstance) {
     // Карточка должна быть либо ещё не привязана, либо уже привязана к
     // ЭТОМУ ЖЕ telegram_id (идемпотентный повтор) — иначе это захват уже
     // занятой карточки чужого сотрудника (в т.ч. admin) со своим telegram_id.
-    const target = await query(`SELECT telegram_id, is_active FROM employees WHERE id = $1`, [employee_id]);
-    if (!target.rows[0]) {
+    const target = await employeesRepo.findBindTarget(employee_id);
+    if (!target) {
       return reply.code(404).send({ error: 'employee not found' });
     }
     // GET /employees (единственный источник списка карточек для бинда во
@@ -76,13 +80,13 @@ export async function registerMeRoutes(app: FastifyInstance) {
     // ДЕАКТИВИРОВАННОГО сотрудника и унаследовать всю его историю продаж/
     // BFQ/XP — реактивация карточки должна быть осознанным действием
     // менеджера (PATCH /employees/:id), а не побочным эффектом self-bind.
-    if (target.rows[0].is_active === false) {
+    if (target.is_active === false) {
       return reply.code(409).send({
         error: 'employee_inactive',
         message: 'Карточка деактивирована. Обратитесь к менеджеру для восстановления доступа'
       });
     }
-    const currentOwner = target.rows[0].telegram_id ? Number(target.rows[0].telegram_id) : null;
+    const currentOwner = target.telegram_id ? Number(target.telegram_id) : null;
     if (currentOwner && currentOwner !== telegram_id) {
       return reply.code(409).send({ error: 'already_bound', message: 'Карточка уже привязана к другому Telegram' });
     }
@@ -92,31 +96,20 @@ export async function registerMeRoutes(app: FastifyInstance) {
     // один telegram_id; employees.telegram_id теперь UNIQUE (0002), так что
     // проигравший запрос падает по constraint, а не молча портит данные —
     // ловим это здесь и отдаём тот же понятный 409, а не голую ошибку SQL.
-    await query(
-      `UPDATE employees SET telegram_id = NULL WHERE telegram_id = $1`,
-      [telegram_id]
-    );
-    let res;
+    await employeesRepo.clearTelegramId(telegram_id);
+    let bound: any;
     try {
-      res = await query(
-        `UPDATE employees
-         SET telegram_id = $1,
-             access_status = COALESCE(NULLIF(access_status, ''), 'active'),
-             is_active = true
-         WHERE id = $2
-         RETURNING id as employee_id, id, full_name, short_name, role, telegram_id, access_status`,
-        [telegram_id, employee_id]
-      );
+      bound = await employeesRepo.bindTelegram(telegram_id, employee_id);
     } catch (e: any) {
       if (e?.code === '23505') {
         return reply.code(409).send({ error: 'already_bound', message: 'Карточка уже привязана к другому Telegram' });
       }
       throw e;
     }
-    if (!res.rows[0]) {
+    if (!bound) {
       return reply.code(404).send({ error: 'employee not found' });
     }
-    return { bound: true, ...res.rows[0] };
+    return { bound: true, ...bound };
     }
   );
 
@@ -135,86 +128,24 @@ export async function registerMeRoutes(app: FastifyInstance) {
       return { bound: false, message: 'Привяжите аккаунт во вкладке Профиль' };
     }
 
-    const emp = await query(
-      `SELECT id, full_name, short_name, role, telegram_id
-       FROM employees
-       WHERE id = $1 AND COALESCE(is_active, true) = true
-       LIMIT 1`,
-      [request.user.employee_id]
-    );
-    if (!emp.rows[0]) {
+    const e = await employeesRepo.findBasicActive(request.user.employee_id);
+    if (!e) {
       return { bound: false, message: 'Привяжите аккаунт во вкладке Профиль' };
     }
-    const e = emp.rows[0];
 
-    const sch = await query(
-      `SELECT sch.*, COALESCE(st.display_name, st.name) as store_name, st.color, st.code as store_code, st.address as store_address
-       FROM schedules sch
-       LEFT JOIN stores st ON st.id = sch.store_id
-       WHERE sch.employee_id = $1
-         AND sch.work_date::date = $2::date
-         AND COALESCE(sch.hours, 0) > 0
-       LIMIT 1`,
-      [e.id, date]
-    );
-    const shift = sch.rows[0] || null;
+    const shift = await schedulesRepo.findShiftWithStore(e.id, date);
 
-    const sales = await query(
-      `SELECT
-         COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
-         COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
-         COALESCE(SUM(phones),0) as phones, COALESCE(SUM(accessories),0) as accessories,
-         COALESCE(SUM(shpd),0) as shpd, COALESCE(SUM(wink),0) as wink,
-         COALESCE(SUM(focus),0) as focus, COALESCE(SUM(insurance),0) as insurance,
-         COALESCE(SUM(settings),0) as settings,
-         COALESCE(SUM(credit_issued),0) as credit_issued,
-         COALESCE(SUM(credit_request),0) as credit_request
-       FROM sales
-       WHERE employee_id = $1 AND sale_date::date = $2::date`,
-      [e.id, date]
-    );
-    const fact = sales.rows[0] || {};
+    const fact = await salesRepo.sumDayFactForEmployee(e.id, date);
 
     const month = date.slice(0, 7) + '-01';
-    const planRow = await query(
-      `SELECT * FROM employee_month_plans
-       WHERE employee_id = $1 AND month::date = $2::date`,
-      [e.id, month]
-    );
-    const monthPlan = planRow.rows[0] || null;
+    const monthPlan = await plansRepo.findEmployeeMonthPlanExact(e.id, month);
 
     // факт с начала месяца (для «остаток плана»)
-    const monthFact = await query(
-      `SELECT
-         COALESCE(SUM(sim),0) as sim,
-         COALESCE(SUM(mnp),0) as mnp,
-         COALESCE(SUM(pa),0) as pa,
-         COALESCE(SUM(combo),0) as combo,
-         COALESCE(SUM(phones),0) as phones,
-         COALESCE(SUM(accessories),0) as accessories,
-         COALESCE(SUM(settings),0) as settings,
-         COALESCE(SUM(insurance),0) as insurance,
-         COALESCE(SUM(wink),0) as wink,
-         COALESCE(SUM(shpd),0) as shpd,
-         COALESCE(SUM(focus),0) as focus
-       FROM sales
-       WHERE employee_id = $1
-         AND sale_date >= $2::date
-         AND sale_date < ($2::date + interval '1 month')`,
-      [e.id, month]
-    );
-    const mf = monthFact.rows[0] || {};
+    const mf = await salesRepo.sumMonthFactForEmployee(e.id, month);
 
     // сколько смен осталось с сегодня до конца месяца
-    const remShifts = await query(
-      `SELECT COUNT(*)::int as cnt FROM schedules
-       WHERE employee_id = $1
-         AND work_date::date >= $2::date
-         AND work_date::date < ($3::date + interval '1 month')
-         AND COALESCE(hours, 0) > 0`,
-      [e.id, date, month]
-    );
-    const div = Math.max(1, Number(remShifts.rows[0]?.cnt) || 1);
+    const remShifts = await schedulesRepo.countRemainingInMonth(e.id, date, month);
+    const div = Math.max(1, remShifts);
 
     const metrics = [
       'sim', 'mnp', 'pa', 'combo', 'phones',
@@ -243,14 +174,7 @@ export async function registerMeRoutes(app: FastifyInstance) {
 
     // Незакрытые задачи (18.4) — «Мой день» уже единственный персональный
     // экран сотрудника, естественное место показать, что назначил менеджер.
-    const tasks = await query(
-      `SELECT t.*, COALESCE(st.display_name, st.name) as store_name
-       FROM tasks t
-       LEFT JOIN stores st ON st.id = t.store_id
-       WHERE t.assigned_to = $1 AND t.status IN ('open', 'in_progress')
-       ORDER BY t.due_at NULLS LAST, t.created_at DESC`,
-      [e.id]
-    ).catch(() => ({ rows: [] as any[] }));
+    const tasks = await tasksRepo.findOpenForAssignee(e.id).catch(() => [] as any[]);
 
     return {
       bound: true,
@@ -268,7 +192,7 @@ export async function registerMeRoutes(app: FastifyInstance) {
       month_plan: monthPlan,
       month_fact: mf,
       remaining_shifts: div,
-      tasks: tasks.rows
+      tasks
     };
   });
 

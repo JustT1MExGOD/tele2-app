@@ -4,9 +4,9 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { resolveViewOrgId } from './middleware-auth.js';
 import { serverError } from './utils/http-errors.js';
+import * as promosRepo from './repositories/promos.js';
 import type {
   PromosListResponse,
   PromoCard,
@@ -45,16 +45,9 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
     try {
-      const res = await query(
-        `SELECT id, code, note, created_by, created_by_name, created_at
-         FROM rtk_promocodes
-         WHERE is_used = false AND COALESCE(org_id, 'default') = $1
-         ORDER BY created_at DESC
-         LIMIT 200`,
-        [orgId]
-      );
+      const rows = await promosRepo.listUnused(orgId);
       return {
-        items: res.rows.map((r: any) => ({
+        items: rows.map((r: any) => ({
           id: r.id,
           mask: maskPromoCode(r.code),
           note: r.note,
@@ -73,13 +66,9 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     const id = Number((request.params as any).id);
     const orgId = resolveViewOrgId(request.user!);
     try {
-      const res = await query(
-        `SELECT id, code, note, created_by_name, created_at
-         FROM rtk_promocodes WHERE id = $1 AND is_used = false AND COALESCE(org_id, 'default') = $2`,
-        [id, orgId]
-      );
-      if (!res.rows[0]) return reply.code(404).send({ error: 'not_found' });
-      return res.rows[0];
+      const row = await promosRepo.findUnusedById(id, orgId);
+      if (!row) return reply.code(404).send({ error: 'not_found' });
+      return row;
     } catch (e: any) {
       return serverError(request, reply, 'db_error', e);
     }
@@ -97,13 +86,8 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     const note = body.note ? String(body.note).slice(0, 200) : null;
     const orgId = resolveViewOrgId(request.user!, body.org_id);
     try {
-      const res = await query(
-        `INSERT INTO rtk_promocodes (code, note, created_by, created_by_name, org_id)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, code, note, created_at`,
-        [code, note, user.employee_id, user.full_name, orgId]
-      );
-      return { ok: true, item: res.rows[0] };
+      const item = await promosRepo.create(code, note, user.employee_id, user.full_name, orgId);
+      return { ok: true, item };
     } catch (e: any) {
       return serverError(request, reply, 'db_error', e);
     }
@@ -116,14 +100,8 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     const id = Number((request.params as any).id);
     const orgId = resolveViewOrgId(request.user!);
     try {
-      const res = await query(
-        `UPDATE rtk_promocodes
-         SET is_used = true, used_by = $2, used_at = now()
-         WHERE id = $1 AND is_used = false AND COALESCE(org_id, 'default') = $3
-         RETURNING id`,
-        [id, user.employee_id, orgId]
-      );
-      if (!res.rows[0]) return reply.code(404).send({ error: 'not_found' });
+      const used = await promosRepo.markUsed(id, user.employee_id, orgId);
+      if (!used) return reply.code(404).send({ error: 'not_found' });
       return { ok: true, used: true };
     } catch (e: any) {
       return serverError(request, reply, 'db_error', e);

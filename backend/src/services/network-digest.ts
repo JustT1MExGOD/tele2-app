@@ -4,20 +4,17 @@
  * точкам (используется Command Center/Store Profile/кабинетом
  * супервайзера), здесь только форматирование в текст и рассылка.
  */
-import { query } from '../db/index.js';
 import { buildSupervisorDashboard } from './supervisor-analytics.js';
 import { getOrg, getOrgNotifyTarget } from './tenant.js';
 import { notifyChat } from '../bot/index.js';
 import { networkDigest } from '../bot/messages.js';
 import { todayMoscow } from '../utils/date.js';
 import { claimCronSend } from '../cron/reports.js';
+import * as storesRepo from '../repositories/stores.js';
+import * as orgsRepo from '../repositories/organizations.js';
 
 export async function buildNetworkDigestText(orgId: string, days: number, periodLabel: string): Promise<string | null> {
-  const storesRes = await query(
-    `SELECT id FROM stores WHERE COALESCE(org_id,'default') = $1 AND COALESCE(is_active,true) = true`,
-    [orgId]
-  );
-  const storeIds = storesRes.rows.map((r: any) => String(r.id));
+  const storeIds = await storesRepo.listActiveIdsForOrg(orgId);
   if (!storeIds.length) return null;
 
   const dash = await buildSupervisorDashboard({ scope: storeIds, date: todayMoscow(), days });
@@ -64,8 +61,8 @@ export async function sendNetworkDigest(
   if (opts.orgId) {
     orgIds = [opts.orgId];
   } else {
-    const orgsRes = await query(`SELECT id FROM organizations`);
-    orgIds = orgsRes.rows.length ? orgsRes.rows.map((r: any) => r.id) : ['default'];
+    const ids = await orgsRepo.listIds();
+    orgIds = ids.length ? ids : ['default'];
   }
 
   for (const orgId of orgIds) {

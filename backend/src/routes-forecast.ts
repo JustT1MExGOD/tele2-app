@@ -3,13 +3,14 @@
  * Выделено из routes-v13.ts.
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { query } from './db/index.js';
 import { requireAuth, requireManager, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
 import { forecastStore, salesHeatmap, newbieCohorts, getStaffingHints } from './services/forecast.js';
 import { rebuildHourProfiles } from './services/insights.js';
 import { getLiveNetworkMap } from './services/live-map.js';
 import { generateForecastSummary, getLatestForecastSummary } from './services/ai.js';
 import { todayMoscow } from './utils/date.js';
+import * as storesRepo from './repositories/stores.js';
+import * as salesRepo from './repositories/sales.js';
 import type { ForecastResponse, StaffingHintsResponse } from './shared/api-types.js';
 
 export async function registerForecastRoutes(app: FastifyInstance) {
@@ -27,10 +28,10 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     // точку (кэш в ai_audit) — не дёргает Groq при каждом открытии страницы.
     let aiSummary = await getLatestForecastSummary(storeId, from);
     if (!aiSummary && fc.history_days >= 7) {
-      const storeRow = await query(`SELECT COALESCE(display_name, name) as name FROM stores WHERE id = $1`, [storeId]);
+      const storeName = await storesRepo.findDisplayName(storeId);
       aiSummary = await generateForecastSummary({
         storeId,
-        storeName: storeRow.rows[0]?.name || storeId,
+        storeName: storeName || storeId,
         date: from,
         items: fc.items
       });
@@ -78,20 +79,13 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
-    const sales = await query(
-      `SELECT s.*, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.code
-       FROM sales s
-       JOIN employees e ON e.id = s.employee_id
-       JOIN stores st ON st.id = s.store_id
-       WHERE s.sale_date::date = $1::date AND COALESCE(st.org_id,'default') = $2`,
-      [date, orgId]
-    );
+    const sales = await salesRepo.findForBiDaily(date, orgId);
     const live = await getLiveNetworkMap(orgId);
     return {
       source: 't2-sales-app',
       generated_at: new Date().toISOString(),
       date,
-      sales: sales.rows,
+      sales,
       network: live
     };
   });

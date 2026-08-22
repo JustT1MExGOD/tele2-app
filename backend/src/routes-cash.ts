@@ -4,9 +4,10 @@
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
 import { requireManager, requireActive, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
+import * as cashRepo from './repositories/cash.js';
+import * as storesRepo from './repositories/stores.js';
 import type { CashTableResponse, CashRow } from './shared/api-types.js';
 
 const PutCashBody = Type.Object({
@@ -31,28 +32,12 @@ export async function registerCashRoutes(app: FastifyInstance) {
     const to = (q.to || todayMoscow()).slice(0, 10);
     const orgId = resolveViewOrgId(request.user!, q.org_id);
 
-    const storesRes = await query(
-      `SELECT id, COALESCE(display_name, name) as name, code FROM stores s
-       WHERE COALESCE(is_active, true) = true AND COALESCE(org_id, 'default') = $1
-       ORDER BY hours NULLS LAST, s.name`,
-      [orgId]
-    );
-    const stList = storesRes.rows;
-
-    const cashRes = await query(
-      `SELECT c.store_id, c.cash_date::text as cash_date,
-              c.cash_fact, c.cash_1c,
-              (c.cash_fact - (c.cash_1c + 2000)) as delta, c.comment
-       FROM store_cash c
-       JOIN stores st ON st.id = c.store_id
-       WHERE c.cash_date >= $1::date AND c.cash_date <= $2::date AND COALESCE(st.org_id, 'default') = $3
-       ORDER BY c.cash_date`,
-      [from, to, orgId]
-    );
+    const stList = await storesRepo.listActiveBasic(orgId);
+    const cashRows = await cashRepo.findInRange(from, to, orgId);
 
     // даты: все дни периода, где есть касса + сегодня
     const dateSet = new Set<string>();
-    for (const r of cashRes.rows) {
+    for (const r of cashRows) {
       dateSet.add(String(r.cash_date).slice(0, 10));
     }
     dateSet.add(to);
@@ -65,7 +50,7 @@ export async function registerCashRoutes(app: FastifyInstance) {
     const dates = [...dateSet].sort().reverse();
 
     const cells: Record<string, Record<string, any>> = {};
-    for (const r of cashRes.rows) {
+    for (const r of cashRows) {
       const d = String(r.cash_date).slice(0, 10);
       if (!cells[d]) cells[d] = {};
       cells[d][r.store_id] = {
@@ -103,19 +88,7 @@ export async function registerCashRoutes(app: FastifyInstance) {
     const cash_1c = Number(body.cash_1c) || 0;
     const comment = body.comment || null;
 
-    const res = await query(
-      `INSERT INTO store_cash (store_id, cash_date, cash_fact, cash_1c, comment, updated_at)
-       VALUES ($1, $2, $3, $4, $5, now())
-       ON CONFLICT (store_id, cash_date)
-       DO UPDATE SET
-         cash_fact = EXCLUDED.cash_fact,
-         cash_1c = EXCLUDED.cash_1c,
-         comment = EXCLUDED.comment,
-         updated_at = now()
-       RETURNING *`,
-      [store_id, cash_date, cash_fact, cash_1c, comment]
-    );
-    return res.rows[0];
+    return cashRepo.upsert({ storeId: store_id, cashDate: cash_date, cashFact: cash_fact, cash1c: cash_1c, comment });
     }
   );
 
@@ -125,18 +98,6 @@ export async function registerCashRoutes(app: FastifyInstance) {
     const from = q.from || todayMoscow().slice(0, 8) + '01';
     const to = q.to || todayMoscow();
     const orgId = resolveViewOrgId(request.user!, q.org_id);
-    const params: any[] = [from, to, orgId];
-    let sql = `
-      SELECT c.*, COALESCE(st.display_name, st.name) as store_name
-      FROM store_cash c
-      LEFT JOIN stores st ON st.id = c.store_id
-      WHERE c.cash_date >= $1::date AND c.cash_date <= $2::date AND COALESCE(st.org_id, 'default') = $3`;
-    if (q.store_id) {
-      params.push(q.store_id);
-      sql += ` AND c.store_id = $${params.length}`;
-    }
-    sql += ` ORDER BY c.cash_date DESC, st.name`;
-    const res = await query(sql, params);
-    return res.rows;
+    return cashRepo.list(from, to, orgId, q.store_id);
   });
 }

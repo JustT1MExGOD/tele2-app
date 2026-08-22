@@ -1,4 +1,4 @@
-import { query } from '../db/index.js';
+import * as repo from '../repositories/ai.js';
 
 // Groq: бесплатный API поверх открытых моделей (без карты на free-тарифе).
 // Free-план: 1000 запросов/день, 100k токенов/день на llama-3.3-70b-versatile —
@@ -44,11 +44,15 @@ async function logAudit(opts: {
   prompt: string;
   response: string;
 }) {
-  await query(
-    `INSERT INTO ai_audit (kind, employee_id, store_id, ref_date, prompt, response, model)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    [opts.kind, opts.employeeId ?? null, opts.storeId ?? null, opts.refDate ?? null, opts.prompt, opts.response, MODEL]
-  ).catch((e) => console.warn('ai_audit insert failed:', e?.message || e));
+  await repo.insertAudit({
+    kind: opts.kind,
+    employeeId: opts.employeeId ?? null,
+    storeId: opts.storeId ?? null,
+    refDate: opts.refDate ?? null,
+    prompt: opts.prompt,
+    response: opts.response,
+    model: MODEL
+  });
 }
 
 /** Итог смены сотруднику — 3-5 строк, генерируется сразу после закрытия смены. */
@@ -149,13 +153,7 @@ export async function generateDipComment(opts: {
 
 /** Последний AI-комментарий к просадке точки за дату (для Command Center). */
 export async function getLatestDipComment(storeId: string, date: string): Promise<string | null> {
-  const res = await query(
-    `SELECT response FROM ai_audit
-     WHERE kind = 'dip_comment' AND store_id = $1 AND ref_date = $2::date
-     ORDER BY created_at DESC LIMIT 1`,
-    [storeId, date]
-  ).catch(() => ({ rows: [] as any[] }));
-  return res.rows[0]?.response || null;
+  return repo.findLatestResponse('dip_comment', storeId, date);
 }
 
 const DOW_LABELS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -163,13 +161,7 @@ const DOW_LABELS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 /** Уже сгенерированное сегодня объяснение прогноза точки, если есть —
  * страница «Прогноз» не должна дёргать Groq на каждое открытие. */
 export async function getLatestForecastSummary(storeId: string, date: string): Promise<string | null> {
-  const res = await query(
-    `SELECT response FROM ai_audit
-     WHERE kind = 'forecast_summary' AND store_id = $1 AND ref_date = $2::date
-     ORDER BY created_at DESC LIMIT 1`,
-    [storeId, date]
-  ).catch(() => ({ rows: [] as any[] }));
-  return res.rows[0]?.response || null;
+  return repo.findLatestResponse('forecast_summary', storeId, date);
 }
 
 /**

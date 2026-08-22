@@ -8,9 +8,11 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query, withTransaction } from './db/index.js';
+import { withTransaction } from './db/index.js';
 import { requireActive, requireManager, canAssignRole, resolveViewOrgId, requireEmployeeInOrg, Role } from './middleware-auth.js';
-import { recordAudit } from './services/audit.js';
+import { record as recordAudit } from './repositories/audit.js';
+import * as employeesRepo from './repositories/employees.js';
+import * as schedulesRepo from './repositories/schedules.js';
 import type { EmployeesListResponse, CreateEmployeeResponse } from './shared/api-types.js';
 
 const PostEmployeeBody = Type.Object({
@@ -40,14 +42,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // заглянуть в другую — ?org_id=, доступно только admin (переключатель сети в UI).
     const q = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, q.org_id);
-    const res = await query(
-      `SELECT id, full_name, short_name, ${canSeeTelegramId ? 'telegram_id,' : ''} is_active, role
-       FROM employees
-       WHERE is_active = true AND COALESCE(org_id, 'default') = $1
-       ORDER BY id`,
-      [orgId]
-    );
-    return res.rows;
+    return employeesRepo.listActiveByOrg(orgId, canSeeTelegramId);
   });
 
   // ===== EMPLOYEES CRUD =====
@@ -68,13 +63,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // Новый сотрудник попадает в сеть создающего его менеджера; admin может
     // явно указать другую сеть (переключатель сети в UI шлёт org_id).
     const org_id = resolveViewOrgId(request.user!, b.org_id);
-    const res = await query(
-      `INSERT INTO employees (full_name, short_name, role, is_active, org_id)
-       VALUES ($1, $2, $3, true, $4)
-       RETURNING id, full_name, short_name, role, is_active, telegram_id, org_id`,
-      [full_name, short_name, role, org_id]
-    );
-    return res.rows[0];
+    return employeesRepo.createEmployee(full_name, short_name, role, org_id);
     }
   );
 
@@ -90,62 +79,42 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const b = request.body as PatchEmployeeBody;
-    const sets: string[] = [];
-    const vals: any[] = [];
-    let i = 1;
-    if (b.full_name !== undefined) {
-      sets.push(`full_name = $${i++}`);
-      vals.push(String(b.full_name).trim());
-    }
-    if (b.short_name !== undefined) {
-      sets.push(`short_name = $${i++}`);
-      vals.push(b.short_name);
-    }
-    if (b.is_active !== undefined) {
-      sets.push(`is_active = $${i++}`);
-      vals.push(!!b.is_active);
-    }
+    const patch: employeesRepo.EmployeePatch = {};
+    if (b.full_name !== undefined) patch.full_name = String(b.full_name).trim();
+    if (b.short_name !== undefined) patch.short_name = b.short_name;
+    if (b.is_active !== undefined) patch.is_active = !!b.is_active;
     // роль намеренно не меняется здесь — для этого есть отдельные
     // /employees/:id/role (v3) и PATCH /employees/:id/role (v8),
     // которые дополнительно назначают точки супервайзеру.
-    if (!sets.length) return reply.code(400).send({ error: 'no fields' });
-    vals.push(Number(id));
+    if (!Object.keys(patch).length) return reply.code(400).send({ error: 'no fields' });
 
     // Аудит — только когда реально меняется is_active (деактивация/
     // восстановление — чувствительное действие), не на каждый rename.
     if (b.is_active !== undefined) {
       const orgId = resolveViewOrgId(request.user!, b.org_id);
-      const before = await query(`SELECT is_active FROM employees WHERE id = $1`, [Number(id)]);
+      const before = await employeesRepo.getIsActive(Number(id));
       const row = await withTransaction(async (q) => {
-        const res = await q(
-          `UPDATE employees SET ${sets.join(', ')} WHERE id = $${i}
-           RETURNING id, full_name, short_name, role, is_active, telegram_id`,
-          vals
-        );
-        if (res.rows[0]) {
-          await recordAudit(q, {
+        const res = await employeesRepo.updateFields(Number(id), patch, q);
+        if (res) {
+          await recordAudit({
             orgId,
             actorEmployeeId: request.user!.employee_id,
             actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
             action: 'employee.deactivate',
             targetType: 'employee',
             targetId: id,
-            before: { is_active: before.rows[0]?.is_active ?? null },
+            before: { is_active: before ?? null },
             after: { is_active: !!b.is_active },
             requestId: request.id
-          });
+          }, q);
         }
-        return res.rows[0];
+        return res;
       });
       return row || reply.code(404).send({ error: 'not found' });
     }
 
-    const res = await query(
-      `UPDATE employees SET ${sets.join(', ')} WHERE id = $${i}
-       RETURNING id, full_name, short_name, role, is_active, telegram_id`,
-      vals
-    );
-    return res.rows[0] || reply.code(404).send({ error: 'not found' });
+    const res = await employeesRepo.updateFields(Number(id), patch);
+    return res || reply.code(404).send({ error: 'not found' });
     }
   );
 
@@ -160,14 +129,10 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
 
     const row = await withTransaction(async (q) => {
       // soft delete — отвязываем telegram, но продажи/историю не трогаем
-      const res = await q(
-        `UPDATE employees SET is_active = false, telegram_id = NULL WHERE id = $1
-         RETURNING id, full_name, is_active`,
-        [Number(id)]
-      );
-      if (!res.rows[0]) return null;
+      const res = await employeesRepo.softDeactivate(Number(id), q);
+      if (!res) return null;
 
-      await recordAudit(q, {
+      await recordAudit({
         orgId,
         actorEmployeeId: request.user!.employee_id,
         actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
@@ -177,9 +142,9 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
         before: { is_active: true },
         after: { is_active: false },
         requestId: request.id
-      });
+      }, q);
 
-      return res.rows[0];
+      return res;
     });
 
     if (!row) return reply.code(404).send({ error: 'not found' });
@@ -191,10 +156,8 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // смены (реальная история — кто фактически работал) не трогаем. Вне
     // транзакции сознательно — best-effort очистка, не обязана откатывать
     // уже подтверждённое увольнение при своей неудаче.
-    await query(
-      `DELETE FROM schedules WHERE employee_id = $1 AND work_date::date >= (now() AT TIME ZONE 'Europe/Moscow')::date`,
-      [Number(id)]
-    ).catch((e: any) => console.error('cleanup future schedules on employee delete:', e?.message || e));
+    await schedulesRepo.deleteFutureForEmployee(Number(id))
+      .catch((e: any) => console.error('cleanup future schedules on employee delete:', e?.message || e));
 
     return { ok: true, ...row };
     }

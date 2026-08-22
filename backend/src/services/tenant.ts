@@ -3,8 +3,15 @@
  * по сети (кто что видит) живёт в middleware-auth.ts (resolveViewOrgId,
  * assertStoreInOrg) и в самих роутах — этот файл только про запись/чтение
  * самой записи organizations, не про то, кто имеет право её видеть.
+ *
+ * 20.8.0 (Full DAL): SQL сам по себе переехал в repositories/organizations.ts,
+ * repositories/stores.ts и repositories/employees.ts — этот файл остаётся
+ * тонким сервисным слоем (те же сигнатуры, тот же try/catch-и-дефолт для
+ * вызывающего кода, просто композиция репозиториев вместо query()).
  */
-import { query } from '../db/index.js';
+import * as orgsRepo from '../repositories/organizations.js';
+import * as storesRepo from '../repositories/stores.js';
+import * as employeesRepo from '../repositories/employees.js';
 
 export type Org = {
   id: string;
@@ -29,20 +36,16 @@ const DEFAULT: Org = {
 
 export async function getOrg(orgId = 'default'): Promise<Org> {
   try {
-    const res = await query(
-      `SELECT id, name, brand_name, primary_color, logo_url
-       FROM organizations WHERE id = $1 AND COALESCE(is_active,true) = true`,
-      [orgId]
-    );
-    if (res.rows[0]) return res.rows[0];
+    const row = await orgsRepo.findActiveById(orgId);
+    if (row) return row;
   } catch (_) {}
   return { ...DEFAULT, id: orgId || 'default' };
 }
 
 export async function orgIdForEmployee(employeeId: number): Promise<string> {
   try {
-    const res = await query(`SELECT org_id FROM employees WHERE id = $1`, [employeeId]);
-    return res.rows[0]?.org_id || 'default';
+    const orgId = await employeesRepo.getOrgId(employeeId);
+    return orgId || 'default';
   } catch (_) {
     return 'default';
   }
@@ -50,18 +53,7 @@ export async function orgIdForEmployee(employeeId: number): Promise<string> {
 
 export async function listStoresForOrg(orgId: string) {
   try {
-    // display_name (батч 3, п.7) перекрывает "сырое" name из * — при
-    // дублирующихся именах колонок в результирующей строке node-postgres
-    // берёт последнее значение, так что этот SELECT не ломает ни один
-    // существующий вызов, читающий store.name как обычно. ORDER BY s.name
-    // (не голое "name") — иначе неоднозначность с выходным алиасом того же
-    // имени валит запрос ("ORDER BY name неоднозначен"), молча съедаемая
-    // catch-ем ниже — вернулся бы просто пустой список без единой ошибки.
-    const res = await query(
-      `SELECT *, COALESCE(display_name, name) AS name FROM stores s WHERE COALESCE(org_id,'default') = $1 ORDER BY s.name`,
-      [orgId]
-    );
-    return res.rows;
+    return await storesRepo.listWithDisplayName(orgId);
   } catch (_) {
     return [];
   }
@@ -70,13 +62,8 @@ export async function listStoresForOrg(orgId: string) {
 /** Чат сети, к которой принадлежит точка. Фолбэк — глобальный CHAT_ID (env), если у сети чат не задан. */
 export async function getStoreChatId(storeId: string): Promise<string | undefined> {
   try {
-    const res = await query(
-      `SELECT o.chat_id FROM stores s
-       LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
-       WHERE s.id = $1`,
-      [storeId]
-    );
-    return res.rows[0]?.chat_id || undefined;
+    const chatId = await storesRepo.getChatId(storeId);
+    return chatId || undefined;
   } catch (_) {
     return undefined;
   }
@@ -85,8 +72,8 @@ export async function getStoreChatId(storeId: string): Promise<string | undefine
 /** Чат сети по её id. Фолбэк — глобальный CHAT_ID (env), если у сети чат не задан. */
 export async function getOrgChatId(orgId: string): Promise<string | undefined> {
   try {
-    const res = await query(`SELECT chat_id FROM organizations WHERE id = $1`, [orgId]);
-    return res.rows[0]?.chat_id || undefined;
+    const chatId = await orgsRepo.getChatId(orgId);
+    return chatId || undefined;
   } catch (_) {
     return undefined;
   }
@@ -106,8 +93,8 @@ export async function getOrgNotifyTarget(
 ): Promise<NotifyTarget> {
   const col = purpose === 'sales' ? 'sales_thread_id' : 'reports_thread_id';
   try {
-    const res = await query(`SELECT chat_id, ${col} as thread_id FROM organizations WHERE id = $1`, [orgId]);
-    return { chatId: res.rows[0]?.chat_id || undefined, threadId: res.rows[0]?.thread_id || undefined };
+    const row = await orgsRepo.getNotifyTarget(orgId, col);
+    return { chatId: row?.chat_id || undefined, threadId: row?.thread_id || undefined };
   } catch (_) {
     return {};
   }
@@ -120,13 +107,8 @@ export async function getStoreNotifyTarget(
 ): Promise<NotifyTarget> {
   const col = purpose === 'sales' ? 'sales_thread_id' : 'reports_thread_id';
   try {
-    const res = await query(
-      `SELECT o.chat_id, o.${col} as thread_id FROM stores s
-       LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
-       WHERE s.id = $1`,
-      [storeId]
-    );
-    return { chatId: res.rows[0]?.chat_id || undefined, threadId: res.rows[0]?.thread_id || undefined };
+    const row = await storesRepo.getNotifyTarget(storeId, col);
+    return { chatId: row?.chat_id || undefined, threadId: row?.thread_id || undefined };
   } catch (_) {
     return {};
   }
@@ -135,10 +117,7 @@ export async function getStoreNotifyTarget(
 /** Все сети (id + chat_id), у которых явно настроен свой чат. */
 export async function listOrgsWithChat(): Promise<{ id: string; chat_id: string }[]> {
   try {
-    const res = await query(
-      `SELECT id, chat_id FROM organizations WHERE chat_id IS NOT NULL AND chat_id != ''`
-    );
-    return res.rows;
+    return await orgsRepo.listWithChat();
   } catch (_) {
     return [];
   }
@@ -162,12 +141,7 @@ export async function listOrgs(): Promise<
   }[]
 > {
   try {
-    const res = await query(
-      `SELECT id, name, brand_name, primary_color, sector_id, chat_id,
-              sales_thread_id, reports_thread_id, COALESCE(is_active,true) as is_active
-       FROM organizations ORDER BY name`
-    );
-    return res.rows;
+    return (await orgsRepo.listAll()) as any;
   } catch (_) {
     return [];
   }
@@ -179,13 +153,7 @@ export async function listOrgs(): Promise<
  * редактировать выключенные сети). */
 export async function getOrgAdmin(orgId: string): Promise<Org | null> {
   try {
-    const res = await query(
-      `SELECT id, name, brand_name, primary_color, logo_url, sector_id, chat_id,
-              sales_thread_id, reports_thread_id, COALESCE(is_active,true) as is_active
-       FROM organizations WHERE id = $1`,
-      [orgId]
-    );
-    return res.rows[0] || null;
+    return await orgsRepo.findByIdAdmin(orgId);
   } catch (_) {
     return null;
   }
@@ -198,11 +166,7 @@ export async function listActiveOrgsPublic(): Promise<
   { id: string; name: string; brand_name: string | null; primary_color: string | null; logo_url: string | null }[]
 > {
   try {
-    const res = await query(
-      `SELECT id, name, brand_name, primary_color, logo_url
-       FROM organizations WHERE COALESCE(is_active, true) = true ORDER BY name`
-    );
-    return res.rows;
+    return await orgsRepo.listActivePublic();
   } catch (_) {
     return [];
   }
@@ -216,48 +180,11 @@ export async function upsertOrg(body: Partial<Org> & { id: string }) {
   if (body.sector_id) {
     const sectorId = String(body.sector_id).trim();
     if (sectorId) {
-      await query(`INSERT INTO sectors (id, name) VALUES ($1, $1) ON CONFLICT (id) DO NOTHING`, [sectorId]);
+      await orgsRepo.upsertSector(sectorId);
     }
   }
 
-  // brand_name/primary_color/logo_url: COALESCE на $3/$4/$5 напрямую (не
-  // EXCLUDED — тот на INSERT-ветке уже получил бы дефолт и никогда не был
-  // бы null) — на новой сети даёт разумный дефолт цвета, на редактировании
-  // с пропущенным полем сохраняет то, что уже было, а не тихо стирает.
-  await query(
-    `INSERT INTO organizations (id, name, brand_name, primary_color, logo_url, sector_id)
-     VALUES ($1, $2, $3, COALESCE($4,'#2AABEE'), $5, COALESCE($6,'default'))
-     ON CONFLICT (id) DO UPDATE SET
-       name = EXCLUDED.name,
-       brand_name = COALESCE($3, organizations.brand_name),
-       primary_color = COALESCE($4, organizations.primary_color),
-       logo_url = COALESCE($5, organizations.logo_url)`,
-    [
-      body.id,
-      body.name || body.id,
-      body.brand_name || null,
-      body.primary_color || null,
-      body.logo_url || null,
-      body.sector_id || null
-    ]
-  );
-
-  // chat_id/thread_id/sector_id/is_active — правим только если явно
-  // переданы: сеть можно создать раньше, чем узнают chat_id из /chatid
-  // бота, и дописать поле позже, не затирая остальное молчаливым null.
-  const sets: string[] = [];
-  const vals: any[] = [];
-  let i = 1;
-  for (const key of ['sector_id', 'chat_id', 'sales_thread_id', 'reports_thread_id', 'is_active'] as const) {
-    if (body[key] !== undefined) {
-      sets.push(`${key} = $${i++}`);
-      vals.push(key === 'is_active' ? !!body[key] : body[key] || null);
-    }
-  }
-  if (sets.length) {
-    vals.push(body.id);
-    await query(`UPDATE organizations SET ${sets.join(', ')} WHERE id = $${i}`, vals);
-  }
+  await orgsRepo.upsert(body as orgsRepo.OrgPatch);
 
   return getOrgAdmin(body.id);
 }

@@ -216,7 +216,7 @@ export interface EmployeeListItem {
   full_name: string;
   short_name: string | null;
   // Только manager-tier (manager/senior/admin) — обычный сотрудник его не видит.
-  telegram_id?: number | null;
+  telegram_id?: number | string | null;
   is_active: boolean;
   role: string;
 }
@@ -331,7 +331,7 @@ export type BindMeResponse = MeResponse & { bound: true };
 export interface MeDayResponse {
   bound: boolean;
   message?: string;
-  employee?: { id: number; full_name: string; short_name: string | null; role: string; telegram_id: number | null };
+  employee?: { id: number; full_name: string; short_name: string | null; role: string; telegram_id: number | string | null };
   date?: string;
   shift?: {
     store_id: string; store_name: string | null; store_code: string | null; store_address: string | null;
@@ -509,12 +509,12 @@ export interface SubmitAccessRequestResponse {
   status: string;
   id?: number;
   message?: string;
-  request?: Record<string, unknown>;
+  request?: unknown;
 }
 
 export interface AccessRequestItem {
   id: number;
-  telegram_id: number;
+  telegram_id: number | string;
   full_name: string;
   message: string | null;
   status: string;

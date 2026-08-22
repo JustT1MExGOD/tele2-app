@@ -1,0 +1,92 @@
+/**
+ * Data Access Layer (20.8.0, Full DAL) — SQL по таблице `access_requests`.
+ */
+import { query } from '../db/index.js';
+
+export interface AccessRequestRow {
+  id: number;
+  telegram_id: string | number;
+  telegram_username: string | null;
+  full_name: string;
+  claimed_employee_id: number | null;
+  message: string | null;
+  status: string;
+  org_id: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface AccessRequestWithEffectiveOrg extends AccessRequestRow {
+  effective_org_id: string;
+}
+
+export async function findLatestByTelegramId(telegramId: string | number): Promise<AccessRequestRow | null> {
+  const res = await query(
+    `SELECT * FROM access_requests WHERE telegram_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [telegramId]
+  );
+  return res.rows[0] || null;
+}
+
+export async function findPendingByTelegramId(telegramId: string | number): Promise<{ id: number } | null> {
+  const res = await query(
+    `SELECT id FROM access_requests WHERE telegram_id = $1 AND status = 'pending'`,
+    [telegramId]
+  );
+  return res.rows[0] || null;
+}
+
+export async function create(data: {
+  telegramId: string | number; username: string | null; fullName: string;
+  claimedEmployeeId: number | null; message: string; orgId: string | null;
+}): Promise<AccessRequestRow> {
+  const res = await query(
+    `INSERT INTO access_requests
+       (telegram_id, telegram_username, full_name, claimed_employee_id, message, status, org_id)
+     VALUES ($1,$2,$3,$4,$5,'pending',$6)
+     RETURNING *`,
+    [data.telegramId, data.username, data.fullName, data.claimedEmployeeId, data.message, data.orgId]
+  );
+  return res.rows[0];
+}
+
+/** GET /access/requests — очередь заявок сети (эффективная сеть: прямой org_id
+ * на заявке -> сеть заклеймленного сотрудника -> 'default'). */
+export async function listPendingForOrg(orgId: string): Promise<AccessRequestRow[]> {
+  const res = await query(
+    `SELECT ar.* FROM access_requests ar
+     LEFT JOIN employees e ON e.id = ar.claimed_employee_id
+     WHERE ar.status = 'pending'
+       AND COALESCE(ar.org_id, COALESCE(e.org_id,'default'), 'default') = $1
+     ORDER BY ar.created_at ASC`,
+    [orgId]
+  );
+  return res.rows;
+}
+
+/** Approve/reject — та же effective_org_id проекция, что list, для одной заявки по id. */
+export async function findByIdWithEffectiveOrg(id: number): Promise<AccessRequestWithEffectiveOrg | null> {
+  const res = await query(
+    `SELECT ar.*, COALESCE(ar.org_id, e.org_id, 'default') as effective_org_id
+     FROM access_requests ar
+     LEFT JOIN employees e ON e.id = ar.claimed_employee_id
+     WHERE ar.id = $1`,
+    [id]
+  );
+  return res.rows[0] || null;
+}
+
+export async function markApproved(id: number, reviewedBy: number | null): Promise<void> {
+  await query(
+    `UPDATE access_requests SET status = 'approved', reviewed_by = $1, reviewed_at = now() WHERE id = $2`,
+    [reviewedBy, id]
+  );
+}
+
+export async function markRejected(id: number, reviewedBy: number | null): Promise<void> {
+  await query(
+    `UPDATE access_requests SET status = 'rejected', reviewed_by = $1, reviewed_at = now() WHERE id = $2`,
+    [reviewedBy, id]
+  );
+}

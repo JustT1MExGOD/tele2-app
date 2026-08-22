@@ -84,6 +84,95 @@ export async function list(orgId: string): Promise<StoreRecord[]> {
   return res.rows;
 }
 
+/** services/alerts.ts::runSmartAlertsTick — cron по ВСЕМ сетям разом, без org-фильтра. */
+/** services/network-digest.ts — id активных точек своей сети. */
+export async function listActiveIdsForOrg(orgId: string): Promise<string[]> {
+  const res = await query(
+    `SELECT id FROM stores WHERE COALESCE(org_id,'default') = $1 AND COALESCE(is_active,true) = true`,
+    [orgId]
+  );
+  return res.rows.map((r: any) => String(r.id));
+}
+
+export async function listAllActive(): Promise<{ id: string; name: string; code: string }[]> {
+  const res = await query(`SELECT id, name, code FROM stores WHERE COALESCE(is_active,true)=true`);
+  return res.rows;
+}
+
+/** services/plans.ts::computeStoreDailyPlans — все точки сети (без фильтра is_active — старое поведение). */
+export async function listBasicForOrg(orgId: string): Promise<{ id: string; name: string; code: string }[]> {
+  const res = await query(
+    `SELECT id, COALESCE(display_name, name) as name, code FROM stores s WHERE COALESCE(org_id, 'default') = $1 ORDER BY s.name`,
+    [orgId]
+  );
+  return res.rows;
+}
+
+/** GET /cash/table — короткая проекция активных точек сети для шапки таблицы. */
+export async function listActiveBasic(orgId: string): Promise<{ id: string; name: string; code: string }[]> {
+  const res = await query(
+    `SELECT id, COALESCE(display_name, name) as name, code FROM stores s
+     WHERE COALESCE(is_active, true) = true AND COALESCE(org_id, 'default') = $1
+     ORDER BY hours NULLS LAST, s.name`,
+    [orgId]
+  );
+  return res.rows;
+}
+
+/** services/tenant.ts::listStoresForOrg — тот же список, что list(), но с
+ * display_name-оверрайдом и сортировкой по имени (для UI-пикеров, не для
+ * графика). Разные ORDER BY / проекция — оставлено двумя функциями, не
+ * слито в одну, чтобы не менять поведение существующих вызывающих. */
+export async function listWithDisplayName(orgId: string): Promise<(StoreRecord & { name: string })[]> {
+  const res = await query(
+    `SELECT *, COALESCE(display_name, name) AS name FROM stores s WHERE COALESCE(org_id,'default') = $1 ORDER BY s.name`,
+    [orgId]
+  );
+  return res.rows;
+}
+
+/** GET /supervisor/stores, ветка manager/admin — ВНИМАНИЕ: в исходном SQL
+ * (routes-v8.ts, до 20.8.0) не было org-фильтра вообще — manager/admin
+ * видели точки всех сетей разом в этом конкретном пикере. Перенесено
+ * дословно, не исправлено — см. итоговый отчёт 20.8.0 о находке. */
+export async function listAllActiveForPicker(): Promise<Pick<StoreRecord, 'id' | 'name' | 'code' | 'color' | 'plan_share'>[]> {
+  const res = await query(
+    `SELECT id, COALESCE(display_name, name) as name, code, color, plan_share FROM stores s
+     WHERE is_active = true OR is_active IS NULL ORDER BY s.name`
+  );
+  return res.rows;
+}
+
+/** Чат сети, к которой принадлежит точка (services/tenant.ts::getStoreChatId). */
+/** GET /forecast/:storeId — имя точки для AI-объяснения прогноза, без org-фильтра (сам эндпоинт уже org-scoped через requireStoreInOrg). */
+export async function findDisplayName(storeId: string): Promise<string | null> {
+  const res = await query(`SELECT COALESCE(display_name, name) as name FROM stores WHERE id = $1`, [storeId]);
+  return res.rows[0]?.name ?? null;
+}
+
+export async function getChatId(storeId: string): Promise<string | null> {
+  const res = await query(
+    `SELECT o.chat_id FROM stores s
+     LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
+     WHERE s.id = $1`,
+    [storeId]
+  );
+  return res.rows[0]?.chat_id || null;
+}
+
+/** Чат + тема сети точки (services/tenant.ts::getStoreNotifyTarget). */
+export async function getNotifyTarget(
+  storeId: string, threadCol: 'sales_thread_id' | 'reports_thread_id'
+): Promise<{ chat_id: string | null; thread_id: string | null } | null> {
+  const res = await query(
+    `SELECT o.chat_id, o.${threadCol} as thread_id FROM stores s
+     LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
+     WHERE s.id = $1`,
+    [storeId]
+  );
+  return res.rows[0] || null;
+}
+
 /** Существует ли точка с этим id именно в этой сети — замена ручного SELECT,
  * который раньше был у assertStoreInOrg() (middleware-auth.ts). */
 export async function belongsToOrg(orgId: string, storeId: string): Promise<boolean> {

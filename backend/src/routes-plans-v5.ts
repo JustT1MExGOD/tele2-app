@@ -6,9 +6,8 @@
 
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
-import { recordAudit } from './services/audit.js';
+import { record as recordAudit } from './repositories/audit.js';
 
 // Метрики — динамический набор из METRICS (каталог), не перечисляем
 // поимённо в схеме (та же логика, что PostSaleBody в routes-sales.ts) —
@@ -90,13 +89,13 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     const plan = await upsertEmployeeMonthPlan(Number(id), month, data);
 
     // 19.23.0 (Audit Trail): не в withTransaction — upsertEmployeeMonthPlan
-    // сама по себе на pool.query() с собственной веткой восстановления
-    // (INSERT..ON CONFLICT → фолбэк на UPDATE/INSERT при сбое) — заворачивать
+    // сама по себе со своей веткой восстановления (INSERT..ON CONFLICT →
+    // фолбэк на UPDATE/INSERT при сбое) — заворачивать
     // это в общую транзакцию с audit-записью значило бы трогать эту логику
     // отдельным неаккуратным рефакторингом ради одного роута. Ошибку
     // recordAudit не глушим (не .catch(()=>{})) — если она упадёт, ответ
     // будет 500, но сам план к этому моменту уже сохранён.
-    await recordAudit(query, {
+    await recordAudit({
       orgId: resolveViewOrgId(request.user!, body.org_id),
       actorEmployeeId: request.user!.employee_id,
       actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
@@ -184,7 +183,7 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
     // best-effort по transaction wrapping (upsertStoreMonthPlan простая, но
     // после неё уже идёт материализация store_plans — общую транзакцию на
     // всё это не строим), ошибку recordAudit не глушим.
-    await recordAudit(query, {
+    await recordAudit({
       orgId: resolveViewOrgId(request.user!, body.org_id),
       actorEmployeeId: request.user!.employee_id,
       actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,

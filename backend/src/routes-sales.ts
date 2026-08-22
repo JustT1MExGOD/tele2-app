@@ -4,14 +4,15 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query, withTransaction } from './db/index.js';
+import { withTransaction } from './db/index.js';
 import { notifyChat } from './bot/index.js';
 import { todayMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
-import { applySaleUpsert, claimIdempotencyKey, SaleMetricRangeError } from './services/sales-write.js';
-import { recordAudit } from './services/audit.js';
+import * as salesRepo from './repositories/sales.js';
+import { claimIdempotencyKey } from './repositories/sync-log.js';
+import { record as recordAudit } from './repositories/audit.js';
 import type { SalesListResponse, SaleRow } from './shared/api-types.js';
 
 // employee_id/store_id — единственные поля, форма которых реально важна на
@@ -47,17 +48,7 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     const saleDate = date || todayMoscow();
     const orgId = resolveViewOrgId(request.user!, org_id);
 
-    const res = await query(
-      `SELECT s.*, e.full_name, COALESCE(st.display_name, st.name) as store_name
-       FROM sales s
-       JOIN employees e ON e.id = s.employee_id
-       JOIN stores st ON st.id = s.store_id
-       WHERE s.sale_date = $1
-         AND (COALESCE(st.org_id, 'default') = $2 OR s.employee_id = $3)
-       ORDER BY e.full_name`,
-      [saleDate, orgId, request.user!.employee_id]
-    );
-    return res.rows;
+    return salesRepo.findByDayForOrgOrSelf(saleDate, orgId, request.user!.employee_id);
   });
 
   // Прибавление метрик (+ правка через delta отрицательный)
@@ -108,11 +99,8 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     if (clientId) {
       const fresh = await claimIdempotencyKey(clientId, employee_id, tg, body);
       if (!fresh) {
-        const existing = await query(
-          `SELECT * FROM sales WHERE employee_id = $1 AND store_id = $2 AND sale_date = $3`,
-          [employee_id, store_id, sale_date]
-        );
-        return existing.rows[0] || { ok: true, deduped: true };
+        const existing = await salesRepo.findOne(employee_id, store_id, sale_date);
+        return existing || { ok: true, deduped: true };
       }
     }
 
@@ -144,7 +132,7 @@ export async function registerSalesRoutes(app: FastifyInstance) {
 
     let row: any, applied: any[];
     try {
-      ({ row, applied } = await applySaleUpsert({
+      ({ row, applied } = await salesRepo.applySaleUpsert({
         employee_id,
         store_id,
         sale_date,
@@ -153,24 +141,19 @@ export async function registerSalesRoutes(app: FastifyInstance) {
         createdByTelegramId: tg
       }));
     } catch (e: any) {
-      if (e instanceof SaleMetricRangeError) {
+      if (e instanceof salesRepo.SaleMetricRangeError) {
         return reply.code(400).send({ error: 'metric_out_of_range', message: e.message });
       }
       throw e;
     }
 
     try {
-      const info = await query(
-        `SELECT e.full_name, COALESCE(st.display_name, st.name) as store_name
-         FROM employees e, stores st
-         WHERE e.id = $1 AND st.id = $2`,
-        [employee_id, store_id]
-      );
-      if (info.rows[0] && applied.length) {
+      const info = await salesRepo.getNotificationInfo(employee_id, store_id);
+      if (info && applied.length) {
         const { saleNotificationMulti } = await import('./bot/messages.js');
         const text = await saleNotificationMulti({
-          employeeName: info.rows[0].full_name,
-          storeName: info.rows[0].store_name,
+          employeeName: info.full_name,
+          storeName: info.store_name,
           items: applied.map((a) => ({ metric: a.metric, value: a.value }))
         });
         const target = await getStoreNotifyTarget(store_id, 'sales');
@@ -199,19 +182,16 @@ export async function registerSalesRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'unknown metric' });
     }
 
-    const before = await query(
-      `SELECT ${metric} as val, employee_id, store_id, sale_date FROM sales WHERE id = $1`,
-      [id]
-    );
-    if (!before.rows[0]) return reply.code(404).send({ error: 'not found' });
+    const before = await salesRepo.getZeroContext(id, metric);
+    if (!before) return reply.code(404).send({ error: 'not found' });
     // Точка продажи должна быть в сети менеджера — иначе manager одной сети
     // мог бы обнулять метрики продаж на точках вообще любой другой сети.
     const { org_id } = (request.query || {}) as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
-    if (!(await assertStoreInOrg(before.rows[0].store_id, orgId))) {
+    if (!(await assertStoreInOrg(before.store_id, orgId))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
-    const prevVal = Number(before.rows[0].val) || 0;
+    const prevVal = Number(before.val) || 0;
     const user = request.user!;
 
     // 19.23.0 (Audit Trail): UPDATE + sales_audit + audit_log — одна
@@ -220,25 +200,18 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     // правок при сбое второго запроса). Теперь либо обе записи, либо
     // обнуления не было вообще — то самое "transactional audit".
     const row = await withTransaction(async (q) => {
-      const res = await q(
-        `UPDATE sales SET ${metric} = 0, updated_at = now() WHERE id = $1 RETURNING *`,
-        [id]
-      );
+      const res = await salesRepo.zeroMetric(id, metric, q);
 
       if (prevVal !== 0) {
-        await q(
-          `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source, created_by)
-           VALUES ($1,$2,$3,$4,$5,'correction',$6)`,
-          [
-            before.rows[0].employee_id,
-            before.rows[0].store_id,
-            before.rows[0].sale_date,
-            metric,
-            -prevVal,
-            user.telegram_id ? Number(user.telegram_id) : null
-          ]
-        );
-        await recordAudit(q, {
+        await salesRepo.insertCorrectionAudit({
+          employeeId: before.employee_id,
+          storeId: before.store_id,
+          saleDate: before.sale_date,
+          metric,
+          delta: -prevVal,
+          createdByTelegramId: user.telegram_id ? Number(user.telegram_id) : null
+        }, q);
+        await recordAudit({
           orgId,
           actorEmployeeId: user.employee_id,
           actorTelegramId: user.telegram_id ? Number(user.telegram_id) : null,
@@ -248,10 +221,10 @@ export async function registerSalesRoutes(app: FastifyInstance) {
           before: { [metric]: prevVal },
           after: { [metric]: 0 },
           requestId: request.id
-        });
+        }, q);
       }
 
-      return res.rows[0];
+      return res;
     });
 
     return row;

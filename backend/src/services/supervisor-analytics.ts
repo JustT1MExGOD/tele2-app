@@ -6,10 +6,11 @@
  * scope=null («вся БД без фильтра») — так Command Center и кабинет
  * супервайзера показывали вообще все сети сразу.
  */
-import { query } from '../db/index.js';
 import { todayMoscow, currentMonthMoscow } from '../utils/date.js';
 import { buildSesModel, projectDay } from './forecast.js';
 import { getCached, setCached } from './scope-cache.js';
+import * as repo from '../repositories/supervisor-analytics.js';
+import * as supervisorSectorsRepo from '../repositories/supervisor-sectors.js';
 
 // Тот же полный список, что METRICS в services/plans.ts — держим локальную
 // копию (не импортируем, чтобы не тянуть весь plans.ts) для дневных и
@@ -79,14 +80,7 @@ async function forecastRemainingOfMonth(
   }
 
   const histCols = METRICS.map((m) => `COALESCE(SUM(${m}),0) as ${m}`).join(', ');
-  const hist = await query(
-    `SELECT store_id, sale_date::text as d, ${histCols}
-     FROM sales
-     WHERE store_id = ANY($1) AND sale_date >= ($2::date - interval '120 days') AND sale_date < $2::date
-     GROUP BY store_id, sale_date
-     ORDER BY store_id, sale_date`,
-    [storeIds, date]
-  ).catch(() => ({ rows: [] as any[] }));
+  const hist = { rows: await repo.findForecastHistory(storeIds, date, histCols) };
 
   // GROUP BY sale_date пропускает дни без продаж вообще — если их молча
   // выкинуть, сглаженный уровень никогда не увидит настоящий "0" и не
@@ -143,8 +137,7 @@ export async function resolveSupervisorStores(
 ): Promise<StoreScope> {
   if (role === 'admin' || role === 'manager') {
     try {
-      const res = await query(`SELECT id FROM stores WHERE COALESCE(org_id, 'default') = $1`, [orgId || 'default']);
-      return res.rows.map((r: any) => String(r.id));
+      return await repo.findStoreIdsForOrg(orgId || 'default');
     } catch {
       return [];
     }
@@ -156,29 +149,12 @@ export async function resolveSupervisorStores(
   const cached = getCached(employeeId);
   if (cached !== undefined) return cached;
   try {
-    const res = await query(
-      `SELECT s.id as store_id
-       FROM supervisor_sectors ss
-       JOIN organizations o ON o.sector_id = ss.sector_id
-       JOIN stores s ON COALESCE(s.org_id, 'default') = o.id
-       WHERE ss.supervisor_id = $1`,
-      [employeeId]
-    );
-    const stores = res.rows.map((r: any) => String(r.store_id));
+    const stores = await supervisorSectorsRepo.listStoreIdsForSupervisor(employeeId);
     setCached(employeeId, stores);
     return stores;
   } catch {
     return [];
   }
-}
-
-function storeFilterSql(scope: StoreScope, alias = 'st', paramIdx = 1) {
-  if (scope === null) return { sql: '', params: [] as any[] };
-  if (!scope.length) return { sql: ' AND false ', params: [] as any[] };
-  return {
-    sql: ` AND ${alias}.id = ANY($${paramIdx}) `,
-    params: [scope]
-  };
 }
 
 /** Главный дашборд супервайзера */
@@ -199,26 +175,14 @@ export async function buildSupervisorDashboard(opts: {
   // Список точек + название сети (o.name) — кабинет супервайзера кросс-сетевой
   // по своей сути (сектор = несколько сетей), без названия сети непонятно,
   // какая точка из какой сети в общем списке.
-  let storesRes;
+  let stores: any[];
   if (opts.scope === null) {
-    storesRes = await query(
-      `SELECT s.id, COALESCE(s.display_name, s.name) as name, s.display_name, s.code, COALESCE(s.color, '#2AABEE') as color,
-              COALESCE(s.org_id, 'default') as org_id, COALESCE(o.name, 'default') as org_name
-       FROM stores s LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
-       WHERE COALESCE(s.is_active, true) = true ORDER BY s.name`
-    );
+    stores = await repo.findAllStoresWithOrgName();
   } else if (!opts.scope.length) {
     return emptyDash(from, date, month);
   } else {
-    storesRes = await query(
-      `SELECT s.id, COALESCE(s.display_name, s.name) as name, s.display_name, s.code, COALESCE(s.color, '#2AABEE') as color,
-              COALESCE(s.org_id, 'default') as org_id, COALESCE(o.name, 'default') as org_name
-       FROM stores s LEFT JOIN organizations o ON o.id = COALESCE(s.org_id, 'default')
-       WHERE s.id = ANY($1) AND COALESCE(s.is_active, true) = true ORDER BY s.name`,
-      [opts.scope]
-    );
+    stores = await repo.findStoresWithOrgNameForScope(opts.scope);
   }
-  const stores = storesRes.rows || [];
   const storeIds = stores.map((s: any) => String(s.id));
 
   // Пустой список точек — не дергаем SQL с ANY([])
@@ -229,67 +193,39 @@ export async function buildSupervisorDashboard(opts: {
   // факт сегодня по точкам — все METRICS, не только SIM/MNP/ПА (нужно для
   // разворачиваемого списка «Ещё метрики» на вкладке «Точки»)
   const todaySumCols = METRICS.map((m) => `COALESCE(SUM(${m}),0) as ${m}`).join(', ');
-  const todayFact = await query(
-    `SELECT store_id, ${todaySumCols}
-     FROM sales WHERE sale_date::date = $1::date AND store_id = ANY($2)
-     GROUP BY store_id`,
-    [date, storeIds]
-  ).catch(() => ({ rows: [] as any[] }));
+  const todayFactRows = await repo.findTodayFact(date, storeIds, todaySumCols);
 
-  const factMap = new Map(todayFact.rows.map((r: any) => [r.store_id, r]));
+  const factMap = new Map(todayFactRows.map((r: any) => [r.store_id, r]));
 
   // планы на дату
-  const plans = await query(
-    `SELECT * FROM store_plans WHERE plan_date::date = $1::date AND store_id = ANY($2)`,
-    [date, storeIds]
-  ).catch(() => ({ rows: [] as any[] }));
-  let planMap = new Map(plans.rows.map((r: any) => [r.store_id, r]));
+  const plansRows = await repo.findPlansForDate(date, storeIds);
+  let planMap = new Map(plansRows.map((r: any) => [r.store_id, r]));
   if (!planMap.size) {
-    const tpl = await query(
-      `SELECT * FROM store_plans WHERE plan_date IS NULL AND store_id = ANY($1)`,
-      [storeIds]
-    ).catch(() => ({ rows: [] as any[] }));
-    planMap = new Map(tpl.rows.map((r: any) => [r.store_id, r]));
+    const tplRows = await repo.findPlanTemplates(storeIds);
+    planMap = new Map(tplRows.map((r: any) => [r.store_id, r]));
   }
 
   // смены сегодня
-  const shifts = await query(
-    `SELECT sch.store_id, e.id as employee_id, e.full_name, sch.shift_text, sch.hours
-     FROM schedules sch
-     JOIN employees e ON e.id = sch.employee_id
-     WHERE sch.work_date::date = $1::date AND COALESCE(sch.hours,0) > 0
-       AND sch.store_id = ANY($2)
-     ORDER BY sch.store_id, e.full_name`,
-    [date, storeIds]
-  ).catch(() => ({ rows: [] as any[] }));
+  const shiftRows = await repo.findShiftsForDate(date, storeIds);
 
   const shiftByStore = new Map<string, any[]>();
-  for (const r of shifts.rows) {
+  for (const r of shiftRows) {
     if (!shiftByStore.has(r.store_id)) shiftByStore.set(r.store_id, []);
     shiftByStore.get(r.store_id)!.push(r);
   }
 
-  // series 14 days for charts
-  const series = await query(
-    // sale_date::text (не ::date) — раньше `d` возвращался JS Date-объектом
-    // (node-postgres парсит date-колонку в полночь ПО ЛОКАЛЬНОМУ времени
-    // процесса), а String(dateObj) даёт "Tue Aug 11", не "2026-08-11" —
-    // seriesMap ключился нечитаемой строкой, которая никогда не совпадала
-    // с ключом ниже (cursor.toISOString()), и trend был ВСЕГДА пустым
-    // (тот же класс бага, что чинили в toDateISO() 17.10.0 — там, где
-    // рядом forecastRemainingOfMonth уже кастует в ::text, бага нет).
-    `SELECT sale_date::text as d,
-       COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp, COALESCE(SUM(pa),0) pa,
-       COALESCE(SUM(combo),0) combo
-     FROM sales
-     WHERE sale_date >= $1::date AND sale_date <= $2::date AND store_id = ANY($3)
-     GROUP BY sale_date::date
-     ORDER BY d`,
-    [from, date, storeIds]
-  ).catch(() => ({ rows: [] as any[] }));
+  // series 14 days for charts — sale_date::text (не ::date) — раньше `d`
+  // возвращался JS Date-объектом (node-postgres парсит date-колонку в
+  // полночь ПО ЛОКАЛЬНОМУ времени процесса), а String(dateObj) даёт
+  // "Tue Aug 11", не "2026-08-11" — seriesMap ключился нечитаемой строкой,
+  // которая никогда не совпадала с ключом ниже (cursor.toISOString()), и
+  // trend был ВСЕГДА пустым (тот же класс бага, что чинили в toDateISO()
+  // 17.10.0 — там, где рядом forecastRemainingOfMonth уже кастует в
+  // ::text, бага нет).
+  const seriesRows = await repo.findSeriesForRange(from, date, storeIds);
 
   // fill missing days
-  const seriesMap = new Map(series.rows.map((r: any) => [String(r.d).slice(0, 10), r]));
+  const seriesMap = new Map(seriesRows.map((r: any) => [String(r.d).slice(0, 10), r]));
   const trend: { date: string; sim: number; mnp: number; pa: number; combo: number; units: number }[] = [];
   const cursor = new Date(from + 'T12:00:00');
   const end = new Date(date + 'T12:00:00');
@@ -304,23 +240,14 @@ export async function buildSupervisorDashboard(opts: {
   // факт с начала месяца по точкам — все METRICS (нужно для «Выполнение
   // месячного плана» и как база для прогноза до конца месяца)
   const monthSumCols = METRICS.map((m) => `COALESCE(SUM(${m}),0) as ${m}`).join(', ');
-  const monthFact = await query(
-    `SELECT store_id, ${monthSumCols}
-     FROM sales
-     WHERE sale_date >= $1::date AND sale_date <= $2::date AND store_id = ANY($3)
-     GROUP BY store_id`,
-    [monthStart, date, storeIds]
-  ).catch(() => ({ rows: [] as any[] }));
-  const monthMap = new Map(monthFact.rows.map((r: any) => [r.store_id, r]));
+  const monthFactRows = await repo.findMonthFact(monthStart, date, storeIds, monthSumCols);
+  const monthMap = new Map(monthFactRows.map((r: any) => [r.store_id, r]));
 
   // месячные планы точек (store_month_plans) — бывший single-store хелпер
   // getStoreMonthPlan() тут не переиспользуем, батчим одним запросом на
   // весь сектор, а не по точке за раз
-  const monthPlansRes = await query(
-    `SELECT * FROM store_month_plans WHERE store_id = ANY($1) AND month = $2::date`,
-    [storeIds, monthStart]
-  ).catch(() => ({ rows: [] as any[] }));
-  const monthPlanMap = new Map(monthPlansRes.rows.map((r: any) => [r.store_id, r]));
+  const monthPlansRows = await repo.findMonthPlans(storeIds, monthStart);
+  const monthPlanMap = new Map(monthPlansRows.map((r: any) => [r.store_id, r]));
 
   // Прогноз до конца месяца — SES + сезонность на день недели (см.
   // forecastRemainingOfMonth выше), один батч-запрос на весь сектор.
@@ -439,21 +366,7 @@ export async function buildSupervisorDashboard(opts: {
 
   // top employees period (+ их сеть — кросс-сетевой топ иначе не показывает,
   // кто откуда, что важно для сектора из нескольких сетей)
-  const topEmp = await query(
-    `SELECT e.id, e.full_name, COALESCE(e.org_id,'default') as org_id, COALESCE(o.name,'default') as org_name,
-       COALESCE(SUM(s.sim),0) sim, COALESCE(SUM(s.mnp),0) mnp,
-       COALESCE(SUM(s.pa),0) pa, COALESCE(SUM(s.combo),0) combo,
-       COALESCE(SUM(s.phones),0) phones
-     FROM sales s
-     JOIN employees e ON e.id = s.employee_id
-     LEFT JOIN organizations o ON o.id = COALESCE(e.org_id, 'default')
-     WHERE s.sale_date >= $1::date AND s.sale_date <= $2::date
-       AND s.store_id = ANY($3)
-     GROUP BY e.id, e.full_name, e.org_id, o.name
-     ORDER BY (COALESCE(SUM(s.sim),0)*2 + COALESCE(SUM(s.mnp),0)*3 + COALESCE(SUM(s.pa),0)*2) DESC
-     LIMIT 15`,
-    [from, date, storeIds]
-  ).catch(() => ({ rows: [] as any[] }));
+  const topEmpRows = await repo.findTopEmployees(from, date, storeIds);
 
   // pace: expected % of day by hour (simple linear 10-21)
   const nowMsk = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
@@ -476,14 +389,8 @@ export async function buildSupervisorDashboard(opts: {
   // при отправке итогового отчёта; здесь только подтягиваем готовый текст.
   if (drops.length) {
     const dropStoreIds = [...new Set(drops.map((d) => d.store_id))];
-    const aiRes = await query(
-      `SELECT DISTINCT ON (store_id) store_id, response
-       FROM ai_audit
-       WHERE kind = 'dip_comment' AND ref_date = $1::date AND store_id = ANY($2)
-       ORDER BY store_id, created_at DESC`,
-      [date, dropStoreIds]
-    ).catch(() => ({ rows: [] as any[] }));
-    const aiByStore = new Map(aiRes.rows.map((r: any) => [r.store_id, r.response]));
+    const aiRows = await repo.findAiDipComments(date, dropStoreIds);
+    const aiByStore = new Map(aiRows.map((r: any) => [r.store_id, r.response]));
     for (const d of drops) {
       const c = aiByStore.get(d.store_id);
       if (c) d.ai_comment = c;
@@ -518,14 +425,14 @@ export async function buildSupervisorDashboard(opts: {
       plan_mnp: netPlanMnp,
       plan_pa: netPlanPa,
       stores_count: stores.length,
-      staff_on_shift: shifts.rows.length,
+      staff_on_shift: shiftRows.length,
       drops_count: drops.length,
       month: { metrics: monthMetricsNet, forecast: monthForecastNet }
     },
     stores: storeCards,
     drops: drops.sort((a, b) => (a.severity === 'critical' ? -1 : 1)),
     trend,
-    top_employees: topEmp.rows.map((e: any, i: number) => ({
+    top_employees: topEmpRows.map((e: any, i: number) => ({
       rank: i + 1,
       id: e.id,
       full_name: e.full_name,
@@ -555,32 +462,18 @@ export async function findUnderperformingEmployees(scope: StoreScope, date: stri
   const nowMsk = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
   if (date === todayMoscow() && nowMsk.getHours() < 14) return [];
 
-  const filter = storeFilterSql(scope, 'st', 1);
   if (scope !== null && !scope.length) return [];
 
-  const res = await query(
-    `SELECT sch.employee_id, e.full_name, sch.store_id, COALESCE(st.display_name, st.name) as store_name,
-       COALESCE(SUM(s.sim + s.mnp + s.pa + s.combo), 0) as units
-     FROM schedules sch
-     JOIN employees e ON e.id = sch.employee_id
-     JOIN stores st ON st.id = sch.store_id
-     LEFT JOIN sales s ON s.employee_id = sch.employee_id AND s.store_id = sch.store_id
-       AND s.sale_date::date = sch.work_date::date
-     WHERE sch.work_date::date = $${scope !== null ? 2 : 1}::date
-       AND COALESCE(sch.hours, 0) > 0
-       ${filter.sql}
-     GROUP BY sch.employee_id, e.full_name, sch.store_id, st.name, st.display_name`,
-    scope !== null ? [...filter.params, date] : [date]
-  ).catch(() => ({ rows: [] as any[] }));
+  const rows = await repo.findUnderperformingRaw(scope, date);
 
   const byStore = new Map<string, { employee_id: number; full_name: string; units: number }[]>();
-  for (const r of res.rows) {
+  for (const r of rows) {
     if (!byStore.has(r.store_id)) byStore.set(r.store_id, []);
     byStore.get(r.store_id)!.push({ employee_id: Number(r.employee_id), full_name: r.full_name, units: n(r.units) });
   }
 
   const out: { employee_id: number; full_name: string; store_id: string; store_name: string }[] = [];
-  const storeNames = new Map(res.rows.map((r: any) => [r.store_id, r.store_name]));
+  const storeNames = new Map(rows.map((r: any) => [r.store_id, r.store_name]));
   for (const [storeId, staff] of byStore) {
     const hasAnySales = staff.some((s) => s.units > 0);
     if (!hasAnySales) continue; // уже store-level drop, не дублируем

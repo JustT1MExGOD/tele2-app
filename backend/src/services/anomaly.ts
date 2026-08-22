@@ -6,10 +6,11 @@
  * числа; этот — единственный сигнал против ТИПИЧНОГО дня той же точки,
  * статистический (z-score), а не «меньше плана на N%».
  */
-import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
 import { buildSesModel, projectDay } from './forecast.js';
 import { insertAlertOnce } from './alerts.js';
+import * as storesRepo from '../repositories/stores.js';
+import * as salesRepo from '../repositories/sales.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -26,38 +27,23 @@ export async function checkAnomalyVsForecast() {
   const yesterday = yesterdayDate.toISOString().slice(0, 10);
   const yesterdayDow = yesterdayDate.getDay();
 
-  const storesRes = await query(`SELECT id, name FROM stores WHERE COALESCE(is_active,true)=true`);
-  const stores = storesRes.rows as { id: string; name: string }[];
+  const stores = await storesRepo.listAllActive();
   if (!stores.length) return { checked: 0, created: 0 };
   const storeIds = stores.map((s) => s.id);
 
   // История ДО вчера (вчера намеренно исключён — иначе день сравнивается сам с собой).
-  const hist = await query(
-    `SELECT store_id, sale_date::text as d,
-            COALESCE(SUM(sim),0)+COALESCE(SUM(mnp),0)+COALESCE(SUM(pa),0)+COALESCE(SUM(combo),0) as total
-     FROM sales
-     WHERE store_id = ANY($1) AND sale_date >= ($2::date - interval '120 days') AND sale_date < $2::date
-     GROUP BY store_id, sale_date`,
-    [storeIds, yesterday]
-  ).catch(() => ({ rows: [] as any[] }));
+  const hist = await salesRepo.findHistoricalTotals(storeIds, yesterday);
 
   const histByStore = new Map<string, Map<string, number>>();
-  for (const r of hist.rows) {
+  for (const r of hist) {
     const d = String(r.d).slice(0, 10);
     if (!histByStore.has(r.store_id)) histByStore.set(r.store_id, new Map());
     histByStore.get(r.store_id)!.set(d, num(r.total));
   }
 
-  const actualRes = await query(
-    `SELECT store_id,
-            COALESCE(SUM(sim),0)+COALESCE(SUM(mnp),0)+COALESCE(SUM(pa),0)+COALESCE(SUM(combo),0) as total
-     FROM sales
-     WHERE store_id = ANY($1) AND sale_date = $2::date
-     GROUP BY store_id`,
-    [storeIds, yesterday]
-  );
+  const actualRows = await salesRepo.findTotalsForDate(storeIds, yesterday);
   const actualByStore = new Map<string, number>();
-  for (const r of actualRes.rows) actualByStore.set(r.store_id, num(r.total));
+  for (const r of actualRows) actualByStore.set(r.store_id, num(r.total));
 
   let created = 0;
   for (const st of stores) {

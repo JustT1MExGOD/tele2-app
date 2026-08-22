@@ -4,7 +4,9 @@
  * для живого прогресса «до»/«во время» смены. Формула не менялась,
  * перенесена как есть из routes-shifts.ts.
  */
-import { query } from '../db/index.js';
+import * as salesRepo from '../repositories/sales.js';
+import * as plansRepo from '../repositories/plans.js';
+import * as schedulesRepo from '../repositories/schedules.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -27,13 +29,7 @@ export interface DayPlanFact {
 }
 
 export async function computeDayPlanFact(employeeId: number, date: string): Promise<DayPlanFact> {
-  const sales = await query(
-    `SELECT COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp,
-            COALESCE(SUM(pa),0) pa, COALESCE(SUM(combo),0) combo
-     FROM sales WHERE employee_id = $1 AND sale_date::date = $2::date`,
-    [employeeId, date]
-  );
-  const factRow = sales.rows[0] || {};
+  const factRow = await salesRepo.sumDayFactNarrow(employeeId, date);
   const fact: DayMetrics = {
     sim: num(factRow.sim),
     mnp: num(factRow.mnp),
@@ -42,19 +38,9 @@ export async function computeDayPlanFact(employeeId: number, date: string): Prom
   };
 
   const month = date.slice(0, 7) + '-01';
-  const planRow = await query(
-    `SELECT sim, mnp, pa, combo FROM employee_month_plans
-     WHERE employee_id = $1 AND month::date = $2::date`,
-    [employeeId, month]
-  );
-  const rem = await query(
-    `SELECT COUNT(*)::int c FROM schedules
-     WHERE employee_id = $1 AND work_date::date >= $2::date
-       AND work_date::date < ($3::date + interval '1 month') AND COALESCE(hours,0)>0`,
-    [employeeId, date, month]
-  );
-  const div = Math.max(1, num(rem.rows[0]?.c));
-  const mp = planRow.rows[0] || {};
+  const mp = (await plansRepo.findEmployeeMonthPlanExact(employeeId, month)) || {};
+  const remCnt = await schedulesRepo.countRemainingInMonth(employeeId, date, month);
+  const div = Math.max(1, num(remCnt));
   const dayPlan: DayMetrics = {
     sim: Math.ceil(num(mp.sim) / div),
     mnp: Math.ceil(num(mp.mnp) / div),

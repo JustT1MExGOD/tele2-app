@@ -5,11 +5,12 @@
  */
 
 import cron from 'node-cron';
-import { query } from '../db/index.js';
 import { bot, notifyChat } from '../bot/index.js';
 import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
 import { computeStoreDailyPlans } from '../services/plans.js';
 import { getOrgNotifyTarget } from '../services/tenant.js';
+import * as cronRepo from '../repositories/cron.js';
+import * as orgsRepo from '../repositories/organizations.js';
 
 /** Группировка произвольных строк с полем org_id по сети — каждая сеть получает своё сообщение в свой чат. */
 function groupByOrg<T extends { org_id: string }>(rows: T[]): Map<string, T[]> {
@@ -22,11 +23,10 @@ function groupByOrg<T extends { org_id: string }>(rows: T[]): Map<string, T[]> {
 }
 
 async function wasSent(key: string) {
-  const r = await query('SELECT 1 FROM alert_flags WHERE id = $1', [key]);
-  return r.rows.length > 0;
+  return cronRepo.alertWasSent(key);
 }
 async function mark(key: string) {
-  await query('INSERT INTO alert_flags (id) VALUES ($1) ON CONFLICT DO NOTHING', [key]);
+  await cronRepo.markAlertSent(key);
 }
 
 export async function checkZeroSalesAlert() {
@@ -36,28 +36,15 @@ export async function checkZeroSalesAlert() {
   const key = `zero_sales_${date}`;
   if (await wasSent(key)) return;
 
-  const res = await query(
-    `SELECT e.full_name, e.telegram_id, st.name as store_name, sch.shift_text,
-            COALESCE(st.org_id, 'default') as org_id
-     FROM schedules sch
-     JOIN employees e ON e.id = sch.employee_id
-     JOIN stores st ON st.id = sch.store_id
-     WHERE sch.work_date = $1 AND sch.hours > 0 AND e.is_active = true
-       AND NOT EXISTS (
-         SELECT 1 FROM sales s
-         WHERE s.employee_id = e.id AND s.sale_date = $1
-           AND (s.sim+s.mnp+s.pa+s.combo+s.phones) > 0
-       )`,
-    [date]
-  );
+  const rows0 = await cronRepo.findZeroSalesOnShift(date);
 
-  if (!res.rows.length) {
+  if (!rows0.length) {
     await mark(key);
     return;
   }
 
   // Одна сеть — одно сообщение в её чат (в тему "отчёты", если настроена).
-  for (const [orgId, rows] of groupByOrg(res.rows)) {
+  for (const [orgId, rows] of groupByOrg(rows0)) {
     const lines = rows.map((r: any) => `• ${r.full_name} — ${r.store_name}`).join('\n');
     const target = await getOrgNotifyTarget(orgId, 'reports');
     await notifyChat(
@@ -67,7 +54,7 @@ export async function checkZeroSalesAlert() {
     );
   }
 
-  for (const r of res.rows) {
+  for (const r of rows0) {
     if (bot && r.telegram_id) {
       try {
         await bot.api.sendMessage(
@@ -79,7 +66,7 @@ export async function checkZeroSalesAlert() {
     }
   }
   await mark(key);
-  console.log('Alert zero sales:', res.rows.length);
+  console.log('Alert zero sales:', rows0.length);
 }
 
 export async function checkStoreLagAlert() {
@@ -90,8 +77,8 @@ export async function checkStoreLagAlert() {
   const key = `store_lag_${date}`;
   if (await wasSent(key)) return;
 
-  const orgsRes = await query(`SELECT id FROM organizations`);
-  const orgIds = orgsRes.rows.length ? orgsRes.rows.map((r: any) => r.id) : ['default'];
+  const orgIds0 = await orgsRepo.listIds();
+  const orgIds = orgIds0.length ? orgIds0 : ['default'];
 
   const lagging: { org_id: string; line: string }[] = [];
   for (const orgId of orgIds) {
@@ -102,13 +89,7 @@ export async function checkStoreLagAlert() {
       continue;
     }
     for (const st of plans.stores || []) {
-      const fact = await query(
-        `SELECT COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
-                COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo
-         FROM sales WHERE store_id = $1 AND sale_date = $2`,
-        [st.store_id, date]
-      );
-      const f = fact.rows[0];
+      const f = await cronRepo.sumKeyMetricsForStoreDate(st.store_id, date);
       const planSim = Number(st.plan?.sim) || 0;
       const factSim = Number(f.sim) || 0;
       if (planSim > 0 && factSim / planSim < 0.4) {

@@ -6,10 +6,10 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { authPlugin, requireAuth, requireManager } from './middleware-auth.js';
 import { invalidateMetricsCache, getMetricDefs } from './services/metrics-catalog.js';
 import { serverError } from './utils/http-errors.js';
+import * as metricsRepo from './repositories/metrics.js';
 import type { MetricsResponse, CreateMetricResponse, DeleteMetricResponse } from './shared/api-types.js';
 
 const PostMetricBody = Type.Object({
@@ -40,13 +40,6 @@ function slugify(label: string, short?: string) {
   let id = base.replace(/[^a-z0-9_]/g, '').slice(0, 24);
   if (!id || !/^[a-z]/.test(id)) id = 'm_' + (id || 'metric');
   return id.slice(0, 30);
-}
-
-async function ensureColumn(table: string, col: string) {
-  // col already sanitized
-  await query(
-    `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} numeric DEFAULT 0`
-  );
 }
 
 export async function registerMetricsRoutes(app: FastifyInstance) {
@@ -87,49 +80,19 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
     // sort_order
     let sort = 200;
     try {
-      const mx = await query(`SELECT COALESCE(MAX(sort_order), 0) + 10 AS s FROM plan_metrics`);
-      sort = Number(mx.rows[0]?.s) || 200;
+      sort = await metricsRepo.nextSortOrder();
     } catch (_) {}
 
     try {
-      await query(
-        `INSERT INTO plan_metrics (id, label, short_label, unit, is_active, sort_order)
-         VALUES ($1, $2, $3, $4, true, $5)
-         ON CONFLICT (id) DO UPDATE SET
-           label = EXCLUDED.label,
-           short_label = EXCLUDED.short_label,
-           unit = EXCLUDED.unit,
-           is_active = true,
-           sort_order = COALESCE(plan_metrics.sort_order, EXCLUDED.sort_order)`,
-        [id, label, short, unit, sort]
-      );
+      await metricsRepo.upsert(id, label, short, unit, sort);
     } catch (e: any) {
-      // create table if missing
-      if (String(e?.message || e).includes('plan_metrics')) {
-        await query(`
-          CREATE TABLE IF NOT EXISTS plan_metrics (
-            id text PRIMARY KEY,
-            label text NOT NULL,
-            short_label text,
-            unit text DEFAULT 'count',
-            is_active boolean DEFAULT true,
-            sort_order int DEFAULT 100
-          )`);
-        await query(
-          `INSERT INTO plan_metrics (id, label, short_label, unit, is_active, sort_order)
-           VALUES ($1,$2,$3,$4,true,$5)
-           ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, is_active = true`,
-          [id, label, short, unit, sort]
-        );
-      } else {
-        return serverError(request, reply, 'db_error', e);
-      }
+      return serverError(request, reply, 'db_error', e);
     }
 
     // колонки в основных таблицах — чтобы план/продажи/точки работали
     for (const table of ['sales', 'store_plans', 'employee_month_plans']) {
       try {
-        await ensureColumn(table, id);
+        await metricsRepo.ensureColumn(table, id);
       } catch (e: any) {
         console.warn(`ALTER ${table}.${id}:`, e?.message || e);
       }
@@ -165,7 +128,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'locked', message: 'Базовую метрику нельзя удалить' });
     }
     try {
-      await query(`UPDATE plan_metrics SET is_active = false WHERE id = $1`, [id]);
+      await metricsRepo.softDeactivate(id);
     } catch (e: any) {
       return serverError(request, reply, 'db_error', e);
     }

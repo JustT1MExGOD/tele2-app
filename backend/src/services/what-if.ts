@@ -2,8 +2,10 @@
  * What-if: виртуальный перенос смены → пересчёт покрытия плана точки.
  * Не пишет в БД — только симуляция.
  */
-import { query } from '../db/index.js';
 import { toDateISO, todayMoscow } from '../utils/date.js';
+import * as repo from '../repositories/what-if.js';
+import * as plansRepo from '../repositories/plans.js';
+import * as schedulesRepo from '../repositories/schedules.js';
 
 function n(v: any) {
   return Number(v) || 0;
@@ -13,21 +15,9 @@ const METRICS = ['sim', 'mnp', 'pa', 'combo'] as const;
 
 async function perShiftPlan(employeeId: number, date: string) {
   const month = date.slice(0, 7) + '-01';
-  const pr = await query(
-    `SELECT sim, mnp, pa, combo FROM employee_month_plans
-     WHERE employee_id = $1 AND month::date = $2::date LIMIT 1`,
-    [employeeId, month]
-  );
-  const rem = await query(
-    `SELECT COUNT(*)::int c FROM schedules
-     WHERE employee_id = $1
-       AND work_date::date >= $2::date
-       AND work_date::date < ($3::date + interval '1 month')
-       AND COALESCE(hours, 0) > 0`,
-    [employeeId, date, month]
-  );
-  const div = Math.max(1, n(rem.rows[0]?.c));
-  const row = pr.rows[0] || {};
+  const row = (await plansRepo.findEmployeeMonthPlanExact(employeeId, month)) || {};
+  const remCnt = await schedulesRepo.countRemainingInMonth(employeeId, date, month);
+  const div = Math.max(1, n(remCnt));
   const out: Record<string, number> = {};
   for (const m of METRICS) out[m] = Math.ceil(n(row[m]) / div);
   return out;
@@ -53,11 +43,7 @@ export async function simulateScheduleMoves(opts: {
   // могла двигать сотрудника на точку вообще любой другой сети. Точки
   // чужой сети просто не попадают в coverage, поэтому move на них ниже
   // естественно отбрасывается как unknown_store — без отдельного чека.
-  const stores = await query(
-    `SELECT id, COALESCE(display_name, name) as name, code, COALESCE(color, '#2AABEE') as color
-     FROM stores s WHERE COALESCE(is_active, true) = true AND COALESCE(org_id,'default') = $1 ORDER BY s.name`,
-    [opts.orgId]
-  );
+  const stores = await repo.listActiveStoresWithColor(opts.orgId);
 
   type Cov = {
     store_id: string;
@@ -71,13 +57,8 @@ export async function simulateScheduleMoves(opts: {
 
   const coverage: Record<string, Cov> = {};
 
-  for (const st of stores.rows) {
-    const staff = await query(
-      `SELECT employee_id FROM schedules
-       WHERE store_id = $1 AND work_date::date = $2::date AND COALESCE(hours, 0) > 0`,
-      [st.id, date]
-    );
-    const ids = staff.rows.map((r: any) => Number(r.employee_id));
+  for (const st of stores) {
+    const ids = await repo.findStaffIdsOnShift(st.id, date);
     const expected: Record<string, number> = { sim: 0, mnp: 0, pa: 0, combo: 0 };
     for (const eid of ids) {
       const ps = await perShiftPlan(eid, date);

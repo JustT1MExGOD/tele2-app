@@ -3,18 +3,19 @@
  * Выделено из routes-v3.ts.
  */
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import { query } from './db/index.js';
 import { calculateAllBFQ } from './services/bfq.js';
 import { requireAuth, requireManager, isManager, resolveViewOrgId } from './middleware-auth.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
-import { recordAudit } from './services/audit.js';
+import { record as recordAudit } from './repositories/audit.js';
+import * as salesRepo from './repositories/sales.js';
+import * as schedulesRepo from './repositories/schedules.js';
 
 // 19.23.0 (Audit Trail) — экспорт не мутация, просто фиксируем факт "кто
 // когда что выгрузил" (data exfiltration угол из исходного ревью). Ошибку
 // не глушим намеренно, но и не блокируем ответ — файл уже готов к этому
 // моменту, отдаём его синхронно, аудит пишем fire-and-forget с логом сбоя.
 function auditExport(request: FastifyRequest, orgId: string, targetId: string, filters: Record<string, unknown>) {
-  recordAudit(query, {
+  recordAudit({
     orgId,
     actorEmployeeId: request.user!.employee_id,
     actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
@@ -60,28 +61,11 @@ export async function registerExportRoutes(app: FastifyInstance) {
     // Раньше manager видел историю продаж ВСЕХ сетей сразу — теперь только
     // своей (или явно выбранной admin-переключателем); своя запись видна
     // всегда, даже если сегодня подменяешь в чужой сети.
-    const params: any[] = [from, to, orgId, request.user!.employee_id];
-    let sql = `
-      SELECT s.*, e.full_name, COALESCE(st.display_name, st.name) as store_name
-      FROM sales s
-      JOIN employees e ON e.id = s.employee_id
-      JOIN stores st ON st.id = s.store_id
-      WHERE s.sale_date >= $1 AND s.sale_date <= $2
-        AND (COALESCE(st.org_id,'default') = $3 OR s.employee_id = $4)
-    `;
-    if (employeeFilter) {
-      params.push(employeeFilter);
-      sql += ` AND s.employee_id = $${params.length}`;
-    }
-    if (q.store_id) {
-      params.push(q.store_id);
-      sql += ` AND s.store_id = $${params.length}`;
-    }
-    params.push(limit);
-    sql += ` ORDER BY s.sale_date DESC, e.full_name LIMIT $${params.length}`;
-
-    const res = await query(sql, params);
-    return { from, to, count: res.rows.length, items: res.rows };
+    const rows = await salesRepo.findHistory({
+      from, to, orgId, ownEmployeeId: request.user!.employee_id,
+      employeeFilter, storeId: q.store_id || null, limit
+    });
+    return { from, to, count: rows.length, items: rows };
   });
 
   app.get('/sales/audit', async (request, reply) => {
@@ -90,21 +74,9 @@ export async function registerExportRoutes(app: FastifyInstance) {
     const from = q.from || todayMoscow().slice(0, 8) + '01';
     const to = q.to || todayMoscow();
     const orgId = resolveViewOrgId(request.user!, q.org_id);
-    const params: any[] = [from, to, orgId];
-    let sql = `
-      SELECT a.*, e.full_name, COALESCE(st.display_name, st.name) as store_name
-      FROM sales_audit a
-      LEFT JOIN employees e ON e.id = a.employee_id
-      LEFT JOIN stores st ON st.id = a.store_id
-      WHERE a.sale_date >= $1 AND a.sale_date <= $2 AND COALESCE(st.org_id,'default') = $3
-    `;
-    if (q.employee_id) {
-      params.push(Number(q.employee_id));
-      sql += ` AND a.employee_id = $${params.length}`;
-    }
-    sql += ` ORDER BY a.created_at DESC LIMIT 500`;
-    const res = await query(sql, params);
-    return res.rows;
+    return salesRepo.findSalesAudit({
+      from, to, orgId, employeeId: q.employee_id ? Number(q.employee_id) : null
+    });
   });
 
   // ========== EXPORT ==========
@@ -115,24 +87,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
     const from = q.from || todayMoscow().slice(0, 8) + '01';
     const to = q.to || todayMoscow();
     const orgId = resolveViewOrgId(request.user!, q.org_id);
-    const params: any[] = [from, to, orgId];
-    let sql = `
-      SELECT s.sale_date, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.code,
-             s.sim, s.mnp, s.pa, s.combo, s.phones, s.accessories,
-             s.insurance, s.wink, s.shpd, s.focus, s.settings,
-             s.credit_request, s.credit_issued, s.plotter, s.hb
-      FROM sales s
-      JOIN employees e ON e.id = s.employee_id
-      JOIN stores st ON st.id = s.store_id
-      WHERE s.sale_date >= $1 AND s.sale_date <= $2 AND COALESCE(st.org_id,'default') = $3
-    `;
-    if (q.store_id) {
-      params.push(q.store_id);
-      sql += ` AND s.store_id = $${params.length}`;
-    }
-    sql += ` ORDER BY s.sale_date, e.full_name`;
-
-    const res = await query(sql, params);
+    const rows = await salesRepo.findForCsvExport({ from, to, orgId, storeId: q.store_id || null });
     const header = [
       'date', 'employee', 'store', 'code',
       'sim', 'mnp', 'pa', 'combo', 'phones', 'accessories',
@@ -141,7 +96,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
     ];
 
     const lines = [header.join(';')];
-    for (const r of res.rows) {
+    for (const r of rows) {
       lines.push([
         String(r.sale_date).slice(0, 10),
         r.full_name, r.store_name, r.code,
@@ -209,20 +164,11 @@ export async function registerExportRoutes(app: FastifyInstance) {
     endDate.setMonth(endDate.getMonth() + 1);
     const end = endDate.toISOString().slice(0, 10);
 
-    const res = await query(
-      `SELECT sch.work_date, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.code,
-              sch.shift_text, sch.hours
-       FROM schedules sch
-       JOIN employees e ON e.id = sch.employee_id
-       JOIN stores st ON st.id = sch.store_id
-       WHERE sch.work_date >= $1 AND sch.work_date < $2 AND COALESCE(st.org_id,'default') = $3
-       ORDER BY sch.work_date, e.full_name`,
-      [start, end, orgId]
-    );
+    const rows = await schedulesRepo.findForCsvExport(start, end, orgId);
 
     const header = ['date', 'employee', 'store', 'code', 'shift', 'hours'];
     const lines = [header.join(';')];
-    for (const r of res.rows) {
+    for (const r of rows) {
       lines.push([
         String(r.work_date).slice(0, 10),
         r.full_name, r.store_name, r.code, r.shift_text, r.hours

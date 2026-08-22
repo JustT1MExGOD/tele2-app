@@ -14,8 +14,8 @@
  * последняя его запись и есть то, что нужно анонсировать, независимо от
  * того, какая именно версия сейчас фактически запущена.
  */
-import { query } from '../db/index.js';
 import { CHANGELOG, ChangelogEntry } from '../changelog.js';
+import * as appSettingsRepo from '../repositories/app-settings.js';
 import { buildReleaseCardPng } from './report-image.js';
 import { notifyChatPhoto } from '../bot/index.js';
 
@@ -56,15 +56,7 @@ export function buildAnnounceCaption(version: string, entry: ChangelogEntry): st
  * RETURNING не отдаёт строку, ровно как offline_sync_log/cron_send_log.
  */
 export async function claimReleaseAnnouncement(version: string): Promise<boolean> {
-  const claim = await query(
-    `INSERT INTO app_settings (key, value, updated_at)
-     VALUES ('last_announced_version', $1, now())
-     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-     WHERE app_settings.value IS DISTINCT FROM EXCLUDED.value
-     RETURNING value`,
-    [version]
-  );
-  return !!claim.rows[0];
+  return appSettingsRepo.claimIfChanged('last_announced_version', version);
 }
 
 export async function announceReleaseIfNeeded() {

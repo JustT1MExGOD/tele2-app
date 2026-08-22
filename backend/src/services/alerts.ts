@@ -1,10 +1,17 @@
 /**
  * Умные алерты по точкам — не спам в общий чат, а точечные события.
+ * 20.8.0 (Full DAL): SQL переехал в repositories/alerts.ts + stores.ts +
+ * sales.ts + shifts.ts + cash.ts, этот файл остаётся генератором (бизнес-
+ * правила "что считать алертом"), композирующим их вызовы.
  */
-import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
 import { notifyAdmin, notifyChat } from '../bot/index.js';
 import { checkAnomalyVsForecast } from './anomaly.js';
+import * as alertsRepo from '../repositories/alerts.js';
+import * as storesRepo from '../repositories/stores.js';
+import * as salesRepo from '../repositories/sales.js';
+import * as shiftsRepo from '../repositories/shifts.js';
+import * as cashRepo from '../repositories/cash.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -30,72 +37,59 @@ export async function runSmartAlertsTick() {
     await checkAnomalyVsForecast().catch((e) => console.error('checkAnomalyVsForecast:', e?.message || e));
   }
 
-  const stores = await query(
-    `SELECT id, name, code FROM stores WHERE COALESCE(is_active,true)=true`
-  );
+  const stores = await storesRepo.listAllActive();
 
   const created: any[] = [];
 
-  for (const st of stores.rows) {
-    const sales = await query(
-      `SELECT COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp,
-              COALESCE(SUM(pa),0) pa, COALESCE(SUM(combo),0) combo
-       FROM sales WHERE store_id = $1 AND sale_date::date = $2::date`,
-      [st.id, today]
-    );
-    const s = sales.rows[0] || {};
+  for (const st of stores) {
+    const s = await salesRepo.sumMetricsForStoreDay(st.id, today);
     const sim = num(s.sim);
     const mnp = num(s.mnp);
 
     // 0 MNP при уже заметных SIM после 14:00
     if (hour >= 14 && sim >= 4 && mnp === 0) {
-      const alert = await insertAlertOnce({
+      const alert = await alertsRepo.insertOnce({
         store_id: st.id,
         alert_type: 'low_mnp_ratio',
         severity: 'warn',
         title: `${st.name}: 0 MNP при ${sim} SIM`,
         body: `К ${hour}:00 на точке ${sim} SIM и ни одного MNP — нетипично. Проверьте скрипт переноса.`,
-        payload: { sim, mnp, hour, date: today }
+        payload: { sim, mnp, hour, date: today },
+        alert_date: today
       });
       if (alert) created.push(alert);
     }
 
     // нет продаж к 13:00 при открытой смене
     if (hour >= 13 && sim + mnp + num(s.pa) === 0) {
-      const open = await query(
-        `SELECT COUNT(*)::int c FROM shift_sessions
-         WHERE store_id = $1 AND work_date = $2::date AND status = 'open'`,
-        [st.id, today]
-      );
-      if (num(open.rows[0]?.c) > 0) {
-        const alert = await insertAlertOnce({
+      const openCount = await shiftsRepo.countOpenForStoreDay(st.id, today);
+      if (openCount > 0) {
+        const alert = await alertsRepo.insertOnce({
           store_id: st.id,
           alert_type: 'no_sales_hour',
           severity: 'critical',
           title: `${st.name}: тишина до ${hour}:00`,
           body: `Смена открыта, продаж нет. Загляни на точку или напиши смене.`,
-          payload: { hour, date: today }
+          payload: { hour, date: today },
+          alert_date: today
         });
         if (alert) created.push(alert);
       }
     }
 
     // кассовый разрыв
-    const cash = await query(
-      `SELECT cash_fact, cash_1c FROM store_cash
-       WHERE store_id = $1 AND cash_date = $2::date`,
-      [st.id, today]
-    );
-    if (cash.rows[0]) {
-      const delta = num(cash.rows[0].cash_fact) - num(cash.rows[0].cash_1c);
+    const cash = await cashRepo.findOneForStoreDay(st.id, today);
+    if (cash) {
+      const delta = num(cash.cash_fact) - num(cash.cash_1c);
       if (Math.abs(delta) >= 1000) {
-        const alert = await insertAlertOnce({
+        const alert = await alertsRepo.insertOnce({
           store_id: st.id,
           alert_type: 'cash_gap',
           severity: Math.abs(delta) >= 5000 ? 'critical' : 'warn',
           title: `${st.name}: расхождение кассы ${delta}`,
-          body: `Факт ${cash.rows[0].cash_fact} vs 1С ${cash.rows[0].cash_1c}`,
-          payload: { delta, date: today }
+          body: `Факт ${cash.cash_fact} vs 1С ${cash.cash_1c}`,
+          payload: { delta, date: today },
+          alert_date: today
         });
         if (alert) created.push(alert);
       }
@@ -112,38 +106,4 @@ export async function runSmartAlertsTick() {
   return { hour, created: created.length, items: created };
 }
 
-export async function insertAlertOnce(opts: {
-  store_id: string;
-  employee_id?: number;
-  alert_type: string;
-  severity: string;
-  title: string;
-  body: string;
-  payload: any;
-  /** По умолчанию сегодня — детекция аномалий (19.2) проверяет ВЧЕРАШНИЙ
-   * завершённый день и должна клеймиться под его датой, не под сегодняшней. */
-  alert_date?: string;
-}) {
-  // Атомарный claim по partial unique index (store_id, alert_type,
-  // alert_date) WHERE status='open' (0007) — раньше это была
-  // SELECT-проверка и отдельный INSERT, уязвимые к гонке между двумя
-  // одновременно живыми контейнерами при деплое (см. миграцию). ON
-  // CONFLICT DO NOTHING делает второй, проигравший вызов молча no-op.
-  const res = await query(
-    `INSERT INTO smart_alerts (store_id, employee_id, alert_type, severity, title, body, payload, alert_date)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-     ON CONFLICT DO NOTHING
-     RETURNING *`,
-    [
-      opts.store_id,
-      opts.employee_id || null,
-      opts.alert_type,
-      opts.severity,
-      opts.title,
-      opts.body,
-      JSON.stringify(opts.payload || {}),
-      opts.alert_date || todayMoscow()
-    ]
-  );
-  return res.rows[0] || null;
-}
+export const insertAlertOnce = alertsRepo.insertOnce;

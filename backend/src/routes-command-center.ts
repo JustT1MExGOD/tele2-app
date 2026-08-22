@@ -5,8 +5,8 @@
  * трёх отдельных походов с фронта.
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { query } from './db/index.js';
 import { requireAuth, resolveViewOrgId } from './middleware-auth.js';
+import * as alertsRepo from './repositories/alerts.js';
 import {
   resolveSupervisorStores,
   buildSupervisorDashboard,
@@ -47,22 +47,12 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
       // отдельная секция: drops вычисляются на лету, smart_alerts — это
       // сработавшие cron-триггеры (кассовый разрыв, простой часа и т.п.),
       // разные источники, не смешиваем их вычисление, но подаём вместе.
-      const alertsRes =
+      const openAlerts: any[] =
         scope === null
-          ? await query(
-              `SELECT a.*, COALESCE(st.display_name, st.name) as store_name FROM smart_alerts a
-               LEFT JOIN stores st ON st.id = a.store_id
-               WHERE a.status = 'open' ORDER BY a.created_at DESC LIMIT 50`
-            )
+          ? await alertsRepo.listOpenAll()
           : scope.length
-            ? await query(
-                `SELECT a.*, COALESCE(st.display_name, st.name) as store_name FROM smart_alerts a
-                 LEFT JOIN stores st ON st.id = a.store_id
-                 WHERE a.status = 'open' AND a.store_id = ANY($1)
-                 ORDER BY a.created_at DESC LIMIT 50`,
-                [scope]
-              )
-            : { rows: [] as any[] };
+            ? await alertsRepo.listOpenForStores(scope)
+            : [];
 
       // Единый problems-список — фронту не нужно знать источник, только
       // severity/текст/куда вести. store-level drops уже отсортированы
@@ -97,7 +87,7 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
             }
           ]
         })),
-        ...alertsRes.rows.map((a: any): CommandCenterProblem => ({
+        ...openAlerts.map((a: any): CommandCenterProblem => ({
           severity: a.severity,
           message: a.title,
           store_id: a.store_id,
@@ -116,7 +106,7 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
         stores: dash.stores,
         problems,
         underperforming_count: underperforming.length,
-        alerts_count: alertsRes.rows.length,
+        alerts_count: openAlerts.length,
         generated_at: new Date().toISOString()
       };
     } catch (e: any) {

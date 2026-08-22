@@ -5,13 +5,17 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { requireAuth, isManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { parseSalePhrase } from './services/sales-nlp.js';
 import { evaluateAfterSale, evaluateShiftClose, getGamificationProfile } from './services/gamification.js';
 import { generateShiftSummary } from './services/ai.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
-import { applySaleUpsert, claimIdempotencyKey, SaleMetricRangeError } from './services/sales-write.js';
+import * as salesRepo from './repositories/sales.js';
+import { claimIdempotencyKey } from './repositories/sync-log.js';
+import * as shiftsRepo from './repositories/shifts.js';
+import * as schedulesRepo from './repositories/schedules.js';
+import * as tasksRepo from './repositories/tasks.js';
+import * as employeesRepo from './repositories/employees.js';
 import { notifyChat } from './bot/index.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
 import { computeDayPlanFact } from './services/shift-pace.js';
@@ -101,13 +105,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // точка из графика или body
     let store_id = body.store_id;
     if (!store_id) {
-      const sch = await query(
-        `SELECT store_id FROM schedules
-         WHERE employee_id = $1 AND work_date::date = $2::date AND COALESCE(hours,0)>0
-         LIMIT 1`,
-        [employee_id, date]
-      );
-      store_id = sch.rows[0]?.store_id;
+      store_id = (await schedulesRepo.findScheduledStoreId(employee_id, date)) || undefined;
     }
     if (!store_id) {
       return reply.code(400).send({ error: 'store_id required (нет смены в графике)' });
@@ -120,11 +118,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     }
 
     // закрыть висящие open
-    await query(
-      `UPDATE shift_sessions SET status = 'auto_closed', closed_at = now()
-       WHERE employee_id = $1 AND status = 'open'`,
-      [employee_id]
-    );
+    await shiftsRepo.autoCloseHanging(employee_id);
 
     // Partial unique index (employee_id) WHERE status='open' — гонка: два
     // параллельных /shifts/open для одного сотрудника оба проходят
@@ -132,57 +126,16 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // нет), и без constraint оба вставили бы свою 'open'-сессию, оставляя
     // сотрудника с двумя одновременно "открытыми" сменами. Проигравший
     // ловит 23505 и получает уже открытую победителем сессию вместо ошибки.
-    let session: any;
-    let deduped = false;
-    try {
-      const res = await query(
-        `INSERT INTO shift_sessions
-           (employee_id, store_id, work_date, status, opened_at, open_lat, open_lng, open_accuracy_m)
-         VALUES ($1,$2,$3,'open', now(), $4, $5, $6)
-         RETURNING *`,
-        [
-          employee_id,
-          store_id,
-          date,
-          body.lat ?? null,
-          body.lng ?? null,
-          body.accuracy_m ?? null
-        ]
-      );
-      session = res.rows[0];
-    } catch (e: any) {
-      if (e?.code === '23505') {
-        const existing = await query(
-          `SELECT * FROM shift_sessions WHERE employee_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1`,
-          [employee_id]
-        );
-        session = existing.rows[0];
-        deduped = true;
-      } else {
-        throw e;
-      }
-    }
+    const { session, deduped } = await shiftsRepo.claimOpenSession(
+      employee_id, store_id, date, body.lat ?? null, body.lng ?? null, body.accuracy_m ?? null
+    );
 
     // Shift 2.0 (18.7) — фаза «до»: план на сегодня, передача от предыдущей
     // смены на этой точке (любой сотрудник), незакрытые задачи сотрудника.
-    const [pace, handoverRes, tasksRes] = await Promise.all([
+    const [pace, handover, openTasks] = await Promise.all([
       computeDayPlanFact(employee_id, date),
-      query(
-        `SELECT ss.handover_note, ss.closed_at, e.full_name as from_employee_name
-         FROM shift_sessions ss
-         JOIN employees e ON e.id = ss.employee_id
-         WHERE ss.store_id = $1 AND ss.status = 'closed' AND ss.handover_note IS NOT NULL
-         ORDER BY ss.closed_at DESC LIMIT 1`,
-        [store_id]
-      ),
-      query(
-        `SELECT t.*, COALESCE(st.display_name, st.name) as store_name
-         FROM tasks t
-         LEFT JOIN stores st ON st.id = t.store_id
-         WHERE t.assigned_to = $1 AND t.status IN ('open', 'in_progress')
-         ORDER BY t.due_at NULLS LAST, t.created_at DESC`,
-        [employee_id]
-      )
+      shiftsRepo.findLatestHandoverForStore(store_id),
+      tasksRepo.findOpenForAssignee(employee_id)
     ]);
 
     return {
@@ -190,8 +143,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       session,
       deduped,
       day_plan: pace.dayPlan,
-      handover: handoverRes.rows[0] || null,
-      open_tasks: tasksRes.rows
+      handover: handover || null,
+      open_tasks: openTasks
     };
     }
   );
@@ -204,16 +157,10 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     const body = (request.body || {}) as ShiftCloseBody;
     const employee_id = request.user!.employee_id!;
 
-    const open = await query(
-      `SELECT * FROM shift_sessions
-       WHERE employee_id = $1 AND status = 'open'
-       ORDER BY opened_at DESC LIMIT 1`,
-      [employee_id]
-    );
-    if (!open.rows[0]) {
+    const sess = await shiftsRepo.findOpenForEmployee(employee_id);
+    if (!sess) {
       return reply.code(400).send({ error: 'no open session' });
     }
-    const sess = open.rows[0];
     const date = toDateISO(sess.work_date);
 
     const { fact, dayPlan, planPct } = await computeDayPlanFact(employee_id, date);
@@ -232,40 +179,24 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // WHERE ... AND status='open' больше не совпадёт ни с одной строкой, и
     // он получит 0 обновлённых строк вместо того, чтобы тоже перевести уже
     // закрытую сессию в 'closed' и (что хуже) начислить награду второй раз.
-    const res = await query(
-      `UPDATE shift_sessions SET
-         status = 'closed',
-         closed_at = now(),
-         close_lat = $1,
-         close_lng = $2,
-         self_report = $3,
-         mood = $4,
-         blockers = $5,
-         ideal_shift = $6,
-         score = $7,
-         handover_note = $8
-       WHERE id = $9 AND status = 'open'
-       RETURNING *`,
-      [
-        body.lat ?? null,
-        body.lng ?? null,
-        body.self_report || null,
-        body.mood ?? null,
-        body.blockers || null,
-        ideal,
-        score,
-        body.handover_note || null,
-        sess.id
-      ]
-    );
+    const closed = await shiftsRepo.closeSession(sess.id, {
+      lat: body.lat ?? null,
+      lng: body.lng ?? null,
+      selfReport: body.self_report || null,
+      mood: body.mood ?? null,
+      blockers: body.blockers || null,
+      ideal,
+      score,
+      handoverNote: body.handover_note || null
+    });
 
-    if (!res.rows[0]) {
+    if (!closed) {
       // Проиграли гонку — другой параллельный запрос (или более ранний
       // ретрай того же клиента) уже закрыл именно эту сессию между нашим
       // SELECT и UPDATE. Не ошибка и не повод считать/начислять что-либо
       // заново — отдаём уже закрытую сессию как есть.
-      const already = await query(`SELECT * FROM shift_sessions WHERE id = $1`, [sess.id]);
-      return { ok: true, session: already.rows[0], deduped: true };
+      const already = await shiftsRepo.findById(sess.id);
+      return { ok: true, session: already, deduped: true };
     }
 
     // XP/бейджи/streak — не более одного раза за календарный день. Без этой
@@ -275,15 +206,10 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // реальной продажи. Смена при этом всё равно закрывается нормально
     // (сохраняются score/факт/AI-разбор), просто повторное закрытие того же
     // дня не награждается второй раз.
-    const alreadyRewarded = await query(
-      `SELECT 1 FROM shift_sessions
-       WHERE employee_id = $1 AND work_date::date = $2::date AND status = 'closed' AND id != $3
-       LIMIT 1`,
-      [employee_id, date, sess.id]
-    );
+    const alreadyRewarded = await shiftsRepo.hasOtherClosedToday(employee_id, date, sess.id);
     let gam: any;
     let rewarded = true;
-    if (alreadyRewarded.rows[0]) {
+    if (alreadyRewarded) {
       rewarded = false;
       const profile = await getGamificationProfile(employee_id);
       gam = { ...(profile || {}), xp_gained: 0, leveled_up: false };
@@ -297,10 +223,10 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     }
 
     const factOut = { sim: num(fact.sim), mnp: num(fact.mnp), pa: num(fact.pa), combo: num(fact.combo) };
-    const empRow = await query(`SELECT full_name FROM employees WHERE id = $1`, [employee_id]);
+    const empRow = await employeesRepo.getContactInfo(employee_id);
     const aiSummary = await generateShiftSummary({
       employeeId: employee_id,
-      employeeName: empRow.rows[0]?.full_name || 'Сотрудник',
+      employeeName: empRow?.full_name || 'Сотрудник',
       planPct,
       idealShift: ideal,
       fact: factOut,
@@ -312,7 +238,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
 
     return {
       ok: true,
-      session: res.rows[0],
+      session: closed,
       plan_pct: planPct,
       ideal_shift: ideal,
       ideal_missing: idealMissing,
@@ -328,15 +254,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
 
   app.get('/shifts/current', async (request, reply): Promise<ShiftCurrentResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
-    const res = await query(
-      `SELECT ss.*, COALESCE(st.display_name, st.name) as store_name, st.color
-       FROM shift_sessions ss
-       LEFT JOIN stores st ON st.id = ss.store_id
-       WHERE ss.employee_id = $1 AND ss.status = 'open'
-       ORDER BY ss.opened_at DESC LIMIT 1`,
-      [request.user!.employee_id]
-    );
-    const session = res.rows[0] || null;
+    const session = await shiftsRepo.findCurrentOpenWithStore(request.user!.employee_id!);
     if (!session) return { session: null };
 
     // Shift 2.0 (18.7) — фаза «во время»: живой план/факт дня, пока смена
@@ -378,11 +296,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     let store_id = body.store_id;
     const sale_date = String(body.sale_date || todayMoscow()).slice(0, 10);
     if (!store_id) {
-      const sch = await query(
-        `SELECT store_id FROM schedules WHERE employee_id=$1 AND work_date::date=$2::date LIMIT 1`,
-        [employee_id, sale_date]
-      );
-      store_id = sch.rows[0]?.store_id;
+      store_id = (await schedulesRepo.findAnyScheduledStoreId(employee_id, sale_date)) || undefined;
     }
     if (!store_id) return reply.code(400).send({ error: 'store_id required' });
 
@@ -405,11 +319,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     if (clientId) {
       const fresh = await claimIdempotencyKey(clientId, employee_id, tg, body);
       if (!fresh) {
-        const existing = await query(
-          `SELECT * FROM sales WHERE employee_id = $1 AND store_id = $2 AND sale_date = $3`,
-          [employee_id, store_id, sale_date]
-        );
-        return { ok: true, deduped: true, parsed, sale: existing.rows[0] || null };
+        const existing = await salesRepo.findOne(employee_id, store_id, sale_date);
+        return { ok: true, deduped: true, parsed, sale: existing || null };
       }
     }
 
@@ -419,7 +330,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // и в истории правок, и в heatmap.
     let row: any, applied: any[];
     try {
-      ({ row, applied } = await applySaleUpsert({
+      ({ row, applied } = await salesRepo.applySaleUpsert({
         employee_id,
         store_id,
         sale_date,
@@ -428,7 +339,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
         createdByTelegramId: tg
       }));
     } catch (e: any) {
-      if (e instanceof SaleMetricRangeError) {
+      if (e instanceof salesRepo.SaleMetricRangeError) {
         return reply.code(400).send({ error: 'metric_out_of_range', message: e.message });
       }
       throw e;
@@ -439,15 +350,12 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // Уведомление в чат — той же логикой, что основной /sales. Раньше его
     // тут не было: быстрый ввод происходил невидимо для команды в чате.
     try {
-      const info = await query(
-        `SELECT e.full_name, COALESCE(st.display_name, st.name) as store_name FROM employees e, stores st WHERE e.id = $1 AND st.id = $2`,
-        [employee_id, store_id]
-      );
-      if (info.rows[0] && applied.length) {
+      const info = await salesRepo.getNotificationInfo(employee_id, store_id);
+      if (info && applied.length) {
         const { saleNotificationMulti } = await import('./bot/messages.js');
         const text = await saleNotificationMulti({
-          employeeName: info.rows[0].full_name,
-          storeName: info.rows[0].store_name,
+          employeeName: info.full_name,
+          storeName: info.store_name,
           items: applied.map((a) => ({ metric: a.metric, value: a.value }))
         });
         const target = await getStoreNotifyTarget(store_id, 'sales');
@@ -476,19 +384,13 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
         continue;
       }
       try {
-        const ins = await query(
-          `INSERT INTO offline_sync_log (client_id, employee_id, telegram_id, payload, status)
-           VALUES ($1,$2,$3,$4,'applied')
-           ON CONFLICT (client_id) DO NOTHING
-           RETURNING id`,
-          [
-            client_id,
-            request.user!.employee_id,
-            request.user!.telegram_id,
-            JSON.stringify(op)
-          ]
+        const fresh = await claimIdempotencyKey(
+          client_id,
+          request.user!.employee_id!,
+          request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+          op
         );
-        if (!ins.rows[0]) {
+        if (!fresh) {
           results.push({ client_id, status: 'duplicate' });
           continue;
         }
@@ -524,7 +426,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
           // в offline_sync_log по client_id чуть выше) — свой ключ внутрь
           // не передаём, иначе она сработала бы дважды на одном и том же op.
           if (store_id) {
-            await applySaleUpsert({
+            await salesRepo.applySaleUpsert({
               employee_id,
               store_id,
               sale_date,

@@ -1,8 +1,8 @@
 /**
  * Инсайты смены: отставание от плана, типичный трафик точки, сравнение с собой.
  */
-import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
+import * as repo from '../repositories/insights.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -10,13 +10,9 @@ function num(v: any) {
 
 /** Профиль часов точки: доля продаж по часам для дня недели */
 export async function getStoreHourWeights(storeId: string, dow: number) {
-  const res = await query(
-    `SELECT hour, weight FROM store_hour_profile
-     WHERE store_id = $1 AND dow = $2 ORDER BY hour`,
-    [storeId, dow]
-  );
-  if (res.rows.length) {
-    return res.rows.map((r: any) => ({ hour: Number(r.hour), weight: num(r.weight) }));
+  const rows = await repo.findHourProfile(storeId, dow);
+  if (rows.length) {
+    return rows.map((r: any) => ({ hour: Number(r.hour), weight: num(r.weight) }));
   }
   // fallback: рабочие 10–21 равномерно
   const hours = [];
@@ -138,24 +134,9 @@ export async function buildShiftInsight(opts: {
 export async function selfComparison(employeeId: number) {
   const today = todayMoscow();
 
-  const days = await query(
-    `SELECT sale_date::text as d,
-            COALESCE(SUM(sim),0) as sim,
-            COALESCE(SUM(mnp),0) as mnp,
-            COALESCE(SUM(pa),0) as pa,
-            COALESCE(SUM(combo),0) as combo,
-            COALESCE(SUM(phones),0) as phones,
-            COALESCE(SUM(accessories),0) as accessories
-     FROM sales
-     WHERE employee_id = $1
-       AND sale_date >= ($2::date - interval '29 days')
-       AND sale_date <= $2::date
-     GROUP BY sale_date
-     ORDER BY sale_date`,
-    [employeeId, today]
-  );
+  const days = await repo.findDailySalesHistory(employeeId, today);
 
-  const rows = days.rows.map((r: any) => ({
+  const rows = days.map((r: any) => ({
     date: String(r.d).slice(0, 10),
     sim: num(r.sim),
     mnp: num(r.mnp),
@@ -201,23 +182,17 @@ function addDays(iso: string, delta: number) {
 /** Пересчёт hour profile из истории sales (если есть timestamp — иначе равномерно по сменам) */
 export async function rebuildHourProfiles() {
   // Без точного часа продажи строим прокси: равномерный вес 10–21
-  const stores = await query(`SELECT id FROM stores WHERE COALESCE(is_active,true)=true`);
-  for (const st of stores.rows) {
+  const storeIds = await repo.listActiveStoreIds();
+  for (const storeId of storeIds) {
     for (let dow = 0; dow <= 6; dow++) {
       for (let hour = 10; hour <= 21; hour++) {
         // чуть выше вес 12–14 и 17–19
         let w = 1;
         if (hour >= 12 && hour <= 14) w = 1.3;
         if (hour >= 17 && hour <= 19) w = 1.4;
-        await query(
-          `INSERT INTO store_hour_profile (store_id, dow, hour, weight, sample_count)
-           VALUES ($1,$2,$3,$4,0)
-           ON CONFLICT (store_id, dow, hour)
-           DO UPDATE SET weight = EXCLUDED.weight`,
-          [st.id, dow, hour, w]
-        );
+        await repo.upsertHourWeight(storeId, dow, hour, w);
       }
     }
   }
-  return { ok: true, stores: stores.rows.length };
+  return { ok: true, stores: storeIds.length };
 }

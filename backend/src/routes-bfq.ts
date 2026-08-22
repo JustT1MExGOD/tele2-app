@@ -4,7 +4,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
+import * as bfqRepo from './repositories/bfq.js';
 import {
   calculateAllBFQ,
   calculateEmployeeBFQ,
@@ -106,19 +106,6 @@ export async function registerBfqRoutes(app: FastifyInstance) {
     const m = month || currentMonthMoscow();
     const start = `${m}-01`;
     const orgId = resolveViewOrgId(request.user!, org_id);
-    const params: any[] = [start, orgId];
-    let sql = `
-      SELECT q.*, e.full_name
-      FROM bfq_questionnaires q
-      JOIN employees e ON e.id = q.employee_id
-      WHERE q.created_at >= $1::date AND COALESCE(e.org_id,'default') = $2
-    `;
-    if (employee_id) {
-      params.push(Number(employee_id));
-      sql += ` AND q.employee_id = $${params.length}`;
-    }
-    sql += ` ORDER BY q.created_at DESC LIMIT 200`;
-    const res = await query(sql, params);
-    return res.rows;
+    return bfqRepo.listQuestionnaires(start, orgId, employee_id ? Number(employee_id) : null);
   });
 }

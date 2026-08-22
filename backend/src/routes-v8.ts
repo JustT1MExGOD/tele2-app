@@ -10,7 +10,7 @@
 
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query, withTransaction } from './db/index.js';
+import { withTransaction } from './db/index.js';
 import {
   requireActive,
   requireManager,
@@ -26,8 +26,12 @@ import {
 import { todayMoscow } from './utils/date.js';
 import { bot } from './bot/index.js';
 import { listActiveOrgsPublic } from './services/tenant.js';
-import { recordAudit } from './services/audit.js';
+import { record as recordAudit } from './repositories/audit.js';
 import { invalidate as invalidateScope } from './services/scope-cache.js';
+import * as employeesRepo from './repositories/employees.js';
+import * as accessRequestsRepo from './repositories/access-requests.js';
+import * as supervisorSectorsRepo from './repositories/supervisor-sectors.js';
+import * as storesRepo from './repositories/stores.js';
 import type {
   AccessStatusResponse,
   AccessOrgsResponse,
@@ -95,16 +99,11 @@ export async function registerV8Routes(app: FastifyInstance) {
 
     // pending request without employee row?
     if (user.access_status === 'none') {
-      const req = await query(
-        `SELECT * FROM access_requests
-         WHERE telegram_id = $1
-         ORDER BY created_at DESC LIMIT 1`,
-        [user.telegram_id]
-      );
-      if (req.rows[0]) {
+      const req = await accessRequestsRepo.findLatestByTelegramId(user.telegram_id);
+      if (req) {
         return {
-          status: req.rows[0].status,
-          request: req.rows[0],
+          status: req.status,
+          request: req,
           user
         };
       }
@@ -127,20 +126,7 @@ export async function registerV8Routes(app: FastifyInstance) {
   // выбрав сеть B он всё равно мог «заклеймить» сотрудника сети A.
   app.get('/access/employees-directory', async (request): Promise<AccessDirectoryResponse> => {
     const { org_id } = request.query as { org_id?: string };
-    const params: any[] = [];
-    let orgFilter = '';
-    if (org_id) {
-      params.push(String(org_id));
-      orgFilter = ` AND COALESCE(org_id,'default') = $${params.length}`;
-    }
-    const res = await query(
-      `SELECT id, full_name FROM employees
-       WHERE is_active = true AND (telegram_id IS NULL OR telegram_id = 0)
-         AND (access_status = 'active' OR access_status IS NULL)${orgFilter}
-       ORDER BY full_name`,
-      params
-    );
-    return res.rows;
+    return employeesRepo.findUnclaimedDirectory(org_id ? String(org_id) : undefined);
   });
 
   // Заявка на доступ
@@ -164,12 +150,9 @@ export async function registerV8Routes(app: FastifyInstance) {
       return { ok: true, status: 'active', message: 'Уже есть доступ' };
     }
 
-    const pending = await query(
-      `SELECT id FROM access_requests WHERE telegram_id = $1 AND status = 'pending'`,
-      [telegramId]
-    );
-    if (pending.rows[0]) {
-      return { ok: true, status: 'pending', id: pending.rows[0].id };
+    const pending = await accessRequestsRepo.findPendingByTelegramId(telegramId);
+    if (pending) {
+      return { ok: true, status: 'pending', id: pending.id };
     }
 
     const claimedId = b.claimed_employee_id ? Number(b.claimed_employee_id) : null;
@@ -179,45 +162,33 @@ export async function registerV8Routes(app: FastifyInstance) {
     // пикере (пикер эпика 16.0), с фолбэком на 'default' как везде в коде.
     let effectiveOrgId = String(b.org_id || 'default');
     if (claimedId) {
-      const claimed = await query(`SELECT COALESCE(org_id,'default') as org_id FROM employees WHERE id = $1`, [claimedId]);
-      effectiveOrgId = claimed.rows[0]?.org_id || 'default';
+      const claimedOrgId = await employeesRepo.getOrgId(claimedId);
+      effectiveOrgId = claimedOrgId || 'default';
     }
     // org_id на самой заявке: NULL для claim-пути (не дублируем сеть
     // сотрудника — источники могут разойтись), иначе то, что выбрал гость.
     const storedOrgId = claimedId ? null : (b.org_id ? String(b.org_id) : null);
 
-    const res = await query(
-      `INSERT INTO access_requests
-         (telegram_id, telegram_username, full_name, claimed_employee_id, message, status, org_id)
-       VALUES ($1,$2,$3,$4,$5,'pending',$6)
-       RETURNING *`,
-      [
-        telegramId,
-        b.username || null,
-        full_name,
-        claimedId,
-        b.message || '',
-        storedOrgId
-      ]
-    );
+    const created = await accessRequestsRepo.create({
+      telegramId,
+      username: b.username || null,
+      fullName: full_name,
+      claimedEmployeeId: claimedId,
+      message: b.message || '',
+      orgId: storedOrgId
+    });
 
     // уведомить managers своей сети + admin (страховка, если у новой сети
     // ещё нет активного управляющего)
     try {
-      const managers = await query(
-        `SELECT telegram_id, full_name FROM employees
-         WHERE telegram_id IS NOT NULL AND access_status = 'active'
-           AND ( role = 'admin'
-                 OR (role IN ('manager','supervisor','senior') AND COALESCE(org_id,'default') = $1) )`,
-        [effectiveOrgId]
-      );
+      const managers = await employeesRepo.findManagersToNotify(effectiveOrgId);
       const text =
         `🔐 <b>Заявка на доступ</b>\n` +
         `👤 ${esc(full_name)}\n` +
         `TG: <code>${telegramId}</code>\n` +
         (b.message ? `💬 ${esc(b.message)}\n` : '') +
         `\nПодтверди в Mini App → Команда → Заявки`;
-      for (const m of managers.rows) {
+      for (const m of managers) {
         if (bot && m.telegram_id) {
           await bot.api.sendMessage(m.telegram_id, text, { parse_mode: 'HTML' }).catch(() => {});
         }
@@ -226,7 +197,7 @@ export async function registerV8Routes(app: FastifyInstance) {
       console.error('notify managers', e);
     }
 
-    return { ok: true, status: 'pending', request: res.rows[0] };
+    return { ok: true, status: 'pending', request: created };
     }
   );
 
@@ -238,15 +209,7 @@ export async function registerV8Routes(app: FastifyInstance) {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
-    const res = await query(
-      `SELECT ar.* FROM access_requests ar
-       LEFT JOIN employees e ON e.id = ar.claimed_employee_id
-       WHERE ar.status = 'pending'
-         AND COALESCE(ar.org_id, COALESCE(e.org_id,'default'), 'default') = $1
-       ORDER BY ar.created_at ASC`,
-      [orgId]
-    );
-    return res.rows;
+    return accessRequestsRepo.listPendingForOrg(orgId);
   });
 
   // Approve
@@ -262,14 +225,7 @@ export async function registerV8Routes(app: FastifyInstance) {
     // Каскад: одобряющий может выдать только роль строго ниже своей (admin — без ограничений).
     const role: Role = canAssignRole(request.user!.role, requestedRole) ? requestedRole : 'employee';
 
-    const reqRes = await query(
-      `SELECT ar.*, COALESCE(ar.org_id, e.org_id, 'default') as effective_org_id
-       FROM access_requests ar
-       LEFT JOIN employees e ON e.id = ar.claimed_employee_id
-       WHERE ar.id = $1`,
-      [Number(id)]
-    );
-    const req = reqRes.rows[0];
+    const req = await accessRequestsRepo.findByIdWithEffectiveOrg(Number(id));
     if (!req || req.status !== 'pending') {
       return reply.code(404).send({ error: 'request not found' });
     }
@@ -285,16 +241,8 @@ export async function registerV8Routes(app: FastifyInstance) {
     let employeeId = req.claimed_employee_id ? Number(req.claimed_employee_id) : null;
 
     if (employeeId) {
-      await query(
-        `UPDATE employees SET
-           telegram_id = $1,
-           access_status = 'active',
-           role = COALESCE($2, role),
-           verified_by = $3,
-           verified_at = now(),
-           full_name = COALESCE(full_name, $4)
-         WHERE id = $5`,
-        [req.telegram_id, role === 'employee' ? null : role, request.user!.employee_id, req.full_name, employeeId]
+      await employeesRepo.approveExisting(
+        employeeId, req.telegram_id, role === 'employee' ? null : role, request.user!.employee_id, req.full_name
       );
     } else {
       // Создать нового — попадает в сеть заявки (гость выбрал в пикере при
@@ -305,22 +253,10 @@ export async function registerV8Routes(app: FastifyInstance) {
       // вообще нет org_id (не должно происходить после миграции, кроме
       // как для уже неактуальных пред-миграционных строк).
       const orgId = req.org_id || request.user!.org_id;
-      const ins = await query(
-        `INSERT INTO employees (full_name, telegram_id, role, access_status, is_active, verified_by, verified_at, org_id)
-         VALUES ($1,$2,$3,'active',true,$4,now(),$5)
-         RETURNING id`,
-        [req.full_name, req.telegram_id, role, request.user!.employee_id, orgId]
-      );
-      // если нет serial — может понадобиться ручной id; предполагаем serial/identity
-      employeeId = ins.rows[0]?.id;
+      employeeId = await employeesRepo.createFromApproval(req.full_name, req.telegram_id, role, request.user!.employee_id, orgId);
     }
 
-    await query(
-      `UPDATE access_requests
-       SET status = 'approved', reviewed_by = $1, reviewed_at = now()
-       WHERE id = $2`,
-      [request.user!.employee_id, Number(id)]
-    );
+    await accessRequestsRepo.markApproved(Number(id), request.user!.employee_id);
 
     if (bot && req.telegram_id) {
       await bot.api
@@ -343,26 +279,14 @@ export async function registerV8Routes(app: FastifyInstance) {
     async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { id } = request.params as { id: string };
-    const reqRes = await query(
-      `SELECT ar.*, COALESCE(ar.org_id, e.org_id, 'default') as effective_org_id
-       FROM access_requests ar
-       LEFT JOIN employees e ON e.id = ar.claimed_employee_id
-       WHERE ar.id = $1`,
-      [Number(id)]
-    );
-    const req = reqRes.rows[0];
+    const req = await accessRequestsRepo.findByIdWithEffectiveOrg(Number(id));
     if (!req) return reply.code(404).send({ error: 'not found' });
     const orgId = resolveViewOrgId(request.user!, (request.body as AccessRejectBody)?.org_id);
     if (req.effective_org_id !== orgId) {
       return reply.code(403).send({ error: 'forbidden', message: 'Заявка не принадлежит вашей сети' });
     }
 
-    await query(
-      `UPDATE access_requests
-       SET status = 'rejected', reviewed_by = $1, reviewed_at = now()
-       WHERE id = $2`,
-      [request.user!.employee_id, Number(id)]
-    );
+    await accessRequestsRepo.markRejected(Number(id), request.user!.employee_id);
 
     if (bot && req.telegram_id) {
       await bot.api
@@ -382,22 +306,9 @@ export async function registerV8Routes(app: FastifyInstance) {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const user = request.user!;
     if (user.role === 'manager' || user.role === 'admin') {
-      const all = await query(
-        `SELECT id, COALESCE(display_name, name) as name, code, color, plan_share FROM stores s
-         WHERE is_active = true OR is_active IS NULL ORDER BY s.name`
-      );
-      return all.rows;
+      return storesRepo.listAllActiveForPicker();
     }
-    const res = await query(
-      `SELECT st.id, COALESCE(st.display_name, st.name) as name, st.code, st.color, st.plan_share
-       FROM supervisor_sectors ss
-       JOIN organizations o ON o.sector_id = ss.sector_id
-       JOIN stores st ON COALESCE(st.org_id, 'default') = o.id
-       WHERE ss.supervisor_id = $1
-       ORDER BY st.name`,
-      [user.employee_id]
-    );
-    return res.rows;
+    return supervisorSectorsRepo.listStoresForSupervisor(user.employee_id!);
   });
 
   app.put(
@@ -415,12 +326,7 @@ export async function registerV8Routes(app: FastifyInstance) {
     }
     const { id } = request.params as { id: string };
     const { sector_id } = request.body as SupervisorSectorBody;
-    await query(`DELETE FROM supervisor_sectors WHERE supervisor_id = $1`, [Number(id)]);
-    await query(
-      `INSERT INTO supervisor_sectors (supervisor_id, sector_id) VALUES ($1,$2)
-       ON CONFLICT DO NOTHING`,
-      [Number(id), sector_id]
-    );
+    await supervisorSectorsRepo.replaceForSupervisor(Number(id), sector_id);
     invalidateScope(Number(id));
     return { ok: true, sector_id };
     }
@@ -449,37 +355,30 @@ export async function registerV8Routes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
     }
 
-    const before = await query(`SELECT role FROM employees WHERE id = $1`, [Number(id)]);
+    const beforeRole = await employeesRepo.getRole(Number(id));
     const orgId = resolveViewOrgId(request.user!, b.org_id);
 
     // 19.23.0 (Audit Trail): смена роли + пересборка supervisor_sectors +
     // запись в audit_log — одна транзакция. Раньше это были три независимых
-    // pool.query() — упасть между ними означало роль сменилась, а сектор
-    // остался старым (или наоборот), без какого-либо следа в логах.
+    // отдельных запроса — упасть между ними означало роль сменилась, а
+    // сектор остался старым (или наоборот), без какого-либо следа в логах.
     const row = await withTransaction(async (q) => {
-      const res = await q(
-        `UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`,
-        [role, Number(id)]
-      );
+      const res = await employeesRepo.updateRole(Number(id), role, q);
       if (role === 'supervisor' && b.sector_id) {
-        await q(`DELETE FROM supervisor_sectors WHERE supervisor_id = $1`, [Number(id)]);
-        await q(
-          `INSERT INTO supervisor_sectors (supervisor_id, sector_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-          [Number(id), b.sector_id]
-        );
+        await supervisorSectorsRepo.replaceForSupervisor(Number(id), b.sector_id, q);
       }
-      await recordAudit(q, {
+      await recordAudit({
         orgId,
         actorEmployeeId: request.user!.employee_id,
         actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
         action: 'employee.role_change',
         targetType: 'employee',
         targetId: id,
-        before: { role: before.rows[0]?.role ?? null },
+        before: { role: beforeRole ?? null },
         after: { role },
         requestId: request.id
-      });
-      return res.rows[0];
+      }, q);
+      return res;
     });
 
     // Инвалидация вне транзакции намеренно — кэш только про производительность

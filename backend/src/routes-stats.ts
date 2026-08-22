@@ -3,10 +3,10 @@
  * Вынесено из index.ts при разбиении монолита на модули.
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
 import { requireActive, resolveViewOrgId } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
+import * as repo from './repositories/stats.js';
 import type { StatsDailyResponse, DashboardResponse, EmployeeProgressResponse } from './shared/api-types.js';
 
 export async function registerStatsRoutes(app: FastifyInstance) {
@@ -23,20 +23,7 @@ export async function registerStatsRoutes(app: FastifyInstance) {
     const cols = await getSalesSumColumns();
     const sumSelect = cols.map((c) => `COALESCE(SUM(s.${c}),0) as ${c}`).join(', ');
 
-    const res = await query(
-      `SELECT
-         st.id as store_id,
-         COALESCE(st.display_name, st.name) as name,
-         st.code,
-         ${sumSelect}
-       FROM stores st
-       LEFT JOIN sales s ON s.store_id = st.id AND s.sale_date = $1
-       WHERE COALESCE(st.org_id, 'default') = $2
-       GROUP BY st.id, st.name, st.display_name, st.code, st.hours
-       ORDER BY st.hours`,
-      [d, orgId]
-    );
-    return res.rows;
+    return repo.findDailyStoreStats(d, orgId, sumSelect);
   });
 
   // «Топ за 7 дней» — активность на точках своей сети (не по «домашней»
@@ -47,29 +34,10 @@ export async function registerStatsRoutes(app: FastifyInstance) {
     const { org_id } = request.query as { org_id?: string };
     const today = todayMoscow();
     const orgId = resolveViewOrgId(request.user!, org_id);
-    const res = await query(
-      `SELECT e.id as employee_id, e.full_name,
-              COALESCE(SUM(s.sim),0)::int as sim,
-              COALESCE(SUM(s.mnp),0)::int as mnp,
-              COALESCE(SUM(s.pa),0)::int as pa,
-              COALESCE(SUM(s.combo),0)::int as combo,
-              COALESCE(SUM(s.phones),0)::float as phones,
-              COALESCE(SUM(s.accessories),0)::float as accessories,
-              (COALESCE(SUM(s.sim),0) + COALESCE(SUM(s.mnp),0)*2 + COALESCE(SUM(s.pa),0)*3)::int as score
-       FROM sales s
-       JOIN employees e ON e.id = s.employee_id
-       JOIN stores st ON st.id = s.store_id
-       WHERE s.sale_date::date >= ($1::date - interval '6 days')
-         AND s.sale_date::date <= $1::date
-         AND COALESCE(st.org_id, 'default') = $2
-       GROUP BY e.id, e.full_name
-       ORDER BY score DESC, sim DESC
-       LIMIT 10`,
-      [today, orgId]
-    );
+    const rows = await repo.findWeeklyLeaderboard(today, orgId);
     return {
-      top: res.rows,
-      top7: res.rows,
+      top: rows,
+      top7: rows,
       period: { from: null, to: today }
     };
   });
@@ -85,30 +53,17 @@ export async function registerStatsRoutes(app: FastifyInstance) {
     const { date } = request.query as { date?: string };
     const d = date || todayMoscow();
 
-    const sch = await query(
-      `SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2 LIMIT 1`,
-      [id, d]
-    );
-    const storeId = sch.rows[0]?.store_id;
+    const storeId = await repo.findShiftStoreId(id, d);
 
     let plan: any = {};
     if (storeId) {
-      const planRes = await query(
-        `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date IS NULL`,
-        [storeId]
-      );
-      plan = planRes.rows[0] || {};
+      plan = await repo.findStoreTemplatePlan(storeId);
     }
 
     // Все метрики (не только "витринные" 5) — чтобы кастомные метрики были
     // видны в ответе, даже если в общий процент прогресса не идут.
     const allCols = await getSalesSumColumns();
-    const factRes = await query(
-      `SELECT ${allCols.map((c) => `COALESCE(SUM(${c}),0) as ${c}`).join(', ')}
-       FROM sales WHERE employee_id = $1 AND sale_date = $2`,
-      [id, d]
-    );
-    const fact = factRes.rows[0] || {};
+    const fact = await repo.sumEmployeeDayFact(id, d, allCols.map((c) => `COALESCE(SUM(${c}),0) as ${c}`).join(', '));
 
     // Основной прогресс-ринг считается по ключевым метрикам (как и раньше);
     // остальные метрики попадают в result как есть, без учёта в total.

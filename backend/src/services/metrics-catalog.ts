@@ -1,7 +1,7 @@
 /**
  * Единый каталог метрик из plan_metrics (+ fallback)
  */
-import { query } from '../db/index.js';
+import * as repo from '../repositories/metrics.js';
 
 export type MetricDef = {
   id: string;
@@ -35,14 +35,9 @@ const TTL = 30_000;
 export async function getMetricDefs(force = false): Promise<MetricDef[]> {
   if (!force && cache && Date.now() - cacheAt < TTL) return cache;
   try {
-    const res = await query(
-      `SELECT id, label, short_label, unit
-       FROM plan_metrics
-       WHERE COALESCE(is_active, true) = true
-       ORDER BY sort_order NULLS LAST, id`
-    );
-    if (res.rows.length) {
-      cache = res.rows.map((r: any) => ({
+    const rows = await repo.listActiveDefs();
+    if (rows.length) {
+      cache = rows.map((r: any) => ({
         id: String(r.id),
         label: r.label || r.id,
         short_label: r.short_label || r.label || r.id,
@@ -106,16 +101,8 @@ let colCacheAt = 0;
 export async function getSalesSumColumns(force = false): Promise<string[]> {
   if (!force && colCache && Date.now() - colCacheAt < TTL) return colCache;
   try {
-    const res = await query(
-      `SELECT column_name, data_type
-       FROM information_schema.columns
-       WHERE table_name = 'sales'
-         AND data_type IN ('numeric', 'integer', 'bigint', 'double precision', 'real', 'smallint')
-       ORDER BY ordinal_position`
-    );
-    const cols = res.rows
-      .map((r: any) => String(r.column_name))
-      .filter((c: string) => !NON_METRIC_COLUMNS.has(c));
+    const allCols = await repo.listNumericSalesColumns();
+    const cols = allCols.filter((c: string) => !NON_METRIC_COLUMNS.has(c));
     if (cols.length) {
       colCache = cols;
       colCacheAt = Date.now();

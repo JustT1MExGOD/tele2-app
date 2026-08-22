@@ -5,12 +5,14 @@
  * в одном месте, по образцу routes-store-profile.ts (18.5).
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { query } from './db/index.js';
 import { requireAuth, requireEmployeeInOrg } from './middleware-auth.js';
 import { calculateEmployeeBFQ } from './services/bfq.js';
 import { getGamificationProfile } from './services/gamification.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
+import * as employeesRepo from './repositories/employees.js';
+import * as schedulesRepo from './repositories/schedules.js';
+import * as shiftsRepo from './repositories/shifts.js';
 import type { EmployeeProfileResponse } from './shared/api-types.js';
 
 function canViewEmployeeProfile(user: { role?: string } | null | undefined): boolean {
@@ -44,48 +46,22 @@ export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
     const from = d.toISOString().slice(0, 10);
 
     try {
-      const empRow = await query(
-        `SELECT id, full_name, short_name, role FROM employees WHERE id = $1`,
-        [employeeId]
-      );
-      if (!empRow.rows[0]) return reply.code(404).send({ error: 'not found' });
+      const empRow = await employeesRepo.findBasicById(employeeId);
+      if (!empRow) return reply.code(404).send({ error: 'not found' });
 
-      const [bfq, gamification, staffDays, shiftsRes] = await Promise.all([
+      const [bfq, gamification, scheduledCnt, shifts] = await Promise.all([
         calculateEmployeeBFQ(employeeId, currentMonthMoscow()),
         getGamificationProfile(employeeId),
-        query(
-          `SELECT COUNT(DISTINCT work_date)::int as cnt
-           FROM schedules
-           WHERE employee_id = $1 AND work_date::date >= $2::date AND work_date::date <= $3::date
-             AND COALESCE(hours, 0) > 0`,
-          [employeeId, from, date]
-        ),
-        query(
-          `SELECT ss.work_date::text as date, ss.store_id, COALESCE(st.display_name, st.name) as store_name,
-                  ss.score, ss.ideal_shift, ss.mood
-           FROM shift_sessions ss
-           LEFT JOIN stores st ON st.id = ss.store_id
-           WHERE ss.employee_id = $1 AND ss.status = 'closed'
-             AND ss.work_date::date >= $2::date AND ss.work_date::date <= $3::date
-           ORDER BY ss.work_date DESC LIMIT 20`,
-          [employeeId, from, date]
-        )
+        schedulesRepo.countScheduledDaysForEmployee(employeeId, from, date),
+        shiftsRepo.findRecentClosedForEmployee(employeeId, from, date)
       ]);
 
       // Явка — доля запланированных дней периода, на которые была открыта
       // (не обязательно уже закрыта) смена. Тот же staffing-паттерн, что
       // routes-store-profile.ts, только scope сотрудник вместо точки.
-      const attendedDays = await query(
-        `SELECT COUNT(DISTINCT work_date)::int as cnt
-         FROM shift_sessions
-         WHERE employee_id = $1 AND work_date::date >= $2::date AND work_date::date <= $3::date`,
-        [employeeId, from, date]
-      );
-      const scheduledCnt = Number(staffDays.rows[0]?.cnt) || 0;
-      const attendedCnt = Number(attendedDays.rows[0]?.cnt) || 0;
+      const attendedCnt = await shiftsRepo.countAttendedDays(employeeId, from, date);
       const attendancePct = scheduledCnt > 0 ? clamp(Math.round((attendedCnt / scheduledCnt) * 100), 0, 100) : 100;
 
-      const shifts = shiftsRes.rows;
       const idealCount = shifts.filter((s: any) => s.ideal_shift).length;
       const idealRatePct = shifts.length > 0 ? clamp(Math.round((idealCount / shifts.length) * 100), 0, 100) : 0;
 
@@ -108,10 +84,10 @@ export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
 
       return {
         employee: {
-          id: empRow.rows[0].id,
-          full_name: empRow.rows[0].full_name,
-          short_name: empRow.rows[0].short_name,
-          role: empRow.rows[0].role
+          id: empRow.id,
+          full_name: empRow.full_name,
+          short_name: empRow.short_name,
+          role: empRow.role
         },
         bfq,
         gamification,

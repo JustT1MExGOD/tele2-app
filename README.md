@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.7.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-20.8.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.7.0`  
+**Актуальная версия клиента:** `20.8.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -134,7 +134,7 @@ flowchart TB
         AUTH["middleware-auth.ts<br/>authPlugin (preHandler) · initData HMAC"]
         ROUTES["28 routes-*.ts<br/>core/employees/stores/sales/schedules/stats/cash/<br/>command-center/tasks/store-profile/employee-profile/<br/>forecast/live-alerts/avatar/…"]
         SVC["services/<br/>plans · bfq · sales-write · shift-pace ·<br/>gamification · live-map · alerts · anomaly ·<br/>forecast · supervisor-analytics · ai.ts"]
-        REPO["repositories/<br/>stores.ts (Data Access Layer, 19.22.0+)"]
+        REPO["repositories/<br/>Full Data Access Layer, 19.22.0→20.8.0 —<br/>единственный путь к Postgres для всего backend"]
         CRON["cron/<br/>reports.ts · digest.ts"]
         BOT["bot/ (Grammy)"]
     end
@@ -183,7 +183,7 @@ tele2-app/
     │   ├── middleware-auth.ts          (authPlugin — глобальный preHandler, requireAuth/requireActive/requireManager/…, assertStoreInOrg/assertEmployeeInOrg, ROLE_LEVEL)
     │   ├── changelog.ts                (список версий для автоанонса — только minor-эпики, не хотфиксы)
     │   ├── db/                         (пул соединений, миграционный раннер, withTransaction() — 19.23.0)
-    │   ├── repositories/stores.ts      (Data Access Layer, 19.22.0 — единственное место с SQL по stores, orgId обязательным первым параметром; Employees/Sales/Schedules следующими заходами)
+    │   ├── repositories/                (Full Data Access Layer, 19.22.0→20.8.0 — 31 файл, единственное место в проекте с прямым SQL; orgId обязательным первым параметром у tenant-функций; CI check:no-direct-sql запрещает откат на 54 route/service/cron-файлах)
     │   ├── services/telegram-auth.ts   (проверка initData HMAC)
     │   ├── services/audit.ts           (Audit Trail, 19.23.0 — recordAudit(), пишущая сторона audit_log)
     │   ├── routes-core.ts              (/plans — org-scoped)
@@ -728,6 +728,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **20.5.0** | **Шестой срез Frontend Foundation.** Задачи (`GET /tasks`, `GET /tasks/:id`, `POST /tasks/:id/status`, `POST /tasks/:id/comments`, `15-tasks.js`) — на typed-клиент: список, карточка, смена статуса, комментарии |
 | **20.6.0** | **Седьмой срез Frontend Foundation.** Command Center (`GET /command-center`, `GET /employees`, `POST /tasks`, `14-command-center.js`) — на typed-клиент. `GET /command-center` собирается из нетипизированной внутренней функции (`buildSupervisorDashboard`) — контракт описывает то, что реально читает фронтенд, не весь внутренний ответ; аннотация на `problems` поймала настоящую type-narrowing ошибку (строка вместо литерального union) прямо на этапе типизации |
 | **20.7.0** | **Frontend Foundation завершена — все оставшиеся 15 файлов одним заходом.** По прямому запросу владельца продукта («доделай всё разом») — вместо очередного узкого среза сразу все 13 оставшихся `frontend/js/*.js` плюс два файла (`16-store-profile.js`, `18-employee-profile.js`), чьи бэкенд-типы и клиентские функции уже были готовы, но не подключены. ~60 новых функций в `frontend/src/api-client.ts`, общий контракт (`shared/api-types.ts`) расширен по многоуровневой схеме — точные типы для CRUD-форм, «что реально читает фронтенд»-типы с `[key: string]: unknown` для больших нетипизированных дашбордов (`buildSupervisorDashboard`, `getMonthSummaryTable`, `calculateAllBFQ`, `simulateScheduleMoves`, `getLiveNetworkMap`). Два новых хелпера в клиенте: `requestUpload` (multipart, аватар) и `requestBlob` (CSV-экспорт, не JSON). При сверке поведения до/после на каждом вызове найдено и исправлено несколько мест, где миграция тихо огрубляла текст ошибки в toast (падал общий «Ошибка» вместо прежнего специфичного сообщения) — исправлено на месте, не как отдельный пункт. Найден и **не тронут** мёртвый роут: кнопка «Скопировать неделю» в расписании (`06c-support-tickets.js`) шлёт `POST /schedules/copy-week`, которого нет ни в одном `routes-*.ts` — always-404 с самого начала; оставлено как есть с комментарием в коде, заводить новый роут — отдельное продуктовое решение, не механическая миграция. 51 тест в `frontend/tests/api-client.test.ts` (было 17) — репрезентативный набор на все различные URL/метод-паттерны, не по тесту на каждую из ~60 функций. Из 118 исходных `fetch()`-вызовов эпохи 20 остались ровно 2 сознательно нетронутых: `bootApp()` в `08-access-supervisor.js` (инспектирует `res.status === 404` напрямую, не ложится в общий клиент) и упомянутая мёртвая кнопка |
+| **20.8.0** | **Full Data Access Layer — весь backend на репозиториях.** Первый пункт нового roadmap владельца продукта (20.8-20.20, Core hardening) — «главный технический релиз» по его же оценке. Весь прямой SQL, ещё остававшийся вне routes-stores.ts/employees/sales/schedules/cash/tasks/shifts (уже перенесённых ранее), перенесён в `src/repositories/*`: алерты (`services/alerts.ts`, `routes-live-alerts.ts`, `routes-command-center.ts`), планы вместе с гоночно-защищённой материализацией (`services/plans.ts`, см. 19.24.0), кабинет супервайзера (`supervisor-analytics.ts`), живая карта сети (`live-map.ts`), инсайты смены (`insights.ts`), `routes-me.ts` (identity/bind), прогноз (`forecast.ts`), генерация картинок отчётов (`report-image.ts`), статистика/дашборд/BI-экспорт, профили точки/сотрудника, объявления/каналы, поддержка (тикеты), BFQ, геймификация (XP/бейджи), кастомные метрики, промокоды, what-if симуляция, темп смены, сетевые сводки, каталог метрик, точный heatmap, автоанонс релиза, AI-аудит, оба cron-модуля (отчёты в чат + алерты 14:00/16:00) — 18 новых файлов-репозиториев, ~45 изменённых route/service/cron-файлов. Правило `route → service → repository → PostgreSQL` теперь без исключений по всему backend, `npm run check:no-direct-sql` растянут на 54 файла. Полным прогоном тестов ещё до пуша поймана и исправлена одна настоящая регрессия: у нового `repositories/alerts.ts::insertOnce()` `alert_date` стал обязательным параметром и потерял старый дефолт «сегодня» — вернули, тест на дедупликацию алертов зафиксировал это на будущее. Внешнее поведение не изменилось ни для одного эндпоинта — рефактор архитектуры, не новая функциональность; проверено полным прогоном (277 тестов, зелёные) и живыми проверками на dev-сервере по каждому переносимому куску |
 
 ---
 
@@ -864,6 +865,39 @@ message-first. `20.3` — четвёртый срез: сводка по сет�
 `shared/api-types.ts`, DOM/UI-оркестрация остаётся legacy JS как есть.
 Из 118 исходных `fetch()` остались 2 сознательно нетронутых (§21,
 20.7.0) — эпоха закрыта.
+
+### 20.8-20.20 — Core hardening: разрыв с Telegram-ограничением (roadmap владельца продукта, 2026-08-22)
+Не новые фичи — цель сделать backend таким, чтобы дальнейшая разработка
+почти не увеличивала security debt, прежде чем строить поверх него
+Intelligence-слой (эпоха 21) и, при необходимости, отдельные клиенты
+(эпоха 22).
+
+- **20.8 Full Data Access Layer** ✅ («главный технический релиз» — по
+  оценке владельца продукта) — весь прямой SQL, ещё остававшийся в
+  routes/services/cron (алерты, планы и их гоночно-защищённая
+  материализация — 19.24.0, кабинет супервайзера, живая карта сети,
+  инсайты смены, прогноз, BFQ, геймификация, поддержка, объявления,
+  промокоды, кастомные метрики, cron-отчёты и алерты), перенесён в
+  `src/repositories/*`. Правило `route → service → repository →
+  PostgreSQL` теперь без исключений по всему backend, CI
+  (`npm run check:no-direct-sql`) закрывает откат на 54 файлах. Внешнее
+  поведение не изменилось ни для одного эндпоинта — рефактор
+  архитектуры, не новая функциональность (см. §21, 20.8.0)
+- **20.9 Identity Abstraction** — план: `Identity` (Telegram/Web/Mobile/
+  будущий SSO) → `User` → `Employee`, Telegram остаётся основным входом
+- **20.10 Audit & Observability 2.0** — форензик-уровень аудита,
+  request correlation, структурные логи, логирование cron-джобов
+- **20.11-20.13 Concurrency & Reliability** — idempotency-ключи на
+  критичных операциях, adversarial race-condition suite, recovery
+  (бэкапы/rollback миграций/graceful shutdown)
+- **20.14-20.16 Frontend 2.0** — feature-based структура фронтенда,
+  разделение server/UI/offline-state, offline-очередь → полноценный
+  sync engine
+- **20.17-20.20 Platform Layer** — client-neutral API, Web/PWA,
+  desktop-интерфейс для supervisor/admin, mobile-спайк (proof-of-concept)
+
+Версии внутри 20.8-20.20 не религия — пункты могут объединяться, если
+реальный объём небольшой.
 
 ---
 
@@ -1095,4 +1129,4 @@ message-first. `20.3` — четвёртый срез: сводка по сет�
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v20.7.0 · август 2026*
+*README · актуально на v20.8.0 · август 2026*

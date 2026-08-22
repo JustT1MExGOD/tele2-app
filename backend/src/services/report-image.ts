@@ -4,7 +4,7 @@
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { query } from '../db/index.js';
+import * as repo from '../repositories/report-image.js';
 import { getMetricDefs, MICRO_KEYS, groupForMetric } from './metrics-catalog.js';
 import { getStoreHourWeights } from './insights.js';
 import { renderSvgToPng } from './svg-render-pool.js';
@@ -37,8 +37,8 @@ function resolveFontFiles(): string[] {
 const FONT_FILES = resolveFontFiles();
 
 export async function loadFactPlanStaff(storeId: string, date: string) {
-  const storeRes = await query(`SELECT id, name, code FROM stores WHERE id = $1`, [storeId]).catch(() => ({ rows: [] as any[] }));
-  const st = storeRes.rows[0] || { name: storeId, code: '' };
+  const storeRow = await repo.findStoreBasic(storeId);
+  const st = storeRow || { name: storeId, code: '' };
 
   const defs = await getMetricDefs();
   const ids = defs.map((d) => d.id).filter((id) => /^[a-z][a-z0-9_]{0,29}$/.test(id));
@@ -46,39 +46,19 @@ export async function loadFactPlanStaff(storeId: string, date: string) {
 
   let f: any = {};
   try {
-    const salesRes = await query(
-      `SELECT ${sumParts} FROM sales WHERE store_id = $1 AND sale_date::date = $2::date`,
-      [storeId, date]
-    );
-    f = salesRes.rows[0] || {};
+    f = await repo.sumDayFactColumns(storeId, date, sumParts);
   } catch {
     f = {};
   }
 
   let p: any = {};
   try {
-    let planRes = await query(
-      `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date::date = $2::date LIMIT 1`,
-      [storeId, date]
-    );
-    if (!planRes.rows[0]) {
-      planRes = await query(
-        `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date IS NULL LIMIT 1`,
-        [storeId]
-      );
-    }
-    p = planRes.rows[0] || {};
+    p = await repo.findDayOrTemplatePlan(storeId, date);
   } catch { p = {}; }
 
-  const staffRes = await query(
-    `SELECT e.full_name FROM schedules sch
-     JOIN employees e ON e.id = sch.employee_id
-     WHERE sch.store_id = $1 AND sch.work_date::date = $2::date AND COALESCE(sch.hours,0)>0
-     ORDER BY e.full_name`,
-    [storeId, date]
-  ).catch(() => ({ rows: [] as any[] }));
+  const staff = await repo.listStaffNames(storeId, date);
 
-  return { st, f, p, staff: staffRes.rows.map((r: any) => r.full_name as string), defs };
+  return { st, f, p, staff, defs };
 }
 
 export type ReportKind = 'micro' | 'final';

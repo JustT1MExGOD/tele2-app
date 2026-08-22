@@ -8,8 +8,8 @@
  * Прогноз: по отработанным/оставшимся сменам в месяце
  */
 
-import { query } from '../db/index.js';
 import { getEmployeeMonthPlan } from './plans.js';
+import * as repo from '../repositories/bfq.js';
 
 export const BFQ_CONFIG = {
   comboBoostExtra: 4,    // факт комбо >= план + 4
@@ -190,20 +190,11 @@ async function getEmployeeMonthShifts(employeeId: number, month: string) {
     day: '2-digit'
   }).format(new Date());
 
-  const res = await query(
-    `SELECT work_date, hours
-     FROM schedules
-     WHERE employee_id = $1
-       AND work_date >= $2
-       AND work_date < $3
-       AND hours > 0
-     ORDER BY work_date`,
-    [employeeId, start, end]
-  );
+  const rows = await repo.findShiftsInRange(employeeId, start, end);
 
   let worked = 0;
   let remaining = 0;
-  for (const row of res.rows) {
+  for (const row of rows) {
     const d = String(row.work_date).slice(0, 10);
     if (d <= today) worked++;
     else remaining++;
@@ -217,26 +208,7 @@ async function getEmployeeFacts(employeeId: number, month: string) {
   endDate.setMonth(endDate.getMonth() + 1);
   const end = endDate.toISOString().slice(0, 10);
 
-  const res = await query(
-    `SELECT
-       COALESCE(SUM(sim),0) as sim,
-       COALESCE(SUM(mnp),0) as mnp,
-       COALESCE(SUM(pa),0) as pa,
-       COALESCE(SUM(combo),0) as combo,
-       COALESCE(SUM(phones),0) as phones,
-       COALESCE(SUM(accessories),0) as accessories,
-       COALESCE(SUM(focus),0) as focus,
-       COALESCE(SUM(settings),0) as settings,
-       COALESCE(SUM(wink),0) as wink,
-       COALESCE(SUM(shpd),0) as shpd,
-       COALESCE(SUM(insurance),0) as insurance,
-       COALESCE(SUM(credit_issued),0) as credit,
-       COALESCE(SUM(plotter),0) as plotter
-     FROM sales
-     WHERE employee_id = $1 AND sale_date >= $2 AND sale_date < $3`,
-    [employeeId, start, end]
-  );
-  return res.rows[0] || {};
+  return repo.sumMonthFacts(employeeId, start, end);
 }
 
 function factsToPct(fact: any, plan: any): Record<string, number> {
@@ -255,14 +227,10 @@ function factsToPct(fact: any, plan: any): Record<string, number> {
 
 async function getManual(employeeId: number, month: string) {
   const start = `${month}-01`;
-  const res = await query(
-    `SELECT vmr_avg, penalty FROM bfq_manual
-     WHERE employee_id = $1 AND month = $2`,
-    [employeeId, start]
-  );
+  const row = await repo.findManual(employeeId, start);
   return {
-    vmr: num(res.rows[0]?.vmr_avg),
-    penalty: num(res.rows[0]?.penalty)
+    vmr: num(row?.vmr_avg),
+    penalty: num(row?.penalty)
   };
 }
 
@@ -310,16 +278,10 @@ export async function calculateEmployeeBFQ(employeeId: number, month: string) {
 /** orgId обязателен — раньше без него отдавал BFQ вообще всех сетей
  * (routes-bfq.ts, routes-export.ts), теперь оба вызова обязаны его передать. */
 export async function calculateAllBFQ(month: string, orgId: string) {
-  const emps = await query(
-    `SELECT id, full_name, short_name, role
-     FROM employees
-     WHERE is_active = true AND COALESCE(org_id, 'default') = $1
-     ORDER BY full_name`,
-    [orgId]
-  );
+  const emps = await repo.listActiveEmployeesForOrg(orgId);
 
   const items = [];
-  for (const e of emps.rows) {
+  for (const e of emps) {
     const bfq = await calculateEmployeeBFQ(Number(e.id), month);
     items.push({
       employee_id: e.id,
@@ -354,15 +316,7 @@ export async function upsertBFQManual(
   penalty: number
 ) {
   const start = `${month}-01`;
-  const res = await query(
-    `INSERT INTO bfq_manual (employee_id, month, vmr_avg, penalty)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (employee_id, month)
-     DO UPDATE SET vmr_avg = EXCLUDED.vmr_avg, penalty = EXCLUDED.penalty
-     RETURNING *`,
-    [employeeId, start, vmrAvg, penalty]
-  );
-  return res.rows[0];
+  return repo.upsertManual(employeeId, start, vmrAvg, penalty);
 }
 
 /** Добавить анкету VMR */
@@ -371,12 +325,7 @@ export async function addVMRQuestionnaire(
   score: number,
   comment = ''
 ) {
-  const res = await query(
-    `INSERT INTO bfq_questionnaires (employee_id, score, comment)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
-    [employeeId, score, comment]
-  );
+  const created = await repo.insertQuestionnaire(employeeId, score, comment);
 
   // Пересчёт среднего VMR за текущий месяц
   const month = new Intl.DateTimeFormat('en-CA', {
@@ -386,23 +335,15 @@ export async function addVMRQuestionnaire(
   }).format(new Date());
   const start = `${month}-01`;
 
-  const avg = await query(
-    `SELECT AVG(score) as avg FROM bfq_questionnaires
-     WHERE employee_id = $1 AND created_at >= $2::date`,
-    [employeeId, start]
-  );
-
-  const current = await query(
-    `SELECT penalty FROM bfq_manual WHERE employee_id = $1 AND month = $2`,
-    [employeeId, start]
-  );
+  const avg = await repo.avgQuestionnaireScore(employeeId, start);
+  const currentPenalty = await repo.findManualPenalty(employeeId, start);
 
   await upsertBFQManual(
     employeeId,
     month,
-    num(avg.rows[0]?.avg),
-    num(current.rows[0]?.penalty)
+    num(avg),
+    num(currentPenalty)
   );
 
-  return res.rows[0];
+  return created;
 }

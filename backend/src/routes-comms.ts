@@ -7,8 +7,8 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { requireAuth, requireManager, resolveViewOrgId } from './middleware-auth.js';
+import * as commsRepo from './repositories/comms.js';
 import type { AnnouncementsListResponse, CreateAnnouncementResponse, AnnouncementReadsResponse } from './shared/api-types.js';
 
 const PostAnnouncementBody = Type.Object({
@@ -33,19 +33,7 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     const empId = request.user!.employee_id!;
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
-    const res = await query(
-      `SELECT a.*,
-              EXISTS(
-                SELECT 1 FROM announcement_reads r
-                WHERE r.announcement_id = a.id AND r.employee_id = $1
-              ) as is_read
-       FROM announcements a
-       WHERE a.active = true AND COALESCE(a.org_id,'default') = $2
-       ORDER BY a.created_at DESC
-       LIMIT 50`,
-      [empId, orgId]
-    );
-    return res.rows;
+    return commsRepo.listActiveForEmployee(empId, orgId);
   });
 
   app.post(
@@ -55,23 +43,14 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const body = request.body as PostAnnouncementBody;
     const orgId = resolveViewOrgId(request.user!, body.org_id);
-    const res = await query(
-      `INSERT INTO announcements (title, body, required, created_by, org_id)
-       VALUES ($1,$2,COALESCE($3,true),$4,$5) RETURNING *`,
-      [body.title, body.body, body.required, request.user!.employee_id, orgId]
-    );
-    return res.rows[0];
+    return commsRepo.create(body.title, body.body, body.required, request.user!.employee_id, orgId);
     }
   );
 
   app.post('/announcements/:id/read', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
-    await query(
-      `INSERT INTO announcement_reads (announcement_id, employee_id)
-       VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-      [Number(id), request.user!.employee_id]
-    );
+    await commsRepo.markRead(Number(id), request.user!.employee_id);
     return { ok: true };
   });
 
@@ -84,37 +63,19 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
 
-    const ann = await query(`SELECT COALESCE(org_id,'default') as org_id FROM announcements WHERE id = $1`, [id]);
-    if (!ann.rows[0] || ann.rows[0].org_id !== orgId) {
+    const annOrgId = await commsRepo.findOrgId(id);
+    if (!annOrgId || annOrgId !== orgId) {
       return reply.code(403).send({ error: 'forbidden', message: 'Объявление не принадлежит вашей сети' });
     }
 
-    const read = await query(
-      `SELECT e.id, e.full_name, r.read_at
-       FROM announcement_reads r
-       JOIN employees e ON e.id = r.employee_id
-       WHERE r.announcement_id = $1 AND COALESCE(e.org_id,'default') = $2
-       ORDER BY r.read_at`,
-      [id, orgId]
-    );
-    const unread = await query(
-      `SELECT e.id, e.full_name
-       FROM employees e
-       WHERE COALESCE(e.is_active, true) = true AND e.access_status = 'active'
-         AND COALESCE(e.org_id,'default') = $2
-         AND NOT EXISTS (
-           SELECT 1 FROM announcement_reads r
-           WHERE r.announcement_id = $1 AND r.employee_id = e.id
-         )
-       ORDER BY e.full_name`,
-      [id, orgId]
-    );
-    return { read: read.rows, unread: unread.rows };
+    const read = await commsRepo.listReads(id, orgId);
+    const unread = await commsRepo.listUnread(id, orgId);
+    return { read, unread };
   });
 
   async function assertChannelInOrg(channelId: string, orgId: string): Promise<boolean> {
-    const res = await query(`SELECT COALESCE(org_id,'default') as org_id FROM channels WHERE id = $1`, [channelId]);
-    return !!res.rows[0] && res.rows[0].org_id === orgId;
+    const channelOrgId = await commsRepo.findChannelOrgId(channelId);
+    return !!channelOrgId && channelOrgId === orgId;
   }
 
   app.get('/channels/:id/messages', async (request, reply) => {
@@ -124,15 +85,8 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     if (!(await assertChannelInOrg(id, resolveViewOrgId(request.user!, org_id)))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Канал не принадлежит вашей сети' });
     }
-    const res = await query(
-      `SELECT m.*, e.full_name as author_name
-       FROM channel_messages m
-       LEFT JOIN employees e ON e.id = m.author_id
-       WHERE m.channel_id = $1
-       ORDER BY m.created_at DESC LIMIT 100`,
-      [id]
-    );
-    return res.rows.reverse();
+    const rows = await commsRepo.listChannelMessages(id);
+    return rows.reverse();
   });
 
   app.post(
@@ -147,12 +101,7 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     }
     const text = String(body.body || body.message || '').trim();
     if (!text) return reply.code(400).send({ error: 'body required' });
-    const res = await query(
-      `INSERT INTO channel_messages (channel_id, author_id, body, due_at)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [id, request.user!.employee_id, text, body.due_at || null]
-    );
-    return res.rows[0];
+    return commsRepo.createChannelMessage(id, request.user!.employee_id, text, body.due_at || null);
     }
   );
 }

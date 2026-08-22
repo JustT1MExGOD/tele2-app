@@ -1,4 +1,4 @@
-import { query } from '../db/index.js';
+import * as repo from '../repositories/gamification.js';
 
 const LEVELS = [
   { level: 1, xp: 0, title: 'Стажёр' },
@@ -28,34 +28,17 @@ export function levelFromXp(xp: number) {
 }
 
 export async function addXp(employeeId: number, amount: number, reason: string, ref?: { type?: string; id?: string }) {
-  await query(
-    `INSERT INTO xp_events (employee_id, amount, reason, ref_type, ref_id)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [employeeId, amount, reason, ref?.type || null, ref?.id || null]
-  );
-  const res = await query(
-    `UPDATE employees
-     SET xp = COALESCE(xp,0) + $1,
-         level = GREATEST(COALESCE(level,1), 1)
-     WHERE id = $2
-     RETURNING id, xp, level, streak_days, best_shift_score`,
-    [amount, employeeId]
-  );
-  const row = res.rows[0];
+  await repo.insertXpEvent(employeeId, amount, reason, ref?.type || null, ref?.id || null);
+  const row = await repo.addXpToEmployee(employeeId, amount);
   if (!row) return null;
   const info = levelFromXp(num(row.xp));
-  await query(`UPDATE employees SET level = $1 WHERE id = $2`, [info.level, employeeId]);
+  await repo.setLevel(employeeId, info.level);
   return { ...row, ...info };
 }
 
 export async function grantBadge(employeeId: number, code: string, title: string, meta: any = {}) {
   try {
-    await query(
-      `INSERT INTO employee_badges (employee_id, badge_code, title, meta)
-       VALUES ($1,$2,$3,$4)
-       ON CONFLICT DO NOTHING`,
-      [employeeId, code, title, JSON.stringify(meta)]
-    );
+    await repo.insertBadge(employeeId, code, title, JSON.stringify(meta));
   } catch {
     // unique may differ — ignore duplicates
   }
@@ -77,8 +60,8 @@ export async function evaluateShiftClose(opts: {
   ideal: boolean;
   planPct: number;
 }) {
-  const before = await query(`SELECT xp FROM employees WHERE id = $1`, [opts.employeeId]);
-  const levelBefore = levelFromXp(num(before.rows[0]?.xp)).level;
+  const beforeXp = await repo.findXp(opts.employeeId);
+  const levelBefore = levelFromXp(num(beforeXp)).level;
 
   let xp = 20;
   if (opts.planPct >= 100) xp += 50;
@@ -90,23 +73,14 @@ export async function evaluateShiftClose(opts: {
   }
 
   // streak: продажа/смена сегодня
-  await query(
-    `UPDATE employees SET
-       streak_days = CASE
-         WHEN best_shift_score IS NOT NULL THEN COALESCE(streak_days,0) + 1
-         ELSE 1
-       END,
-       best_shift_score = GREATEST(COALESCE(best_shift_score,0), $1)
-     WHERE id = $2`,
-    [opts.score, opts.employeeId]
-  );
+  await repo.updateStreakAndBestScore(opts.employeeId, opts.score);
 
-  const st = await query(`SELECT streak_days, xp, level FROM employees WHERE id = $1`, [opts.employeeId]);
-  const streak = num(st.rows[0]?.streak_days);
+  const st = await repo.findStreakXpLevel(opts.employeeId);
+  const streak = num(st?.streak_days);
   if (streak === 7) await grantBadge(opts.employeeId, 'streak_7', '7 дней подряд');
   if (streak === 30) await grantBadge(opts.employeeId, 'streak_30', '30 дней огня');
 
-  const info = levelFromXp(num(st.rows[0]?.xp));
+  const info = levelFromXp(num(st?.xp));
   return {
     ...info,
     xp_gained: xp,
@@ -116,21 +90,14 @@ export async function evaluateShiftClose(opts: {
 }
 
 export async function getGamificationProfile(employeeId: number) {
-  const emp = await query(
-    `SELECT id, full_name, xp, level, streak_days, best_shift_score FROM employees WHERE id = $1`,
-    [employeeId]
-  );
-  if (!emp.rows[0]) return null;
-  const badges = await query(
-    `SELECT badge_code, title, earned_at, meta FROM employee_badges
-     WHERE employee_id = $1 ORDER BY earned_at DESC LIMIT 20`,
-    [employeeId]
-  );
+  const emp = await repo.findProfileBasic(employeeId);
+  if (!emp) return null;
+  const badges = await repo.listBadges(employeeId);
   return {
-    ...levelFromXp(num(emp.rows[0].xp)),
-    streak_days: num(emp.rows[0].streak_days),
-    best_shift_score: num(emp.rows[0].best_shift_score),
-    badges: badges.rows
+    ...levelFromXp(num(emp.xp)),
+    streak_days: num(emp.streak_days),
+    best_shift_score: num(emp.best_shift_score),
+    badges
   };
 }
 

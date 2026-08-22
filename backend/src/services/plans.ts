@@ -1,30 +1,23 @@
 /**
  * Месячные планы → дневные → планы точек
  * Единый список метрик (как в sales / frontend)
+ *
+ * 20.8.0 (Full DAL): весь SQL переехал в repositories/plans.ts (таблицы
+ * планов) и repositories/sales.ts, repositories/employees.ts,
+ * repositories/schedules.ts, repositories/stores.ts,
+ * repositories/organizations.ts (факты/справочники) — этот файл остаётся
+ * бизнес-логикой: нормализация ввода, выбор колонок, композиция.
  */
-import { query } from '../db/index.js';
-import { getMetricIds, getMetricDefs } from './metrics-catalog.js';
+import { getMetricIds } from './metrics-catalog.js';
+import * as plansRepo from '../repositories/plans.js';
+import * as salesRepo from '../repositories/sales.js';
+import * as employeesRepo from '../repositories/employees.js';
+import * as schedulesRepo from '../repositories/schedules.js';
+import * as storesRepo from '../repositories/stores.js';
+import * as orgsRepo from '../repositories/organizations.js';
 
-/** Все метрики плана/факта — везде одинаково */
-export const METRICS = [
-  'sim',
-  'mnp',
-  'pa',
-  'combo',
-  'phones',
-  'accessories',
-  'focus',
-  'settings',
-  'wink',
-  'shpd',
-  'insurance',
-  'credit_request',
-  'credit_issued',
-  'plotter',
-  'hb'
-] as const;
-
-export type Metric = (typeof METRICS)[number];
+export const METRICS = plansRepo.METRICS;
+export type Metric = plansRepo.Metric;
 
 /** Алиасы со старых имён (frontend/legacy) */
 const ALIASES: Record<string, Metric> = {
@@ -93,29 +86,6 @@ function normalizePlanInput(data: Record<string, any>): Record<Metric, number> {
   return out;
 }
 
-/** Колонки sales, которые реально есть в БД (кэш) */
-let salesColumnsCache: Set<string> | null = null;
-
-async function getSalesColumns(): Promise<Set<string>> {
-  if (salesColumnsCache) return salesColumnsCache;
-  try {
-    const res = await query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'sales'`
-    );
-    salesColumnsCache = new Set(res.rows.map((r: any) => String(r.column_name)));
-  } catch {
-    salesColumnsCache = new Set([
-      ...METRICS,
-      'employee_id',
-      'store_id',
-      'sale_date'
-    ] as string[]);
-  }
-  return salesColumnsCache;
-}
-
 export async function getEmployeeMonthFacts(employeeId: number, month: string) {
   const start = monthStart(month);
   const end = monthEndExclusive(month);
@@ -131,34 +101,16 @@ export async function getEmployeeMonthFacts(employeeId: number, month: string) {
   for (const m of METRICS) out[m] = 0;
 
   try {
-    const cols = await getSalesColumns();
+    const cols = await salesRepo.getSalesColumns();
     const sumCols = BASE.filter((c) => cols.has(c));
     if (!sumCols.length) {
       // совсем старая схема
-      const res = await query(
-        `SELECT
-           COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
-           COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
-           COALESCE(SUM(phones),0) as phones
-         FROM sales
-         WHERE employee_id = $1 AND sale_date >= $2::date AND sale_date < $3::date`,
-        [employeeId, start, end]
-      );
-      const row = res.rows[0] || {};
+      const row = await salesRepo.sumVeryOldSchemaForEmployeeMonth(employeeId, start, end);
       for (const k of Object.keys(row)) out[k] = num(row[k]);
       return out;
     }
 
-    const selectParts = sumCols.map((c) => `COALESCE(SUM(${c}),0) as ${c}`);
-    const res = await query(
-      `SELECT ${selectParts.join(', ')}
-       FROM sales
-       WHERE employee_id = $1
-         AND sale_date >= $2::date
-         AND sale_date < $3::date`,
-      [employeeId, start, end]
-    );
-    const row = res.rows[0] || {};
+    const row = await salesRepo.sumColumnsForEmployeeMonth(employeeId, start, end, [...sumCols]);
     for (const c of sumCols) out[c] = num(row[c]);
 
     // 2) Кастомные метрики — только если колонка есть
@@ -170,17 +122,8 @@ export async function getEmployeeMonthFacts(employeeId: number, month: string) {
         !sumCols.includes(id as any)
     );
     if (extra.length) {
-      const parts = extra.map((c) => `COALESCE(SUM(${c}),0) as ${c}`);
       try {
-        const r2 = await query(
-          `SELECT ${parts.join(', ')}
-           FROM sales
-           WHERE employee_id = $1
-             AND sale_date >= $2::date
-             AND sale_date < $3::date`,
-          [employeeId, start, end]
-        );
-        const row2 = r2.rows[0] || {};
+        const row2 = await salesRepo.sumColumnsForEmployeeMonth(employeeId, start, end, extra);
         for (const c of extra) out[c] = num(row2[c]);
       } catch (e) {
         console.warn('extra metric facts failed:', (e as any)?.message || e);
@@ -196,17 +139,7 @@ export async function getEmployeeMonthFacts(employeeId: number, month: string) {
     console.error('getEmployeeMonthFacts failed:', (e as any)?.message || e);
     // 3) Последний шанс — минимальный набор
     try {
-      const res = await query(
-        `SELECT
-           COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
-           COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
-           COALESCE(SUM(phones),0) as phones,
-           COALESCE(SUM(accessories),0) as accessories
-         FROM sales
-         WHERE employee_id = $1 AND sale_date >= $2::date AND sale_date < $3::date`,
-        [employeeId, start, end]
-      );
-      const row = res.rows[0] || {};
+      const row = await salesRepo.sumMinimalForEmployeeMonth(employeeId, start, end);
       for (const k of Object.keys(row)) out[k] = num(row[k]);
     } catch (e2) {
       console.error('facts fallback failed:', (e2 as any)?.message || e2);
@@ -218,37 +151,18 @@ export async function getEmployeeMonthFacts(employeeId: number, month: string) {
 export async function getEmployeeShiftCount(employeeId: number, month: string) {
   const start = monthStart(month);
   const end = monthEndExclusive(month);
-  const res = await query(
-    `SELECT COUNT(*)::int as cnt FROM schedules
-     WHERE employee_id = $1 AND work_date >= $2 AND work_date < $3 AND hours > 0`,
-    [employeeId, start, end]
-  );
-  return num(res.rows[0]?.cnt);
+  return schedulesRepo.countWorkedInRange(employeeId, start, end);
 }
 
 export async function getEmployeeRemainingShifts(employeeId: number, month: string) {
   const today = todayMoscow();
   const end = monthEndExclusive(month);
-  const res = await query(
-    `SELECT COUNT(*)::int as cnt FROM schedules
-     WHERE employee_id = $1 AND work_date >= $2 AND work_date < $3 AND hours > 0`,
-    [employeeId, today, end]
-  );
-  return num(res.rows[0]?.cnt);
+  return schedulesRepo.countWorkedInRange(employeeId, today, end);
 }
 
 export async function getEmployeeMonthPlan(employeeId: number, month: string) {
   const start = monthStart(month);
-  const res = await query(
-    `SELECT * FROM employee_month_plans WHERE employee_id = $1 AND month = $2::date`,
-    [employeeId, start]
-  ).catch(() =>
-    query(
-      `SELECT * FROM employee_month_plans WHERE employee_id = $1 AND month::text LIKE $2`,
-      [employeeId, start.slice(0, 7) + '%']
-    )
-  );
-  const row = res.rows[0];
+  const row = await plansRepo.findEmployeeMonthPlanRow(employeeId, start);
   if (!row) return null;
 
   // нормализуем credit → credit_issued
@@ -285,47 +199,9 @@ export async function upsertEmployeeMonthPlan(
   const allCols = [...METRICS, ...extraKeys];
   const cols = ['employee_id', 'month', ...allCols];
   const vals: any[] = [employeeId, start, ...allCols.map((m) => num((norm as any)[m]))];
-  const ph = cols.map((_, i) => `$${i + 1}`);
   const updates = allCols.map((m) => `${m} = EXCLUDED.${m}`).join(', ');
 
-  try {
-    const res = await query(
-      `INSERT INTO employee_month_plans (${cols.join(', ')})
-       VALUES (${ph.join(', ')})
-       ON CONFLICT (employee_id, month) DO UPDATE SET
-         ${updates},
-         updated_at = now()
-       RETURNING *`,
-      vals
-    );
-    return res.rows[0];
-  } catch (e: any) {
-    // нет UNIQUE / нет колонок — пробуем update+insert
-    console.error('upsertEmployeeMonthPlan:', e?.message || e);
-    const existing = await query(
-      `SELECT id FROM employee_month_plans WHERE employee_id = $1 AND month = $2::date`,
-      [employeeId, start]
-    ).catch(() => ({ rows: [] as any[] }));
-
-    if (existing.rows[0]) {
-      const set = METRICS.map((m, i) => `${m} = $${i + 3}`).join(', ');
-      const res = await query(
-        `UPDATE employee_month_plans SET ${set}
-         WHERE employee_id = $1 AND month = $2::date
-         RETURNING *`,
-        [employeeId, start, ...METRICS.map((m) => norm[m])]
-      );
-      return res.rows[0];
-    }
-
-    const res = await query(
-      `INSERT INTO employee_month_plans (${cols.join(', ')})
-       VALUES (${ph.join(', ')})
-       RETURNING *`,
-      vals
-    );
-    return res.rows[0];
-  }
+  return plansRepo.upsertEmployeeMonthPlanRow(employeeId, start, cols, vals, updates, norm);
 }
 
 /**
@@ -335,11 +211,7 @@ export async function upsertEmployeeMonthPlan(
  */
 export async function getStoreMonthPlan(storeId: string, month: string) {
   const start = monthStart(month);
-  const res = await query(
-    `SELECT * FROM store_month_plans WHERE store_id = $1 AND month = $2::date`,
-    [storeId, start]
-  );
-  const row = res.rows[0];
+  const row = await plansRepo.findStoreMonthPlanRow(storeId, start);
   if (!row) return null;
   const plan: Record<string, any> = { ...row };
   if (plan.credit != null && plan.credit_issued == null) plan.credit_issued = plan.credit;
@@ -350,19 +222,7 @@ export async function getStoreMonthPlan(storeId: string, month: string) {
 export async function upsertStoreMonthPlan(storeId: string, month: string, data: Record<string, number>) {
   const start = monthStart(month);
   const norm = normalizePlanInput(data);
-  const cols = ['store_id', 'month', ...METRICS];
-  const ph = cols.map((_, i) => `$${i + 1}`);
-  const vals: any[] = [storeId, start, ...METRICS.map((m) => norm[m])];
-  const updates = METRICS.map((m) => `${m} = EXCLUDED.${m}`).join(', ');
-  const res = await query(
-    `INSERT INTO store_month_plans (${cols.join(', ')})
-     VALUES (${ph.join(', ')})
-     ON CONFLICT (store_id, month) DO UPDATE SET
-       ${updates}, updated_at = now()
-     RETURNING *`,
-    vals
-  );
-  return res.rows[0];
+  return plansRepo.upsertStoreMonthPlanRow(storeId, start, norm);
 }
 
 /** Факт точки за месяц — сумма продаж всех сотрудников на этой точке (не только своей сети — подмена тоже считается). */
@@ -372,15 +232,9 @@ export async function getStoreMonthFacts(storeId: string, month: string) {
   const out: Record<string, number> = {};
   for (const m of METRICS) out[m] = 0;
   try {
-    const cols = await getSalesColumns();
+    const cols = await salesRepo.getSalesColumns();
     const sumCols = (METRICS as readonly string[]).filter((c) => cols.has(c));
-    const selectParts = sumCols.map((c) => `COALESCE(SUM(${c}),0) as ${c}`);
-    const res = await query(
-      `SELECT ${selectParts.join(', ')} FROM sales
-       WHERE store_id = $1 AND sale_date >= $2::date AND sale_date < $3::date`,
-      [storeId, start, end]
-    );
-    const row = res.rows[0] || {};
+    const row = await salesRepo.sumColumnsForStoreMonth(storeId, start, end, sumCols);
     for (const c of sumCols) out[c] = num(row[c]);
   } catch (e) {
     console.error('getStoreMonthFacts failed:', (e as any)?.message || e);
@@ -390,12 +244,7 @@ export async function getStoreMonthFacts(storeId: string, month: string) {
 
 export async function getMonthSummaryTable(month: string, orgId?: string) {
   const start = monthStart(month);
-  const employees = await query(
-    `SELECT id, full_name, short_name, role FROM employees
-     WHERE COALESCE(is_active, true) = true AND COALESCE(org_id, 'default') = $1
-     ORDER BY full_name`,
-    [orgId || 'default']
-  );
+  const employees = await employeesRepo.listBasicByOrg(orgId || 'default');
 
   const rows = [];
   const totalsFact: Record<string, number> = {};
@@ -405,7 +254,7 @@ export async function getMonthSummaryTable(month: string, orgId?: string) {
     totalsPlan[m] = 0;
   }
 
-  for (const e of employees.rows) {
+  for (const e of employees) {
     const fact = await getEmployeeMonthFacts(Number(e.id), month);
     const planRow = await getEmployeeMonthPlan(Number(e.id), month);
     const shifts = await getEmployeeShiftCount(Number(e.id), month);
@@ -501,11 +350,7 @@ export async function computeStoreDailyPlans(date?: string, orgId?: string) {
   const remainingDays = Math.max(1, remainingDaysInMonth(month));
   const org = orgId || 'default';
 
-  const storesRes = await query(
-    `SELECT id, COALESCE(display_name, name) as name, code FROM stores s WHERE COALESCE(org_id, 'default') = $1 ORDER BY s.name`,
-    [org]
-  );
-  const storeList = storesRes.rows;
+  const storeList = await storesRepo.listBasicForOrg(org);
 
   const stores = [];
   for (const st of storeList) {
@@ -535,23 +380,17 @@ export async function computeStoreDailyPlans(date?: string, orgId?: string) {
 }
 
 /**
- * 19.24.0 — раньше начиналась с DELETE FROM store_plans WHERE plan_date=$1,
- * затем голые INSERT в цикле. Вызывается и кроном в 6:00 МСК, и синхронно
- * из PUT /plans/stores/:id/month сразу после правки — конкурентный вызов
- * (правка ровно в момент cron-прогона, или два сохранения планов разных
- * точек одновременно) мог либо оставить дубликаты строк на одну точку/дату
- * (без UNIQUE-constraint'а), либо дать читателям кратковременное окно
- * "плана нет" между DELETE и повторным INSERT. Теперь per-store UPSERT
- * (UNIQUE(store_id, plan_date), миграция 0013) — атомарно на уровне строки,
- * без пустого окна: читатель либо видит старое значение, либо новое.
+ * 19.24.0 — per-store UPSERT (UNIQUE(store_id, plan_date), миграция 0013) —
+ * атомарно на уровне строки, без пустого окна между DELETE и повторным
+ * INSERT (см. repositories/plans.ts::materializeRow).
  */
 export async function materializeStoreDailyPlans(date?: string) {
   const d = date || todayMoscow();
 
   // Пул считается ОТДЕЛЬНО на каждую сеть — иначе план одной сети размывался
   // бы остатками другой (и делился бы между чужими точками).
-  const orgsRes = await query(`SELECT id FROM organizations`);
-  const orgIds = orgsRes.rows.length ? orgsRes.rows.map((r: any) => r.id) : ['default'];
+  const orgIds0 = await orgsRepo.listIds();
+  const orgIds = orgIds0.length ? orgIds0 : ['default'];
 
   let allStores: any[] = [];
   for (const org of orgIds) {
@@ -560,80 +399,7 @@ export async function materializeStoreDailyPlans(date?: string) {
   }
 
   for (const st of allStores) {
-    const p = st.plan;
-    try {
-      await query(
-        `INSERT INTO store_plans (
-           store_id, plan_date,
-           sim, mnp, pa, combo, phones, accessories, focus, settings,
-           wink, shpd, insurance, credit_request, credit_issued, plotter, hb
-         ) VALUES (
-           $1,$2::date,
-           $3,$4,$5,$6,$7,$8,$9,$10,
-           $11,$12,$13,$14,$15,$16,$17
-         )
-         ON CONFLICT (store_id, plan_date) DO UPDATE SET
-           sim = EXCLUDED.sim, mnp = EXCLUDED.mnp, pa = EXCLUDED.pa, combo = EXCLUDED.combo,
-           phones = EXCLUDED.phones, accessories = EXCLUDED.accessories, focus = EXCLUDED.focus,
-           settings = EXCLUDED.settings, wink = EXCLUDED.wink, shpd = EXCLUDED.shpd,
-           insurance = EXCLUDED.insurance, credit_request = EXCLUDED.credit_request,
-           credit_issued = EXCLUDED.credit_issued, plotter = EXCLUDED.plotter, hb = EXCLUDED.hb`,
-        [
-          st.store_id,
-          d,
-          num(p.sim),
-          num(p.mnp),
-          num(p.pa),
-          num(p.combo),
-          num(p.phones),
-          num(p.accessories),
-          num(p.focus),
-          num(p.settings),
-          num(p.wink),
-          num(p.shpd),
-          num(p.insurance),
-          num(p.credit_request),
-          num(p.credit_issued),
-          num(p.plotter),
-          num(p.hb)
-        ]
-      );
-    } catch (e: any) {
-      // fallback без новых колонок (более старая схема)
-      console.error('materialize insert', st.store_id, e?.message || e);
-      await query(
-        `INSERT INTO store_plans (
-           store_id, plan_date,
-           sim, mnp, pa, combo, phones, accessories, focus, settings,
-           wink, shpd, insurance, credit_issued
-         ) VALUES (
-           $1,$2::date,
-           $3,$4,$5,$6,$7,$8,$9,$10,
-           $11,$12,$13,$14
-         )
-         ON CONFLICT (store_id, plan_date) DO UPDATE SET
-           sim = EXCLUDED.sim, mnp = EXCLUDED.mnp, pa = EXCLUDED.pa, combo = EXCLUDED.combo,
-           phones = EXCLUDED.phones, accessories = EXCLUDED.accessories, focus = EXCLUDED.focus,
-           settings = EXCLUDED.settings, wink = EXCLUDED.wink, shpd = EXCLUDED.shpd,
-           insurance = EXCLUDED.insurance, credit_issued = EXCLUDED.credit_issued`,
-        [
-          st.store_id,
-          d,
-          num(p.sim),
-          num(p.mnp),
-          num(p.pa),
-          num(p.combo),
-          num(p.phones),
-          num(p.accessories),
-          num(p.focus),
-          num(p.settings),
-          num(p.wink),
-          num(p.shpd),
-          num(p.insurance),
-          num(p.credit_issued)
-        ]
-      );
-    }
+    await plansRepo.materializeRow(st.store_id, d, st.plan);
   }
 
   return { date: d, month: d.slice(0, 7), stores: allStores };

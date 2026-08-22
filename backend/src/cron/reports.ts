@@ -5,7 +5,6 @@
  * close_time_weekday / close_time_sunday) — раньше дублировалось в TS-массиве
  * SCHEDULES, из-за чего новую точку нужно было вручную дописывать в код.
  */
-import { query } from '../db/index.js';
 import { todayMoscow } from '../utils/date.js';
 import { getSalesSumColumns } from '../services/metrics-catalog.js';
 import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '../bot/index.js';
@@ -14,25 +13,22 @@ import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '
 import { generateDipComment } from '../services/ai.js';
 import { materializeStoreDailyPlans } from '../services/plans.js';
 import { getStoreNotifyTarget } from '../services/tenant.js';
+import * as cronRepo from '../repositories/cron.js';
+import * as reportImageRepo from '../repositories/report-image.js';
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)
 // молча пропадала из микро/итоговых отчётов в чат. Теперь список
 // колонок берётся из реальной схемы таблицы sales.
-async function factSql(): Promise<string> {
+async function factSumColsSql(): Promise<string> {
   const cols = await getSalesSumColumns();
-  const select = cols.map((c) => `COALESCE(SUM(${c}),0) ${c}`).join(', ');
-  return `SELECT ${select} FROM sales WHERE sale_date::date = $1::date AND store_id = $2`;
+  return cols.map((c) => `COALESCE(SUM(${c}),0) ${c}`).join(', ');
 }
 
 /** true — событие claim'нуто впервые (можно отправлять), false — уже было
  * отправлено (кто-то другой уже забрал этот же ключ, пропускаем). */
 export async function claimCronSend(key: string): Promise<boolean> {
-  const res = await query(
-    `INSERT INTO cron_send_log (key) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id`,
-    [key]
-  );
-  return !!res.rows[0];
+  return cronRepo.claimSend(key);
 }
 
 type StorePlanRow = {
@@ -78,28 +74,15 @@ function finalTimeFor(st: StorePlanRow, sunday: boolean): { h: number; m: number
 }
 
 async function loadStorePlans(date: string): Promise<StorePlanRow[]> {
-  const stores = await query(
-    `SELECT id, name, code, micro_report_times, skip_sunday_micro_times,
-            close_time_weekday, close_time_sunday
-     FROM stores ORDER BY name`
-  );
+  const stores = await cronRepo.listStoresForReportSchedule();
   const out: StorePlanRow[] = [];
-  for (const st of stores.rows) {
-    let planRes = await query(
-      `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date::date = $2::date LIMIT 1`,
-      [st.id, date]
-    ).catch(() => ({ rows: [] as any[] }));
-    if (!planRes.rows[0]) {
-      planRes = await query(
-        `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date IS NULL LIMIT 1`,
-        [st.id]
-      ).catch(() => ({ rows: [] as any[] }));
-    }
+  for (const st of stores) {
+    const plan = await cronRepo.findDayOrTemplatePlanResilient(st.id, date);
     out.push({
       store_id: st.id,
       name: st.name,
       code: st.code,
-      plan: planRes.rows[0] || {},
+      plan: plan || {},
       micro_report_times: st.micro_report_times,
       skip_sunday_micro_times: st.skip_sunday_micro_times,
       close_time_weekday: st.close_time_weekday,
@@ -144,20 +127,15 @@ async function sendStoreReportImage(
       });
     } catch (e2: any) {
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
-      const staff = await query(
-        `SELECT e.full_name FROM schedules sch
-         JOIN employees e ON e.id = sch.employee_id
-         WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
-        [date, st.store_id]
-      );
-      const fact = await query(await factSql(), [date, st.store_id]).catch(() => ({ rows: [{}] }));
-      const f = fact.rows[0] || {};
+      const staffNames = await cronRepo.listStaffNamesUnordered(date, st.store_id);
+      const sumColsSql = await factSumColsSql();
+      const f = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql).catch(() => ({}));
       const lines = await microLines(f, st.plan);
       const text = microReport({
         storeName: st.name,
         storeCode: st.code || st.store_id,
         date: `${date}${hourLabel ? ' · ' + hourLabel : ''}`,
-        staff: staff.rows.map((x: any) => x.full_name),
+        staff: staffNames,
         lines
       });
       await notifyChat(text, chatId, threadId);
@@ -175,8 +153,8 @@ async function sendStoreStoryReport(
   try {
     const { plan, fact, tomorrow } = await buildStoryReportPngs(st.store_id, date);
 
-    const dayFact = await query(await factSql(), [date, st.store_id]).catch(() => ({ rows: [{}] }));
-    const df = dayFact.rows[0] || {};
+    const sumColsSql = await factSumColsSql();
+    const df = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql).catch(() => ({}));
     // Полный факт/план точки (все ~18 метрик), а не только SIM/MNP/ПА/Комбо —
     // иначе просадка по остальным показателям для ИИ невидима.
     const comment = await generateDipComment({
@@ -233,20 +211,15 @@ async function sendSingleFinalImage(
       });
     } catch (e2: any) {
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
-      const staff = await query(
-        `SELECT e.full_name FROM schedules sch
-         JOIN employees e ON e.id = sch.employee_id
-         WHERE sch.work_date::date = $1::date AND sch.store_id = $2 AND COALESCE(sch.hours,0)>0`,
-        [date, st.store_id]
-      );
-      const fact = await query(await factSql(), [date, st.store_id]).catch(() => ({ rows: [{}] }));
-      const f = fact.rows[0] || {};
+      const staffNames = await cronRepo.listStaffNamesUnordered(date, st.store_id);
+      const sumColsSql = await factSumColsSql();
+      const f = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql).catch(() => ({}));
       const lines = await finalLines(f, st.plan);
       const text = finalReport({
         storeName: st.name,
         storeCode: st.code || st.store_id,
         date,
-        staff: staff.rows.map((x: any) => x.full_name),
+        staff: staffNames,
         lines
       });
       await notifyChat(text, chatId, threadId);
@@ -306,17 +279,8 @@ async function tick() {
 }
 
 async function sendTomorrowReminders(today: string) {
-  const res = await query(
-    `SELECT sch.*, e.full_name, e.telegram_id, st.name as store_name
-     FROM schedules sch
-     JOIN employees e ON e.id = sch.employee_id
-     LEFT JOIN stores st ON st.id = sch.store_id
-     WHERE sch.work_date::date = ($1::date + interval '1 day')
-       AND COALESCE(sch.hours,0) > 0
-       AND e.telegram_id IS NOT NULL`,
-    [today]
-  );
-  for (const r of res.rows) {
+  const rows = await cronRepo.listTomorrowShiftsForReminders(today);
+  for (const r of rows) {
     await notifyUser(
       r.telegram_id,
       shiftReminder({

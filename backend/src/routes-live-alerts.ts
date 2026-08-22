@@ -4,13 +4,14 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
 import { getLiveNetworkMap } from './services/live-map.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { simulateScheduleMoves } from './services/what-if.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
+import * as alertsRepo from './repositories/alerts.js';
+import * as schedulesRepo from './repositories/schedules.js';
 import type { AlertsListResponse, ChangeAlertStatusResponse, WhatIfResponse, WhatIfApplyResponse, NetworkLiveResponse } from './shared/api-types.js';
 
 const AlertOrgBody = Type.Object({
@@ -56,17 +57,7 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     const { org_id, status } = request.query as { org_id?: string; status?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
     const statusFilter = status && VALID_ALERT_STATUSES.has(status) ? status : 'open';
-    const res = await query(
-      `SELECT a.*, COALESCE(st.display_name, st.name) as store_name,
-         t.id as task_id, t.status as task_status
-       FROM smart_alerts a
-       LEFT JOIN stores st ON st.id = a.store_id
-       LEFT JOIN tasks t ON t.alert_id = a.id
-       WHERE a.status = $1 AND COALESCE(st.org_id,'default') = $2
-       ORDER BY a.created_at DESC LIMIT 50`,
-      [statusFilter, orgId]
-    );
-    return res.rows;
+    return alertsRepo.listForOrg(orgId, statusFilter);
   });
 
   app.post(
@@ -77,20 +68,15 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { org_id } = (request.body || {}) as AlertOrgBody;
     const orgId = resolveViewOrgId(request.user!, org_id);
-    const alert = await query(`SELECT store_id FROM smart_alerts WHERE id = $1`, [Number(id)]);
-    if (!alert.rows[0]) return reply.code(404).send({ error: 'not found' });
+    const alert = await alertsRepo.findStoreId(Number(id));
+    if (!alert) return reply.code(404).send({ error: 'not found' });
     // Раньше можно было погасить чужой алерт, зная/угадав его id (обычный
     // инкрементный bigint) — manager другой сети мог тихо снять критический
     // алерт вообще любой сети.
-    if (alert.rows[0].store_id && !(await assertStoreInOrg(alert.rows[0].store_id, orgId))) {
+    if (alert.store_id && !(await assertStoreInOrg(alert.store_id, orgId))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Алерт не принадлежит вашей сети' });
     }
-    const res = await query(
-      `UPDATE smart_alerts SET status='acked', acked_at=now(), acked_by=$1, updated_at=now()
-       WHERE id=$2 RETURNING *`,
-      [request.user!.employee_id, Number(id)]
-    );
-    return res.rows[0];
+    return alertsRepo.ack(Number(id), request.user!.employee_id);
     }
   );
 
@@ -105,25 +91,16 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const body = (request.body || {}) as AlertStatusBody;
     const orgId = resolveViewOrgId(request.user!, body.org_id);
-    const alert = await query(`SELECT store_id FROM smart_alerts WHERE id = $1`, [Number(id)]);
-    if (!alert.rows[0]) return reply.code(404).send({ error: 'not found' });
-    if (alert.rows[0].store_id && !(await assertStoreInOrg(alert.rows[0].store_id, orgId))) {
+    const alert = await alertsRepo.findStoreId(Number(id));
+    if (!alert) return reply.code(404).send({ error: 'not found' });
+    if (alert.store_id && !(await assertStoreInOrg(alert.store_id, orgId))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Алерт не принадлежит вашей сети' });
     }
     const status = String(body.status || '');
     if (!VALID_ALERT_STATUSES.has(status) || status === 'open') {
       return reply.code(400).send({ error: 'invalid status' });
     }
-    const res = await query(
-      `UPDATE smart_alerts SET
-         status = $1,
-         updated_at = now(),
-         acked_at = COALESCE(acked_at, now()),
-         acked_by = COALESCE(acked_by, $2)
-       WHERE id = $3 RETURNING *`,
-      [status, request.user!.employee_id, Number(id)]
-    );
-    return res.rows[0];
+    return alertsRepo.setStatus(Number(id), status, request.user!.employee_id);
     }
   );
 
@@ -191,25 +168,12 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
       if (!emp || !to) continue;
 
       // сохранить shift_text/hours с текущей смены если есть
-      const cur = await query(
-        `SELECT shift_text, hours FROM schedules
-         WHERE employee_id = $1 AND work_date::date = $2::date LIMIT 1`,
-        [emp, date]
-      );
-      const shift_text = cur.rows[0]?.shift_text || '10-21';
-      const hours = Number(cur.rows[0]?.hours) || 11;
+      const cur = await schedulesRepo.findShiftTextAndHours(emp, date);
+      const shift_text = cur?.shift_text || '10-21';
+      const hours = Number(cur?.hours) || 11;
 
-      const res = await query(
-        `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours)
-         VALUES ($1,$2,$3::date,$4,$5)
-         ON CONFLICT (employee_id, work_date)
-         DO UPDATE SET store_id = EXCLUDED.store_id,
-                       shift_text = EXCLUDED.shift_text,
-                       hours = EXCLUDED.hours
-         RETURNING *`,
-        [emp, to, date, shift_text, hours]
-      );
-      applied.push(res.rows[0]);
+      const saved = await schedulesRepo.upsert(emp, to, date, shift_text, hours);
+      applied.push(saved);
     }
 
     return {

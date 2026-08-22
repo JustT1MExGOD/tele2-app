@@ -4,8 +4,8 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { requireActive, requireAuth } from './middleware-auth.js';
+import * as supportRepo from './repositories/support.js';
 import { notifyAdmin, notifyUser } from './bot/index.js';
 import { supportTicketAdmin } from './bot/messages.js';
 import type {
@@ -57,22 +57,8 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   app.get('/support/admin/tickets', async (request, reply): Promise<AdminTicketsSlaResponse | FastifyReply | undefined> => {
     if (!requireAdmin(request, reply)) return;
     try {
-      const res = await query(
-        `SELECT t.*,
-           CASE
-             WHEN t.resolved_at IS NOT NULL THEN 'resolved'
-             WHEN t.sla_due_at IS NOT NULL AND now() > t.sla_due_at THEN 'breached'
-             WHEN t.first_response_at IS NOT NULL THEN 'responded'
-             ELSE 'waiting'
-           END AS sla_status,
-           EXTRACT(EPOCH FROM (COALESCE(t.sla_due_at, now()) - now())) / 60 AS minutes_left
-         FROM support_tickets t
-         ORDER BY
-           CASE WHEN t.resolved_at IS NULL AND t.sla_due_at < now() THEN 0 ELSE 1 END,
-           t.created_at DESC
-         LIMIT 100`
-      );
-      return { items: res.rows };
+      const items = await supportRepo.listAdminTicketsWithSla();
+      return { items };
     } catch (e: any) {
       return reply.code(500).send({ error: e?.message || 'sla_query_failed', hint: 'sql/v8-0-roadmap.sql' });
     }
@@ -80,11 +66,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
 
   app.get('/support/faq', async (): Promise<FaqListResponse> => {
     try {
-      const res = await query(
-        `SELECT id, question, answer, sort_order FROM support_faq
-         WHERE COALESCE(is_active, true) = true ORDER BY sort_order NULLS LAST, id`
-      );
-      return res.rows;
+      return await supportRepo.listActiveFaq();
     } catch {
       return [];
     }
@@ -94,21 +76,14 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   app.get('/support/my', async (request, reply): Promise<MyTicketsResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const tg = Number(request.user!.telegram_id);
-    const res = await query(
-      `SELECT * FROM support_tickets
-       WHERE telegram_id = $1 OR employee_id = $2
-       ORDER BY created_at DESC LIMIT 50`,
-      [tg, request.user!.employee_id]
-    );
-    return res.rows;
+    return supportRepo.listMyTickets(tg, request.user!.employee_id);
   });
 
   app.get('/support/tickets/:id/messages', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
-    const ticket = await query(`SELECT * FROM support_tickets WHERE id = $1`, [Number(id)]);
-    if (!ticket.rows[0]) return reply.code(404).send({ error: 'not found' });
-    const t = ticket.rows[0];
+    const t = await supportRepo.findTicket(Number(id));
+    if (!t) return reply.code(404).send({ error: 'not found' });
     const isAdmin = request.user?.role === 'admin';
     const isOwner =
       Number(t.telegram_id) === Number(request.user?.telegram_id) ||
@@ -116,11 +91,8 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     if (!isAdmin && !isOwner) {
       return reply.code(403).send({ error: 'forbidden' });
     }
-    const msgs = await query(
-      `SELECT * FROM support_messages WHERE ticket_id = $1 ORDER BY created_at ASC`,
-      [Number(id)]
-    ).catch(() => ({ rows: [] }));
-    return { ticket: t, messages: msgs.rows };
+    const messages = await supportRepo.listMessages(Number(id));
+    return { ticket: t, messages };
   });
 
   /** Новое сообщение в тикет (сотрудник или admin) */
@@ -134,9 +106,8 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     const text = String(body.message || body.text || '').trim();
     if (!text) return reply.code(400).send({ error: 'message required' });
 
-    const ticket = await query(`SELECT * FROM support_tickets WHERE id = $1`, [Number(id)]);
-    if (!ticket.rows[0]) return reply.code(404).send({ error: 'not found' });
-    const t = ticket.rows[0];
+    const t = await supportRepo.findTicket(Number(id));
+    if (!t) return reply.code(404).send({ error: 'not found' });
     const isAdmin = request.user?.role === 'admin';
     const isOwner =
       Number(t.telegram_id) === Number(request.user?.telegram_id) ||
@@ -148,49 +119,17 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     const sender = isAdmin ? 'admin' : 'user';
     let msg;
     try {
-      msg = await query(
-        `INSERT INTO support_messages (ticket_id, sender_role, sender_id, sender_name, body)
-         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [
-          Number(id),
-          sender,
-          request.user!.employee_id,
-          request.user!.full_name,
-          text
-        ]
-      );
+      msg = await supportRepo.addMessage(Number(id), sender, request.user!.employee_id, request.user!.full_name, text);
     } catch {
       // fallback: append to admin_reply
-      await query(
-        `UPDATE support_tickets SET
-           admin_reply = COALESCE(admin_reply,'') || E'\n---\n' || $1,
-           status = 'open',
-           updated_at = now()
-         WHERE id = $2`,
-        [text, Number(id)]
-      );
+      await supportRepo.appendAdminReplyFallback(Number(id), text);
       return { ok: true, fallback: true };
     }
 
     if (isAdmin) {
-      await query(
-        `UPDATE support_tickets SET
-           status = 'answered',
-           updated_at = now(),
-           first_response_at = COALESCE(first_response_at, now()),
-           answered_at = COALESCE(answered_at, now()),
-           sla_breached = CASE
-             WHEN sla_due_at IS NOT NULL AND now() > sla_due_at THEN true
-             ELSE COALESCE(sla_breached, false)
-           END
-         WHERE id = $1`,
-        [Number(id)]
-      );
+      await supportRepo.markAnsweredByAdmin(Number(id));
     } else {
-      await query(
-        `UPDATE support_tickets SET status = 'open', updated_at = now() WHERE id = $1`,
-        [Number(id)]
-      );
+      await supportRepo.markReopenedByUser(Number(id));
     }
 
     if (isAdmin && t.telegram_id) {
@@ -209,7 +148,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       );
     }
 
-    return msg.rows[0];
+    return msg;
     }
   );
 
@@ -236,9 +175,9 @@ export async function registerSupportRoutes(app: FastifyInstance) {
 
     let autoAnswer: string | null = null;
     try {
-      const faq = await query(`SELECT * FROM support_faq WHERE COALESCE(is_active,true)=true`);
+      const faq = await supportRepo.listActiveFaqFull();
       const lower = message.toLowerCase();
-      for (const row of faq.rows) {
+      for (const row of faq) {
         const keys: string[] = row.keywords || [];
         if (Array.isArray(keys) && keys.some((k) => lower.includes(String(k).toLowerCase()))) {
           autoAnswer = row.answer;
@@ -251,39 +190,23 @@ export async function registerSupportRoutes(app: FastifyInstance) {
       ? String(b.priority)
       : 'normal';
     const slaMin = slaMinutesForPriority(priority);
-    const ins = await query(
-      `INSERT INTO support_tickets
-         (employee_id, telegram_id, full_name, category, message, status, admin_reply, answered_at,
-          priority, sla_minutes, sla_due_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now() + ($10::int * interval '1 minute'))
-       RETURNING *`,
-      [
-        employee_id,
-        telegram_id,
-        full_name,
-        category,
-        message,
-        autoAnswer ? 'answered' : 'open',
-        autoAnswer,
-        autoAnswer ? new Date() : null,
-        priority,
-        slaMin
-      ]
-    );
-    const ticket = ins.rows[0];
+    const ticket = await supportRepo.createTicket({
+      employeeId: employee_id,
+      telegramId: telegram_id,
+      fullName: full_name,
+      category,
+      message,
+      status: autoAnswer ? 'answered' : 'open',
+      adminReply: autoAnswer,
+      answeredAt: autoAnswer ? new Date() : null,
+      priority,
+      slaMinutes: slaMin
+    });
 
     try {
-      await query(
-        `INSERT INTO support_messages (ticket_id, sender_role, sender_id, sender_name, body)
-         VALUES ($1,'user',$2,$3,$4)`,
-        [ticket.id, employee_id, full_name, message]
-      );
+      await supportRepo.addMessage(ticket.id, 'user', employee_id, full_name, message);
       if (autoAnswer) {
-        await query(
-          `INSERT INTO support_messages (ticket_id, sender_role, sender_name, body)
-           VALUES ($1,'bot','T2 Support',$2)`,
-          [ticket.id, autoAnswer]
-        );
+        await supportRepo.addMessage(ticket.id, 'bot', null, 'T2 Support', autoAnswer);
       }
     } catch (_) {}
 
@@ -309,13 +232,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   /** Очередь — только admin */
   app.get('/support/tickets', async (request, reply): Promise<AdminTicketsListResponse | undefined> => {
     if (!requireAdmin(request, reply)) return;
-    const res = await query(
-      `SELECT * FROM support_tickets ORDER BY
-         CASE status WHEN 'open' THEN 0 ELSE 1 END,
-         created_at DESC
-       LIMIT 100`
-    );
-    return res.rows;
+    return supportRepo.listOpenQueue();
   });
 
   app.post(
@@ -326,28 +243,11 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { reply: text } = request.body as TicketReplyBody;
 
-    const res = await query(
-      `UPDATE support_tickets
-       SET admin_reply = $1,
-           status = 'answered',
-           answered_at = now(),
-           first_response_at = COALESCE(first_response_at, now()),
-           sla_breached = CASE
-             WHEN sla_due_at IS NOT NULL AND now() > sla_due_at THEN true
-             ELSE COALESCE(sla_breached, false)
-           END
-       WHERE id = $2 RETURNING *`,
-      [String(text), Number(id)]
-    );
-    const t = res.rows[0];
+    const t = await supportRepo.replyAsAdmin(Number(id), String(text));
     if (!t) return reply.code(404).send({ error: 'not found' });
 
     try {
-      await query(
-        `INSERT INTO support_messages (ticket_id, sender_role, sender_id, sender_name, body)
-         VALUES ($1,'admin',$2,$3,$4)`,
-        [Number(id), request.user!.employee_id, request.user!.full_name, String(text)]
-      );
+      await supportRepo.addMessage(Number(id), 'admin', request.user!.employee_id, request.user!.full_name, String(text));
     } catch (_) {}
 
     if (t.telegram_id) {
@@ -361,16 +261,8 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   app.post('/support/tickets/:id/resolve', async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
     const { id } = request.params as { id: string };
-    const res = await query(
-      `UPDATE support_tickets
-       SET status = 'resolved',
-           resolved_at = now(),
-           updated_at = now(),
-           first_response_at = COALESCE(first_response_at, now())
-       WHERE id = $1 RETURNING *`,
-      [Number(id)]
-    );
-    if (!res.rows[0]) return reply.code(404).send({ error: 'not found' });
-    return res.rows[0];
+    const t = await supportRepo.resolveTicket(Number(id));
+    if (!t) return reply.code(404).send({ error: 'not found' });
+    return t;
   });
 }

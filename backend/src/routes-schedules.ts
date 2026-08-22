@@ -6,9 +6,9 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { query } from './db/index.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
+import * as schedulesRepo from './repositories/schedules.js';
 import type { SchedulesListResponse, ScheduleRow, ScheduleMonthResponse, SaveScheduleBulkResponse } from './shared/api-types.js';
 
 const PostScheduleBody = Type.Object({
@@ -52,17 +52,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     // Своя запись видна всегда, даже если сегодня подменяешь в чужой сети —
     // иначе собственная смена пропадает из «Мой день»/формы продажи у
     // самого сотрудника, который её выполняет.
-    const res = await query(
-      `SELECT sch.*, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.short_name as store_short
-       FROM schedules sch
-       JOIN employees e ON e.id = sch.employee_id
-       JOIN stores st ON st.id = sch.store_id
-       WHERE sch.work_date::date = $1::date
-         AND (COALESCE(st.org_id, 'default') = $2 OR sch.employee_id = $3)
-       ORDER BY st.hours, e.full_name`,
-      [workDate, orgId, request.user!.employee_id]
-    );
-    return res.rows;
+    return schedulesRepo.findByDayForOrgOrSelf(workDate, orgId, request.user!.employee_id);
   });
 
   app.post(
@@ -86,19 +76,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const body = request.body as PostScheduleBody;
     const { employee_id, store_id, work_date, shift_text, hours } = body;
-
-    const res = await query(
-      `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (employee_id, work_date)
-       DO UPDATE SET
-         store_id = EXCLUDED.store_id,
-         shift_text = EXCLUDED.shift_text,
-         hours = EXCLUDED.hours
-       RETURNING *`,
-      [employee_id, store_id, work_date, shift_text, hours]
-    );
-    return res.rows[0];
+    return schedulesRepo.upsert(employee_id, store_id, work_date, shift_text, hours);
     }
   );
 
@@ -114,20 +92,9 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
 
     // Своя запись видна всегда — «Мой план» тоже читает этот эндпоинт, и
     // смена в чужой сети (подмена) не должна пропадать из личного графика.
-    const res = await query(
-      `SELECT sch.work_date, sch.shift_text, sch.hours, sch.store_id,
-              e.id as employee_id, e.full_name, e.short_name,
-              COALESCE(st.display_name, st.name) as store_name, st.short_name as store_short
-       FROM schedules sch
-       JOIN employees e ON e.id = sch.employee_id
-       LEFT JOIN stores st ON st.id = sch.store_id
-       WHERE sch.work_date >= $1 AND sch.work_date < $2
-         AND (COALESCE(st.org_id, 'default') = $3 OR sch.employee_id = $4)
-       ORDER BY e.full_name, sch.work_date`,
-      [start, end, orgId, request.user!.employee_id]
-    );
+    const items = await schedulesRepo.findByMonthForOrgOrSelf(start, end, orgId, request.user!.employee_id);
 
-    return { month: m, start, end, items: res.rows };
+    return { month: m, start, end, items };
   });
 
   /**
@@ -162,26 +129,13 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
 
       if (hours <= 0) {
         // удалить смену
-        await query(
-          `DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2`,
-          [employee_id, work_date]
-        );
+        await schedulesRepo.deleteOne(employee_id, work_date);
         saved.push({ employee_id, work_date, deleted: true });
         continue;
       }
 
-      const res = await query(
-        `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (employee_id, work_date)
-         DO UPDATE SET
-           store_id = EXCLUDED.store_id,
-           shift_text = EXCLUDED.shift_text,
-           hours = EXCLUDED.hours
-         RETURNING *`,
-        [employee_id, store_id, work_date, shift_text, hours]
-      );
-      saved.push(res.rows[0]);
+      const saved_row = await schedulesRepo.upsert(employee_id, store_id, work_date, shift_text, hours);
+      saved.push(saved_row);
     }
 
     return { ok: true, count: saved.length, items: saved };
@@ -202,20 +156,14 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     // Раньше без проверки — manager любой сети мог удалить смену вообще
     // любого сотрудника на любую дату (та же дыра, что была в POST /schedules
     // до его собственного фикса — только тут вообще без чека).
-    const existing = await query(
-      `SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2`,
-      [Number(employee_id), work_date]
-    );
-    if (existing.rows[0]?.store_id) {
+    const existingStoreId = await schedulesRepo.findStoreIdFor(Number(employee_id), work_date);
+    if (existingStoreId) {
       const orgId = resolveViewOrgId(request.user!, org_id);
-      if (!(await assertStoreInOrg(existing.rows[0].store_id, orgId))) {
+      if (!(await assertStoreInOrg(existingStoreId, orgId))) {
         return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
       }
     }
-    await query(
-      `DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2`,
-      [Number(employee_id), work_date]
-    );
+    await schedulesRepo.deleteOne(Number(employee_id), work_date);
     return { ok: true };
   });
 }
