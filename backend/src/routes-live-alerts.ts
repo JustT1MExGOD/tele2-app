@@ -2,7 +2,7 @@
  * Живая карта сети, умные алерты, what-if симуляция переноса смен.
  * Выделено из routes-v13.ts.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireAuth, requireManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
@@ -11,6 +11,7 @@ import { runSmartAlertsTick } from './services/alerts.js';
 import { simulateScheduleMoves } from './services/what-if.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
+import type { AlertsListResponse, ChangeAlertStatusResponse } from './shared/api-types.js';
 
 const AlertOrgBody = Type.Object({
   org_id: Type.Optional(Type.String())
@@ -50,7 +51,7 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
 
   // status по умолчанию 'open' — обратная совместимость с тем, как этот
   // роут работал до 18.6 (был жёстко захардкожен на открытые алерты).
-  app.get('/alerts', async (request, reply) => {
+  app.get('/alerts', async (request, reply): Promise<AlertsListResponse | undefined> => {
     if (!requireManager(request, reply)) return;
     const { org_id, status } = request.query as { org_id?: string; status?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
@@ -99,7 +100,7 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   app.post(
     '/alerts/:id/status',
     { schema: { body: AlertStatusBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<ChangeAlertStatusResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = (request.body || {}) as AlertStatusBody;

@@ -128,3 +128,32 @@ export interface SendDigestResponse {
   ok: true;
   kind: 'weekly' | 'monthly';
 }
+
+export interface AlertItem {
+  id: number;
+  store_id: string | null;
+  employee_id: number | null;
+  alert_type: string;
+  severity: string;
+  title: string;
+  body: string | null;
+  payload: Record<string, unknown>;
+  status: string;
+  created_at: string;
+  acked_at: string | null;
+  acked_by: number | null;
+  alert_date: string;
+  updated_at: string | null;
+  store_name: string | null;
+  task_id: number | null;
+  task_status: string | null;
+}
+
+export type AlertsListResponse = AlertItem[];
+
+export interface ChangeAlertStatusRequest {
+  status: string;
+  org_id?: string;
+}
+
+export type ChangeAlertStatusResponse = AlertItem;

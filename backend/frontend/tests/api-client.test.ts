@@ -1,7 +1,8 @@
 /**
  * Typed API client (20.0.0+) — покрывает getOrgStores/getMetrics (01-core.js),
- * промокоды РТК (12-promos.js, 20.1.0) и кассу + кастомные метрики
- * (09-cash-metrics.js, 20.2.0): верный URL/метод/заголовки/тело, проброс
+ * промокоды РТК (12-promos.js, 20.1.0), кассу + кастомные метрики
+ * (09-cash-metrics.js, 20.2.0), сводку по сети (19-reports.js, 20.3.0) и
+ * алерты (17-alerts.js, 20.4.0): верный URL/метод/заголовки/тело, проброс
  * org_id-квери-параметра, throw на не-ok ответе с серверным
  * {error/message} вместо голого статус-кода — message ПЕРВЫМ (не error;
  * поменяно в 20.2.0, см. api-client.ts) — клиент сам не глотает ошибку и
@@ -20,7 +21,9 @@ import {
   saveCash,
   createMetric,
   deleteMetric,
-  sendNetworkDigest
+  sendNetworkDigest,
+  getAlerts,
+  changeAlertStatus
 } from '../src/api-client.js';
 
 function fetchOk(body: unknown) {
@@ -214,5 +217,30 @@ describe('api-client', () => {
       headers, method: 'POST', body: JSON.stringify({ kind: 'weekly' })
     });
     expect(result.kind).toBe('weekly');
+  });
+
+  it('getAlerts — верный URL со status и org_id-квери', async () => {
+    const fetchMock = fetchOk([]);
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getAlerts(headers, 'open', '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/alerts?status=open&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('changeAlertStatus — POST с телом {status}', async () => {
+    const fetchMock = fetchOk({ id: 5, status: 'resolved' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+
+    await changeAlertStatus(headers, 5, { status: 'resolved' });
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/alerts/5/status`, {
+      headers, method: 'POST', body: JSON.stringify({ status: 'resolved' })
+    });
   });
 });

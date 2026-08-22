@@ -838,5 +838,12 @@ export const CHANGELOG: ChangelogEntry[] = [
     bullets: [
       'Четвёртый срез Frontend Foundation: кнопки «Отправить недельную/месячную» на странице «Отчёты» теперь идут через typed-клиент'
     ]
+  },
+  {
+    version: '20.4.0',
+    title: 'Алерты — на typed API-клиент',
+    bullets: [
+      'Пятый срез Frontend Foundation: список алертов, карточка алерта и смена статуса теперь идут через typed-клиент'
+    ]
   }
 ];

@@ -23,9 +23,7 @@ async function loadAlertsPage() {
   if (!box) return;
   box.innerHTML = '<div class="skeleton"></div>';
   try {
-    const res = await fetch(API + '/alerts?status=' + alertsFilter + orgQueryParam(), { headers: authHeaders() });
-    if (!res.ok) throw new Error('fail');
-    const items = await res.json();
+    const items = await window.apiClient.getAlerts(authHeaders(), alertsFilter, orgQueryParam());
 
     box.innerHTML = `
       <div class="quick" style="padding:0 16px 10px;flex-wrap:wrap">
@@ -60,8 +58,7 @@ async function openAlertDetail(id) {
 async function renderAlertDetail(id) {
   const box = document.getElementById('modalBody');
   try {
-    const res = await fetch(API + '/alerts?status=' + alertsFilter + orgQueryParam(), { headers: authHeaders() });
-    const items = await res.json();
+    const items = await window.apiClient.getAlerts(authHeaders(), alertsFilter, orgQueryParam());
     let a = items.find(x => Number(x.id) === Number(id));
     if (!a) {
       // элемент мог уже уйти из текущего фильтра (сменился статус) —
@@ -101,12 +98,7 @@ async function changeAlertStatus(id, status, btnEl) {
   if (btnEl?.disabled) return;
   if (btnEl) btnEl.disabled = true;
   try {
-    const res = await fetch(API + '/alerts/' + id + '/status', {
-      method: 'POST',
-      headers: authHeaders(true),
-      body: JSON.stringify({ status })
-    });
-    if (!res.ok) throw new Error('fail');
+    await window.apiClient.changeAlertStatus(authHeaders(true), id, { status });
     toast('Статус обновлён', 'ok');
     await renderAlertDetail(id);
     if (typeof page !== 'undefined' && page === 'alerts') loadAlertsPage();
