@@ -157,3 +157,56 @@ export interface ChangeAlertStatusRequest {
 }
 
 export type ChangeAlertStatusResponse = AlertItem;
+
+export interface TaskItem {
+  id: number;
+  org_id: string;
+  title: string;
+  description: string | null;
+  created_by: number;
+  assigned_to: number;
+  store_id: string | null;
+  alert_id: number | null;
+  priority: string;
+  status: string;
+  due_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Присутствуют только в списке (GET /tasks — LEFT JOIN); карточка задачи
+  // (GET /tasks/:id, getTaskOr404 — голый SELECT * без джойна) и ответ
+  // смены статуса (UPDATE ... RETURNING *) их не несут.
+  assignee_name?: string | null;
+  store_name?: string | null;
+}
+
+export type TasksListResponse = TaskItem[];
+
+export interface TaskComment {
+  id: number;
+  task_id: number;
+  author_id: number;
+  body: string;
+  created_at: string;
+  // Есть только в GET /tasks/:id (JOIN на employees); прямой INSERT ...
+  // RETURNING * из POST /tasks/:id/comments его не несёт.
+  author_name?: string | null;
+}
+
+export interface TaskDetailResponse {
+  task: TaskItem;
+  comments: TaskComment[];
+}
+
+export interface ChangeTaskStatusRequest {
+  status: string;
+  comment?: string;
+}
+
+export type ChangeTaskStatusResponse = TaskItem;
+
+export interface AddTaskCommentRequest {
+  body: string;
+}
+
+export type AddTaskCommentResponse = TaskComment;

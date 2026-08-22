@@ -27,9 +27,7 @@ async function loadTasksPage() {
   if (!box) return;
   box.innerHTML = '<div class="skeleton"></div>';
   try {
-    const res = await fetch(API + '/tasks?_=1' + orgQueryParam(), { headers: authHeaders() });
-    if (!res.ok) throw new Error('fail');
-    const all = await res.json();
+    const all = await window.apiClient.getTasks(authHeaders(), orgQueryParam());
     const items = (all || []).filter(t => {
       if (tasksFilter === 'active') return t.status === 'open' || t.status === 'in_progress';
       if (tasksFilter === 'all') return true;
@@ -69,9 +67,7 @@ async function openTaskDetail(id) {
 async function renderTaskDetail(id) {
   const box = document.getElementById('modalBody');
   try {
-    const res = await fetch(API + '/tasks/' + id, { headers: authHeaders() });
-    if (!res.ok) throw new Error('fail');
-    const { task: t, comments } = await res.json();
+    const { task: t, comments } = await window.apiClient.getTask(authHeaders(), id);
 
     const canManageTask = canManage() || (typeof me !== 'undefined' && me?.role === 'supervisor');
     const isAssignee = typeof me !== 'undefined' && String(me?.employee_id) === String(t.assigned_to);
@@ -116,12 +112,7 @@ async function changeTaskStatus(id, status, btnEl) {
   if (btnEl?.disabled) return;
   if (btnEl) btnEl.disabled = true;
   try {
-    const res = await fetch(API + '/tasks/' + id + '/status', {
-      method: 'POST',
-      headers: authHeaders(true),
-      body: JSON.stringify({ status })
-    });
-    if (!res.ok) throw new Error('fail');
+    await window.apiClient.changeTaskStatus(authHeaders(true), id, { status });
     toast('Статус обновлён', 'ok');
     await renderTaskDetail(id);
     if (typeof page !== 'undefined' && page === 'tasks') loadTasksPage();
@@ -139,12 +130,7 @@ async function submitTaskComment(id, btnEl) {
   if (!body) return;
   if (btnEl) btnEl.disabled = true;
   try {
-    const res = await fetch(API + '/tasks/' + id + '/comments', {
-      method: 'POST',
-      headers: authHeaders(true),
-      body: JSON.stringify({ body })
-    });
-    if (!res.ok) throw new Error('fail');
+    await window.apiClient.addTaskComment(authHeaders(true), id, { body });
     await renderTaskDetail(id);
   } catch (e) {
     toast('Не удалось отправить комментарий', 'err');

@@ -5,7 +5,7 @@
  * зеркалит support_tickets + support_messages (сущность со статусом +
  * отдельный тред комментариев) — тот же, уже отработанный паттерн.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import {
@@ -17,6 +17,12 @@ import {
   requireStoreInOrg
 } from './middleware-auth.js';
 import { notifyUser } from './bot/index.js';
+import type {
+  TasksListResponse,
+  TaskDetailResponse,
+  ChangeTaskStatusResponse,
+  AddTaskCommentResponse
+} from './shared/api-types.js';
 
 // Null первым в каждом Union — ajv (coerceTypes) иначе коэрсит null на
 // первой подходящей ветке ДО того, как дойдёт до Null() (см. README §24,
@@ -138,7 +144,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
   );
 
   // Список задач сети (менеджер/супервайзер/admin) — фильтры status/assigned_to.
-  app.get('/tasks', async (request, reply) => {
+  app.get('/tasks', async (request, reply): Promise<TasksListResponse | undefined> => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const q = (request.query || {}) as { status?: string; assigned_to?: string; org_id?: string };
     const orgId = resolveViewOrgId(request.user!, q.org_id);
@@ -182,7 +188,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     return res.rows;
   });
 
-  app.get('/tasks/:id', async (request, reply) => {
+  app.get('/tasks/:id', async (request, reply): Promise<TaskDetailResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
     const task = await getTaskOr404(Number(id), reply);
@@ -203,7 +209,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
   app.post(
     '/tasks/:id/comments',
     { schema: { body: TaskCommentBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<AddTaskCommentResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
     const task = await getTaskOr404(Number(id), reply);
@@ -228,7 +234,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
   app.post(
     '/tasks/:id/status',
     { schema: { body: TaskStatusBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<ChangeTaskStatusResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
     const task = await getTaskOr404(Number(id), reply);

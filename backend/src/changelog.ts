@@ -845,5 +845,12 @@ export const CHANGELOG: ChangelogEntry[] = [
     bullets: [
       'Пятый срез Frontend Foundation: список алертов, карточка алерта и смена статуса теперь идут через typed-клиент'
     ]
+  },
+  {
+    version: '20.5.0',
+    title: 'Задачи — на typed API-клиент',
+    bullets: [
+      'Шестой срез Frontend Foundation: список задач, карточка задачи, смена статуса и комментарии теперь идут через typed-клиент'
+    ]
   }
 ];

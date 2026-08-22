@@ -8,7 +8,7 @@
  * README §22): 20.0.0 — /org/stores, /metrics (01-core.js); 20.1.0 —
  * промокоды РТК (12-promos.js); 20.2.0 — касса + кастомные метрики
  * (09-cash-metrics.js); 20.3.0 — сводка по сети (19-reports.js); 20.4.0 —
- * алерты (17-alerts.js).
+ * алерты (17-alerts.js); 20.5.0 — задачи (15-tasks.js).
  *
  * Сознательно бросает на не-ok/сетевой ошибке, не глотает и не
  * подставляет фолбэк сам — это остаётся ответственностью вызывающего
@@ -33,7 +33,13 @@ import type {
   SendDigestResponse,
   AlertsListResponse,
   ChangeAlertStatusRequest,
-  ChangeAlertStatusResponse
+  ChangeAlertStatusResponse,
+  TasksListResponse,
+  TaskDetailResponse,
+  ChangeTaskStatusRequest,
+  ChangeTaskStatusResponse,
+  AddTaskCommentRequest,
+  AddTaskCommentResponse
 } from '../../src/shared/api-types.js';
 
 /**
@@ -150,6 +156,33 @@ export async function changeAlertStatus(
   return request(`/alerts/${id}/status`, headers, { method: 'POST', body });
 }
 
+export async function getTasks(
+  headers: Record<string, string>,
+  orgQuery: string
+): Promise<TasksListResponse> {
+  return request(`/tasks?_=1${orgQuery}`, headers);
+}
+
+export async function getTask(headers: Record<string, string>, id: number): Promise<TaskDetailResponse> {
+  return request(`/tasks/${id}`, headers);
+}
+
+export async function changeTaskStatus(
+  headers: Record<string, string>,
+  id: number,
+  body: ChangeTaskStatusRequest
+): Promise<ChangeTaskStatusResponse> {
+  return request(`/tasks/${id}/status`, headers, { method: 'POST', body });
+}
+
+export async function addTaskComment(
+  headers: Record<string, string>,
+  id: number,
+  body: AddTaskCommentRequest
+): Promise<AddTaskCommentResponse> {
+  return request(`/tasks/${id}/comments`, headers, { method: 'POST', body });
+}
+
 declare global {
   interface Window {
     apiClient: {
@@ -167,6 +200,10 @@ declare global {
       sendNetworkDigest: typeof sendNetworkDigest;
       getAlerts: typeof getAlerts;
       changeAlertStatus: typeof changeAlertStatus;
+      getTasks: typeof getTasks;
+      getTask: typeof getTask;
+      changeTaskStatus: typeof changeTaskStatus;
+      addTaskComment: typeof addTaskComment;
     };
   }
 }
@@ -185,5 +222,9 @@ window.apiClient = {
   deleteMetric,
   sendNetworkDigest,
   getAlerts,
-  changeAlertStatus
+  changeAlertStatus,
+  getTasks,
+  getTask,
+  changeTaskStatus,
+  addTaskComment
 };
