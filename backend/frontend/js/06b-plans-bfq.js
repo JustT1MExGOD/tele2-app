@@ -8,9 +8,7 @@
       box.innerHTML = '<div class="skeleton"></div>';
       try {
         const month = scheduleMonth || todayMoscow().slice(0, 7);
-        const res = await fetch(API + '/bfq?month=' + month + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) throw new Error('no bfq');
-        const data = await res.json();
+        const data = await window.apiClient.getBfqList(authHeaders(), month, orgQueryParam());
         const list = Array.isArray(data) ? data : (data.items || []);
         if (!list.length) {
           box.innerHTML = '<div class="empty">Нет данных BFQ</div>';
@@ -38,8 +36,7 @@
       document.getElementById('overlay').classList.add('show');
       try {
         const month = todayMoscow().slice(0, 7);
-        const res = await fetch(API + '/bfq/' + id + '?month=' + month + orgQueryParam(), { headers: authHeaders() });
-        const d = await res.json();
+        const d = await window.apiClient.getBfqEmployee(authHeaders(), id, month, orgQueryParam());
         const f = d.fact || {};
         const fc = d.forecast || {};
         let manual = '';
@@ -79,12 +76,12 @@
       const month = todayMoscow().slice(0, 7);
       const body = { employee_id: employeeId, month, vmr_avg: vmr, penalty };
       if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
-      const res = await fetch(API + '/bfq/manual', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Нет прав или ошибка', 'err'); return; }
+      try {
+        await window.apiClient.saveBfqManual(authHeaders(true), body);
+      } catch (e) {
+        toast('Нет прав или ошибка', 'err');
+        return;
+      }
       toast('Сохранено', 'ok');
       closeModal();
       loadBFQ();
@@ -99,9 +96,7 @@
       if (label) label.textContent = monthLabel(planMonth);
       if (box) box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/plans/employees/month?month=' + planMonth + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
+        const data = await window.apiClient.getPlansEmployeesMonth(authHeaders(), planMonth, orgQueryParam());
         const rows = data.rows || [];
         if (meta) {
           meta.innerHTML = `Сотрудников: <b>${rows.length}</b> · ост. дней: <b>${data.remaining_days ?? '—'}</b>`;
@@ -198,9 +193,7 @@
       if (label) label.textContent = planMonth;
       box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/plans/employees/month?month=' + planMonth + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
+        const data = await window.apiClient.getPlansEmployeesMonth(authHeaders(), planMonth, orgQueryParam());
         const totals = data.totals || {};
         const fact = totals.fact || {};
         const plan = totals.plan || {};
@@ -252,10 +245,7 @@
       if (!canManage()) return;
       await loadMetricsCatalog();
       const month = planMonth || scheduleMonth || todayMoscow().slice(0, 7);
-      const res = await fetch(API + '/plans/employees/' + employeeId + '/month?month=' + month, {
-        headers: authHeaders()
-      });
-      const p = res.ok ? await res.json() : {};
+      const p = await window.apiClient.getEmployeeMonthPlan(authHeaders(), employeeId, month).catch(() => ({}));
       document.getElementById('modalTitle').textContent = 'План: ' + (name || employeeId);
       const fields = METRICS.map(m => {
         let val = p[m.id];
@@ -278,15 +268,10 @@
         if (el) body[m.id] = Number(el.value) || 0;
       }
       if (body.credit_issued != null) body.credit = body.credit_issued;
-      const res = await fetch(API + '/plans/employees/' + employeeId + '/month', {
-        method: 'PUT',
-        headers: authHeaders(true),
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) {
-        let msg = 'Ошибка';
-        try { const j = await res.json(); msg = j.message || j.error || msg; } catch (_) {}
-        toast(msg, 'err');
+      try {
+        await window.apiClient.saveEmployeeMonthPlan(authHeaders(true), employeeId, body);
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
         return;
       }
       toast('План сохранён', 'ok');
@@ -303,9 +288,7 @@
       const box = document.getElementById('storeDailyPlans');
       if (!box) return;
       try {
-        const res = await fetch(API + '/plans/stores/daily?_=1' + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
+        const data = await window.apiClient.getStoreDailyPlans(authHeaders(), orgQueryParam());
         const stores = data.stores || [];
         storeDailyPlanNames = {};
         stores.forEach(st => { storeDailyPlanNames[st.store_id] = st.name; });
@@ -351,10 +334,7 @@
       await loadMetricsCatalog();
       const month = todayMoscow().slice(0, 7);
       const name = storeDailyPlanNames[storeId] || storeId;
-      const res = await fetch(API + '/plans/stores/' + storeId + '/month?month=' + month, {
-        headers: authHeaders()
-      });
-      const p = res.ok ? await res.json() : {};
+      const p = await window.apiClient.getStoreMonthPlan(authHeaders(), storeId, month).catch(() => ({}));
       document.getElementById('modalTitle').textContent = 'План точки: ' + name;
       const fields = METRICS.map(m => {
         let val = p[m.id];
@@ -381,15 +361,10 @@
       // без org_id бэкенд резолвит orgId в СВОЮ сеть admin'а и 403-ит на
       // чужой точке (assertStoreInOrg), хотя сама точка видна в списке.
       if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
-      const res = await fetch(API + '/plans/stores/' + storeId + '/month', {
-        method: 'PUT',
-        headers: authHeaders(true),
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) {
-        let msg = 'Ошибка';
-        try { const j = await res.json(); msg = j.message || j.error || msg; } catch (_) {}
-        toast(msg, 'err');
+      try {
+        await window.apiClient.saveStoreMonthPlan(authHeaders(true), storeId, body);
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
         return;
       }
       toast('План точки сохранён', 'ok');

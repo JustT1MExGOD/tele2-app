@@ -11,7 +11,7 @@ import { runSmartAlertsTick } from './services/alerts.js';
 import { simulateScheduleMoves } from './services/what-if.js';
 import { todayMoscow, toDateISO } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
-import type { AlertsListResponse, ChangeAlertStatusResponse } from './shared/api-types.js';
+import type { AlertsListResponse, ChangeAlertStatusResponse, WhatIfResponse, WhatIfApplyResponse, NetworkLiveResponse } from './shared/api-types.js';
 
 const AlertOrgBody = Type.Object({
   org_id: Type.Optional(Type.String())
@@ -41,7 +41,7 @@ type WhatIfBody = Static<typeof WhatIfBody>;
 
 export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   // ========== LIVE MAP + ALERTS ==========
-  app.get('/network/live', async (request, reply) => {
+  app.get('/network/live', async (request, reply): Promise<NetworkLiveResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     return getLiveNetworkMap(resolveViewOrgId(request.user!, org_id));
@@ -136,7 +136,7 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   app.post(
     '/schedule/what-if',
     { schema: { body: WhatIfBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<WhatIfResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const body = (request.body || {}) as WhatIfBody;
     const moves = Array.isArray(body.moves) ? body.moves : [];
@@ -162,7 +162,7 @@ export async function registerLiveAlertsRoutes(app: FastifyInstance) {
   app.post(
     '/schedule/what-if/apply',
     { schema: { body: WhatIfBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<WhatIfApplyResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const body = (request.body || {}) as WhatIfBody;
     const date = toDateISO(body.date || todayMoscow());

@@ -2,12 +2,20 @@
  * Поддержка: FAQ + тикеты + чат сообщений
  * Список тикетов и ответы — только role = admin
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireActive, requireAuth } from './middleware-auth.js';
 import { notifyAdmin, notifyUser } from './bot/index.js';
 import { supportTicketAdmin } from './bot/messages.js';
+import type {
+  AdminTicketsSlaResponse,
+  FaqListResponse,
+  MyTicketsResponse,
+  AdminTicketsListResponse,
+  CreateTicketResponse,
+  TicketReplyResponse
+} from './shared/api-types.js';
 
 const TicketMessageBody = Type.Object({
   message: Type.Optional(Type.String()),
@@ -46,7 +54,7 @@ function slaMinutesForPriority(p: string) {
 export async function registerSupportRoutes(app: FastifyInstance) {
   
   /** Admin: тикеты + SLA */
-  app.get('/support/admin/tickets', async (request, reply) => {
+  app.get('/support/admin/tickets', async (request, reply): Promise<AdminTicketsSlaResponse | FastifyReply | undefined> => {
     if (!requireAdmin(request, reply)) return;
     try {
       const res = await query(
@@ -70,7 +78,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/support/faq', async () => {
+  app.get('/support/faq', async (): Promise<FaqListResponse> => {
     try {
       const res = await query(
         `SELECT id, question, answer, sort_order FROM support_faq
@@ -83,7 +91,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   });
 
   /** Мои тикеты + сообщения */
-  app.get('/support/my', async (request, reply) => {
+  app.get('/support/my', async (request, reply): Promise<MyTicketsResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const tg = Number(request.user!.telegram_id);
     const res = await query(
@@ -209,7 +217,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   app.post(
     '/support',
     { schema: { body: CreateTicketBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<CreateTicketResponse | FastifyReply | undefined> => {
     const b = (request.body || {}) as CreateTicketBody;
     const message = String(b.message || '').trim();
     if (!message) return reply.code(400).send({ error: 'message required' });
@@ -299,7 +307,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   );
 
   /** Очередь — только admin */
-  app.get('/support/tickets', async (request, reply) => {
+  app.get('/support/tickets', async (request, reply): Promise<AdminTicketsListResponse | undefined> => {
     if (!requireAdmin(request, reply)) return;
     const res = await query(
       `SELECT * FROM support_tickets ORDER BY
@@ -313,7 +321,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   app.post(
     '/support/tickets/:id/reply',
     { schema: { body: TicketReplyBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<TicketReplyResponse | FastifyReply | undefined> => {
     if (!requireAdmin(request, reply)) return;
     const { id } = request.params as { id: string };
     const { reply: text } = request.body as TicketReplyBody;

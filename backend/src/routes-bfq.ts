@@ -2,7 +2,7 @@
  * BFQ (комплексный показатель качества/прибыли сотрудника): расчёт по
  * сети/сотруднику, ручной VMR+штраф, анкета VMR. Выделено из routes-v3.ts.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import {
@@ -13,6 +13,7 @@ import {
 } from './services/bfq.js';
 import { requireActive, requireManager, resolveViewOrgId, assertEmployeeInOrg, requireEmployeeInOrg } from './middleware-auth.js';
 import { currentMonthMoscow } from './utils/date.js';
+import type { BfqListResponse, BfqEmployeeResponse } from './shared/api-types.js';
 
 const BFQManualBody = Type.Object({
   employee_id: Type.Number(),
@@ -34,7 +35,7 @@ type BFQQuestionnaireBody = Static<typeof BFQQuestionnaireBody>;
 export async function registerBfqRoutes(app: FastifyInstance) {
   // Раньше оба GET были вообще без авторизации — кто угодно без токена мог
   // узнать BFQ (качество/прибыль) любого сотрудника любой сети по id.
-  app.get('/bfq', async (request, reply) => {
+  app.get('/bfq', async (request, reply): Promise<BfqListResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const { month, org_id } = request.query as { month?: string; org_id?: string };
     const m = month || currentMonthMoscow();
@@ -43,7 +44,7 @@ export async function registerBfqRoutes(app: FastifyInstance) {
     return { month: m, items };
   });
 
-  app.get('/bfq/:employeeId', async (request, reply) => {
+  app.get('/bfq/:employeeId', async (request, reply): Promise<BfqEmployeeResponse | FastifyReply | undefined> => {
     if (!requireActive(request, reply)) return;
     const { employeeId } = request.params as { employeeId: string };
     const { month, org_id } = request.query as { month?: string; org_id?: string };

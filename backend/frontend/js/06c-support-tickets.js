@@ -14,12 +14,10 @@
         const from = todayMoscow().slice(0, 8) + '01';
         const to = todayMoscow();
         const empParam = historyEmployeeFilter ? `&employee_id=${historyEmployeeFilter}` : '';
-        const res = await fetch(
-          `${API}/sales/history?from=${from}&to=${to}${empParam}${orgQueryParam()}`,
-          { headers: authHeaders() }
+        const data = await window.apiClient.getSalesHistory(
+          authHeaders(),
+          `?from=${from}&to=${to}${empParam}${orgQueryParam()}`
         );
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
         const items = data.items || [];
         if (!items.length) {
           box.innerHTML = '<div class="empty">Нет продаж за период</div>';
@@ -49,6 +47,11 @@
       return x.toISOString().slice(0, 10);
     }
 
+    // Найдено при миграции на typed-клиент (20.7.0): POST /schedules/copy-week
+    // не существует на бэкенде вообще (ни в одном routes-*.ts) — кнопка
+    // всегда 404-ила. Не мигрирую на window.apiClient (нечего типизировать —
+    // контракта нет) и не завожу роут сам (это уже новая фича с реальными
+    // вопросами по семантике конфликтов расписания, не механическая миграция).
     async function copyScheduleWeek() {
       if (!canManage()) return;
       const from = mondayOf(todayMoscow());
@@ -69,8 +72,7 @@
     async function loadSupport() {
       const box = document.getElementById('faqList');
       try {
-        const res = await fetch(API + '/support/faq', { headers: authHeaders() });
-        const list = res.ok ? await res.json() : [];
+        const list = await window.apiClient.getFaq(authHeaders()).catch(() => []);
         if (!list.length) {
           box.innerHTML = '<div class="empty">FAQ пока пуст</div>';
         } else {
@@ -90,20 +92,17 @@
       const chat = document.getElementById('supportChat');
       if (chat) {
         try {
-          const r = await fetch(API + '/support/my', { headers: authHeaders() });
-          if (r.ok) {
-            const tickets = await r.json();
-            if (!tickets.length) {
-              chat.innerHTML = '<div class="empty" style="padding:8px 0">Пока нет обращений</div>';
-            } else {
-              chat.innerHTML = tickets.slice(0, 8).map(tk => `
-                <div class="progress-block" style="margin-bottom:8px;padding:10px 12px">
-                  <div style="font-size:12px;color:var(--hint)">#${tk.id} · ${tk.status || ''}</div>
-                  <div style="font-size:14px;margin:4px 0">${esc(tk.message || '')}</div>
-                  ${tk.admin_reply ? `<div style="font-size:13px;color:var(--primary);margin-top:6px">↩ ${esc(tk.admin_reply)}</div>` : ''}
-                </div>
-              `).join('');
-            }
+          const tickets = await window.apiClient.getMyTickets(authHeaders());
+          if (!tickets.length) {
+            chat.innerHTML = '<div class="empty" style="padding:8px 0">Пока нет обращений</div>';
+          } else {
+            chat.innerHTML = tickets.slice(0, 8).map(tk => `
+              <div class="progress-block" style="margin-bottom:8px;padding:10px 12px">
+                <div style="font-size:12px;color:var(--hint)">#${tk.id} · ${tk.status || ''}</div>
+                <div style="font-size:14px;margin:4px 0">${esc(tk.message || '')}</div>
+                ${tk.admin_reply ? `<div style="font-size:13px;color:var(--primary);margin-top:6px">↩ ${esc(tk.admin_reply)}</div>` : ''}
+              </div>
+            `).join('');
           }
         } catch (_) {}
       }
@@ -112,8 +111,7 @@
       if (adm && canAdmin()) {
         adm.style.display = '';
         try {
-          const r = await fetch(API + '/support/tickets', { headers: authHeaders() });
-          const list = r.ok ? await r.json() : [];
+          const list = await window.apiClient.getSupportTickets(authHeaders()).catch(() => []);
           const box2 = document.getElementById('adminTicketsList');
           if (!list.length) box2.innerHTML = '<div class="empty">Нет тикетов</div>';
           else box2.innerHTML = list.map(tk => `
@@ -137,11 +135,12 @@
       if (!canAdmin()) { toast('Только admin', 'err'); return; }
       const text = prompt('Ответ на тикет #' + id);
       if (!text) return;
-      const res = await fetch(API + '/support/tickets/' + id + '/reply', {
-        method: 'POST', headers: authHeaders(true),
-        body: JSON.stringify({ reply: text })
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.replyTicket(authHeaders(true), id, { reply: text });
+      } catch (e) {
+        toast('Ошибка', 'err');
+        return;
+      }
       toast('Ответ отправлен', 'ok');
       loadSupport();
     }
@@ -150,16 +149,10 @@
       const message = document.getElementById('supportMsg').value.trim();
       if (!message) { toast('Введите сообщение', 'err'); return; }
       try {
-        const res = await fetch(API + '/support', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify({
-            message,
-            telegram_id: tgUser()?.id,
-            full_name: me?.full_name || tgUser()?.first_name || 'Гость'
-          })
+        const data = await window.apiClient.createSupportTicket(authHeaders(true), {
+          message,
+          full_name: me?.full_name || tgUser()?.first_name || 'Гость'
         });
-        const data = await res.json();
         const el = document.getElementById('supportResult');
         el.style.display = 'block';
         el.textContent = data.auto_reply || data.message || 'Отправлено';
@@ -175,9 +168,7 @@
       const box = document.getElementById('ticketsBox');
       box.innerHTML = '<div class="section"><div class="section-title">Тикеты</div><div class="skeleton"></div></div>';
       try {
-        const res = await fetch(API + '/support/tickets', { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const list = await res.json();
+        const list = await window.apiClient.getSupportTickets(authHeaders());
         const open = (list || []).filter(t => t.status !== 'closed');
         box.innerHTML = `<div class="section"><div class="section-title">Тикеты (${open.length})</div>` +
           (open.length ? open.map(t => `
@@ -196,12 +187,12 @@
     async function replyTicket(id) {
       const text = document.getElementById('treply_' + id)?.value?.trim();
       if (!text) { toast('Введите ответ', 'err'); return; }
-      const res = await fetch(API + '/support/tickets/' + id + '/reply', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: JSON.stringify({ reply: text })
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.replyTicket(authHeaders(true), id, { reply: text });
+      } catch (e) {
+        toast('Ошибка', 'err');
+        return;
+      }
       toast('Ответ отправлен', 'ok');
       loadManagerTickets();
     }
@@ -217,15 +208,13 @@
       if (type === 'schedules') path = `/export/schedules.csv?month=${month}`;
       path += orgQueryParam();
       try {
-        const res = await fetch(API + path, { headers: authHeaders() });
-        if (!res.ok) { toast('Ошибка экспорта', 'err'); return; }
-        const blob = await res.blob();
+        const blob = await window.apiClient.exportCsv(authHeaders(), path);
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = type + '_' + month + '.csv';
         a.click();
         toast('Скачано', 'ok');
       } catch {
-        toast('Ошибка', 'err');
+        toast('Ошибка экспорта', 'err');
       }
     }

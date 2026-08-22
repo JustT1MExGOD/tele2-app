@@ -3,12 +3,13 @@
  * resolveViewOrgId, что везде). Пишущая сторона — src/services/audit.ts,
  * вызывается из тех роутов, что реально совершают чувствительные действия.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
 import { requireManager, resolveViewOrgId } from './middleware-auth.js';
+import type { AuditListResponse } from './shared/api-types.js';
 
 export async function registerAuditRoutes(app: FastifyInstance) {
-  app.get('/audit', async (request, reply) => {
+  app.get('/audit', async (request, reply): Promise<AuditListResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     if (request.user!.role !== 'admin') {
       return reply.code(403).send({ error: 'admin only' });

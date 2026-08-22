@@ -4,13 +4,14 @@
  * собирает уже существующие calculateEmployeeBFQ/getGamificationProfile
  * в одном месте, по образцу routes-store-profile.ts (18.5).
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
 import { requireAuth, requireEmployeeInOrg } from './middleware-auth.js';
 import { calculateEmployeeBFQ } from './services/bfq.js';
 import { getGamificationProfile } from './services/gamification.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
+import type { EmployeeProfileResponse } from './shared/api-types.js';
 
 function canViewEmployeeProfile(user: { role?: string } | null | undefined): boolean {
   if (!user?.role) return false;
@@ -25,7 +26,7 @@ export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
   app.get(
     '/employees/:id/profile',
     { preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })] },
-    async (request, reply) => {
+    async (request, reply): Promise<EmployeeProfileResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     if (!canViewEmployeeProfile(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });

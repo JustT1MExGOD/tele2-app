@@ -31,7 +31,30 @@ import {
   addTaskComment,
   getCommandCenter,
   getEmployees,
-  createTask
+  createTask,
+  getMe,
+  bindMe,
+  getSchedules,
+  saveSchedulesBulk,
+  getEmployeeMonthPlan,
+  saveEmployeeMonthPlan,
+  getStoreDailyPlans,
+  getBfqEmployee,
+  getAccessDirectory,
+  rejectAccessRequest,
+  getSupervisorHealth,
+  getSales,
+  zeroSaleMetric,
+  getSalesHistory,
+  getAnnouncementReads,
+  getReportDay,
+  updateStoreDisplayName,
+  deactivateEmployee,
+  setEmployeeRole,
+  getNetworkLive,
+  uploadAvatar,
+  exportCsv,
+  getAuditLog
 } from '../src/api-client.js';
 
 function fetchOk(body: unknown) {
@@ -337,5 +360,345 @@ describe('api-client', () => {
     expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/tasks`, {
       headers, method: 'POST', body: JSON.stringify(body)
     });
+  });
+
+  // 20.7.0 — все оставшиеся 13 frontend-файлов эпохи 20 одним заходом:
+  // репрезентативный набор (не по тесту на каждую из ~60 функций), по
+  // одному на каждый различный URL/метод-паттерн + отдельно оба новых
+  // хелпера (requestUpload/requestBlob) и все функции, добавленные
+  // реактивно по ходу миграции (getSupervisorHealth/getNetworkLive/getAuditLog).
+
+  it('getMe — верный URL без квери', async () => {
+    const fetchMock = fetchOk({ employee_id: 1, role: 'seller' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getMe(headers);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/me`, { headers });
+  });
+
+  it('bindMe — POST с телом', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+
+    await bindMe(headers, { telegram_id: 42, employee_id: 5 });
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/me/bind`, {
+      headers, method: 'POST', body: JSON.stringify({ telegram_id: 42, employee_id: 5 })
+    });
+  });
+
+  it('getSchedules — верный URL с date и org_id-квери', async () => {
+    const fetchMock = fetchOk([]);
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getSchedules(headers, '2026-01-15', '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/schedules?date=2026-01-15&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('saveSchedulesBulk — POST с телом', async () => {
+    const fetchMock = fetchOk({ ok: true, count: 1 });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+    const body = { date: '2026-01-15', items: [] };
+
+    await saveSchedulesBulk(headers, body);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/schedules/bulk`, {
+      headers, method: 'POST', body: JSON.stringify(body)
+    });
+  });
+
+  it('getEmployeeMonthPlan — верный URL с id и month', async () => {
+    const fetchMock = fetchOk({ employee_id: 1, month: '2026-01' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getEmployeeMonthPlan(headers, 1, '2026-01');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/plans/employees/1/month?month=2026-01`,
+      { headers }
+    );
+  });
+
+  it('saveEmployeeMonthPlan — PUT с телом', async () => {
+    const fetchMock = fetchOk({ employee_id: 1, month: '2026-01' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+    const body = { sim: 10 };
+
+    await saveEmployeeMonthPlan(headers, 1, body);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/plans/employees/1/month`, {
+      headers, method: 'PUT', body: JSON.stringify(body)
+    });
+  });
+
+  it('getStoreDailyPlans — без date использует cache-bust "_=1"', async () => {
+    const fetchMock = fetchOk({});
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getStoreDailyPlans(headers, '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/plans/stores/daily?_=1&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('getStoreDailyPlans — с явным date подставляет его вместо cache-bust', async () => {
+    const fetchMock = fetchOk({});
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getStoreDailyPlans(headers, '', '2026-01-15');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/plans/stores/daily?date=2026-01-15`,
+      { headers }
+    );
+  });
+
+  it('getBfqEmployee — верный URL с id, month и org_id-квери', async () => {
+    const fetchMock = fetchOk({});
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getBfqEmployee(headers, 3, '2026-01', '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/bfq/3?month=2026-01&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('getAccessDirectory — принимает уже собранную query-строку как есть', async () => {
+    const fetchMock = fetchOk([]);
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getAccessDirectory(headers, '?org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/access/employees-directory?org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('rejectAccessRequest — POST с пустым телом', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await rejectAccessRequest(headers, 7);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/access/requests/7/reject`, {
+      headers, method: 'POST', body: '{}'
+    });
+  });
+
+  it('getSupervisorHealth — верный URL с cache-bust и org_id-квери', async () => {
+    const fetchMock = fetchOk({});
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getSupervisorHealth(headers, '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/supervisor/health?_=1&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('getSales — верный URL с date и org_id-квери', async () => {
+    const fetchMock = fetchOk([]);
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getSales(headers, '2026-01-15', '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/sales?date=2026-01-15&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('zeroSaleMetric — PUT, снимает ведущий "&" с org-квери сама (& → ? конвенция)', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+
+    await zeroSaleMetric(headers, 9, '&org_id=other-org', 'sim');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/sales/9/zero?org_id=other-org`, {
+      headers, method: 'PUT', body: JSON.stringify({ metric: 'sim' })
+    });
+  });
+
+  it('zeroSaleMetric — без org-квери не добавляет "?"', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+
+    await zeroSaleMetric(headers, 9, '', 'mnp');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/sales/9/zero`, {
+      headers, method: 'PUT', body: JSON.stringify({ metric: 'mnp' })
+    });
+  });
+
+  it('getSalesHistory — принимает уже собранную query-строку как есть', async () => {
+    const fetchMock = fetchOk({ items: [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getSalesHistory(headers, '?employee_id=1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/sales/history?employee_id=1`,
+      { headers }
+    );
+  });
+
+  it('getAnnouncementReads — с пустым org-квери не фильтрует по сети (сохранённое поведение)', async () => {
+    const fetchMock = fetchOk({ items: [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getAnnouncementReads(headers, 4, '');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/announcements/4/reads`, { headers });
+  });
+
+  it('getReportDay — верный URL с storeId, date и org_id-квери, значения кодируются', async () => {
+    const fetchMock = fetchOk({});
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getReportDay(headers, 's 1', '2026-01-15', '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/reports/day/s%201?date=2026-01-15&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('updateStoreDisplayName — PATCH с телом {display_name}', async () => {
+    const fetchMock = fetchOk({ id: 's1', name: 'Точка', display_name: 'Новое имя' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+
+    await updateStoreDisplayName(headers, 's1', 'Новое имя');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/stores/s1`, {
+      headers, method: 'PATCH', body: JSON.stringify({ display_name: 'Новое имя' })
+    });
+  });
+
+  it('deactivateEmployee — DELETE без тела', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await deactivateEmployee(headers, 3);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/employees/3`, {
+      headers, method: 'DELETE'
+    });
+  });
+
+  it('setEmployeeRole — PATCH с телом {role}', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+
+    await setEmployeeRole(headers, 3, 'manager');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/employees/3/role`, {
+      headers, method: 'PATCH', body: JSON.stringify({ role: 'manager' })
+    });
+  });
+
+  it('getNetworkLive — верный URL с cache-bust и org_id-квери', async () => {
+    const fetchMock = fetchOk({ stores: [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getNetworkLive(headers, '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/network/live?_=1&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('getAuditLog — верный URL с org_id-квери', async () => {
+    const fetchMock = fetchOk({ items: [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getAuditLog(headers, '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/audit&org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('uploadAvatar — POST с FormData-телом без JSON.stringify и без Content-Type', async () => {
+    const fetchMock = fetchOk({ ok: true, avatar_url: '/x.png' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+    const form = new FormData();
+
+    await uploadAvatar(headers, form);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/me/avatar`, {
+      method: 'POST', headers, body: form
+    });
+  });
+
+  it('uploadAvatar — на не-ok бросает message серверной ошибки', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false, status: 400,
+        json: async () => ({ error: 'too_large', message: 'Файл слишком большой' })
+      })) as unknown as typeof fetch
+    );
+
+    await expect(uploadAvatar({}, new FormData())).rejects.toThrow('Файл слишком большой');
+  });
+
+  it('exportCsv — GET, возвращает Blob вместо JSON', async () => {
+    const blob = new Blob(['a,b\n1,2'], { type: 'text/csv' });
+    const fetchMock = vi.fn(async () => ({
+      ok: true, status: 200, blob: async () => blob
+    })) as unknown as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    const result = await exportCsv(headers, '/export/sales.csv');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/export/sales.csv`, { headers });
+    expect(result).toBe(blob);
+  });
+
+  it('exportCsv — на не-ok бросает без попытки распарсить тело как JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 500 })) as unknown as typeof fetch
+    );
+
+    await expect(exportCsv({}, '/export/sales.csv')).rejects.toThrow('api_error:/export/sales.csv:500');
   });
 });

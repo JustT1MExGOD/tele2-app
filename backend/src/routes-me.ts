@@ -2,11 +2,12 @@
  * Идентичность и привязка Telegram: /me, /me/bind, /me/day (смена+факт+
  * дневной план сегодня), назначение роли. Выделено из routes-v3.ts.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { isManager } from './middleware-auth.js';
 import { todayMoscow } from './utils/date.js';
+import type { MeResponse, BindMeResponse, MeDayResponse } from './shared/api-types.js';
 
 const MeBindBody = Type.Object({
   employee_id: Type.Number()
@@ -15,7 +16,7 @@ type MeBindBody = Static<typeof MeBindBody>;
 
 export async function registerMeRoutes(app: FastifyInstance) {
   // ========== ME / ROLE ==========
-  app.get('/me', async (request, reply) => {
+  app.get('/me', async (request, reply): Promise<MeResponse> => {
     // не 404 — фронту удобнее: bound:false → показать «Привязать»
     if (!request.user?.employee_id) {
       return {
@@ -41,7 +42,7 @@ export async function registerMeRoutes(app: FastifyInstance) {
   app.post(
     '/me/bind',
     { schema: { body: MeBindBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<BindMeResponse | FastifyReply> => {
     // Раньше telegram_id брался из тела запроса (или вообще из спуфабельного
     // заголовка) — любой мог отвязать чужой telegram_id от его карточки и
     // привязать СВОЙ к произвольному employee_id, включая admin. Полный
@@ -120,7 +121,7 @@ export async function registerMeRoutes(app: FastifyInstance) {
   );
 
   /** Мой день: смена + факт + дневной план */
-  app.get('/me/day', async (request, reply) => {
+  app.get('/me/day', async (request, reply): Promise<MeDayResponse> => {
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
 
     // Раньше identity бралась из голого X-Telegram-Id заголовка/?telegram_id=

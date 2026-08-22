@@ -2,7 +2,7 @@
  * Продажи: список за день + внесение/правка метрик.
  * Вынесено из index.ts при разбиении монолита на модули.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query, withTransaction } from './db/index.js';
 import { notifyChat } from './bot/index.js';
@@ -12,6 +12,7 @@ import { getSalesSumColumns } from './services/metrics-catalog.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
 import { applySaleUpsert, claimIdempotencyKey, SaleMetricRangeError } from './services/sales-write.js';
 import { recordAudit } from './services/audit.js';
+import type { SalesListResponse, SaleRow } from './shared/api-types.js';
 
 // employee_id/store_id — единственные поля, форма которых реально важна на
 // границе API; сами метрики (sim/mnp/... + произвольные кастомные) остаются
@@ -40,7 +41,7 @@ export async function registerSalesRoutes(app: FastifyInstance) {
   // отдавал продажи всех сетей за день кому угодно с валидным (или вообще
   // без) X-Telegram-Id. Тот же паттерн self-inclusion, что и в /schedules:
   // своя запись видна всегда, даже если сегодня подменяешь в чужой сети.
-  app.get('/sales', async (request, reply) => {
+  app.get('/sales', async (request, reply): Promise<SalesListResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const { date, org_id } = request.query as { date?: string; org_id?: string };
     const saleDate = date || todayMoscow();
@@ -63,7 +64,7 @@ export async function registerSalesRoutes(app: FastifyInstance) {
   app.post(
     '/sales',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } }, schema: { body: PostSaleBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<SaleRow | { ok: true; deduped: true } | FastifyReply | undefined> => {
     if (!requireActive(request, reply)) return;
     const user = request.user!;
     const body = request.body as any;

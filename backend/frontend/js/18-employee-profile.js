@@ -30,11 +30,7 @@ async function renderEmployeeProfile() {
   if (!box) return;
   box.innerHTML = '<div class="skeleton"></div>';
   try {
-    const res = await fetch(API + '/employees/' + encodeURIComponent(employeeId) + '/profile?_=1' + orgQueryParam(), {
-      headers: authHeaders()
-    });
-    if (!res.ok) throw new Error('fail');
-    const d = await res.json();
+    const d = await window.apiClient.getEmployeeProfile(authHeaders(), employeeId, orgQueryParam());
 
     const tone = commandCenterTone(d.health?.score || 0);
     const comps = d.health?.components || {};

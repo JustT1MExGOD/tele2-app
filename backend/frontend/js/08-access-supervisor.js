@@ -122,9 +122,7 @@
     // мог бы «заклеймить» сотрудника сети A).
     async function loadGateOrgs() {
       try {
-        const res = await fetch(API + '/access/orgs', { headers: authHeaders() });
-        if (!res.ok) return;
-        const list = await res.json();
+        const list = await window.apiClient.getAccessOrgs(authHeaders());
         const sel = document.getElementById('gateOrg');
         const field = document.getElementById('gateOrgField');
         if (!sel) return;
@@ -148,9 +146,7 @@
     async function loadGateDirectory(orgId) {
       try {
         const orgParam = orgId ? '?org_id=' + encodeURIComponent(orgId) : '';
-        const res = await fetch(API + '/access/employees-directory' + orgParam, { headers: authHeaders() });
-        if (!res.ok) return;
-        const list = await res.json();
+        const list = await window.apiClient.getAccessDirectory(authHeaders(), orgParam);
         const sel = document.getElementById('gateClaim');
         if (!sel) return;
         sel.innerHTML = '<option value="">— новый сотрудник —</option>';
@@ -192,14 +188,10 @@
         claimed_employee_id: claimed ? Number(claimed) : null,
         org_id: claimed ? null : (orgVal || null)
       };
-      const res = await fetch(API + '/access/request', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: JSON.stringify(body)
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast(data.error || 'Ошибка', 'err');
+      try {
+        await window.apiClient.submitAccessRequest(authHeaders(true), body);
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
         return;
       }
       toast('Заявка отправлена', 'ok');
@@ -226,8 +218,7 @@
         if (res.status === 404) {
           console.warn('/access/status not found — skip gate');
           try {
-            const meRes = await fetch(API + '/me', { headers: authHeaders() });
-            if (meRes.ok) me = await meRes.json();
+            me = await window.apiClient.getMe(authHeaders());
           } catch (_) {}
           hideAccessGate();
           enterHomeOrSupervisorShell();
@@ -250,11 +241,8 @@
 
         me = st.user || me;
         try {
-          const meRes = await fetch(API + '/me', { headers: authHeaders() });
-          if (meRes.ok) {
-            const m = await meRes.json();
-            me = { ...me, ...m };
-          }
+          const m = await window.apiClient.getMe(authHeaders());
+          me = { ...me, ...m };
         } catch (_) {}
 
         hideAccessGate();
@@ -276,8 +264,7 @@
         console.error(e);
         // сеть/парс — не запираем в gate навечно
         try {
-          const meRes = await fetch(API + '/me', { headers: authHeaders() });
-          if (meRes.ok) me = await meRes.json();
+          me = await window.apiClient.getMe(authHeaders());
         } catch (_) {}
         hideAccessGate();
         enterHomeOrSupervisorShell();
@@ -288,9 +275,7 @@
     async function loadSupportSla() {
       if (!canAdmin()) return;
       try {
-        const res = await fetch(API + '/support/admin/tickets', { headers: authHeaders() });
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await window.apiClient.getSupportAdminTickets(authHeaders());
         const box = document.getElementById('supportSlaBox');
         if (!box) return;
         const items = data.items || [];
@@ -314,9 +299,7 @@
       }
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/access/requests', { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const list = await res.json();
+        const list = await window.apiClient.getAccessRequests(authHeaders());
         if (!list.length) {
           box.innerHTML = '<div class="empty">Нет заявок</div>';
           return;
@@ -343,23 +326,23 @@
     async function approveAccess(id) {
       const roleSel = document.getElementById('role_req_' + id);
       const role = roleSel ? roleSel.value : 'employee';
-      const res = await fetch(API + '/access/requests/' + id + '/approve', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: JSON.stringify({ role })
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.approveAccessRequest(authHeaders(true), id, { role });
+      } catch (e) {
+        toast('Ошибка', 'err');
+        return;
+      }
       toast('Доступ открыт', 'ok');
       loadAccessRequests();
     }
 
     async function rejectAccess(id) {
-      const res = await fetch(API + '/access/requests/' + id + '/reject', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: '{}'
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.rejectAccessRequest(authHeaders(true), id);
+      } catch (e) {
+        toast('Ошибка', 'err');
+        return;
+      }
       toast('Отклонено', 'ok');
       loadAccessRequests();
     }
@@ -449,12 +432,7 @@
         if (el) el.innerHTML = '<div class="skeleton" style="margin:16px"></div>';
       });
       try {
-        const res = await fetch(API + '/supervisor/dashboard?days=' + days + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || ('HTTP ' + res.status));
-        }
-        svDashData = await res.json();
+        svDashData = await window.apiClient.getSupervisorDashboard(authHeaders(), days, orgQueryParam());
         renderSvAll(svDashData);
       } catch (e) {
         console.error(e);

@@ -3,7 +3,7 @@
  * и офлайн-очередь. Выделено из routes-v13.ts — было общей свалкой смен,
  * NLP, offline sync, live map, insights, alerts, what-if, forecast разом.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireAuth, isManager, resolveViewOrgId, assertStoreInOrg } from './middleware-auth.js';
@@ -15,6 +15,13 @@ import { applySaleUpsert, claimIdempotencyKey, SaleMetricRangeError } from './se
 import { notifyChat } from './bot/index.js';
 import { getStoreNotifyTarget } from './services/tenant.js';
 import { computeDayPlanFact } from './services/shift-pace.js';
+import type {
+  ShiftOpenResponse,
+  ShiftCloseResponse,
+  ShiftCurrentResponse,
+  SalesParseResponse,
+  SalesQuickResponse
+} from './shared/api-types.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -85,7 +92,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   app.post(
     '/shifts/open',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: ShiftOpenBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<ShiftOpenResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const body = (request.body || {}) as ShiftOpenBody;
     const employee_id = request.user!.employee_id!;
@@ -192,7 +199,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   app.post(
     '/shifts/close',
     { schema: { body: ShiftCloseBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<ShiftCloseResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const body = (request.body || {}) as ShiftCloseBody;
     const employee_id = request.user!.employee_id!;
@@ -319,7 +326,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     }
   );
 
-  app.get('/shifts/current', async (request, reply) => {
+  app.get('/shifts/current', async (request, reply): Promise<ShiftCurrentResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const res = await query(
       `SELECT ss.*, COALESCE(st.display_name, st.name) as store_name, st.color
@@ -343,7 +350,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   app.post(
     '/sales/parse',
     { schema: { body: SalesParseBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<SalesParseResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const body = (request.body || {}) as SalesParseBody;
     const parsed = parseSalePhrase(String(body.text || ''));
@@ -354,7 +361,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   app.post(
     '/sales/quick',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } }, schema: { body: SalesQuickBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<SalesQuickResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const body = (request.body || {}) as SalesQuickBody;
     const parsed = parseSalePhrase(String(body.text || ''));

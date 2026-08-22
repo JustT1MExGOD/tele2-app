@@ -11,8 +11,7 @@
         return;
       }
       try {
-        const res = await fetch(API + '/me/day', { headers: authHeaders() });
-        const d = await res.json();
+        const d = await window.apiClient.getMyDay(authHeaders());
         if (!d.bound) {
           box.innerHTML = `
             <div class="empty" style="text-align:left;padding:8px 0">Аккаунт не привязан</div>
@@ -89,12 +88,7 @@
 
     async function completeMyTask(id) {
       try {
-        const res = await fetch(API + '/tasks/' + id + '/status', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify({ status: 'done' })
-        });
-        if (!res.ok) throw new Error('fail');
+        await window.apiClient.changeTaskStatus(authHeaders(true), id, { status: 'done' });
         toast('Задача выполнена', 'ok');
         loadMyDay();
       } catch (e) {
@@ -123,9 +117,7 @@
       }
       section.style.display = '';
       try {
-        const res = await fetch(API + '/supervisor/health?_=1' + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const d = await res.json();
+        const d = await window.apiClient.getSupervisorHealth(authHeaders(), orgQueryParam());
         const health = Number(d.health) || 0;
         const tone = commandCenterTone(health);
         const pace = Number(d.pace_delta) || 0;
@@ -172,13 +164,12 @@
       if (!empId) return;
       try {
         const today = todayMoscow();
-        const [curRes, schRes] = await Promise.all([
-          fetch(API + '/shifts/current', { headers: authHeaders() }).catch(() => null),
-          fetch(API + '/schedules/month?month=' + today.slice(0, 7), { headers: authHeaders() }).catch(() => null)
+        const [cur, sch] = await Promise.all([
+          window.apiClient.getShiftCurrent(authHeaders()).catch(() => null),
+          window.apiClient.getScheduleMonth(authHeaders(), today.slice(0, 7), '').catch(() => null)
         ]);
 
         if (badgeEl) {
-          const cur = curRes && curRes.ok ? await curRes.json() : null;
           const open = !!cur?.session;
           badgeEl.innerHTML = `<span class="dot"></span>${open ? 'Смена открыта' : 'Смена закрыта'}`;
           badgeEl.classList.toggle('open', open);
@@ -186,7 +177,6 @@
         }
 
         if (daysEl) {
-          const sch = schRes && schRes.ok ? await schRes.json() : null;
           const rows = Array.isArray(sch) ? sch : (sch?.items || sch?.schedules || []);
           const workDates = new Set(
             rows
@@ -237,11 +227,10 @@
       loadCommandCenter();
       initSwipePanels(document.getElementById('homeTodaySwipe'));
       try {
-        const [statsRes, dashRes] = await Promise.all([
-          fetch(API + '/stats/daily?date=' + today + orgQueryParam(), { headers: authHeaders() }).catch(() => null),
-          fetch(API + '/dashboard?_=1' + orgQueryParam(), { headers: authHeaders() }).catch(() => null)
+        const [stats, dash] = await Promise.all([
+          window.apiClient.getStatsDaily(authHeaders(), today, orgQueryParam()).catch(() => []),
+          window.apiClient.getDashboard(authHeaders(), orgQueryParam()).catch(() => null)
         ]);
-        const stats = (statsRes && statsRes.ok) ? await statsRes.json() : [];
         const list = Array.isArray(stats) ? stats : [];
 
         const t = list.reduce((a, s) => ({
@@ -285,8 +274,7 @@
 
         const box = document.getElementById('homeTop');
         if (box) {
-          if (dashRes && dashRes.ok) {
-            const dash = await dashRes.json();
+          if (dash) {
             const leaders = dash.top || dash.top7 || dash.leaders || dash.employees || [];
             if (!leaders.length) {
               box.innerHTML = '<div class="empty">Нет данных за 7 дней</div>';

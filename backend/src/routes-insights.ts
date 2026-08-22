@@ -9,6 +9,7 @@ import { requireAuth } from './middleware-auth.js';
 import { buildShiftInsight, selfComparison, splitDayPlanByHours } from './services/insights.js';
 import { getGamificationProfile, addXp, grantBadge } from './services/gamification.js';
 import { todayMoscow } from './utils/date.js';
+import type { MyInsightResponse, SelfStatsResponse } from './shared/api-types.js';
 
 const TutorialCompleteBody = Type.Object({
   mode: Type.Optional(Type.String())
@@ -20,7 +21,7 @@ function num(v: any) {
 }
 
 export async function registerInsightsRoutes(app: FastifyInstance) {
-  app.get('/me/insight', async (request, reply) => {
+  app.get('/me/insight', async (request, reply): Promise<MyInsightResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
     const employee_id = request.user!.employee_id!;
@@ -72,7 +73,7 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
     return { store_id, fact, day_plan: dayPlan, insight };
   });
 
-  app.get('/me/self-stats', async (request, reply) => {
+  app.get('/me/self-stats', async (request, reply): Promise<SelfStatsResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const stats = await selfComparison(request.user!.employee_id!);
     const gam = await getGamificationProfile(request.user!.employee_id!);

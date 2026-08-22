@@ -3,9 +3,7 @@
     // ===== V14 =====
     async function applyBranding() {
       try {
-        const res = await fetch(API + '/branding', { headers: authHeaders() });
-        if (!res.ok) return;
-        const b = await res.json();
+        const b = await window.apiClient.getBranding(authHeaders());
         if (b.primary_color) document.documentElement.style.setProperty('--primary', b.primary_color);
         if (b.app_title) document.title = b.app_title;
         window.__brand = b;
@@ -45,9 +43,7 @@
       }
       grid.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/heatmap/precise/' + encodeURIComponent(sid) + '?weeks=4' + orgQueryParam(), { headers: authHeaders() });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'fail');
+        const data = await window.apiClient.getHeatmapPrecise(authHeaders(), sid, orgQueryParam());
         const hours = data.hours || data.by_hour || [];
         // hours: [{hour, value}] or map
         let cells = [];
@@ -105,8 +101,7 @@
       if (!sid||!box) return;
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/forecast/' + sid + '?days=7' + orgQueryParam(), { headers: authHeaders() });
-        const data = await res.json();
+        const data = await window.apiClient.getForecast(authHeaders(), sid, orgQueryParam());
         const histDays = Number(data.history_days) || 0;
         const note = histDays < 14
           ? `<div class="empty" style="padding:0 0 10px;text-align:left">🍉 Пока только ${histDays} дн. истории — прогноз грубый, будет точнее по мере накопления данных</div>`
@@ -151,9 +146,7 @@
       if (!section || !box) return;
       if (!canManage()) { section.style.display = 'none'; return; }
       try {
-        const res = await fetch(API + '/staffing-hints?days=7' + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
+        const data = await window.apiClient.getStaffingHints(authHeaders(), orgQueryParam());
         const items = data.items || [];
         if (!items.length) {
           section.style.display = '';
@@ -291,13 +284,7 @@
       try {
         const wiBody = { date, moves };
         if (me?.role === 'admin' && adminViewOrgId) wiBody.org_id = adminViewOrgId;
-        const res = await fetch(API + '/schedule/what-if', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify(wiBody)
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'fail');
+        const data = await window.apiClient.runWhatIf(authHeaders(true), wiBody);
         window.__lastWhatIf = { date: data.date || date, moves, org_id: wiBody.org_id };
         window.__wiLastResult = { data, date: data.date || date, moves };
         const scenario = renderWiScenario(data, date);
@@ -360,13 +347,7 @@
       if (!payload?.moves?.length) { toast('Сначала пересчитай what-if', 'err'); return; }
       if (!canManage()) { toast('Только manager', 'err'); return; }
       try {
-        const res = await fetch(API + '/schedule/what-if/apply', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || data.error || 'fail');
+        const data = await window.apiClient.applyWhatIf(authHeaders(true), payload);
         toast('График обновлён: ' + (data.count || 0) + ' смен', 'ok');
         if (typeof loadMonthSchedule === 'function') loadMonthSchedule();
       } catch (e) {
@@ -380,8 +361,7 @@
       const create = document.getElementById('anCreate');
       if (create) create.style.display = canManage() ? '' : 'none';
       try {
-        const res = await fetch(API + '/announcements', { headers: authHeaders() });
-        const data = await res.json();
+        const data = await window.apiClient.getAnnouncements(authHeaders());
         // бэкенд отдаёт голый массив (как /sales, /employees и т.д.), а не {items:[...]} —
         // раньше тут был data.items||[], который на массиве всегда давал [] и объявления
         // никогда не показывались, сколько бы их ни было в базе
@@ -402,9 +382,7 @@
       document.getElementById('modalBody').innerHTML = '<div class="empty">Загрузка…</div>';
       document.getElementById('overlay')?.classList.add('show');
       try {
-        const res = await fetch(API + '/announcements/' + id + '/reads', { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const d = await res.json();
+        const d = await window.apiClient.getAnnouncementReads(authHeaders(), id, '');
         const read = d.read || [];
         const unread = d.unread || [];
         document.getElementById('modalBody').innerHTML = `
@@ -423,7 +401,7 @@
       }
     }
     async function markAnnouncementRead(id) {
-      await fetch(API + '/announcements/' + id + '/read', { method:'POST', headers: authHeaders(true), body:'{}' });
+      await window.apiClient.markAnnouncementRead(authHeaders(true), id).catch(() => {});
       loadAnnouncements();
     }
     async function createAnnouncement() {
@@ -431,11 +409,10 @@
       const body = document.getElementById('anBody')?.value?.trim();
       const required = !!document.getElementById('anReq')?.checked;
       if (!title || !body) { toast('Заполни заголовок и текст', 'err'); return; }
-      const res = await fetch(API + '/announcements', { method:'POST', headers: authHeaders(true), body: JSON.stringify({ title, body, required }) });
-      if (!res.ok) {
-        let msg = 'Ошибка';
-        try { const j = await res.json(); msg = j.message || j.error || msg; } catch(_){}
-        toast(msg + ' (нужна таблица announcements)', 'err');
+      try {
+        await window.apiClient.createAnnouncement(authHeaders(true), { title, body, required });
+      } catch (e) {
+        toast((e.message || 'Ошибка') + ' (нужна таблица announcements)', 'err');
         return;
       }
       toast('Опубликовано','ok');
@@ -452,17 +429,7 @@
       }
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/reports/day/' + encodeURIComponent(sid) + '?date=' + encodeURIComponent(date) + orgQueryParam(), {
-          headers: authHeaders()
-        });
-        const text = await res.text();
-        let data = {};
-        try { data = JSON.parse(text); } catch (_) {
-          throw new Error(res.ok ? 'Не JSON от сервера' : (text.slice(0, 120) || 'HTTP ' + res.status));
-        }
-        if (!res.ok) {
-          throw new Error(data.message || data.error || ('HTTP ' + res.status));
-        }
+        const data = await window.apiClient.getReportDay(authHeaders(), sid, date, orgQueryParam());
         if (data.svgs) {
           // story: 3 кадра — план → факт → фокус на завтра, как реально уйдёт в чат
           const frames = [
@@ -497,9 +464,7 @@
       if (!box) return;
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/orgs', { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const orgs = await res.json();
+        const orgs = await window.apiClient.getOrgsAdmin(authHeaders());
         orgsAdminCache = Array.isArray(orgs) ? orgs : [];
         box.innerHTML = orgsAdminCache.map(o => `
           <button class="row" onclick="openEditOrg('${o.id}')">
@@ -536,9 +501,7 @@
       if (!box) return;
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/audit' + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
+        const data = await window.apiClient.getAuditLog(authHeaders(), orgQueryParam());
         const items = Array.isArray(data.items) ? data.items : [];
         box.innerHTML = items.map(item => `
           <div class="row" style="cursor:default">
@@ -606,12 +569,12 @@
       };
       const activeEl = document.getElementById('no_active');
       if (activeEl) body.is_active = activeEl.checked;
-      const res = await fetch(API + '/admin/org/' + encodeURIComponent(id), {
-        method: 'PUT',
-        headers: authHeaders(true),
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.saveOrg(authHeaders(true), id, body);
+      } catch (e) {
+        toast('Ошибка', 'err');
+        return;
+      }
       toast(existingId ? 'Сеть обновлена' : 'Сеть создана', 'ok');
       closeModal();
       loadOrgsAdmin();

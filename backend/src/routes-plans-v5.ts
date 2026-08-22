@@ -4,7 +4,7 @@
  * await registerPlansV5Routes(app);
  */
 
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
@@ -34,10 +34,16 @@ import {
   monthStart
 } from './services/plans.js';
 import { currentMonthMoscow, todayMoscow } from './utils/date.js';
+import type {
+  MonthSummaryTableResponse,
+  EmployeeMonthPlanResponse,
+  StoreDailyPlansResponse,
+  StoreMonthPlanResponse
+} from './shared/api-types.js';
 
 export async function registerPlansV5Routes(app: FastifyInstance) {
   // Сводная таблица «как Excel»: факт / план / % — по сотрудникам своей сети
-  app.get('/plans/employees/month', async (request, reply) => {
+  app.get('/plans/employees/month', async (request, reply): Promise<MonthSummaryTableResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const { month, org_id } = request.query as { month?: string; org_id?: string };
     const m = month || currentMonthMoscow();
@@ -47,7 +53,7 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
 
   // План одного сотрудника на месяц. Раньше вообще без авторизации — план
   // (цели по метрикам) любого сотрудника любой сети был виден по id кому угодно.
-  app.get('/plans/employees/:id/month', async (request, reply) => {
+  app.get('/plans/employees/:id/month', async (request, reply): Promise<EmployeeMonthPlanResponse | FastifyReply | undefined> => {
     if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const { month, org_id } = request.query as { month?: string; org_id?: string };
@@ -72,7 +78,7 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
       preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })],
       schema: { body: MonthPlanBody }
     },
-    async (request, reply) => {
+    async (request, reply): Promise<EmployeeMonthPlanResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = request.body as any;
@@ -123,7 +129,7 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
   });
 
   // Вычисленные дневные планы точек своей сети (остаток месячного плана точки / дни)
-  app.get('/plans/stores/daily', async (request, reply) => {
+  app.get('/plans/stores/daily', async (request, reply): Promise<StoreDailyPlansResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const { date, org_id } = request.query as { date?: string; org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
@@ -131,7 +137,7 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
   });
 
   // План одной точки на месяц (вносится вручную, независимо от планов сотрудников)
-  app.get('/plans/stores/:id/month', async (request, reply) => {
+  app.get('/plans/stores/:id/month', async (request, reply): Promise<StoreMonthPlanResponse | FastifyReply | undefined> => {
     if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const { month } = request.query as { month?: string };
@@ -147,7 +153,7 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
       preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })],
       schema: { body: MonthPlanBody }
     },
-    async (request, reply) => {
+    async (request, reply): Promise<StoreMonthPlanResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = request.body as any;

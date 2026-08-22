@@ -105,13 +105,7 @@
     async function openShiftSession() {
       try {
         const geo = await geoCoords();
-        const res = await fetch(API + '/shifts/open', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify(geo)
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.message || 'fail');
+        const data = await window.apiClient.openShift(authHeaders(true), geo);
         toast('Смена открыта', 'ok');
         try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
         showShiftBrief(data);
@@ -173,13 +167,7 @@
       const handoverNote = document.getElementById('closeHandover')?.value || '';
       try {
         const geo = await geoCoords();
-        const res = await fetch(API + '/shifts/close', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify({ ...geo, self_report: report, mood, handover_note: handoverNote })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || data.error || 'fail');
+        const data = await window.apiClient.closeShift(authHeaders(true), { ...geo, self_report: report, mood, handover_note: handoverNote });
         try { tg?.HapticFeedback?.notificationOccurred?.('success'); } catch (_) {}
         if (data.ideal_shift || (data.plan_pct >= 100)) {
           try { confettiBurst && confettiBurst(); } catch (_) {}
@@ -243,14 +231,11 @@
       if (gamEl) gamEl.innerHTML = '';
 
       try {
-        const [curRes, insRes, selfRes] = await Promise.all([
-          fetch(API + '/shifts/current', { headers: authHeaders() }),
-          fetch(API + '/me/insight', { headers: authHeaders() }),
-          fetch(API + '/me/self-stats', { headers: authHeaders() })
+        const [cur, ins, self] = await Promise.all([
+          window.apiClient.getShiftCurrent(authHeaders()).catch(() => ({})),
+          window.apiClient.getMyInsight(authHeaders()).catch(() => ({})),
+          window.apiClient.getSelfStats(authHeaders()).catch(() => ({}))
         ]);
-        const cur = curRes.ok ? await curRes.json() : {};
-        const ins = insRes.ok ? await insRes.json() : {};
-        const self = selfRes.ok ? await selfRes.json() : {};
 
         if (shiftEl) {
           const sess = cur.session;
@@ -347,11 +332,7 @@
 
     async function previewQuickSale() {
       const text = document.getElementById('quickSaleText')?.value || '';
-      const res = await fetch(API + '/sales/parse', {
-        method: 'POST', headers: authHeaders(true),
-        body: JSON.stringify({ text })
-      });
-      const data = await res.json();
+      const data = await window.apiClient.parseSalePhrase(authHeaders(true), { text });
       const el = document.getElementById('quickSalePreview');
       if (!el) return;
       el.style.display = 'block';
@@ -369,12 +350,7 @@
       if (!text.trim()) { toast('Введи фразу', 'err'); return; }
       if (btn) btn.disabled = true;
       try {
-        const res = await fetch(API + '/sales/quick', {
-          method: 'POST', headers: authHeaders(true),
-          body: JSON.stringify({ text, client_id: window.__quickSaleClientId })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'fail');
+        const data = await window.apiClient.quickSale(authHeaders(true), { text, client_id: window.__quickSaleClientId });
         closeModal();
         const m = data.parsed?.metrics || {};
         toast('Записано: ' + Object.keys(m).map(k => k + ' ' + m[k]).join(', '), 'ok');
@@ -390,9 +366,7 @@
       const meta = document.getElementById('liveMeta');
       if (box) box.innerHTML = '<div class="skeleton"></div>';
       try {
-        const res = await fetch(API + '/network/live?_=1' + orgQueryParam(), { headers: authHeaders() });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
+        const data = await window.apiClient.getNetworkLive(authHeaders(), orgQueryParam());
         if (meta) meta.textContent = 'Дата: ' + (data.date || todayMoscow()) + ' · обновление при открытии экрана';
         const stores = data.stores || [];
         if (!stores.length) {

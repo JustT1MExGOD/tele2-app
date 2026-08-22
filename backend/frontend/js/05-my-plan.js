@@ -54,9 +54,7 @@
       }
 
       try {
-        const meRes = await fetch(API + '/me', { headers: authHeaders() });
-        if (meRes.ok) me = await meRes.json();
-        else me = null;
+        me = await window.apiClient.getMe(authHeaders());
       } catch {
         me = null;
       }
@@ -70,8 +68,7 @@
         if (root) root.style.display = 'none';
         if (bindSec) bindSec.style.display = 'block';
         try {
-          const empRes = await fetch(API + '/employees', { headers: authHeaders() });
-          employees = await empRes.json();
+          employees = await window.apiClient.getEmployees(authHeaders(), '');
           const unbound = (employees || []).filter(e => !e.telegram_id || Number(e.telegram_id) === 0);
           const list = unbound.length ? unbound : (employees || []);
           document.getElementById('bindEmployee').innerHTML =
@@ -88,23 +85,22 @@
 
       // Параллельная загрузка
       const [dayRes, progRes, monthSchRes, bfqRes, monthPlanRes] = await Promise.allSettled([
-        fetch(API + '/me/day', { headers: authHeaders() }),
-        fetch(API + '/employee/progress/' + empId + '?date=' + today, { headers: authHeaders() }),
-        fetch(API + '/schedules/month?month=' + month, { headers: authHeaders() }),
-        fetch(API + '/bfq?month=' + month, { headers: authHeaders() }),
-        fetch(API + '/plans/employees/month?month=' + month, { headers: authHeaders() })
+        window.apiClient.getMyDay(authHeaders()),
+        window.apiClient.getEmployeeProgress(authHeaders(), empId, today),
+        window.apiClient.getScheduleMonth(authHeaders(), month, ''),
+        window.apiClient.getBfqList(authHeaders(), month, ''),
+        window.apiClient.getPlansEmployeesMonth(authHeaders(), month, '')
       ]);
 
-      async function jsonOk(settled) {
-        if (settled.status !== 'fulfilled' || !settled.value.ok) return null;
-        try { return await settled.value.json(); } catch { return null; }
+      function settledOk(settled) {
+        return settled.status === 'fulfilled' ? settled.value : null;
       }
 
-      const dayData = await jsonOk(dayRes);
-      const progData = await jsonOk(progRes);
-      const monthSch = await jsonOk(monthSchRes);
-      const bfqData = await jsonOk(bfqRes);
-      const monthPlansRaw = await jsonOk(monthPlanRes);
+      const dayData = settledOk(dayRes);
+      const progData = settledOk(progRes);
+      const monthSch = settledOk(monthSchRes);
+      const bfqData = settledOk(bfqRes);
+      const monthPlansRaw = settledOk(monthPlanRes);
       // API: { month, rows, totals }
       const monthPlans = Array.isArray(monthPlansRaw)
         ? monthPlansRaw
@@ -348,13 +344,7 @@
       }
       const employeeId = document.getElementById('bindEmployee').value;
       try {
-        const res = await fetch(API + '/me/bind', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify({ telegram_id: user.id, employee_id: Number(employeeId) })
-        });
-        if (!res.ok) throw new Error('bind fail');
-        me = await res.json();
+        me = await window.apiClient.bindMe(authHeaders(true), { telegram_id: user.id, employee_id: Number(employeeId) });
         toast('Привязано', 'ok');
         loadMyPlan();
       } catch (e) {
@@ -407,12 +397,7 @@
         const blob = await resizeImageFile(file);
         const form = new FormData();
         form.append('file', blob, 'avatar.jpg');
-        const res = await fetch(API + '/me/avatar', {
-          method: 'POST',
-          headers: authHeaders(),
-          body: form
-        });
-        if (!res.ok) throw new Error('upload fail');
+        await window.apiClient.uploadAvatar(authHeaders(), form);
         toast('Аватарка обновлена', 'ok');
         loadMyPlan();
       } catch (err) {

@@ -30,11 +30,7 @@ async function renderStoreProfile() {
   if (!box) return;
   box.innerHTML = '<div class="skeleton"></div>';
   try {
-    const res = await fetch(API + '/stores/' + encodeURIComponent(storeId) + '/profile?_=1' + orgQueryParam(), {
-      headers: authHeaders()
-    });
-    if (!res.ok) throw new Error('fail');
-    const d = await res.json();
+    const d = await window.apiClient.getStoreProfile(authHeaders(), storeId, orgQueryParam());
 
     const tone = commandCenterTone(d.health?.score || 0);
     const comps = d.health?.components || {};
@@ -120,12 +116,7 @@ async function editStoreDisplayName(storeId) {
   if (next === null) return;
   const trimmed = next.trim();
   try {
-    const res = await fetch(API + '/stores/' + encodeURIComponent(storeId), {
-      method: 'PATCH',
-      headers: authHeaders(true),
-      body: JSON.stringify({ display_name: trimmed || null })
-    });
-    if (!res.ok) throw new Error('fail');
+    await window.apiClient.updateStoreDisplayName(authHeaders(true), storeId, trimmed || null);
     toast('Название обновлено', 'ok');
     renderStoreProfile();
   } catch (e) {

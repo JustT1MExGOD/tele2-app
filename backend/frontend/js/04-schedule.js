@@ -9,21 +9,14 @@
         // 1) факт + график + шаблон/день из /plans?date=
         // 2) параллельно computed из /plans/stores/daily (из месячных планов сотрудников)
         const ov = orgQueryParam();
-        const [storesData, statsRes, schRes, plansRes, dailyRes] = await Promise.all([
+        const [storesData, stats, schedules, plans, dailyComputed] = await Promise.all([
           fetchOrgStores(),
-          fetch(API + '/stats/daily?date=' + date + ov, { headers: authHeaders() }),
-          fetch(API + '/schedules?date=' + date + ov, { headers: authHeaders() }),
-          fetch(API + '/plans?date=' + date, { headers: authHeaders() }),
-          fetch(API + '/plans/stores/daily?date=' + date + ov, { headers: authHeaders() })
+          window.apiClient.getStatsDaily(authHeaders(), date, ov),
+          window.apiClient.getSchedules(authHeaders(), date, ov),
+          window.apiClient.getPlansTemplate(authHeaders(), date),
+          window.apiClient.getStoreDailyPlans(authHeaders(), ov, date).catch(() => null)
         ]);
         stores = storesData;
-        const stats = await statsRes.json();
-        const schedules = await schRes.json();
-        const plans = await plansRes.json();
-        let dailyComputed = null;
-        try {
-          if (dailyRes.ok) dailyComputed = await dailyRes.json();
-        } catch (_) {}
 
         const statsMap = {};
         (Array.isArray(stats) ? stats : []).forEach(s => { statsMap[s.store_id || s.id] = s; });
@@ -128,11 +121,10 @@
       try {
         const date = todayMoscow();
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const [schRes, storesData] = await Promise.all([
-          fetch(API + '/schedules?date=' + date + orgParam, { headers: authHeaders() }),
+        const [schedules, storesData] = await Promise.all([
+          window.apiClient.getSchedules(authHeaders(), date, orgParam),
           fetchOrgStores()
         ]);
-        const schedules = await schRes.json();
         stores = storesData;
 
         if (!Array.isArray(schedules) || !schedules.length) {
@@ -240,14 +232,7 @@
       box.innerHTML = '<div class="skeleton"></div>';
       try {
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const res = await fetch(API + '/schedules/month?month=' + scheduleMonth + orgParam, { headers: authHeaders() });
-        let data;
-        if (res.ok) {
-          data = await res.json();
-        } else {
-          // fallback: empty
-          data = { items: [] };
-        }
+        const data = await window.apiClient.getScheduleMonth(authHeaders(), scheduleMonth, orgParam).catch(() => ({ items: [] }));
         const items = data.items || [];
 
         if (!stores.length) {
@@ -258,8 +243,7 @@
         // та же сеть, что и месячный график выше, иначе строки грида у
         // admin при просмотре чужой сети — его СОБСТВЕННАЯ команда.
         const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const empRes = await fetch(API + '/employees' + empParam, { headers: authHeaders() });
-        const emps = await empRes.json();
+        const emps = await window.apiClient.getEmployees(authHeaders(), empParam);
         const byEmp = {};
         (emps || []).forEach(e => {
           byEmp[e.id] = { id: e.id, name: e.full_name, days: {} };
@@ -406,23 +390,14 @@
       const hours = Number(document.getElementById('schHours').value) || 0;
       const shift_text = document.getElementById('schText').value || '';
       try {
-        const res = await fetch(API + '/schedules/bulk', {
-          method: 'POST',
-          headers: authHeaders(true),
-          body: JSON.stringify({
-            items: [{ employee_id: employeeId, work_date: dateStr, store_id, hours, shift_text }]
-          })
+        await window.apiClient.saveSchedulesBulk(authHeaders(true), {
+          items: [{ employee_id: employeeId, work_date: dateStr, store_id, hours, shift_text }]
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          toast(err.message || 'Нет прав', 'err');
-          return;
-        }
         toast('Смена сохранена', 'ok');
         closeModal();
         loadMonthSchedule();
       } catch (e) {
-        toast('Ошибка', 'err');
+        toast(e.message || 'Нет прав', 'err');
       }
     }
 

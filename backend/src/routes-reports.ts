@@ -17,7 +17,7 @@ import { requireActive, requireManager, resolveViewOrgId, requireStoreInOrg } fr
 import { buildDailyReportSvg, buildStoryReportSvgs } from './services/report-image.js';
 import { sendNetworkDigest } from './services/network-digest.js';
 import { serverError } from './utils/http-errors.js';
-import type { SendDigestResponse } from './shared/api-types.js';
+import type { SendDigestResponse, ReportDayResponse } from './shared/api-types.js';
 
 const SendMicroBody = Type.Object({
   date: Type.Optional(Type.String()),
@@ -45,7 +45,7 @@ export async function registerReportsRoutes(app: FastifyInstance) {
       config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
       preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })]
     },
-    async (request, reply) => {
+    async (request, reply): Promise<ReportDayResponse | FastifyReply | undefined> => {
     if (!requireActive(request, reply)) return;
     const storeId = String((request.params as any).storeId || '');
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);

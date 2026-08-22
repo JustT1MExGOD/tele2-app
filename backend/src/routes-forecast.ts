@@ -2,7 +2,7 @@
  * Прогноз, точный heatmap по часу, когорты новичков, BI-экспорт.
  * Выделено из routes-v13.ts.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
 import { requireAuth, requireManager, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
 import { forecastStore, salesHeatmap, newbieCohorts, getStaffingHints } from './services/forecast.js';
@@ -10,12 +10,13 @@ import { rebuildHourProfiles } from './services/insights.js';
 import { getLiveNetworkMap } from './services/live-map.js';
 import { generateForecastSummary, getLatestForecastSummary } from './services/ai.js';
 import { todayMoscow } from './utils/date.js';
+import type { ForecastResponse, StaffingHintsResponse } from './shared/api-types.js';
 
 export async function registerForecastRoutes(app: FastifyInstance) {
   app.get(
     '/forecast/:storeId',
     { preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })] },
-    async (request, reply) => {
+    async (request, reply): Promise<ForecastResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const { storeId } = request.params as { storeId: string };
     const from = String((request.query as any)?.from || todayMoscow()).slice(0, 10);
@@ -41,7 +42,7 @@ export async function registerForecastRoutes(app: FastifyInstance) {
 
   // «Кого куда поставить» — эвристика на основе прогноза + текущего графика,
   // не точный расчёт (абсолютной меры «нужно N человек» у нас нет).
-  app.get('/staffing-hints', async (request, reply) => {
+  app.get('/staffing-hints', async (request, reply): Promise<StaffingHintsResponse | undefined> => {
     if (!requireManager(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const days = Math.min(Number((request.query as any)?.days) || 7, 14);

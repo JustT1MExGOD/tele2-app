@@ -4,12 +4,13 @@
  * объяснимый Store Health Score. Не изобретает новый расчётный движок —
  * почти целиком передаёт buildSupervisorDashboard() с scope из одной точки.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
 import { requireAuth, requireStoreInOrg } from './middleware-auth.js';
 import { buildSupervisorDashboard } from './services/supervisor-analytics.js';
 import { todayMoscow } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
+import type { StoreProfileResponse } from './shared/api-types.js';
 
 function canViewStoreProfile(user: { role?: string } | null | undefined): boolean {
   if (!user?.role) return false;
@@ -24,7 +25,7 @@ export async function registerStoreProfileRoutes(app: FastifyInstance) {
   app.get(
     '/stores/:id/profile',
     { preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })] },
-    async (request, reply) => {
+    async (request, reply): Promise<StoreProfileResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     if (!canViewStoreProfile(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });

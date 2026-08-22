@@ -18,7 +18,7 @@
  * "Method GET already declared for route '/supervisor/dashboard'".
  */
 
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { authPlugin, requireAuth, requireManager, resolveViewOrgId } from './middleware-auth.js';
 import {
   resolveSupervisorStores,
@@ -27,6 +27,7 @@ import {
 import { todayMoscow } from './utils/date.js';
 import { serverError } from './utils/http-errors.js';
 import { getStats as getScopeCacheStats } from './services/scope-cache.js';
+import type { SupervisorDashboardResponse, SupervisorHealthResponse } from './shared/api-types.js';
 
 /** Полный кабинет супервайзера — только supervisor/admin. Раньше сюда же
  * пускали manager, но кабинет теперь изолирован от manager/senior (свой
@@ -49,7 +50,7 @@ function canViewSupervisorHealth(user: { role?: string } | null | undefined): bo
 
 export async function registerSupervisorRoutes(app: FastifyInstance) {
   // Подставляем request.user из X-Telegram-Id на каждый запрос модуля
-  app.get('/supervisor/dashboard', async (request, reply) => {
+  app.get('/supervisor/dashboard', async (request, reply): Promise<SupervisorDashboardResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     if (!canViewSupervisor(request.user)) {
       return reply.code(403).send({
@@ -94,7 +95,7 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/supervisor/health', async (request, reply) => {
+  app.get('/supervisor/health', async (request, reply): Promise<SupervisorHealthResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     if (!canViewSupervisorHealth(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });

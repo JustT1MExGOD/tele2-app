@@ -4,11 +4,12 @@
  * DELETE /schedules переехали сюда же из routes-v3.ts — раньше мутации
  * графика были раскиданы по двум файлам.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { todayMoscow, currentMonthMoscow } from './utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from './middleware-auth.js';
+import type { SchedulesListResponse, ScheduleRow, ScheduleMonthResponse, SaveScheduleBulkResponse } from './shared/api-types.js';
 
 const PostScheduleBody = Type.Object({
   employee_id: Type.Number(),
@@ -42,7 +43,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
   // График — по точкам своей сети. Сотрудник может быть на смене в чужой
   // сети (подмена, см. README/эпик 17.0) — но каждая сеть видит смены на
   // СВОИХ точках, а не весь график сразу.
-  app.get('/schedules', async (request, reply) => {
+  app.get('/schedules', async (request, reply): Promise<SchedulesListResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const { date, org_id } = request.query as { date?: string; org_id?: string };
     const workDate = date || todayMoscow();
@@ -81,7 +82,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
       ],
       schema: { body: PostScheduleBody }
     },
-    async (request, reply) => {
+    async (request, reply): Promise<ScheduleRow | undefined> => {
     if (!requireManager(request, reply)) return;
     const body = request.body as PostScheduleBody;
     const { employee_id, store_id, work_date, shift_text, hours } = body;
@@ -101,7 +102,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     }
   );
 
-  app.get('/schedules/month', async (request, reply) => {
+  app.get('/schedules/month', async (request, reply): Promise<ScheduleMonthResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const { month, org_id } = request.query as { month?: string; org_id?: string };
     const m = month || currentMonthMoscow();
@@ -138,7 +139,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
   app.post(
     '/schedules/bulk',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: PostScheduleBulkBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<SaveScheduleBulkResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const body = request.body as PostScheduleBulkBody;
     const items = Array.isArray(body?.items) ? body.items : [];

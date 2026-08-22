@@ -2,14 +2,14 @@
  * v14 — branding, precise heatmap, tenant
  * Отчёты /reports/day — в index.ts (не дублировать)
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { authPlugin, requireAuth, requireManager, resolveViewOrgId, requireStoreInOrg } from './middleware-auth.js';
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from './services/tenant.js';
 import { logSaleEvents, hourMoscow, salesHeatmap, rebuildHourProfiles } from './services/heatmap.js';
 import { serverError } from './utils/http-errors.js';
 import { invalidateAll as invalidateAllScopes } from './services/scope-cache.js';
-import type { OrgStoresResponse } from './shared/api-types.js';
+import type { OrgStoresResponse, BrandingResponse, OrgsListResponse, UpsertOrgResponse, HeatmapPreciseResponse } from './shared/api-types.js';
 
 // upsertOrg(body: Partial<Org> & {id}) принимает произвольный поднабор
 // полей organizations (name/brand_name/primary_color/logo_url/sector_id/
@@ -25,7 +25,7 @@ const UpsertOrgBody = Type.Object(
 type UpsertOrgBody = Static<typeof UpsertOrgBody>;
 
 export async function registerV14Routes(app: FastifyInstance) {
-  app.get('/branding', async (request) => {
+  app.get('/branding', async (request): Promise<BrandingResponse> => {
     let orgId = 'default';
     if (request.user?.employee_id) {
       try {
@@ -55,7 +55,7 @@ export async function registerV14Routes(app: FastifyInstance) {
   });
 
   // Список сетей — для переключателя сети в UI у admin (см. GET/POST /employees ?org_id=).
-  app.get('/orgs', async (request, reply) => {
+  app.get('/orgs', async (request, reply): Promise<OrgsListResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     if (request.user?.role !== 'admin') {
       return reply.code(403).send({ error: 'admin only' });
@@ -66,7 +66,7 @@ export async function registerV14Routes(app: FastifyInstance) {
   app.put(
     '/admin/org/:id',
     { schema: { body: UpsertOrgBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<UpsertOrgResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     if (request.user?.role !== 'admin') {
       return reply.code(403).send({ error: 'admin only' });
@@ -98,7 +98,7 @@ export async function registerV14Routes(app: FastifyInstance) {
   app.get(
     '/heatmap/precise/:storeId',
     { preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })] },
-    async (request, reply) => {
+    async (request, reply): Promise<HeatmapPreciseResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const storeId = (request.params as any).storeId;
     const weeks = Math.min(Number((request.query as any)?.weeks) || 4, 12);

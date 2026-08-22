@@ -12,8 +12,7 @@
       sw.style.display = 'block';
       if (sw.dataset.loaded) return;
       try {
-        const res = await fetch(API + '/orgs', { headers: authHeaders() });
-        const orgs = await res.json();
+        const orgs = await window.apiClient.getOrgsAdmin(authHeaders());
         const current = adminViewOrgId || me.org_id;
         sw.innerHTML = `<div class="field"><label>Сеть</label>
           <select onchange="switchAdminOrg(this.value)">
@@ -50,12 +49,11 @@
       renderOrgSwitcher();
       try {
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const [empRes, salesRes] = await Promise.all([
-          fetch(API + '/employees' + orgParam, { headers: authHeaders() }),
-          fetch(API + '/sales?date=' + todayMoscow() + orgQueryParam(), { headers: authHeaders() })
+        const [emps, sales] = await Promise.all([
+          window.apiClient.getEmployees(authHeaders(), orgParam),
+          window.apiClient.getSales(authHeaders(), todayMoscow(), orgQueryParam())
         ]);
-        employees = await empRes.json();
-        const sales = await salesRes.json();
+        employees = emps;
         const map = {};
         (Array.isArray(sales) ? sales : []).forEach(s => {
           if (!map[s.employee_id]) map[s.employee_id] = { sim: 0, phones: 0, combo: 0, active: false };
@@ -108,14 +106,11 @@
         // (переключатель у admin) — без org_id все три запроса тихо
         // резолвились в СВОЮ сеть admin'а, а не в ту, что он смотрит.
         const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const [empRes, salesRes, schRes] = await Promise.all([
-          fetch(API + '/employees' + orgParam, { headers: authHeaders() }),
-          fetch(API + '/sales?date=' + todayMoscow() + orgQueryParam(), { headers: authHeaders() }),
-          fetch(API + '/schedules?date=' + todayMoscow() + orgQueryParam(), { headers: authHeaders() })
+        const [emps, sales, schedules] = await Promise.all([
+          window.apiClient.getEmployees(authHeaders(), orgParam),
+          window.apiClient.getSales(authHeaders(), todayMoscow(), orgQueryParam()),
+          window.apiClient.getSchedules(authHeaders(), todayMoscow(), orgQueryParam())
         ]);
-        const emps = await empRes.json();
-        const sales = await salesRes.json();
-        const schedules = await schRes.json();
         const emp = (emps || []).find(e => String(e.id) === String(id));
         const sale = (sales || []).find(s => String(s.employee_id) === String(id));
         const sch = (schedules || []).find(s => String(s.employee_id) === String(id));
@@ -163,13 +158,8 @@
       if (!canManage()) return;
       if (!confirm(`Убрать «${metricLabel(metric)}» из продаж сегодня?`)) return;
       try {
-        const zeroOrgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
-        const res = await fetch(API + '/sales/' + saleId + '/zero' + zeroOrgParam, {
-          method: 'PUT',
-          headers: authHeaders(true),
-          body: JSON.stringify({ metric })
-        });
-        if (!res.ok) { toast('Ошибка', 'err'); return; }
+        const zeroOrgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
+        await window.apiClient.zeroSaleMetric(authHeaders(true), saleId, zeroOrgParam, metric);
         toast('Исправлено', 'ok');
         openEmployeeCard(employeeId);
       } catch (e) {
@@ -179,12 +169,12 @@
 
     async function setRole(id, role) {
       if (!canManage()) return;
-      const res = await fetch(API + '/employees/' + id + '/role', {
-        method: 'PATCH',
-        headers: authHeaders(true),
-        body: JSON.stringify({ role })
-      });
-      if (!res.ok) { toast(res.status === 403 ? 'Можно назначать только роли ниже своей' : 'Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.setEmployeeRole(authHeaders(true), id, role);
+      } catch (e) {
+        toast(e.message || 'Ошибка', 'err');
+        return;
+      }
       toast('Роль: ' + roleLabel(role), 'ok');
       loadTeam();
     }
@@ -192,11 +182,12 @@
     async function removeEmployee(id) {
       if (!canManage()) return;
       if (!confirm('Деактивировать сотрудника?')) return;
-      const res = await fetch(API + '/employees/' + id, {
-        method: 'DELETE',
-        headers: authHeaders()
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.deactivateEmployee(authHeaders(), id);
+      } catch (e) {
+        toast('Ошибка', 'err');
+        return;
+      }
       toast('Удалён', 'ok');
       loadTeam();
     }
@@ -224,12 +215,12 @@
       if (!full_name) { toast('Укажите ФИО', 'err'); return; }
       const body = { full_name, role };
       if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
-      const res = await fetch(API + '/employees', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.createEmployee(authHeaders(true), body);
+      } catch (e) {
+        toast('Ошибка', 'err');
+        return;
+      }
       toast('Сотрудник добавлен', 'ok');
       closeModal();
       loadTeam();
@@ -282,12 +273,12 @@
         close_time_sunday: close_time || undefined
       };
       if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
-      const res = await fetch(API + '/stores', {
-        method: 'POST',
-        headers: authHeaders(true),
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Ошибка', 'err'); return; }
+      try {
+        await window.apiClient.createStore(authHeaders(true), body);
+      } catch (e) {
+        toast('Ошибка', 'err');
+        return;
+      }
       toast('Точка создана', 'ok');
       closeModal();
       stores = [];

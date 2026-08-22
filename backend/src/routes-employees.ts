@@ -6,12 +6,12 @@
  * API было физически невозможно (единственный путь — approve заявки на
  * доступ). Вынесено сюда и подключено.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query, withTransaction } from './db/index.js';
 import { requireActive, requireManager, canAssignRole, resolveViewOrgId, requireEmployeeInOrg, Role } from './middleware-auth.js';
 import { recordAudit } from './services/audit.js';
-import type { EmployeesListResponse } from './shared/api-types.js';
+import type { EmployeesListResponse, CreateEmployeeResponse } from './shared/api-types.js';
 
 const PostEmployeeBody = Type.Object({
   full_name: Type.String({ minLength: 1 }),
@@ -54,7 +54,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.post(
     '/employees',
     { schema: { body: PostEmployeeBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<CreateEmployeeResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const b = request.body as PostEmployeeBody;
     const full_name = String(b.full_name || '').trim();

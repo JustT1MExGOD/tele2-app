@@ -2,15 +2,16 @@
  * Статистика по точкам, дэшборд-лидерборд, персональный прогресс.
  * Вынесено из index.ts при разбиении монолита на модули.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { query } from './db/index.js';
 import { todayMoscow } from './utils/date.js';
 import { requireActive, resolveViewOrgId } from './middleware-auth.js';
 import { getSalesSumColumns } from './services/metrics-catalog.js';
+import type { StatsDailyResponse, DashboardResponse, EmployeeProgressResponse } from './shared/api-types.js';
 
 export async function registerStatsRoutes(app: FastifyInstance) {
   // «Сеть сегодня» — точки своей сети, не все сети вперемешку.
-  app.get('/stats/daily', async (request, reply) => {
+  app.get('/stats/daily', async (request, reply): Promise<StatsDailyResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const { date, org_id } = request.query as { date?: string; org_id?: string };
     const d = date || todayMoscow();
@@ -41,7 +42,7 @@ export async function registerStatsRoutes(app: FastifyInstance) {
   // «Топ за 7 дней» — активность на точках своей сети (не по «домашней»
   // сети сотрудника — подмена в чужой сети должна засчитываться той сети,
   // где реально стоит точка, как и везде в эпике 17.0).
-  app.get('/dashboard', async (request, reply) => {
+  app.get('/dashboard', async (request, reply): Promise<DashboardResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const today = todayMoscow();
@@ -74,7 +75,7 @@ export async function registerStatsRoutes(app: FastifyInstance) {
   });
 
   // ===== EMPLOYEE PROGRESS =====
-  app.get('/employee/progress/:id', async (request, reply) => {
+  app.get('/employee/progress/:id', async (request, reply): Promise<EmployeeProgressResponse | FastifyReply | undefined> => {
     if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const isManagerRole = request.user!.role === 'manager' || request.user!.role === 'admin';

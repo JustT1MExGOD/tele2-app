@@ -5,10 +5,11 @@
  * micro_report_times до этого: сотрудник любой сети видел объявления
  * и мог читать/писать в каналы вообще всех сетей.
  */
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query } from './db/index.js';
 import { requireAuth, requireManager, resolveViewOrgId } from './middleware-auth.js';
+import type { AnnouncementsListResponse, CreateAnnouncementResponse, AnnouncementReadsResponse } from './shared/api-types.js';
 
 const PostAnnouncementBody = Type.Object({
   title: Type.String({ minLength: 1 }),
@@ -27,7 +28,7 @@ const PostChannelMessageBody = Type.Object({
 type PostChannelMessageBody = Static<typeof PostChannelMessageBody>;
 
 export async function registerCommsRoutes(app: FastifyInstance) {
-  app.get('/announcements', async (request, reply) => {
+  app.get('/announcements', async (request, reply): Promise<AnnouncementsListResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const empId = request.user!.employee_id!;
     const { org_id } = request.query as { org_id?: string };
@@ -50,7 +51,7 @@ export async function registerCommsRoutes(app: FastifyInstance) {
   app.post(
     '/announcements',
     { schema: { body: PostAnnouncementBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<CreateAnnouncementResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const body = request.body as PostAnnouncementBody;
     const orgId = resolveViewOrgId(request.user!, body.org_id);
@@ -77,7 +78,7 @@ export async function registerCommsRoutes(app: FastifyInstance) {
   // Кто прочитал объявление — раньше read-статус был виден только самому
   // сотруднику (is_read у себя), manager не мог понять, кто из команды ещё
   // не в курсе обязательного объявления.
-  app.get('/announcements/:id/reads', async (request, reply) => {
+  app.get('/announcements/:id/reads', async (request, reply): Promise<AnnouncementReadsResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
     const { org_id } = request.query as { org_id?: string };

@@ -8,7 +8,7 @@
  * /access/employees-directory, /combo/calc
  */
 
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { query, withTransaction } from './db/index.js';
 import {
@@ -28,6 +28,14 @@ import { bot } from './bot/index.js';
 import { listActiveOrgsPublic } from './services/tenant.js';
 import { recordAudit } from './services/audit.js';
 import { invalidate as invalidateScope } from './services/scope-cache.js';
+import type {
+  AccessStatusResponse,
+  AccessOrgsResponse,
+  AccessDirectoryResponse,
+  SubmitAccessRequestResponse,
+  AccessRequestsListResponse,
+  ApproveAccessResponse
+} from './shared/api-types.js';
 
 const AccessRequestBody = Type.Object({
   full_name: Type.String({ minLength: 1 }),
@@ -76,7 +84,7 @@ function esc(s: any) {
 export async function registerV8Routes(app: FastifyInstance) {
   // подтянуть user на каждый запрос
   // ===== ACCESS STATUS (гость может) =====
-  app.get('/access/status', async (request) => {
+  app.get('/access/status', async (request): Promise<AccessStatusResponse> => {
     // request.user уже проставлен глобальным authPlugin и подтверждён
     // подписью Telegram initData (или явным ALLOW_INSECURE_AUTH в деве) —
     // раньше при отсутствующем request.user роут тихо доверял голому
@@ -110,14 +118,14 @@ export async function registerV8Routes(app: FastifyInstance) {
   // Активные сети — пикер при регистрации. Публично: гость ещё не
   // авторизован, id+имя(+бренд для темизации) — ничего чувствительного
   // (нет chat_id, нет sector_id).
-  app.get('/access/orgs', async () => {
+  app.get('/access/orgs', async (): Promise<AccessOrgsResponse> => {
     return listActiveOrgsPublic();
   });
 
   // Список сотрудников для «я вот этот» (только имена, без чувствительного).
   // ?org_id= — сузить до сети, которую гость уже выбрал в пикере, иначе
   // выбрав сеть B он всё равно мог «заклеймить» сотрудника сети A.
-  app.get('/access/employees-directory', async (request) => {
+  app.get('/access/employees-directory', async (request): Promise<AccessDirectoryResponse> => {
     const { org_id } = request.query as { org_id?: string };
     const params: any[] = [];
     let orgFilter = '';
@@ -139,7 +147,7 @@ export async function registerV8Routes(app: FastifyInstance) {
   app.post(
     '/access/request',
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: AccessRequestBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<SubmitAccessRequestResponse | FastifyReply | undefined> => {
     // Та же поправка, что /me/bind — telegram_id только из подтверждённого
     // request.user, не из спуфабельного заголовка напрямую.
     const telegramId = Number(request.user?.telegram_id || 0);
@@ -226,7 +234,7 @@ export async function registerV8Routes(app: FastifyInstance) {
   // заявке (эпик 16.0, гость выбрал сеть в пикере при регистрации) → сеть
   // заклеймленного сотрудника (claim-путь) → 'default' (только хвосты до
   // миграции access-requests-org.sql, уже закрыты backfill'ом там же).
-  app.get('/access/requests', async (request, reply) => {
+  app.get('/access/requests', async (request, reply): Promise<AccessRequestsListResponse | undefined> => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
@@ -245,7 +253,7 @@ export async function registerV8Routes(app: FastifyInstance) {
   app.post(
     '/access/requests/:id/approve',
     { schema: { body: AccessApproveBody } },
-    async (request, reply) => {
+    async (request, reply): Promise<ApproveAccessResponse | FastifyReply | undefined> => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const { id } = request.params as { id: string };
     const b = (request.body as AccessApproveBody) || {};
