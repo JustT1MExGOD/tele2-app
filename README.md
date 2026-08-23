@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.8.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-20.9.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.8.0`  
+**Актуальная версия клиента:** `20.9.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -729,6 +729,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **20.6.0** | **Седьмой срез Frontend Foundation.** Command Center (`GET /command-center`, `GET /employees`, `POST /tasks`, `14-command-center.js`) — на typed-клиент. `GET /command-center` собирается из нетипизированной внутренней функции (`buildSupervisorDashboard`) — контракт описывает то, что реально читает фронтенд, не весь внутренний ответ; аннотация на `problems` поймала настоящую type-narrowing ошибку (строка вместо литерального union) прямо на этапе типизации |
 | **20.7.0** | **Frontend Foundation завершена — все оставшиеся 15 файлов одним заходом.** По прямому запросу владельца продукта («доделай всё разом») — вместо очередного узкого среза сразу все 13 оставшихся `frontend/js/*.js` плюс два файла (`16-store-profile.js`, `18-employee-profile.js`), чьи бэкенд-типы и клиентские функции уже были готовы, но не подключены. ~60 новых функций в `frontend/src/api-client.ts`, общий контракт (`shared/api-types.ts`) расширен по многоуровневой схеме — точные типы для CRUD-форм, «что реально читает фронтенд»-типы с `[key: string]: unknown` для больших нетипизированных дашбордов (`buildSupervisorDashboard`, `getMonthSummaryTable`, `calculateAllBFQ`, `simulateScheduleMoves`, `getLiveNetworkMap`). Два новых хелпера в клиенте: `requestUpload` (multipart, аватар) и `requestBlob` (CSV-экспорт, не JSON). При сверке поведения до/после на каждом вызове найдено и исправлено несколько мест, где миграция тихо огрубляла текст ошибки в toast (падал общий «Ошибка» вместо прежнего специфичного сообщения) — исправлено на месте, не как отдельный пункт. Найден и **не тронут** мёртвый роут: кнопка «Скопировать неделю» в расписании (`06c-support-tickets.js`) шлёт `POST /schedules/copy-week`, которого нет ни в одном `routes-*.ts` — always-404 с самого начала; оставлено как есть с комментарием в коде, заводить новый роут — отдельное продуктовое решение, не механическая миграция. 51 тест в `frontend/tests/api-client.test.ts` (было 17) — репрезентативный набор на все различные URL/метод-паттерны, не по тесту на каждую из ~60 функций. Из 118 исходных `fetch()`-вызовов эпохи 20 остались ровно 2 сознательно нетронутых: `bootApp()` в `08-access-supervisor.js` (инспектирует `res.status === 404` напрямую, не ложится в общий клиент) и упомянутая мёртвая кнопка |
 | **20.8.0** | **Full Data Access Layer — весь backend на репозиториях.** Первый пункт нового roadmap владельца продукта (20.8-20.20, Core hardening) — «главный технический релиз» по его же оценке. Весь прямой SQL, ещё остававшийся вне routes-stores.ts/employees/sales/schedules/cash/tasks/shifts (уже перенесённых ранее), перенесён в `src/repositories/*`: алерты (`services/alerts.ts`, `routes-live-alerts.ts`, `routes-command-center.ts`), планы вместе с гоночно-защищённой материализацией (`services/plans.ts`, см. 19.24.0), кабинет супервайзера (`supervisor-analytics.ts`), живая карта сети (`live-map.ts`), инсайты смены (`insights.ts`), `routes-me.ts` (identity/bind), прогноз (`forecast.ts`), генерация картинок отчётов (`report-image.ts`), статистика/дашборд/BI-экспорт, профили точки/сотрудника, объявления/каналы, поддержка (тикеты), BFQ, геймификация (XP/бейджи), кастомные метрики, промокоды, what-if симуляция, темп смены, сетевые сводки, каталог метрик, точный heatmap, автоанонс релиза, AI-аудит, оба cron-модуля (отчёты в чат + алерты 14:00/16:00) — 18 новых файлов-репозиториев, ~45 изменённых route/service/cron-файлов. Правило `route → service → repository → PostgreSQL` теперь без исключений по всему backend, `npm run check:no-direct-sql` растянут на 54 файла. Полным прогоном тестов ещё до пуша поймана и исправлена одна настоящая регрессия: у нового `repositories/alerts.ts::insertOnce()` `alert_date` стал обязательным параметром и потерял старый дефолт «сегодня» — вернули, тест на дедупликацию алертов зафиксировал это на будущее. Внешнее поведение не изменилось ни для одного эндпоинта — рефактор архитектуры, не новая функциональность; проверено полным прогоном (277 тестов, зелёные) и живыми проверками на dev-сервере по каждому переносимому куску |
+| **20.9.0** | **Authentication Boundary — Telegram изолирован в adapter.** Второй пункт roadmap'а 20.8-20.20; владелец продукта сам сузил исходный пункт «Identity Abstraction» до именно этой границы (без схемы БД, без `identities`-таблицы — до появления второго реального provider). Новый `src/auth/`: `identity.ts` (provider-agnostic `Identity` — `{provider, providerId}`), `providers/telegram.ts` (вся Telegram-специфика — initData/HMAC/заголовки, раньше жившая прямо в `middleware-auth.ts`), `principal.ts` (`Identity → Principal/AuthUser`, диспетчеризация по `provider`). `middleware-auth.ts` стал тонкой Fastify-обвязкой поверх этой границы и ре-экспортирует все прежние имена (`Role`, `AuthUser`, `ROLE_LEVEL`, `canAssignRole`, `loadUser`) — ни один из ~30 роут-файлов не пришлось трогать. Один баг пойман ещё до пуша: первая версия положила `identity` прямо в `Principal` — и оно тут же протекло в тело ответа `GET /access/status` (роут отдаёт `request.user` как есть); убрали `identity` из `Principal`-типа, оставили параметром только у `loadUser()` — API отдаёт байт-в-байт то же, что и раньше. Новые тесты (`tests/unit/auth-boundary.test.ts`) фиксируют саму границу: авторизационные примитивы физически не принимают `Identity` в сигнатуре, `loadUser()` с гипотетическим будущим provider отдаёт безопасный guest, не пытаясь трактовать его как Telegram |
 
 ---
 
@@ -883,8 +884,14 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   (`npm run check:no-direct-sql`) закрывает откат на 54 файлах. Внешнее
   поведение не изменилось ни для одного эндпоинта — рефактор
   архитектуры, не новая функциональность (см. §21, 20.8.0)
-- **20.9 Identity Abstraction** — план: `Identity` (Telegram/Web/Mobile/
-  будущий SSO) → `User` → `Employee`, Telegram остаётся основным входом
+- **20.9 Authentication Boundary** ✅ (сужено от исходного «Identity
+  Abstraction» по решению владельца продукта — без схемы БД/`identities`,
+  только кодовая граница) — `src/auth/` (`identity.ts`,
+  `providers/telegram.ts`, `principal.ts`), Telegram-специфика изолирована
+  в adapter, `middleware-auth.ts` ре-экспортирует прежние имена без
+  изменений для вызывающего кода. `identities`-таблица и мультипровайдерный
+  вход — когда появится реальный второй provider (Web/Mobile/SSO), не
+  раньше (см. §21, 20.9.0)
 - **20.10 Audit & Observability 2.0** — форензик-уровень аудита,
   request correlation, структурные логи, логирование cron-джобов
 - **20.11-20.13 Concurrency & Reliability** — idempotency-ключи на
@@ -1129,4 +1136,4 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v20.8.0 · август 2026*
+*README · актуально на v20.9.0 · август 2026*

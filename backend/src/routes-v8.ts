@@ -145,7 +145,7 @@ export async function registerV8Routes(app: FastifyInstance) {
     }
 
     // уже active?
-    const existing = await loadUser(telegramId);
+    const existing = await loadUser({ provider: 'telegram', providerId: String(telegramId) });
     if (existing.access_status === 'active') {
       return { ok: true, status: 'active', message: 'Уже есть доступ' };
     }

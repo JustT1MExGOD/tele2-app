@@ -1,49 +1,25 @@
 /**
  * Единый auth для v3 + v8
  * employee / manager / admin / supervisor
+ *
+ * 20.9.0 (Authentication Boundary) — Telegram-специфика (initData/заголовки)
+ * и Identity->Principal резолвинг переехали в src/auth/ (providers/telegram.ts,
+ * principal.ts); этот файл остаётся Fastify-специфичной обвязкой поверх них
+ * (authPlugin, requireAuth/requireActive/…, org-scope декораторы) и
+ * ре-экспортирует Role/AccessStatus/AuthUser/ROLE_LEVEL/canAssignRole/loadUser
+ * без изменений имён — ~30 роут-файлов уже импортируют их отсюда.
  */
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { verifyTelegramInitData } from './services/telegram-auth.js';
 import * as storesRepo from './repositories/stores.js';
 import * as employeesRepo from './repositories/employees.js';
 import * as supervisorSectorsRepo from './repositories/supervisor-sectors.js';
+import { resolveTelegramIdentity } from './auth/providers/telegram.js';
+import { loadUser } from './auth/principal.js';
+import type { AuthUser } from './auth/principal.js';
 
-export type Role = 'trainee' | 'employee' | 'senior' | 'manager' | 'supervisor' | 'admin' | 'guest';
-export type AccessStatus = 'pending' | 'active' | 'rejected' | 'blocked' | 'none';
-
-/**
- * Иерархия ролей: trainee < employee < senior < manager < supervisor < admin.
- * senior — операционно то же самое, что manager (проходит requireManager),
- * но не видит Command Center и кабинет супервайзера (см. canViewSupervisor
- * в routes-supervisor.ts и canViewAnalytics() на фронте — туда senior
- * намеренно не добавлен).
- */
-export const ROLE_LEVEL: Record<Role, number> = {
-  guest: -1,
-  trainee: 0,
-  employee: 1,
-  senior: 2,
-  manager: 3,
-  supervisor: 4,
-  admin: 5
-};
-
-/** Можно назначать только роли строго ниже своей; admin — без ограничений. */
-export function canAssignRole(actorRole: Role, targetRole: Role): boolean {
-  if (actorRole === 'admin') return true;
-  return ROLE_LEVEL[targetRole] < ROLE_LEVEL[actorRole];
-}
-
-export interface AuthUser {
-  telegram_id: string | number;
-  employee_id: number | null;
-  full_name: string | null;
-  role: Role;
-  access_status: AccessStatus;
-  /** Сеть точек (organizations.id) сотрудника — 'default', пока у него не задана. */
-  org_id: string;
-}
-
+export type { Role, AccessStatus, AuthUser, Principal } from './auth/principal.js';
+export { ROLE_LEVEL, canAssignRole, loadUser } from './auth/principal.js';
+export type { Identity, IdentityProvider } from './auth/identity.js';
 
 /** Alias для v8 */
 export type AppUser = AuthUser;
@@ -57,91 +33,10 @@ declare module 'fastify' {
   }
 }
 
-export async function loadUser(telegramId: number): Promise<AuthUser> {
-  if (!telegramId) {
-    return {
-      telegram_id: 0,
-      employee_id: null,
-      full_name: null,
-      role: 'guest',
-      access_status: 'none',
-      org_id: 'default'
-    };
-  }
-
-  const e = await employeesRepo.findByTelegramId(telegramId);
-
-  if (!e) {
-    return {
-      telegram_id: telegramId,
-      employee_id: null,
-      full_name: null,
-      role: 'guest',
-      access_status: 'none',
-      org_id: 'default'
-    };
-  }
-
-  const active = e.is_active !== false;
-  return {
-    telegram_id: Number(e.telegram_id) || telegramId,
-    employee_id: active ? Number(e.employee_id) : null,
-    full_name: e.full_name,
-    role: (e.role || 'employee') as Role,
-    access_status: (e.access_status || (active ? 'active' : 'none')) as AccessStatus,
-    org_id: e.org_id || 'default'
-  };
-}
-
-/**
- * telegram_id доверяем ТОЛЬКО если он подтверждён подписью Telegram
- * (initData). Голый заголовок X-Telegram-Id легко подделать, поэтому
- * он используется лишь как dev-фоллбэк, когда BOT_TOKEN не настроен
- * (локальная разработка) или явно включён ALLOW_INSECURE_AUTH=true.
- */
-function resolveTelegramId(request: FastifyRequest): number | null {
-  const botToken = process.env.BOT_TOKEN || '';
-  const insecureDev = process.env.ALLOW_INSECURE_AUTH === 'true';
-  const initData =
-    (request.headers['x-telegram-init-data'] as string) ||
-    (request.headers['x-telegram-initdata'] as string) ||
-    '';
-
-  if (initData && botToken) {
-    const verified = verifyTelegramInitData(initData, botToken);
-    if (verified.ok && verified.user?.id) {
-      return verified.user.id;
-    }
-    // initData присутствует, но не проходит проверку — не откатываемся
-    // на голый заголовок, иначе проверка теряет смысл. reason прокидываем
-    // на request, чтобы requireAuth/requireActive могли ответить понятнее
-    // голого 401 — особенно для 'expired' (переоткрыть Mini App чинит это).
-    request.authError = verified.reason || 'invalid';
-    return null;
-  }
-
-  if (!botToken || insecureDev) {
-    const raw =
-      (request.headers['x-telegram-id'] as string) ||
-      (request.headers['x-telegram-user-id'] as string) ||
-      '';
-    // Голый Number(raw) пропускал дробные ("123.456") и переполняющие
-    // bigint значения ("1e+29" в экспоненциальной записи) как "валидные" —
-    // они падали только позже, на ::bigint в SQL, необработанным
-    // исключением (500) на любом роуте, читающем request.user. Реальные
-    // Telegram id — целые положительные числа, максимум ~15 цифр с
-    // огромным запасом.
-    if (raw && /^\d{1,15}$/.test(raw)) return Number(raw);
-    return null;
-  }
-
-  return null;
-}
-
 export async function resolveUser(request: FastifyRequest): Promise<AuthUser | null> {
-  const telegramId = resolveTelegramId(request);
-  if (!telegramId) return null;
-  return loadUser(telegramId);
+  const identity = resolveTelegramIdentity(request);
+  if (!identity) return null;
+  return loadUser(identity);
 }
 
 export async function authPlugin(request: FastifyRequest, _reply: FastifyReply) {

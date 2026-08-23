@@ -879,5 +879,16 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Заодно нашли и починили одну настоящую регрессию, пойманную полным прогоном тестов ещё до пуша: у нового репозитория алертов alert_date стал обязательным параметром и потерял старый дефолт "сегодня" — вернули дефолт, тест на дедупликацию алертов зафиксировал это на будущее',
       'Внешнее поведение не изменилось ни для одного эндпоинта — рефактор архитектуры, не новая функциональность; проверено полным прогоном (277 тестов) и живыми проверками на dev-сервере по каждому переносимому куску'
     ]
+  },
+  {
+    version: '20.9.0',
+    title: 'Authentication Boundary — Telegram изолирован в adapter',
+    bullets: [
+      'Новый src/auth/: identity.ts (provider-agnostic Identity — provider+providerId), providers/telegram.ts (вся Telegram-специфика — initData/HMAC/заголовки, раньше жившая внутри middleware-auth.ts), principal.ts (Identity → Principal/AuthUser, диспетчеризация по provider)',
+      'middleware-auth.ts стал тонкой Fastify-обвязкой поверх этой границы (authPlugin, requireAuth/requireActive/…, org-scope декораторы) и ре-экспортирует все прежние имена (Role, AuthUser, ROLE_LEVEL, canAssignRole, loadUser) — ни один из ~30 роут-файлов, использующих их, не пришлось трогать',
+      'Без изменений схемы БД, поведения API и бизнес-логики — сознательно узкий scope (владелец продукта сам сузил из первоначального roadmap-пункта "Identity Abstraction" до именно этой границы, отложив отдельную таблицу identities до появления второго реального provider)',
+      'Один реальный баг поймали ещё до пуша: первая версия добавляла identity прямо в Principal — и она тут же протекла в тело ответа GET /access/status (там request.user отдаётся как есть). Убрали identity из Principal-типа, оставили его только параметром loadUser() — API отдаёт байт-в-байт то же, что и раньше',
+      'Новые тесты (tests/unit/auth-boundary.test.ts) фиксируют саму границу: canAssignRole/isManager/ROLE_LEVEL работают по одной лишь Principal.role и физически не видят Identity в сигнатуре; loadUser() с гипотетическим будущим provider возвращает безопасный guest, не пытаясь трактовать его как Telegram'
+    ]
   }
 ];
