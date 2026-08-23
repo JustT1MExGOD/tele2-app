@@ -22,6 +22,31 @@
 
 </div>
 
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="docs/screenshots/home-command-center.png" width="100%" alt="Главная: Command Center с живыми просадками сети"><br>
+<sub><strong>Главная</strong> — Command Center: health-score сети, просадки точек в реальном времени</sub>
+</td>
+<td width="50%" align="center">
+<img src="docs/screenshots/profile-shift-live.png" width="100%" alt="Профиль: открытая смена с живым план/факт"><br>
+<sub><strong>Профиль</strong> — открытая смена: план/факт по метрикам вживую, AI-подсказка по темпу</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<img src="docs/screenshots/plan-day.png" width="100%" alt="План: план дня точки по блокам метрик"><br>
+<sub><strong>План</strong> — план дня точки по блокам (GI / Товарка / РТК / Кредиты), кто на смене</sub>
+</td>
+<td width="50%" align="center">
+<img src="docs/screenshots/schedule-month.png" width="100%" alt="График: сводная таблица смен команды на месяц"><br>
+<sub><strong>График</strong> — сводный график команды на месяц, точка на каждый день</sub>
+</td>
+</tr>
+</table>
+
+<sub>Скриншоты сняты в изолированном локальном демо-окружении на синтетических тестовых данных (вымышленные имена и цифры) — не с прода.</sub>
+
 ---
 
 ### Если у вас 20 секунд
