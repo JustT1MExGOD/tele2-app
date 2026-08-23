@@ -5,7 +5,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireAuth, isManager, resolveViewOrgId, assertStoreInOrg } from '../../auth/guards.js';
+import { requireAuth, canWriteSalesForOthers, resolveViewOrgId, assertStoreInOrg } from '../../auth/guards.js';
 import { parseSalePhrase } from '../../core/sales/nlp.js';
 import { evaluateAfterSale, evaluateShiftClose, getGamificationProfile } from '../../core/employees/gamification.js';
 import { generateShiftSummary } from '../../integrations/ai/client.js';
@@ -288,7 +288,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     }
 
     const employee_id = Number(body.employee_id || request.user!.employee_id);
-    const isManagerRole = isManager(request.user);
+    // senior — намеренно нет, см. canWriteSalesForOthers в auth/guards.ts.
+    const isManagerRole = canWriteSalesForOthers(request.user);
     if (!isManagerRole && employee_id !== request.user!.employee_id) {
       return reply.code(403).send({ error: 'только свои продажи' });
     }
@@ -409,7 +410,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
           // кидаем Error, его ловит try/catch ниже и помечает just этот op.
           // "Своя" продажа (employee_id === себя) тоже проверяется — раньше
           // проверка сети запускалась только для "manager пишет за другого".
-          if (employee_id !== request.user!.employee_id && !isManager(request.user)) {
+          // senior — намеренно нет, см. canWriteSalesForOthers в auth/guards.ts.
+          if (employee_id !== request.user!.employee_id && !canWriteSalesForOthers(request.user)) {
             throw new Error('можно синхронизировать только свои продажи');
           }
           const orgIdSync = employee_id !== request.user!.employee_id

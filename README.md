@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.12.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-20.13.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.12.0`  
+**Актуальная версия клиента:** `20.13.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -585,6 +585,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **20.11.0** | **Repository Restructuring — backend layered structure + docs split.** Владелец продукта попросил перестроить структуру репозитория вне очереди, до Concurrency & Reliability. `backend/src/` (103 файла) переехал из плоской структуры в layered: `api/routes/` (сгруппированы по домену — `me/`, `org/`, `analytics/`, `ops/`, `profiles/`, плюс плоские CRUD-домены), `core/<domain>/` (бывший `services/`), `data/repositories/`+`data/db/` (бывший `repositories/`+`db/`, чистый rename), `platform/notifications/`, `integrations/telegram/`+`integrations/ai/` (бывший `bot/`+часть `services/`). Механический перенос: физическое перемещение + кодмод на все относительные импорты (307 специфаеров в 61 файле бэкенда + 50 в 41 тестовом файле), без единого изменения бизнес-логики — весь риск в 4 legacy grab-bag файлах (`routes-v8.ts`, `routes-v14.ts`, `routes-live-alerts.ts`, `routes-core.ts`), каждый годами сваливал несколько несвязанных доменов в одну кучу; разложены по настоящим границам (`org/access.ts` — новый, `org/branding.ts`+`analytics/heatmap.ts`, `analytics/live.ts`+`ops/alerts.ts`+`analytics/what-if.ts`, слияние `PATCH /employees/:id/role` в `org/employees.ts` и `GET /me/access` в `me/index.ts`, `GET /plans` в `api/routes/plans.ts`). `app.ts` стал тоньше — регистрация 31 route-модуля выделена в `api/routes/index.ts`. `npm run check:no-direct-sql` — 56 путей обновлены. `docs/` вынесен из 1143-строчного README: `ARCHITECTURE.md` (диаграмма + полное дерево), `API.md` (таблица эндпоинтов), `DEVELOPMENT.md` (запуск/тесты/конвенции), `SECURITY.md` (весь бывший §24), `docs/ADR/` — 6 ретроспективных architecture decision records (repository pattern, in-memory scope cache, CAS-конкурентность, TypeBox, Authentication Boundary, iife-бандл вместо полной Vite-миграции), `docs/archive/` (устаревший `INTEGRATION-V13.md`). README держит короткие ссылки на прежних номерах секций — ничего не переименовано, все 6 существовавших `§N`-ссылок в коде остались валидны. Frontend — начат настоящий feature-sliced переезд отдельным, более поздним заходом (не смешан с этой версией, см. `docs/ADR/006`). Внешнее поведение API не изменилось ни для одного эндпоинта — проверено полным прогоном (285 тестов), CI-чеком, live E2E по каждому расколотому/слитому файлу |
 | **20.11.1** | Хотфикс сразу вслед за 20.11.0 — кодмод переписал только статические `import`/`from`-специфаеры, но не заметил runtime-строки путей (`new Worker(...)`, `path.join(__dirname, ...)`) в 3 файлах, переехавших на уровень глубже. Реально сломан был только `core/reports/svg-pool.ts` (`new Worker()` без фолбэка на `process.cwd()` — «Cannot find module» в проде сразу после деплоя, ломало рендер PNG-отчётов, не только announce-путь, на котором ошибка сначала всплыла в логах); `data/db/migrate.ts` и `core/reports/image.ts` не были реально сломаны (их первый кандидат — `process.cwd()`-путь — уже резолвился верно), но их мёртвый `__dirname`-фолбэк тоже поправлен. Проверено на реальном скомпилированном `dist/` и живым E2E через настоящий worker-поток |
 | **20.12.0** | **Frontend rewrite — первый реальный срез.** `frontend/src/app/router.ts` — типизированный реестр страниц вместо роста if-цепочки в `02-nav-utils.js`; сознательно НЕ URL/hash-based (Telegram Mini App без серверных роутов, свой `start_param` вместо путей). `frontend/src/app/state.ts` — типизированный доступ к сессии поверх легаси-глобала `me`, не новое хранилище (тот же источник правды, что уже читает весь легаси-код — без риска разъехаться). `frontend/src/features/send-network-digest/` — первая кнопка на `addEventListener` вместо `onclick=`. `frontend/src/pages/reports/` заменяет `frontend/js/19-reports.js` файл-в-файл (тот же `window.loadReportsPage`, легаси `switchPage()`/`loadPage()` не тронуты — выбран как пилот: самая маленькая легаси-страница, 71 строка, без собственного состояния). Каждая мигрированная страница — свой отдельный iife-бандл (Rollup не даёт несколько точек входа в одной iife/umd-сборке) — второй `vite build` (`vite.pages.config.ts`, `emptyOutDir: false`) добавлен в `build:frontend`. Реального браузера в среде выполнения не было — основная поведенческая проверка на этот раз jsdom-тест с реальным симулированным кликом (`frontend/tests/reports-page.test.ts`), плюс живая проверка на dev-сервере, что бандл действительно отдаётся и подключён |
+| **20.13.0** | **Security hardening — единое правило «продажи за другого», закрыты 2 XSS-дыры.** По внешнему security-аудиту (v20.11.1) — проверен по каждому пункту на реальном коде, не принят на веру: часть находок подтвердилась, часть оказалась уже известными осознанными компромиссами (публичные аватары под rate-limit), одна («self-check» в `/sync/batch`) не подтвердилась — механизм и так был корректен. Подтверждённая несогласованность: `POST /sales` уже запрещал `senior` вносить продажу за ДРУГОГО сотрудника (только `manager`/`admin`), а параллельные пути того же действия — `POST /sales/quick` и `POST /sync/batch` — разрешали через общий `isManager()` (который включает `senior`); один и тот же вопрос имел два разных ответа в зависимости от точки входа. Новая `src/auth/guards.ts::canWriteSalesForOthers()` — единая точка правды, применена во всех трёх местах. Закрыты 2 подтверждённых XSS-пробела без экранирования (`07-add-sale.js` — имя сотрудника в модалке правки продажи, `11-v13.js` — текст и пункты AI-инсайта смены), оба теперь через `esc()`. Внешнее поведение не изменилось ни для кого, кроме `senior` в этих двух конкретных путях — проверено полным прогоном (291 тест, было 285) и живым E2E по всем трём путям записи продажи за другого |
 
 ---
 
@@ -776,10 +777,21 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   пилот на самой маленькой легаси-странице, продолжается следующими
   версиями той же incremental-схемой, что Frontend Foundation (см. §21,
   20.12.0; альтернативы — `docs/ADR/006`)
-- **20.13-20.15 Concurrency & Reliability** — idempotency-ключи на
+- **20.13 Security hardening** ✅ — по внешнему security-аудиту (v20.11.1),
+  проверенному по каждому пункту на реальном коде, не принятому на веру.
+  Единое правило «продажи за другого» (`canWriteSalesForOthers()`):
+  `POST /sales` уже запрещал `senior` вносить продажу за ДРУГОГО
+  сотрудника, а `POST /sales/quick`/`POST /sync/batch` через общий
+  `isManager()` разрешали — один вопрос, два разных ответа в зависимости
+  от точки входа, теперь одна точка правды на все три места. Закрыты 2
+  подтверждённых XSS-пробела без экранирования (`07-add-sale.js`,
+  `11-v13.js`). Часть находок аудита — уже известные осознанные
+  компромиссы (публичные аватары под rate-limit), не новые дыры (см. §21,
+  20.13.0)
+- **20.14-20.16 Concurrency & Reliability** — idempotency-ключи на
   критичных операциях, adversarial race-condition suite, recovery
   (бэкапы/rollback миграций/graceful shutdown)
-- **20.17-20.20 Platform Layer** — client-neutral API, Web/PWA,
+- **20.18-20.21 Platform Layer** — client-neutral API, Web/PWA,
   desktop-интерфейс для supervisor/admin, mobile-спайк (proof-of-concept)
 
 Версии внутри 20.8-20.20 не религия — пункты могут объединяться или
@@ -822,4 +834,4 @@ Supervisor Scope Cache, Authentication Boundary) —
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v20.12.0 · август 2026*
+*README · актуально на v20.13.0 · август 2026*

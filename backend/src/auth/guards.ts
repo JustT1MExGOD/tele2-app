@@ -254,6 +254,25 @@ export function isManager(user?: AuthUser | null) {
 }
 
 /**
+ * Может ли этот пользователь вносить/синхронизировать ПРОДАЖИ ЗА ДРУГОГО
+ * сотрудника? Уже сотрудник заполняет "внести продажу" только за себя —
+ * это отдельное, более узкое разрешение, чем общее isManager() (которое
+ * включает senior для аналитики/просмотра): senior не входит сюда
+ * намеренно, по решению владельца продукта — операционно senior "как
+ * manager" почти везде, но не здесь.
+ *
+ * Единая точка правды для этой конкретной проверки — раньше POST /sales
+ * (routes-sales.ts) и POST /sales/quick + /sync/batch (routes-shifts.ts)
+ * каждый решали это по-своему (один — inline role-check без senior,
+ * другие — через isManager() с senior), т.е. один и тот же вопрос
+ * "может ли senior вписать продажу за коллегу" имел два разных ответа в
+ * зависимости от того, каким путём продажа попадала в систему.
+ */
+export function canWriteSalesForOthers(user?: AuthUser | null): boolean {
+  return user?.role === 'manager' || user?.role === 'admin';
+}
+
+/**
  * Точки, видимые пользователю. manager/admin — без ограничений (null).
  * supervisor — руководитель сектора: видит все точки всех сетей своего
  * сектора (supervisor_sectors → organizations → stores), а не список

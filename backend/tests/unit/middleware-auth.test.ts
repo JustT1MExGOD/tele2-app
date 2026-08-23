@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveViewOrgId, canAssignRole, type AuthUser } from '../../src/auth/guards.js';
+import { resolveViewOrgId, canAssignRole, isManager, canWriteSalesForOthers, type AuthUser } from '../../src/auth/guards.js';
 
 function user(role: AuthUser['role'], orgId: string): AuthUser {
   return {
@@ -49,5 +49,27 @@ describe('canAssignRole', () => {
     expect(canAssignRole('supervisor', 'manager')).toBe(true);
     expect(canAssignRole('supervisor', 'supervisor')).toBe(false);
     expect(canAssignRole('supervisor', 'admin')).toBe(false);
+  });
+});
+
+describe('canWriteSalesForOthers', () => {
+  it('manager и admin могут вносить продажи за другого сотрудника', () => {
+    expect(canWriteSalesForOthers(user('manager', 'default'))).toBe(true);
+    expect(canWriteSalesForOthers(user('admin', 'default'))).toBe(true);
+  });
+
+  it('senior не может — уже, чем isManager(), намеренно', () => {
+    expect(isManager(user('senior', 'default'))).toBe(true);
+    expect(canWriteSalesForOthers(user('senior', 'default'))).toBe(false);
+  });
+
+  it('employee/supervisor не могут', () => {
+    expect(canWriteSalesForOthers(user('employee', 'default'))).toBe(false);
+    expect(canWriteSalesForOthers(user('supervisor', 'default'))).toBe(false);
+  });
+
+  it('без пользователя — false', () => {
+    expect(canWriteSalesForOthers(null)).toBe(false);
+    expect(canWriteSalesForOthers(undefined)).toBe(false);
   });
 });

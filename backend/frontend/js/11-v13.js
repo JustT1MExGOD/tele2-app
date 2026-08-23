@@ -263,7 +263,7 @@
 
         if (insightEl && ins.insight) {
           const i = ins.insight;
-          const focus = (i.focus || []).map(f => `<div style="font-size:12px;margin-top:4px">• ${f}</div>`).join('');
+          const focus = (i.focus || []).map(f => `<div style="font-size:12px;margin-top:4px">• ${esc(f)}</div>`).join('');
           const split = i.split;
           let splitHtml = '';
           if (split?.before_lunch && split?.after_lunch) {
@@ -275,7 +275,7 @@
           insightEl.innerHTML = `
             <div class="progress-block" style="margin-bottom:12px">
               <div class="section-title" style="margin-bottom:8px">Фокус сейчас</div>
-              <div style="font-size:14px;line-height:1.4">${i.message || ''}</div>
+              <div style="font-size:14px;line-height:1.4">${esc(i.message || '')}</div>
               ${focus}${splitHtml}
             </div>`;
         }

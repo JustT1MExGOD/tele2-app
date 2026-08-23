@@ -7,7 +7,7 @@ import { Type, Static } from '@sinclair/typebox';
 import { withTransaction } from '../../data/db/index.js';
 import { notifyChat } from '../../integrations/telegram/bot.js';
 import { todayMoscow } from '../../utils/date.js';
-import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg } from '../../auth/guards.js';
+import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, canWriteSalesForOthers } from '../../auth/guards.js';
 import { getSalesSumColumns } from '../../core/shared/metrics-catalog.js';
 import { getStoreNotifyTarget } from '../../core/shared/tenant.js';
 import * as salesRepo from '../../data/repositories/sales.js';
@@ -68,7 +68,8 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     }
 
     // employee может писать только за себя; manager/admin — за всех
-    const isManagerRole = user.role === 'manager' || user.role === 'admin';
+    // (senior — намеренно нет, см. canWriteSalesForOthers в auth/guards.ts).
+    const isManagerRole = canWriteSalesForOthers(user);
     const writingForSelf = Number(user.employee_id) === employee_id;
     if (!isManagerRole && !writingForSelf) {
       return reply.code(403).send({

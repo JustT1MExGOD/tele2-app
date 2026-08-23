@@ -164,7 +164,7 @@
       document.getElementById('modalTitle').textContent = 'Исправить продажу (дельта)';
       document.getElementById('modalBody').innerHTML = `
         <div class="empty" style="text-align:left;padding:0 0 10px">
-          Укажи <b>изменение</b>: −1 уменьшит, +1 добавит. Сотрудник: ${saleRow.full_name || saleRow.employee_id}
+          Укажи <b>изменение</b>: −1 уменьшит, +1 добавит. Сотрудник: ${esc(saleRow.full_name || saleRow.employee_id)}
         </div>
         <input type="hidden" id="modalEmployee" value="${saleRow.employee_id}">
         <input type="hidden" id="modalStore" value="${saleRow.store_id}">
