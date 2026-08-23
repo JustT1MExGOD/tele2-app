@@ -1,40 +1,66 @@
+<div align="center">
+
 # T2 Sales
 
-### Операционная система розничных продаж сети T2  
+### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.13.0-2AABEE?style=flat-square)
-![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
-![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
+[![version](https://img.shields.io/badge/version-20.13.0-2AABEE?style=flat-square)](#21-история-версий)
+[![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
+![tests](https://img.shields.io/badge/tests-291%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
 ![postgres](https://img.shields.io/badge/PostgreSQL-Railway-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![ai](https://img.shields.io/badge/AI%20Copilot-Groq%20%C2%B7%20free-34B37E?style=flat-square)
 ![status](https://img.shields.io/badge/status-в%20проде%20%C2%B7%202%20сети%20%C2%B7%207%20точек-success?style=flat-square)
 
-> Не «таблица + бот в чате».  
+> Не «таблица + бот в чате».
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.13.0`  
-**Часовой пояс истины:** `Europe/Moscow`
+[📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [📚 Все документы](docs/README.md)
+
+</div>
+
+---
+
+### Если у вас 20 секунд
+
+- **Что это** — веб-приложение прямо внутри Telegram (Mini App), которым сотрудники магазинов пользуются вместо блокнота, Google Sheets и переписки в чате.
+- **Кто пользуется** — продавец на точке (внёс продажу, открыл смену), управляющий сетью (видит всё, раздаёт задачи), супервайзер нескольких сетей, админ.
+- **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
+- **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
+
+**Актуальная версия клиента:** `20.13.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
 ## Оглавление
 
+**Что и зачем**
+
 1. [Зачем это существует](#1-зачем-это-существует)
 2. [Кому и что даёт](#2-кому-и-что-даёт)
+
+**Как устроено**
+
 3. [Стек и инфраструктура](#3-стек-и-инфраструктура)
 4. [Архитектура](#4-архитектура)
 5. [Структура репозитория](#5-структура-репозитория)
 6. [Модель данных](#6-модель-данных)
 7. [Роли и доступ](#7-роли-и-доступ)
+
+**Что внутри**
+
 8. [Функциональность по модулям](#8-функциональность-по-модулям)
 9. [Метрики продаж](#9-метрики-продаж)
 10. [Планирование](#10-планирование)
 11. [Касса](#11-касса)
 12. [Telegram-бот и отчёты](#12-telegram-бот-и-отчёты)
 13. [Обучение](#13-обучение)
+
+**Как работать**
+
 14. [HTTP API](#14-http-api)
 15. [Переменные окружения](#15-переменные-окружения)
 16. [Локальный запуск](#16-локальный-запуск)
@@ -42,6 +68,9 @@
 18. [Миграции SQL](#18-миграции-sql)
 19. [Mini App в BotFather](#19-mini-app-в-botfather)
 20. [Типовые сбои](#20-типовые-сбои)
+
+**Куда движется и по каким правилам**
+
 21. [История версий](#21-история-версий)
 22. [Дорожная карта](#22-дорожная-карта)
 23. [Соглашения по разработке](#23-соглашения-по-разработке)
@@ -123,8 +152,40 @@ Google Sheets + переписка в Telegram живут на одной точ
 
 ## 4. Архитектура
 
-Диаграмма и разбор слоёв (`api/routes/` → `core/<domain>/` →
-`data/repositories/`) — **[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)**.
+```mermaid
+flowchart TB
+    subgraph TG["Telegram"]
+        MA["Mini App<br/>(frontend/*)"]
+        CH["Bot chats"]
+    end
+
+    subgraph BE["Fastify backend (backend/src)"]
+        AUTH["auth/<br/>guards.ts (authPlugin, preHandler) · identity/principal · providers/telegram"]
+        API["api/routes/<br/>29+ route-модулей, сгруппированы по домену:<br/>me/ · org/ · analytics/ · ops/ · profiles/ · flat (sales/schedules/plans/…)"]
+        CORE["core/&lt;domain&gt;/<br/>бизнес-логика: plans · bfq · sales/nlp · shifts/pace ·<br/>employees/gamification · analytics/* · alerts · reports"]
+        DATA["data/repositories/ + data/db/<br/>Full Data Access Layer, 19.22.0→20.8.0 —<br/>единственный путь к Postgres для всего backend"]
+        CRON["cron/<br/>reports.ts · digest.ts · alerts.ts · job-logger.ts"]
+        INTEG["integrations/<br/>telegram/ (Grammy bot) · ai/ (Groq client)"]
+        PLAT["platform/notifications/<br/>changelog · release-announce"]
+    end
+
+    PG[("PostgreSQL<br/>(Railway)")]
+    GROQ["Groq API<br/>llama-3.3-70b-versatile"]
+
+    MA -- "X-Telegram-Init-Data<br/>(подписанный, прод)" --> AUTH
+    AUTH --> API --> CORE
+    API --> DATA --> PG
+    CRON --> CORE
+    CORE --> DATA
+    CORE -- "shift summary /<br/>dip hypothesis" --> INTEG
+    INTEG -- Groq --> GROQ
+    INTEG <--> CH
+    API --> INTEG
+    CRON --> INTEG
+```
+
+Клиент **не** ходит в БД напрямую — только через API. Полный разбор слоёв
+и живой справочник структуры — **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ---
 
@@ -132,7 +193,7 @@ Google Sheets + переписка в Telegram живут на одной точ
 
 Полное дерево `backend/src/` (layered-структура: `api/`, `core/`, `data/`,
 `platform/`, `integrations/`, `auth/`, `cron/`, `workers/`, `shared/`,
-`utils/`) — **[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)**.
+`utils/`) — **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ---
 
@@ -357,7 +418,7 @@ localStorage.removeItem('t2_tutorial_mgr_done')   // manager
 ## 14. HTTP API
 
 Полная таблица эндпоинтов по группам, с указанием файла-обработчика —
-**[docs/API.md](../docs/API.md)**. Auth: `X-Telegram-Init-Data`
+**[docs/API.md](docs/API.md)**. Auth: `X-Telegram-Init-Data`
 (подписанный, прод) — см. §24. Каждый роут, отдающий чужие/сетевые
 данные, гейтится `requireAuth`/`requireActive`/`requireManager`/
 `requireSupervisor` + org-scope — см. §7, §24.
@@ -366,14 +427,14 @@ localStorage.removeItem('t2_tutorial_mgr_done')   // manager
 
 ## 15. Переменные окружения
 
-Полная таблица — **[docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)**.
+Полная таблица — **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
 
 ---
 
 ## 16. Локальный запуск
 
 Установка, запуск, прогон тестов на одноразовом Postgres —
-**[docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)**. В CI
+**[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**. В CI
 (`.github/workflows/ci.yml`) то же самое происходит автоматически на
 каждый push.
 
@@ -455,6 +516,20 @@ Invoke-RestMethod "$base/me" -Headers $h
 ---
 
 ## 21. История версий
+
+**Последние версии** (полная история — 60+ записей от Google Sheets до
+сегодня — под спойлером ниже):
+
+| Версия | Суть |
+|--------|------|
+| **20.9.0** | Authentication Boundary — Telegram изолирован в отдельный adapter, готовность под будущий Web/Mobile/SSO |
+| **20.10.0** | Audit & Observability 2.0 — forensic-поля в `audit_log`, структурные логи фоновых задач |
+| **20.11.0 – 20.11.1** | Repository Restructuring — backend на layered-структуру (`api/`/`core/`/`data/`), `docs/` вынесен из README, хотфикс путей |
+| **20.12.0** | Frontend rewrite — первый реальный срез (typed-роутер, состояние, первая feature-sliced страница) |
+| **20.13.0** | Security hardening — единое правило «продажи за другого» для роли `senior`, закрыты 2 XSS-пробела |
+
+<details>
+<summary><strong>Показать полную историю версий</strong> — от Google Sheets до сегодняшнего дня</summary>
 
 | Версия | Суть |
 |--------|------|
@@ -587,12 +662,19 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **20.12.0** | **Frontend rewrite — первый реальный срез.** `frontend/src/app/router.ts` — типизированный реестр страниц вместо роста if-цепочки в `02-nav-utils.js`; сознательно НЕ URL/hash-based (Telegram Mini App без серверных роутов, свой `start_param` вместо путей). `frontend/src/app/state.ts` — типизированный доступ к сессии поверх легаси-глобала `me`, не новое хранилище (тот же источник правды, что уже читает весь легаси-код — без риска разъехаться). `frontend/src/features/send-network-digest/` — первая кнопка на `addEventListener` вместо `onclick=`. `frontend/src/pages/reports/` заменяет `frontend/js/19-reports.js` файл-в-файл (тот же `window.loadReportsPage`, легаси `switchPage()`/`loadPage()` не тронуты — выбран как пилот: самая маленькая легаси-страница, 71 строка, без собственного состояния). Каждая мигрированная страница — свой отдельный iife-бандл (Rollup не даёт несколько точек входа в одной iife/umd-сборке) — второй `vite build` (`vite.pages.config.ts`, `emptyOutDir: false`) добавлен в `build:frontend`. Реального браузера в среде выполнения не было — основная поведенческая проверка на этот раз jsdom-тест с реальным симулированным кликом (`frontend/tests/reports-page.test.ts`), плюс живая проверка на dev-сервере, что бандл действительно отдаётся и подключён |
 | **20.13.0** | **Security hardening — единое правило «продажи за другого», закрыты 2 XSS-дыры.** По внешнему security-аудиту (v20.11.1) — проверен по каждому пункту на реальном коде, не принят на веру: часть находок подтвердилась, часть оказалась уже известными осознанными компромиссами (публичные аватары под rate-limit), одна («self-check» в `/sync/batch`) не подтвердилась — механизм и так был корректен. Подтверждённая несогласованность: `POST /sales` уже запрещал `senior` вносить продажу за ДРУГОГО сотрудника (только `manager`/`admin`), а параллельные пути того же действия — `POST /sales/quick` и `POST /sync/batch` — разрешали через общий `isManager()` (который включает `senior`); один и тот же вопрос имел два разных ответа в зависимости от точки входа. Новая `src/auth/guards.ts::canWriteSalesForOthers()` — единая точка правды, применена во всех трёх местах. Закрыты 2 подтверждённых XSS-пробела без экранирования (`07-add-sale.js` — имя сотрудника в модалке правки продажи, `11-v13.js` — текст и пункты AI-инсайта смены), оба теперь через `esc()`. Внешнее поведение не изменилось ни для кого, кроме `senior` в этих двух конкретных путях — проверено полным прогоном (291 тест, было 285) и живым E2E по всем трём путям записи продажи за другого |
 
+</details>
+
 ---
 
 ## 22. Дорожная карта
 
 Крупные эпохи проекта — не текущий спринт, а последовательность уже
-пройденных и будущих этапов.
+пройденных и будущих этапов. Актуальный, ещё не закрытый этап —
+**Core hardening (20.8-20.20)** ниже; всё, что уже сделано (эпохи 17-20) —
+под спойлером для контекста.
+
+<details>
+<summary><strong>Пройденные эпохи</strong> (17 → Frontend Foundation, 20.7.0) — по клику</summary>
 
 ### Эпоха 17 — «Надёжность перед деньгами» ✅ (17.0.0-17.17.0)
 CI на каждый push, тестовый слой авторизации/изоляции сети (149 тестов к
@@ -723,6 +805,8 @@ message-first. `20.3` — четвёртый срез: сводка по сет�
 Из 118 исходных `fetch()` остались 2 сознательно нетронутых (§21,
 20.7.0) — эпоха закрыта.
 
+</details>
+
 ### 20.8-20.20 — Core hardening: разрыв с Telegram-ограничением (roadmap владельца продукта, 2026-08-22)
 Не новые фичи — цель сделать backend таким, чтобы дальнейшая разработка
 почти не увеличивала security debt, прежде чем строить поверх него
@@ -802,7 +886,7 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
 
 ## 23. Соглашения по разработке
 
-Полный список — **[docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)**.
+Полный список — **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
 Коротко: роуты группируются по домену в `src/api/routes/` (см. §5), даты
 только МСК, схема БД только через `backend/migrations/`, `npm run
 check:no-direct-sql` держит Data Access Layer, версионирование — MINOR на
@@ -815,8 +899,8 @@ check:no-direct-sql` держит Data Access Layer, версионирован�
 Полный разбор (initData/HMAC, CORS, rate-limit/CSP, TypeBox-валидация,
 Data Access Layer, Audit Trail, Concurrency & Workflow Integrity,
 Supervisor Scope Cache, Authentication Boundary) —
-**[docs/SECURITY.md](../docs/SECURITY.md)**. Архитектурные решения с
-альтернативами и причинами — **[docs/ADR/](../docs/ADR/)**.
+**[docs/SECURITY.md](docs/SECURITY.md)**. Архитектурные решения с
+альтернативами и причинами — **[docs/ADR/](docs/ADR/)**.
 
 ---
 
@@ -833,5 +917,12 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 ---
 
-**T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
+<div align="center">
+
+**T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.
+
+[📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
+
 *README · актуально на v20.13.0 · август 2026*
+
+</div>
