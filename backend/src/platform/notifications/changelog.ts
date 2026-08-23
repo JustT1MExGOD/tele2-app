@@ -912,5 +912,17 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Внешнее поведение API не изменилось ни для одного эндпоинта — проверено полным прогоном (285 тестов), CI-чеком (check:no-direct-sql, 56 файлов), live E2E по каждому расколотому/слитому файлу',
       'Frontend — начат настоящий feature-sliced переезд (router/state/components), не просто перемещение файлов; продолжается отдельными следующими версиями той же incremental-схемой, что Frontend Foundation (эпоха 20.0-20.7)'
     ]
+  },
+  {
+    version: '20.12.0',
+    title: 'Frontend rewrite — первый реальный срез (router/state/features)',
+    bullets: [
+      'frontend/src/app/router.ts — типизированный реестр страниц вместо роста if-цепочки в 02-nav-utils.js; сознательно не URL/hash-based — это Telegram Mini App без серверных роутов и без сценария закладок (у Telegram deep-linking свой start_param, не пути)',
+      'frontend/src/app/state.ts — типизированный доступ к сессии поверх легаси-глобала me (не новое хранилище — то же самое состояние, что уже читает весь остальной легаси-код, без риска разъехаться)',
+      'frontend/src/features/send-network-digest/ — первая кнопка на addEventListener вместо onclick=, для неё уже не нужен unsafe-inline в CSP',
+      'frontend/src/pages/reports/ заменяет frontend/js/19-reports.js файл-в-файл — тот же window.loadReportsPage, легаси switchPage()/loadPage() не тронуты, 19 остальных страниц работают как раньше',
+      'Каждая мигрированная страница — свой отдельный iife-бандл (Rollup не даёт несколько точек входа в одной iife/umd-сборке): второй vite build (vite.pages.config.ts) добавлен в build:frontend рядом с уже существующим для api-client.ts',
+      'Живая E2E-проверка на dev-сервере (бандл отдаётся, index.html его подключает) — реального браузера в этой среде не было, поэтому основная проверка поведения — jsdom-тест с реальным симулированным кликом (frontend/tests/reports-page.test.ts, тот же подход, что уже используется для api-client.test.ts), а не визуальный осмотр в Telegram WebView'
+    ]
   }
 ];

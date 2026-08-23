@@ -1,13 +1,13 @@
 {
   "name": "backend",
-  "version": "20.11.1",
+  "version": "20.12.0",
   "type": "module",
   "engines": {
     "node": "22.x"
   },
   "scripts": {
     "build": "tsc && npm run build:frontend",
-    "build:frontend": "vite build --config frontend/vite.config.ts",
+    "build:frontend": "vite build --config frontend/vite.config.ts && vite build --config frontend/vite.pages.config.ts",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "smoke:frontend": "node scripts/smoke-frontend.mjs",
