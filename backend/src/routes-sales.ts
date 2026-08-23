@@ -220,7 +220,8 @@ export async function registerSalesRoutes(app: FastifyInstance) {
           targetId: id,
           before: { [metric]: prevVal },
           after: { [metric]: 0 },
-          requestId: request.id
+          requestId: request.id,
+          actorRole: user.role
         }, q);
       }
 

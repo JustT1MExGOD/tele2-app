@@ -966,6 +966,10 @@ export interface AuditLogItem {
   actor_employee_id: number | null;
   actor_telegram_id: number | null;
   actor_name: string | null;
+  /** Роль актора на момент действия (снимок, не текущая роль) — 20.10.0. */
+  actor_role: string | null;
+  /** Сеть цели действия — 20.10.0, сегодня всегда совпадает с org_id. */
+  target_org_id: string | null;
   action: string;
   target_type: string;
   target_id: string | null;

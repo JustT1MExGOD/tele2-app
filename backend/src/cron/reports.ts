@@ -15,6 +15,7 @@ import { materializeStoreDailyPlans } from '../services/plans.js';
 import { getStoreNotifyTarget } from '../services/tenant.js';
 import * as cronRepo from '../repositories/cron.js';
 import * as reportImageRepo from '../repositories/report-image.js';
+import { runJob } from '../utils/job-logger.js';
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)
@@ -246,7 +247,7 @@ async function tick() {
 
   // напоминания о завтрашней смене — как было
   if (hh === 20 && mm === 0 && (await claimCronSend(`tomorrow_reminders:${date}`))) {
-    await sendTomorrowReminders(date);
+    await runJob('report.tomorrow_reminders', () => sendTomorrowReminders(date));
   }
 
   // Дневные планы точек раньше материализовались только вручную кнопкой
@@ -257,8 +258,8 @@ async function tick() {
     const tomorrow = new Date(date + 'T12:00:00');
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-    await materializeStoreDailyPlans(date).catch((e) => console.error('auto-materialize today', e?.message || e));
-    await materializeStoreDailyPlans(tomorrowStr).catch((e) => console.error('auto-materialize tomorrow', e?.message || e));
+    await runJob('report.materialize_today', () => materializeStoreDailyPlans(date));
+    await runJob('report.materialize_tomorrow', () => materializeStoreDailyPlans(tomorrowStr));
   }
 
   const stores = await loadStorePlans(date);
@@ -266,14 +267,18 @@ async function tick() {
   for (const st of stores) {
     const micros = microHoursFor(st, sunday);
     if (mm === 0 && micros.includes(hh) && (await claimCronSend(`micro:${st.store_id}:${date}:${hh}`))) {
-      await sendStoreReportImage(st, date, 'micro', hh);
-      console.log('Микро-картинка:', st.name, hh + ':00');
+      await runJob(`report.micro:${st.store_id}`, async () => {
+        await sendStoreReportImage(st, date, 'micro', hh);
+        console.log('Микро-картинка:', st.name, hh + ':00');
+      });
     }
 
     const fin = finalTimeFor(st, sunday);
     if (hh === fin.h && mm === fin.m && (await claimCronSend(`final:${st.store_id}:${date}`))) {
-      await sendStoreReportImage(st, date, 'final');
-      console.log('Итог-картинка:', st.name, `${fin.h}:${String(fin.m).padStart(2, '0')}`);
+      await runJob(`report.final:${st.store_id}`, async () => {
+        await sendStoreReportImage(st, date, 'final');
+        console.log('Итог-картинка:', st.name, `${fin.h}:${String(fin.m).padStart(2, '0')}`);
+      });
     }
   }
 }

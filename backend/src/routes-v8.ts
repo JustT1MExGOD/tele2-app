@@ -376,7 +376,8 @@ export async function registerV8Routes(app: FastifyInstance) {
         targetId: id,
         before: { role: beforeRole ?? null },
         after: { role },
-        requestId: request.id
+        requestId: request.id,
+        actorRole: request.user!.role
       }, q);
       return res;
     });

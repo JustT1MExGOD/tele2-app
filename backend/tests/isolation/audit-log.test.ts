@@ -47,6 +47,10 @@ describe('Audit Trail', () => {
     expect(row.rows[0].before.role).toBe('employee');
     expect(row.rows[0].after.role).toBe('senior');
     expect(row.rows[0].request_id).toBeTruthy();
+    // 20.10.0 — снимок роли АКТОРА (admin, кто сделал смену), не цели;
+    // target_org_id по умолчанию равен org_id (нет кросс-org действий сегодня).
+    expect(row.rows[0].actor_role).toBe('admin');
+    expect(row.rows[0].target_org_id).toBe(orgA);
   });
 
   it('GET /audit — чужая сеть не видит события другой сети', async () => {

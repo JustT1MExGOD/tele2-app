@@ -105,7 +105,8 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
             targetId: id,
             before: { is_active: before ?? null },
             after: { is_active: !!b.is_active },
-            requestId: request.id
+            requestId: request.id,
+            actorRole: request.user!.role
           }, q);
         }
         return res;
@@ -141,7 +142,8 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
         targetId: id,
         before: { is_active: true },
         after: { is_active: false },
-        requestId: request.id
+        requestId: request.id,
+        actorRole: request.user!.role
       }, q);
 
       return res;

@@ -103,7 +103,8 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
       targetType: 'employee_plan',
       targetId: id,
       after: data,
-      requestId: request.id
+      requestId: request.id,
+      actorRole: request.user!.role
     });
 
     return plan;
@@ -191,7 +192,8 @@ export async function registerPlansV5Routes(app: FastifyInstance) {
       targetType: 'store_plan',
       targetId: id,
       after: data,
-      requestId: request.id
+      requestId: request.id,
+      actorRole: request.user!.role
     });
 
     return plan;

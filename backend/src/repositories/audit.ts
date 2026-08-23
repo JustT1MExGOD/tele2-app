@@ -24,6 +24,10 @@ export interface AuditEvent {
   before?: unknown;
   after?: unknown;
   requestId?: string | null;
+  /** Роль актора НА МОМЕНТ действия — снимок, не текущая роль (могут сменить позже). */
+  actorRole?: string | null;
+  /** Сеть цели действия — по умолчанию совпадает с orgId (см. 0014_audit_log_forensic_fields.sql). */
+  targetOrgId?: string | null;
 }
 
 export interface AuditLogItem {
@@ -32,6 +36,8 @@ export interface AuditLogItem {
   actor_employee_id: number | null;
   actor_telegram_id: number | null;
   actor_name: string | null;
+  actor_role: string | null;
+  target_org_id: string | null;
   action: string;
   target_type: string;
   target_id: string | null;
@@ -44,8 +50,8 @@ export interface AuditLogItem {
 export async function record(event: AuditEvent, q: typeof query = query): Promise<void> {
   await q(
     `INSERT INTO audit_log
-       (org_id, actor_employee_id, actor_telegram_id, action, target_type, target_id, before, after, request_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       (org_id, actor_employee_id, actor_telegram_id, action, target_type, target_id, before, after, request_id, actor_role, target_org_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       event.orgId,
       event.actorEmployeeId,
@@ -55,7 +61,9 @@ export async function record(event: AuditEvent, q: typeof query = query): Promis
       event.targetId,
       event.before !== undefined ? JSON.stringify(event.before) : null,
       event.after !== undefined ? JSON.stringify(event.after) : null,
-      event.requestId || null
+      event.requestId || null,
+      event.actorRole || null,
+      event.targetOrgId || event.orgId || null
     ]
   );
 }

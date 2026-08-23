@@ -23,7 +23,8 @@ function auditExport(request: FastifyRequest, orgId: string, targetId: string, f
     targetType: 'export',
     targetId,
     after: filters,
-    requestId: request.id
+    requestId: request.id,
+    actorRole: request.user!.role
   }).catch((e: any) => request.log.error(e, 'audit write failed for export.csv'));
 }
 

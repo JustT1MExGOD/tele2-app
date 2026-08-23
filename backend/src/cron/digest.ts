@@ -8,6 +8,7 @@
 import cron from 'node-cron';
 import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
 import { sendNetworkDigest } from '../services/network-digest.js';
+import { runJob } from '../utils/job-logger.js';
 
 export function startDigestCron() {
   cron.schedule('* * * * *', () => {
@@ -15,10 +16,10 @@ export function startDigestCron() {
     const date = todayMoscow();
     const weekday = new Date(date + 'T12:00:00').getDay(); // 0=вс, 1=пн
     if (weekday === 1) {
-      sendNetworkDigest('weekly').catch((e) => console.error('weekly digest:', e?.message || e));
+      runJob('digest.weekly', () => sendNetworkDigest('weekly'));
     }
     if (date.slice(8, 10) === '01') {
-      sendNetworkDigest('monthly').catch((e) => console.error('monthly digest:', e?.message || e));
+      runJob('digest.monthly', () => sendNetworkDigest('monthly'));
     }
   });
 }

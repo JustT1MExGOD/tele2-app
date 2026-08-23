@@ -4,9 +4,11 @@ import { runMigrations } from './db/migrate.js';
 import { startBot, notifyAdmin } from './bot/index.js';
 import { startReportCron } from './cron/reports.js';
 import { startDigestCron } from './cron/digest.js';
+import { startAlertCron } from './cron/alerts.js';
 import { todayMoscow } from './utils/date.js';
 import { runSmartAlertsTick } from './services/alerts.js';
 import { announceReleaseIfNeeded } from './services/release-announce.js';
+import { runJob } from './utils/job-logger.js';
 
 /**
  * Раньше падение миграции/старта было видно только в Railway logs, которые
@@ -72,11 +74,16 @@ try {
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
   startReportCron();
   startDigestCron();
+  // 20.10.0 — раньше был написан (services/alerts.ts docstring это явно
+  // предполагало — "подключи в startReportCron или отдельный cron"), но
+  // нигде не вызывался: «Контроль 14:00» (сотрудники без продаж на смене)
+  // и «Отставание точек 16:00» никогда не срабатывали в проде.
+  startAlertCron();
   announceReleaseIfNeeded().catch((e) => console.error('release announce:', e?.message || e));
 
   // умные алерты каждые 30 мин (внутри — только 11–21 МСК)
   setInterval(() => {
-    runSmartAlertsTick().catch((e) => console.error('alerts tick:', e?.message || e));
+    runJob('alerts.smart_tick', () => runSmartAlertsTick());
   }, 30 * 60 * 1000);
 } catch (err) {
   app.log.error(err);
