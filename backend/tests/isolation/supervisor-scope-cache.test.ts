@@ -8,9 +8,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
-import { resolveSupervisorStores } from '../../src/services/supervisor-analytics.js';
-import { getStats, invalidateAll } from '../../src/services/scope-cache.js';
+import { query } from '../../src/data/db/index.js';
+import { resolveSupervisorStores } from '../../src/core/analytics/supervisor.js';
+import { getStats, invalidateAll } from '../../src/core/shared/scope-cache.js';
 
 describe('Supervisor Scope Cache', () => {
   const fx = new TestFixtures();

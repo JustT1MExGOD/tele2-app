@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 
 // 18.4 Tasks / Action System — замыкает цикл data → alert → action → task →
 // result, который Command Center (18.1) начал, но не заканчивал.

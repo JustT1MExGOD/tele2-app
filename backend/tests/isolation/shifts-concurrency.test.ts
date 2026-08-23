@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 
 // Регрессия: гонки в /shifts/open и /shifts/close, найденные при разборе
 // пункта «две параллельные операции с одной сменой не ломают состояние».

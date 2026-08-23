@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 
 // Регрессия на 15.16.0: announcements.org_id/channels.org_id существовали в
 // схеме, но ни один запрос их не читал — сотрудник любой сети видел

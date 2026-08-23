@@ -5,7 +5,7 @@
  * не по глобальному "мы же всегда Telegram" предположению.
  */
 import { describe, it, expect } from 'vitest';
-import { canAssignRole, isManager, ROLE_LEVEL, loadUser, type AuthUser } from '../../src/middleware-auth.js';
+import { canAssignRole, isManager, ROLE_LEVEL, loadUser, type AuthUser } from '../../src/auth/guards.js';
 import { resolveTelegramIdentity } from '../../src/auth/providers/telegram.js';
 import type { Identity } from '../../src/auth/identity.js';
 

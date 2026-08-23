@@ -3,7 +3,7 @@
 ### Операционная система розничных продаж сети T2  
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-![version](https://img.shields.io/badge/version-20.10.0-2AABEE?style=flat-square)
+![version](https://img.shields.io/badge/version-20.11.0-2AABEE?style=flat-square)
 ![ci](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![node](https://img.shields.io/badge/node-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -15,7 +15,7 @@
 > Не «таблица + бот в чате».  
 > Единая рабочая среда смены: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
 
-**Актуальная версия клиента:** `20.10.0`  
+**Актуальная версия клиента:** `20.11.0`  
 **Часовой пояс истины:** `Europe/Moscow`
 
 ---
@@ -123,113 +123,16 @@ Google Sheets + переписка в Telegram живут на одной точ
 
 ## 4. Архитектура
 
-```mermaid
-flowchart TB
-    subgraph TG["Telegram"]
-        MA["Mini App<br/>(frontend/*)"]
-        CH["Bot chats"]
-    end
-
-    subgraph BE["Fastify backend (backend/src)"]
-        AUTH["middleware-auth.ts<br/>authPlugin (preHandler) · initData HMAC"]
-        ROUTES["28 routes-*.ts<br/>core/employees/stores/sales/schedules/stats/cash/<br/>command-center/tasks/store-profile/employee-profile/<br/>forecast/live-alerts/avatar/…"]
-        SVC["services/<br/>plans · bfq · sales-write · shift-pace ·<br/>gamification · live-map · alerts · anomaly ·<br/>forecast · supervisor-analytics · ai.ts"]
-        REPO["repositories/<br/>Full Data Access Layer, 19.22.0→20.8.0 —<br/>единственный путь к Postgres для всего backend"]
-        CRON["cron/<br/>reports.ts · digest.ts"]
-        BOT["bot/ (Grammy)"]
-    end
-
-    PG[("PostgreSQL<br/>(Railway)")]
-    GROQ["Groq API<br/>llama-3.3-70b-versatile"]
-
-    MA -- "X-Telegram-Init-Data<br/>(подписанный, прод)" --> AUTH
-    AUTH --> ROUTES --> SVC
-    ROUTES --> REPO --> PG
-    CRON --> SVC
-    SVC --> PG
-    SVC -- "shift summary /<br/>dip hypothesis" --> GROQ
-    BOT <--> CH
-    ROUTES --> BOT
-    CRON --> BOT
-```
-
-Клиент **не** ходит в БД напрямую — только через API. «Сегодня» всегда через `todayMoscow()` (`Europe/Moscow`), не UTC контейнера. AI Copilot (`services/ai.ts`) не в горячем пути запросов — вызывается только при закрытии смены, в cron итоговых отчётов и при открытии страницы «Прогноз» (кэшируется на день), no-op без `GROQ_API_KEY`. Рендер SVG→PNG-картинок (отчёты, карточка анонса версии) — в отдельном пуле `worker_threads`, не блокирует основной event loop.
+Диаграмма и разбор слоёв (`api/routes/` → `core/<domain>/` →
+`data/repositories/`) — **[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)**.
 
 ---
 
 ## 5. Структура репозитория
 
-```text
-tele2-app/
-├── README.md
-├── docs/INTEGRATION-V13.md
-├── sql/                      (исторические ручные SQL-снимки, не источник схемы — см. §18)
-└── backend/                 ← Root Directory на Railway
-    ├── package.json
-    ├── tsconfig.json
-    ├── railway.json
-    ├── migrations/              (пронумерованные .sql, применяются сами — см. §18; 0001_baseline.sql … 0013_store_plans_unique.sql)
-    ├── assets/fonts/            (DejaVu Sans — рендер SVG-отчётов; Google Sans TTF — та же resvg-карточка анонса)
-    ├── tests/
-    │   ├── setup.ts             (жёсткая проверка: DATABASE_URL только localhost/127.0.0.1)
-    │   ├── helpers/              (app.ts → buildApp()+inject(), fixtures.ts → TestFixtures)
-    │   ├── unit/                 (чистые функции: forecast-модель, sales-write, caption-builder…)
-    │   ├── isolation/            (auth/multi-tenant регресс — org-scoping, race conditions, идемпотентность)
-    │   └── adversarial/          (security-регресс: auth bypass, unauth disclosure, cross-tenant IDOR, identity spoofing — 19.11.0)
-    ├── src/
-    │   ├── index.ts                    (bootstrap: миграции → buildApp() → listen → бот/крон)
-    │   ├── app.ts                      (Fastify instance, cors: origin:false, helmet/rate-limit, static, регистрация routeModules)
-    │   ├── env.ts                      (dotenv, импортируется первым — гарантирует порядок)
-    │   ├── middleware-auth.ts          (authPlugin — глобальный preHandler, requireAuth/requireActive/requireManager/…, assertStoreInOrg/assertEmployeeInOrg, ROLE_LEVEL)
-    │   ├── changelog.ts                (список версий для автоанонса — только minor-эпики, не хотфиксы)
-    │   ├── db/                         (пул соединений, миграционный раннер, withTransaction() — 19.23.0)
-    │   ├── repositories/                (Full Data Access Layer, 19.22.0→20.8.0 — 31 файл, единственное место в проекте с прямым SQL; orgId обязательным первым параметром у tenant-функций; CI check:no-direct-sql запрещает откат на 54 route/service/cron-файлах)
-    │   ├── services/telegram-auth.ts   (проверка initData HMAC)
-    │   ├── services/audit.ts           (Audit Trail, 19.23.0 — recordAudit(), пишущая сторона audit_log)
-    │   ├── routes-core.ts              (/plans — org-scoped)
-    │   ├── routes-stores.ts            (CRUD точек — только через repositories/stores.ts, без прямого SQL)
-    │   ├── routes-audit.ts             (GET /audit, admin-only — читающая сторона audit_log)
-    │   ├── routes-employees.ts         (CRUD сотрудников, кастомные названия точек)
-    │   ├── routes-avatar.ts            (загрузка/раздача кастомной аватарки, bytea в Postgres)
-    │   ├── routes-sales.ts             (/sales)
-    │   ├── routes-schedules.ts         (/schedules, /schedules/bulk)
-    │   ├── routes-stats.ts             (/stats, /dashboard)
-    │   ├── routes-cash.ts              (/cash)
-    │   ├── routes-promos.ts            (промокоды RTK)
-    │   ├── routes-reports.ts           (SVG-отчёты по точке, страница «Отчёты»)
-    │   ├── routes-me.ts                (/me, /me/bind, /me/day)
-    │   ├── routes-bfq.ts               (/bfq: расчёт, ручной VMR/штраф, анкета)
-    │   ├── routes-export.ts            (история продаж, аудит, CSV-экспорты)
-    │   ├── routes-plans-v5.ts          (месячные/дневные планы сотрудников и точек, сводная таблица)
-    │   ├── routes-v8.ts                (заявки на доступ, назначение роли, кабинет супервайзера-доступа)
-    │   ├── routes-support.ts
-    │   ├── routes-shifts.ts            (/shifts/*, NLP-разбор продажи, офлайн-очередь /sync/batch)
-    │   ├── routes-insights.ts          (личная аналитика: /me/insight, /me/self-stats)
-    │   ├── routes-live-alerts.ts       (живая карта, умные алерты, what-if)
-    │   ├── routes-comms.ts             (объявления сети, каналы)
-    │   ├── routes-forecast.ts          (прогноз, heatmap, когорты, BI-экспорт)
-    │   ├── routes-v14.ts               (branding, org/stores)
-    │   ├── routes-metrics.ts
-    │   ├── routes-supervisor.ts        (кабинет супервайзера)
-    │   ├── routes-command-center.ts    (единый экран manager/supervisor/admin)
-    │   ├── routes-tasks.ts             (задачи из просадки/алерта)
-    │   ├── routes-store-profile.ts     (Store Intelligence, Health Score)
-    │   ├── routes-employee-profile.ts  (Employee 2.0, Health Score)
-    │   ├── services/   (plans, bfq, nlp(sales-nlp), sales-write, shift-pace, insights, gamification,
-    │   │                live-map, alerts, anomaly, forecast, metrics-catalog, heatmap, network-digest,
-    │   │                supervisor-analytics, report-image, svg-render-pool, tenant, release-announce,
-    │   │                what-if, ai.ts ← AI Copilot)
-    │   ├── workers/svg-render.worker.ts (resvg SVG→PNG в отдельном потоке — см. §12)
-    │   ├── bot/        (index.ts, messages.ts)
-    │   ├── cron/       (reports.ts, digest.ts)
-    │   └── utils/date.ts
-    └── frontend/
-        ├── index.html   (разметка + подключение styles.css и js/*.js по порядку)
-        ├── styles.css
-        ├── fonts/       (Google Sans WOFF2 — фронтовый шрифт, отдельно от assets/fonts/ TTF для resvg)
-        ├── js/          (01-core → 19-reports, 21 файл, классические <script>, общая глобальная область — порядок подключения важен)
-        └── offline-queue.js
-```
+Полное дерево `backend/src/` (layered-структура: `api/`, `core/`, `data/`,
+`platform/`, `integrations/`, `auth/`, `cron/`, `workers/`, `shared/`,
+`utils/`) — **[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)**.
 
 ---
 
@@ -453,78 +356,26 @@ localStorage.removeItem('t2_tutorial_mgr_done')   // manager
 
 ## 14. HTTP API
 
-База: `https://<app>.up.railway.app`  
-Auth: `X-Telegram-Init-Data` (подписанный, прод) — см. §24. `X-Telegram-Id`
-только в деве.
-
-| Группа | Примеры |
-|--------|---------|
-| System | `GET /health` |
-| Me / access | `/me`, `/me/day`, `/me/bind`, `/me/insight`, `/me/self-stats`, `/access/status`, `/access/request`, `/access/orgs` |
-| Avatar | `POST /me/avatar`, `GET /avatars/:employeeId` |
-| Sales / shifts | `/sales`, `/sales/quick`, `/sales/:id/zero`, `/shifts/open\|close\|current`, `/sync/batch` |
-| Plans / schedule | `/plans/*`, `/plans/employees/*`, `/plans/stores/*`, `/schedules`, `/schedules/month`, `/schedules/bulk` |
-| BFQ / cash | `/bfq`, `/bfq/:employeeId`, `/cash/table`, `PUT /cash` |
-| Stores / org | `/stores`, `/org/stores`, `POST /employees`, `POST /stores` |
-| Command Center / Tasks / Alerts | `/command-center`, `/tasks`, `/tasks/:id`, `/alerts`, `/alerts/:id/ack` |
-| Profiles | `/stores/:id/profile`, `/employees/:id/profile` |
-| Forecast / analytics | `/forecast/:storeId`, `/heatmap/*`, `/staffing-hints`, `/cohorts/newbies`, `/network/live`, `/schedule/what-if(/apply)` |
-| Reports | `/reports/day/:storeId`, `/export/bi/daily` |
-| Promo / support / comms | `/promos`, `/support`, `/announcements`, `/channels/:id/messages` |
-| Supervisor | `/supervisor/dashboard`, `/supervisor/health`, `PUT /supervisor/:id/sector` |
-| Export | CSV: `/export/sales.csv`, `/export/bfq.csv`, `/export/schedules.csv` |
-
-Каждый роут, отдающий чужие/сетевые данные, гейтится `requireAuth`/
-`requireActive`/`requireManager`/`requireSupervisor` + org-scope — см. §7, §24.
+Полная таблица эндпоинтов по группам, с указанием файла-обработчика —
+**[docs/API.md](../docs/API.md)**. Auth: `X-Telegram-Init-Data`
+(подписанный, прод) — см. §24. Каждый роут, отдающий чужие/сетевые
+данные, гейтится `requireAuth`/`requireActive`/`requireManager`/
+`requireSupervisor` + org-scope — см. §7, §24.
 
 ---
 
 ## 15. Переменные окружения
 
-| Variable | Нужно | Описание |
-|----------|-------|----------|
-| `DATABASE_URL` | да | Postgres |
-| `BOT_TOKEN` | да | BotFather |
-| `PORT` | Railway | listen port |
-| `ADMIN_TELEGRAM_ID` | желательно | admin |
-| `REPORT_CHAT_ID` | желательно | глобальный фолбэк-чат отчётов (по умолчанию — чат сети из `organizations.chat_id`) |
-| `RELEASE_CHANNEL_ID` | нет | отдельный Telegram-канал для автоанонса версий (с 18.11.0) — без него анонс тихо пропускается |
-| `BOT_POLLING` | нет | `false` отключает getUpdates |
-| `ALLOW_INSECURE_AUTH` | нет | `true` включает dev-фоллбэк на голый `X-Telegram-Id` без проверки initData (**не включать в проде**) |
-| `GROQ_API_KEY` | нет | ключ Groq (console.groq.com, free tier, без карты) — включает AI Copilot; без ключа обе функции no-op'ают |
-| `GROQ_MODEL` | нет | override модели, дефолт `llama-3.3-70b-versatile` |
+Полная таблица — **[docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)**.
 
 ---
 
 ## 16. Локальный запуск
 
-```bash
-cd backend
-npm ci
-npm run build
-npm start
-curl -s localhost:3000/health
-```
-
-### Тесты (изоляция сети, эпик 17.0)
-
-Тесты пишут и удаляют данные через реальные роуты — только на **локальный**
-одноразовый Postgres, никогда на прод (жёсткая проверка в `tests/setup.ts`:
-`DATABASE_URL` обязан указывать на `localhost`/`127.0.0.1`).
-
-```bash
-# создать backend/.env.test.local (в репозиторий не попадает) с
-# DATABASE_URL на свой локальный Postgres, например:
-# DATABASE_URL=postgresql://postgres@127.0.0.1:5432/t2_test
-
-cd backend
-npm run migrate   # один раз — накатить схему (см. §18, backend/migrations/)
-npm test
-```
-
-В CI (`.github/workflows/ci.yml`) то же самое происходит автоматически на
-каждый push — Postgres поднимается в одноразовом контейнере, схема
-накатывается тем же `npm run migrate`, что и на проде.
+Установка, запуск, прогон тестов на одноразовом Postgres —
+**[docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)**. В CI
+(`.github/workflows/ci.yml`) то же самое происходит автоматически на
+каждый push.
 
 ---
 
@@ -731,6 +582,7 @@ Invoke-RestMethod "$base/me" -Headers $h
 | **20.8.0** | **Full Data Access Layer — весь backend на репозиториях.** Первый пункт нового roadmap владельца продукта (20.8-20.20, Core hardening) — «главный технический релиз» по его же оценке. Весь прямой SQL, ещё остававшийся вне routes-stores.ts/employees/sales/schedules/cash/tasks/shifts (уже перенесённых ранее), перенесён в `src/repositories/*`: алерты (`services/alerts.ts`, `routes-live-alerts.ts`, `routes-command-center.ts`), планы вместе с гоночно-защищённой материализацией (`services/plans.ts`, см. 19.24.0), кабинет супервайзера (`supervisor-analytics.ts`), живая карта сети (`live-map.ts`), инсайты смены (`insights.ts`), `routes-me.ts` (identity/bind), прогноз (`forecast.ts`), генерация картинок отчётов (`report-image.ts`), статистика/дашборд/BI-экспорт, профили точки/сотрудника, объявления/каналы, поддержка (тикеты), BFQ, геймификация (XP/бейджи), кастомные метрики, промокоды, what-if симуляция, темп смены, сетевые сводки, каталог метрик, точный heatmap, автоанонс релиза, AI-аудит, оба cron-модуля (отчёты в чат + алерты 14:00/16:00) — 18 новых файлов-репозиториев, ~45 изменённых route/service/cron-файлов. Правило `route → service → repository → PostgreSQL` теперь без исключений по всему backend, `npm run check:no-direct-sql` растянут на 54 файла. Полным прогоном тестов ещё до пуша поймана и исправлена одна настоящая регрессия: у нового `repositories/alerts.ts::insertOnce()` `alert_date` стал обязательным параметром и потерял старый дефолт «сегодня» — вернули, тест на дедупликацию алертов зафиксировал это на будущее. Внешнее поведение не изменилось ни для одного эндпоинта — рефактор архитектуры, не новая функциональность; проверено полным прогоном (277 тестов, зелёные) и живыми проверками на dev-сервере по каждому переносимому куску |
 | **20.9.0** | **Authentication Boundary — Telegram изолирован в adapter.** Второй пункт roadmap'а 20.8-20.20; владелец продукта сам сузил исходный пункт «Identity Abstraction» до именно этой границы (без схемы БД, без `identities`-таблицы — до появления второго реального provider). Новый `src/auth/`: `identity.ts` (provider-agnostic `Identity` — `{provider, providerId}`), `providers/telegram.ts` (вся Telegram-специфика — initData/HMAC/заголовки, раньше жившая прямо в `middleware-auth.ts`), `principal.ts` (`Identity → Principal/AuthUser`, диспетчеризация по `provider`). `middleware-auth.ts` стал тонкой Fastify-обвязкой поверх этой границы и ре-экспортирует все прежние имена (`Role`, `AuthUser`, `ROLE_LEVEL`, `canAssignRole`, `loadUser`) — ни один из ~30 роут-файлов не пришлось трогать. Один баг пойман ещё до пуша: первая версия положила `identity` прямо в `Principal` — и оно тут же протекло в тело ответа `GET /access/status` (роут отдаёт `request.user` как есть); убрали `identity` из `Principal`-типа, оставили параметром только у `loadUser()` — API отдаёт байт-в-байт то же, что и раньше. Новые тесты (`tests/unit/auth-boundary.test.ts`) фиксируют саму границу: авторизационные примитивы физически не принимают `Identity` в сигнатуре, `loadUser()` с гипотетическим будущим provider отдаёт безопасный guest, не пытаясь трактовать его как Telegram |
 | **20.10.0** | **Audit & Observability 2.0.** Третий пункт roadmap'а 20.8-20.20. `audit_log` пополнился forensic-полями `actor_role` (снимок роли актора НА МОМЕНТ действия, не текущая — роль могут сменить позже) и `target_org_id` (сеть цели действия, структурно отдельно от сети актора — сегодня всегда совпадают, для будущих кросс-org сценариев уже разделено). Новый `src/utils/job-logger.ts` — структурные (pino JSON, тот же формат, что HTTP-логи Fastify) логи фоновых задач: старт/длительность/успех-неудача на каждое реальное cron-действие (материализация планов, микро/итог-картинки по каждой точке отдельно, напоминания о смене, недельная/месячная сводка, умные алерты). Побочный эффект той же правки: раньше ошибка отправки картинки одной точки могла оборвать цикл по остальным точкам в этом тике — теперь каждая точка обёрнута отдельно. Найден и подключён мёртвый код: `src/cron/alerts.ts::startAlertCron()` (контроль «0 продаж на смене» 14:00, «отставание точек» 16:00) был полностью написан, но никогда не вызывался из `index.ts` — обе фичи не срабатывали в проде ни разу; подключено по решению владельца продукта |
+| **20.11.0** | **Repository Restructuring — backend layered structure + docs split.** Владелец продукта попросил перестроить структуру репозитория вне очереди, до Concurrency & Reliability. `backend/src/` (103 файла) переехал из плоской структуры в layered: `api/routes/` (сгруппированы по домену — `me/`, `org/`, `analytics/`, `ops/`, `profiles/`, плюс плоские CRUD-домены), `core/<domain>/` (бывший `services/`), `data/repositories/`+`data/db/` (бывший `repositories/`+`db/`, чистый rename), `platform/notifications/`, `integrations/telegram/`+`integrations/ai/` (бывший `bot/`+часть `services/`). Механический перенос: физическое перемещение + кодмод на все относительные импорты (307 специфаеров в 61 файле бэкенда + 50 в 41 тестовом файле), без единого изменения бизнес-логики — весь риск в 4 legacy grab-bag файлах (`routes-v8.ts`, `routes-v14.ts`, `routes-live-alerts.ts`, `routes-core.ts`), каждый годами сваливал несколько несвязанных доменов в одну кучу; разложены по настоящим границам (`org/access.ts` — новый, `org/branding.ts`+`analytics/heatmap.ts`, `analytics/live.ts`+`ops/alerts.ts`+`analytics/what-if.ts`, слияние `PATCH /employees/:id/role` в `org/employees.ts` и `GET /me/access` в `me/index.ts`, `GET /plans` в `api/routes/plans.ts`). `app.ts` стал тоньше — регистрация 31 route-модуля выделена в `api/routes/index.ts`. `npm run check:no-direct-sql` — 56 путей обновлены. `docs/` вынесен из 1143-строчного README: `ARCHITECTURE.md` (диаграмма + полное дерево), `API.md` (таблица эндпоинтов), `DEVELOPMENT.md` (запуск/тесты/конвенции), `SECURITY.md` (весь бывший §24), `docs/ADR/` — 6 ретроспективных architecture decision records (repository pattern, in-memory scope cache, CAS-конкурентность, TypeBox, Authentication Boundary, iife-бандл вместо полной Vite-миграции), `docs/archive/` (устаревший `INTEGRATION-V13.md`). README держит короткие ссылки на прежних номерах секций — ничего не переименовано, все 6 существовавших `§N`-ссылок в коде остались валидны. Frontend — начат настоящий feature-sliced переезд отдельным, более поздним заходом (не смешан с этой версией, см. `docs/ADR/006`). Внешнее поведение API не изменилось ни для одного эндпоинта — проверено полным прогоном (285 тестов), CI-чеком, live E2E по каждому расколотому/слитому файлу |
 
 ---
 
@@ -898,231 +750,54 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   успехом/неудачей (`src/utils/job-logger.ts`); заодно найден и подключён
   никогда не вызывавшийся `startAlertCron()` (контроль 14:00/16:00 не
   срабатывал в проде ни разу) (см. §21, 20.10.0)
-- **20.11-20.13 Concurrency & Reliability** — idempotency-ключи на
+- **20.11 Repository Restructuring** ✅ (backend) / 🔄 (frontend) —
+  владелец продукта попросил перестроить структуру репозитория вне
+  очереди, до Concurrency & Reliability. `backend/src/` переехал из
+  плоской структуры (`routes-*.ts`/`services/`/`repositories/` в корне
+  `src/`) в layered (`api/routes/`, `core/<domain>/`, `data/`,
+  `platform/`, `integrations/`, плюс уже существовавшие `auth/`/`cron/`/
+  `workers/`/`shared/`/`utils/`) — механический перенос без изменения
+  поведения (103 файла, из них 4 legacy grab-bag файла — `routes-v8.ts`,
+  `routes-v14.ts`, `routes-live-alerts.ts`, `routes-core.ts` — разложены
+  по реальным доменным границам, где раньше были свалены в одну кучу по
+  историческим причинам). Заодно найден и подключён мёртвый
+  `startAlertCron()`-путь (см. 20.10.0). `docs/` вынесен из README:
+  `ARCHITECTURE.md`, `API.md`, `DEVELOPMENT.md`, `SECURITY.md`,
+  `docs/ADR/` (ретроспективные architecture decision records на 6
+  ключевых решений), `docs/archive/` — README держит короткие ссылки на
+  прежних номерах секций, ничего не переименовано. Frontend — начат
+  настоящий feature-sliced переезд (не просто перемещение файлов, см.
+  `docs/ADR/006`), продолжается следующими версиями той же схемой, что
+  Frontend Foundation (см. §21, 20.11.0)
+- **20.12-20.14 Concurrency & Reliability** — idempotency-ключи на
   критичных операциях, adversarial race-condition suite, recovery
   (бэкапы/rollback миграций/graceful shutdown)
-- **20.14-20.16 Frontend 2.0** — feature-based структура фронтенда,
-  разделение server/UI/offline-state, offline-очередь → полноценный
-  sync engine
 - **20.17-20.20 Platform Layer** — client-neutral API, Web/PWA,
   desktop-интерфейс для supervisor/admin, mobile-спайк (proof-of-concept)
 
-Версии внутри 20.8-20.20 не религия — пункты могут объединяться, если
-реальный объём небольшой.
+Версии внутри 20.8-20.20 не религия — пункты могут объединяться или
+переставляться местами по решению владельца продукта, если реальный
+объём небольшой или приоритет меняется.
 
 ---
 
 ## 23. Соглашения по разработке
 
-1. Фичи — свой `routes-<имя>.ts` (по теме, не по версии — `routes-vN`
-   давно не используется) + добавить в `routeModules` в `app.ts`
-2. Даты только МСК (`todayMoscow()`, не `new Date()`/UTC контейнера)
-3. Изменение схемы БД — новый `backend/migrations/00NN_описание.sql`, не
-   ad hoc SQL на Railway (см. §18)
-4. Перед push: `npx tsc --noEmit`, `npm run build:frontend` (если менялся
-   `frontend/src/`), `npm run smoke:frontend`, `npm run test:frontend`
-   (если есть frontend-тесты), полный `npx vitest run` на одноразовом
-   локальном Postgres — build ловит TS-ошибки бэкенда, smoke:frontend
-   ловит ReferenceError от неправильного порядка `frontend/js/*.js` (см.
-   14.3.1), тесты — регресс авторизации/изоляции сети/бизнес-корректности/
-   security
-5. Не коммитить `.env`
-6. Роуты, отдающие чужие/сетевые данные — всегда через `requireAuth`/
-   `requireActive`/… + org-scope (§7, §24), никогда голый заголовок в обход
-   `authPlugin`
-7. Один bot polling (`BOT_POLLING=false` для второй локальной копии)
-8. Версионирование — MINOR на каждую сущностную правку (фича, фикс,
-   рефактор), changelog-запись в `src/changelog.ts` только для эпиков,
-   не хотфиксов (см. §21 — история версий длиннее, чем changelog-анонсы)
-9. Сущности, уже переехавшие на Data Access Layer (§24, `src/repositories/`)
-   — доступ к ним из роутов только через репозиторий, не собственным
-   `query()`; CI (`npm run check:no-direct-sql`) на этом ловит откат
-10. Frontend-файл, переехавший на TypeScript (§24, `frontend/src/`) —
-    настоящий ES-модуль (`import`/`export`), собирается Vite'ом в
-    IIFE-бандл (`npm run build:frontend`), контракт с бэкендом — через
-    `backend/src/shared/api-types.ts`, не заново описанные типы. Файлы,
-    ещё не переехавшие, остаются в `frontend/js/` классическими скриптами
-    без изменений
+Полный список — **[docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)**.
+Коротко: роуты группируются по домену в `src/api/routes/` (см. §5), даты
+только МСК, схема БД только через `backend/migrations/`, `npm run
+check:no-direct-sql` держит Data Access Layer, версионирование — MINOR на
+каждую правку с changelog-записью только для эпиков (см. §21).
 
 ---
 
 ## 24. Безопасность
 
-- Роли и принадлежность сети проверяются на сервере (`middleware-auth.ts`),
-  не только скрываются в UI — `requireAuth`/`requireActive`/`requireManager`/
-  `requireSupervisor` + `assertStoreInOrg`/`assertEmployeeInOrg` на каждом
-  роуте, читающем или пишущем чужие данные.
-- **initData проверяется на сервере.** Mini App шлёт сырой `tg.WebApp.initData`
-  в заголовке `X-Telegram-Init-Data`; глобальный `preHandler`-хук `authPlugin`
-  (навешан один раз в `app.ts`, выполняется перед каждым роутом) пересчитывает
-  HMAC по `BOT_TOKEN` (`src/services/telegram-auth.ts`) и кладёт в
-  `request.user` подтверждённую identity — только если подпись сходится.
-  Голый `X-Telegram-Id` без initData принимается ТОЛЬКО если `BOT_TOKEN` не
-  задан (локальная разработка) либо явно включён `ALLOW_INSECURE_AUTH=true`
-  — в `RAILWAY_ENVIRONMENT=production` сервер вообще откажется стартовать
-  и с `ALLOW_INSECURE_AUTH=true`, и без `BOT_TOKEN` (`src/index.ts`, 19.14.0),
-  так что это не просто конвенция, а жёсткий гварт. `request.user` —
-  единственный источник identity во всех роутах; читать заголовок напрямую
-  в обход `authPlugin` считается багом (класс дыр, закрытый в 19.11.0).
-  Сама initData-сессия живёт 1 час (было 24, снижено в 19.14.0 по
-  рекомендации Telegram) — по истечении роут отвечает понятным
-  `session_expired`, а не голым 401.
-- CORS **закрыт** (`origin: false`, с 17.8.0) — Mini App всегда бьёт на API
-  своим же origin, легитимного кросс-origin браузерного вызова нет.
-- `@fastify/rate-limit` (19.14.0) — общий потолок на всё API + отдельные
-  более жёсткие лимиты на публичную аватарку, генерацию отчётов и заявку на
-  доступ. `@fastify/helmet` (19.14.0) — CSP и другие заголовки безопасности;
-  CSP разрешает inline-обработчики (`script-src-attr`/`style-src-attr`), так
-  как вёрстка держится на `onclick=`/`style=`-атрибутах — переход на
-  строгую CSP требует более крупной переделки фронтенда (см. дорожную
-  карту, §22).
-- 26 регрессионных тестов на именно этот класс дыр (`backend/tests/adversarial/`)
-  — не проверка «работает ли», а фиксация конкретных прошлых инцидентов
-  (auth bypass, unauthenticated disclosure, cross-tenant IDOR, identity
-  spoofing), чтобы не повторились молча.
-- Глобальный `setErrorHandler` (`app.ts`, 19.15.0) — известные коды ошибок
-  Postgres (дубликат, ссылка на несуществующую запись, некорректный формат)
-  превращаются в стабильный `{error, message}` без сырого текста драйвера;
-  роуты со своим `catch` используют тот же принцип через
-  `serverError()` (`src/utils/http-errors.ts`). CI падает на
-  `npm audit --audit-level=high` — известная уязвимость высокой критичности
-  в зависимостях блокирует мёрдж, а не остаётся незамеченной до следующего
-  ручного аудита.
-- `requireStoreInOrg()`/`requireEmployeeInOrg()` (`middleware-auth.ts`,
-  19.17.0) — preHandler-декораторы поверх `assertStoreInOrg`/
-  `assertEmployeeInOrg`, регистрируются в опциях роута вместо ручного вызова
-  внутри тела обработчика. 18 роутов переведены; там, где store/employee id
-  узнаётся только после fetch внутри самого обработчика или где self-write/
-  manager-for-other разруливаются по-разному (см. 19.11.0), декоратор не
-  подходит технически — оставлено с ручной проверкой намеренно, не забыто.
-- TypeBox-схемы (`@sinclair/typebox`, 19.18.0) на `schema.body` роута —
-  Fastify валидирует запрос своим встроенным ajv-компилятором ДО того, как
-  управление доходит до обработчика, и до кода — `err.code ===
-  'FST_ERR_VALIDATION'` в глобальном `setErrorHandler` превращает это в
-  чистый `{error: 'validation_failed', details: [...]}`. Ajv по умолчанию
-  коэрсит типы (строка "5" ↔ число 5, `true` ↔ `1`) — тот же уровень
-  гибкости, что уже был у ручных `Number()`/`String()` по всему коду,
-  никаких новых отказов на легитимных запросах. Отгружено 4 заходами: 10
-  самых денежных/расписательных write-роутов (§21, 19.18.0), доступ/роли и
-  CRUD сотрудников/точек (19.19.0), задачи/поддержка/промокоды/объявления
-  (19.20.0), алерты/what-if/метрики/планы/отчёты/бренд сети (19.21.0) —
-  **весь write-API теперь на TypeBox**, `request.body as any` не осталось.
-  Динамические по форме тела (кастомные метрики продаж/планов, разнородные
-  `sync/batch`- и `what-if moves`-операции, произвольные поля апдейта сети)
-  сознательно оставлены `additionalProperties: true` — схема не должна быть
-  строже уже отлаженной ручной логики внутри обработчика.
-- **Ловушка ajv-коэрсии `null`** (найдена и закрыта в 19.19.0) — `coerceTypes:
-  true` (Fastify-дефолт) превращает `null` в `0` для числовых полей и в `""`
-  для строковых МОЛЧА, без ошибки валидации. Для полей, которые фронтенд
-  реально шлёт как `null` намеренно (координаты геолокации при отказе в
-  доступе — `geoCoords()` в `11-v13.js`; сброс кастомного названия точки —
-  `16-store-profile.js`), это меняет смысл данных (терялось «геолокации
-  нет», подменяясь на настоящую координату `0,0`). Фикс — `Type.Union([Type.Null(), Type.Number()])`
-  С Null ПЕРВЫМ в объединении: ajv перебирает варианты по порядку и коэрсит
-  на первом подходящем — если первым стоит `Type.Number()`, `null` домётся
-  до него раньше `Type.Null()`. При добавлении новых полей в существующие
-  или новые TypeBox-схемы, если фронтенд может прислать `null` намеренно
-  (не просто «поле пропущено») — соответствующий тип обязан быть
-  `Type.Union([Type.Null(), ...])`, иначе баг тихий и не даёт о себе знать,
-  пока кто-то не заметит испорченные данные в проде.
-- **Data Access Layer** (`src/repositories/`, 19.22.0+) — org-scoping
-  переведён из «не забыть проверить в каждом SELECT» в структурную гарантию:
-  каждая функция репозитория берёт `orgId` первым обязательным (не
-  optional) параметром, без него функцию физически нельзя вызвать, и каждый
-  SQL внутри уже несёт `WHERE COALESCE(org_id,'default') = $orgId`. Роуты,
-  переехавшие на репозиторий (пока только `routes-stores.ts`), обязаны не
-  импортировать `query`/`pool` напрямую — проверяется в CI
-  (`npm run check:no-direct-sql`, ratchet-список файлов в
-  `scripts/check-no-direct-sql.mjs`, растёт по мере переноса следующих
-  сущностей). Пилот на одной сущности (Stores) — Employees/Sales/Schedules
-  следующими заходами той же схемой.
-- **Audit Trail** (`audit_log`, `services/audit.ts`, 19.23.0) — единая лента
-  чувствительных действий вместо разрозненных `sales_audit`/`ai_audit`.
-  `withTransaction()` (`db/index.ts`) — первое переиспользование
-  BEGIN/COMMIT/ROLLBACK в прикладном коде (паттерн раньше был только в
-  `db/migrate.ts`): смена роли и правка продажи коммитят мутацию и
-  audit-запись одним махом или откатывают обе. Изменение плана намеренно
-  вне транзакции — `upsertEmployeeMonthPlan`/`upsertStoreMonthPlan`
-  (`services/plans.ts`) несут собственную ветку восстановления при сбое
-  INSERT..ON CONFLICT, встраивать это в общую транзакцию отдельным
-  неаккуратным рефакторингом не стали; ошибку `recordAudit()` там не
-  глушат (не `.catch(()=>{})`) — если она упадёт, ответ будет 500, но план
-  к этому моменту уже сохранён. Экспорт CSV — вообще не мутация, аудит
-  пишется fire-and-forget после того, как файл уже готов к отдаче.
-- **Concurrency & Workflow Integrity** (19.24.0) — перед кодом проверено,
-  что уже реально защищено (не предположение, а факт по схеме и коду):
-  `idx_shift_sessions_one_open_per_employee` (partial UNIQUE INDEX, эпоха
-  17.0) физически не даёт двух открытых смен одному сотруднику; закрытие
-  смены — `UPDATE ... WHERE id=$X AND status='open'`, честный
-  compare-and-swap; `offline_sync_log.client_id` — настоящий UNIQUE
-  constraint + `ON CONFLICT DO NOTHING`, не только логика в коде; `sales`
-  — `UNIQUE(employee_id, store_id, sale_date)`. Всё это закреплено новыми
-  тестами, которые реально стреляют `Promise.all()` из двух одновременных
-  запросов, а не проверяют последовательные сценарии. Найденная и
-  закрытая настоящая гонка — `materializeStoreDailyPlans()`
-  (`services/plans.ts`): раньше `DELETE FROM store_plans WHERE
-  plan_date=$1` + голые `INSERT` в цикле без `ON CONFLICT` и без
-  уникального constraint'а на `(store_id, plan_date)` — вызывается и
-  кроном в 6:00 МСК, и синхронно из `PUT /plans/stores/:id/month` сразу
-  после правки, реальное совпадение по времени возможно. Теперь
-  `UNIQUE(store_id, plan_date)` (миграция 0013) + per-store `INSERT ...
-  ON CONFLICT DO UPDATE` — без окна "плана нет" между delete и insert, без
-  риска дублей. Optimistic locking (версионирование строк) нигде не
-  добавлен — `PATCH /stores/:id` и подобные уже делают частичный `UPDATE
-  SET <только присланные поля>`, не перезапись всей строки, поэтому
-  классический lost-update сценарий физически не возникает; добавлять
-  версионирование под гипотетическую, не обнаруженную на практике
-  проблему не стали.
-- **Supervisor Scope Cache** (`services/scope-cache.ts`, 19.25.0) —
-  `resolveSupervisorStores()` (реальный hot path кабинета супервайзера и
-  Command Center — JOIN `supervisor_sectors → organizations → stores` на
-  каждую загрузку) теперь кэшируется в памяти процесса на 5 минут для
-  роли `supervisor`; ветка admin/manager (дешёвый индексированный
-  `SELECT id FROM stores WHERE org_id=$1`) намеренно не кэшируется —
-  кэшировать нечего. `getUserStoreIds()` (`middleware-auth.ts`), названная
-  в исходном ревью как «ходит в БД на каждый запрос», на проверку —
-  мёртвый код, нигде не вызывается; кэш вокруг несуществующего вызова не
-  строили. Redis рассмотрен и отклонён не из экономии, а по топологии:
-  прод — 1 реплика Railway (`grammy`-бот на long-polling физически не
-  живёт на двух инстансах одного `BOT_TOKEN` без `409 Conflict`), при
-  одной реплике in-memory `Map` даёт ровно ту же корректность, что Redis,
-  без нового сервиса и сетевого failure mode — понадобится Redis только
-  если/когда прод перейдёт на несколько реплик (не запланировано, бот
-  всё равно не переживёт это без отдельного перехода на webhook).
-  Инвалидация точечная (`invalidate(supervisorId)`) при `PUT
-  /supervisor/:id/sector` и `PATCH /employees/:id/role`, полная
-  (`invalidateAll()`) при `PUT /admin/org/:id` (смена сектора сети задевает
-  сразу всех супервайзеров и старого, и нового сектора — точечно
-  разрешить дорого, полный сброс на редкой операции не создаёт заметной
-  нагрузки). `GET /admin/cache-stats` (admin-only) — `{hits, misses, size,
-  hitRate}`, ops/debug-метрика, не отдельный UI-экран.
-- **Frontend Foundation** (`frontend/src/`, `frontend/vite.config.ts`,
-  20.0.0) — первый Vite-билд фронтенда, формат **iife** (не es/umd)
-  выбран сознательно: остальные 19 файлов `frontend/js/*.js` — классические
-  синхронные `<script src=...>` без `type="module"`, ожидающие, что всё
-  нужное уже в общей глобальной области к моменту их выполнения; IIFE
-  сохраняет ту же семантику загрузки и не требует правки
-  `scripts/smoke-frontend.mjs` (тот матчит `<script src="...">` жёстким
-  regexp'ом). Пилотный typed-клиент (`frontend/src/api-client.ts`) кроет
-  только два живых GET-эндпоинта (`/org/stores`, `/metrics`) — сознательно
-  бросает на не-ok/сетевой ошибке, сам не глотает и не подставляет
-  фолбэк (это остаётся задачей вызывающего кода в `01-core.js`, там
-  поведение снаружи не изменилось — тот же try/catch, что и раньше).
-  Общий контракт `backend/src/shared/api-types.ts` переиспользует
-  `StoreRecord` из `repositories/stores.ts` (19.22.0) как есть, не
-  дублирует; бэкенд-роуты получают явную аннотацию возвращаемого типа —
-  компилируемая гарантия, что реализация и контракт не разойдутся, а не
-  просто описание для фронтенда. `frontend/vitest.config.ts` (jsdom) —
-  отдельный от `backend/vitest.config.ts` (там добавлен `exclude:
-  ['frontend/**']`, иначе дефолтный include vitest подхватил бы
-  frontend-тесты в обычном `npm test`). Пилот на двух эндпоинтах, не вся
-  поверхность — `01-core.js` держит расшаренное мутируемое состояние
-  (`me`, `adminViewOrgId`, `METRICS`), на которое прямо ссылаются все
-  остальные 19 файлов; полная модуляризация этого файла — риск для
-  отдельного захода, не часть 20.0.0. Замена 71 инлайнового `onclick=`
-  на `addEventListener`/переход на строгую CSP (см. запись про
-  `@fastify/helmet` выше) — отдельная, более крупная переделка, не
-  затронута.
+Полный разбор (initData/HMAC, CORS, rate-limit/CSP, TypeBox-валидация,
+Data Access Layer, Audit Trail, Concurrency & Workflow Integrity,
+Supervisor Scope Cache, Authentication Boundary) —
+**[docs/SECURITY.md](../docs/SECURITY.md)**. Архитектурные решения с
+альтернативами и причинами — **[docs/ADR/](../docs/ADR/)**.
 
 ---
 
@@ -1140,4 +815,4 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
 ---
 
 **T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.  
-*README · актуально на v20.10.0 · август 2026*
+*README · актуально на v20.11.0 · август 2026*

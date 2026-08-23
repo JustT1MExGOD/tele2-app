@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 
 // Регрессия на КРИТИЧНУЮ дыру: POST /me/bind был вообще без авторизации —
 // telegram_id брался из тела запроса (или спуфабельного заголовка), не из

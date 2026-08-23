@@ -7,8 +7,8 @@
  */
 import cron from 'node-cron';
 import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
-import { sendNetworkDigest } from '../services/network-digest.js';
-import { runJob } from '../utils/job-logger.js';
+import { sendNetworkDigest } from '../core/analytics/network-digest.js';
+import { runJob } from './job-logger.js';
 
 export function startDigestCron() {
   cron.schedule('* * * * *', () => {

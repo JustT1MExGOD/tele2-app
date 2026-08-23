@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
-import { claimReleaseAnnouncement, buildAnnounceCaption } from '../../src/services/release-announce.js';
-import { query } from '../../src/db/index.js';
+import { claimReleaseAnnouncement, buildAnnounceCaption } from '../../src/platform/notifications/release-announce.js';
+import { query } from '../../src/data/db/index.js';
 
 // Подпись к анонсу теперь несёт полное описание (заголовок + все буллеты),
 // не короткую строку "T2 Sales обновился до X" — по прямому запросу

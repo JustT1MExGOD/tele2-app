@@ -5,13 +5,13 @@
  */
 
 import cron from 'node-cron';
-import { bot, notifyChat } from '../bot/index.js';
+import { bot, notifyChat } from '../integrations/telegram/bot.js';
 import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
-import { computeStoreDailyPlans } from '../services/plans.js';
-import { getOrgNotifyTarget } from '../services/tenant.js';
-import * as cronRepo from '../repositories/cron.js';
-import * as orgsRepo from '../repositories/organizations.js';
-import { runJob, jobLogger } from '../utils/job-logger.js';
+import { computeStoreDailyPlans } from '../core/plans/service.js';
+import { getOrgNotifyTarget } from '../core/shared/tenant.js';
+import * as cronRepo from '../data/repositories/cron.js';
+import * as orgsRepo from '../data/repositories/organizations.js';
+import { runJob, jobLogger } from './job-logger.js';
 
 /** Группировка произвольных строк с полем org_id по сети — каждая сеть получает своё сообщение в свой чат. */
 function groupByOrg<T extends { org_id: string }>(rows: T[]): Map<string, T[]> {

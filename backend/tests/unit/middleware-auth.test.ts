@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveViewOrgId, canAssignRole, type AuthUser } from '../../src/middleware-auth.js';
+import { resolveViewOrgId, canAssignRole, type AuthUser } from '../../src/auth/guards.js';
 
 function user(role: AuthUser['role'], orgId: string): AuthUser {
   return {

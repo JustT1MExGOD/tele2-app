@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { assertStoreInOrg } from '../../src/middleware-auth.js';
+import { assertStoreInOrg } from '../../src/auth/guards.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 
 describe('assertStoreInOrg', () => {

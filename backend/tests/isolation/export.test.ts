@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 
 // Регрессия: /sales/history, /sales/audit, /export/sales.csv, /export/bfq.csv,
 // /export/schedules.csv были доступны любому manager без фильтра по сети —

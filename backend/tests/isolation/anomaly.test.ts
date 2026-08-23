@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 import { todayMoscow } from '../../src/utils/date.js';
-import { checkAnomalyVsForecast } from '../../src/services/anomaly.js';
+import { checkAnomalyVsForecast } from '../../src/core/analytics/anomaly.js';
 
 // 19.2 Anomaly Detection — единственный smart_alerts-триггер, сравнивающий
 // вчерашний факт со СТАТИСТИЧЕСКИ ТИПИЧНЫМ для этого дня недели (через

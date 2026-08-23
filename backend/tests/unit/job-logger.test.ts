@@ -5,7 +5,7 @@
  * процесс необработанным rejection'ом.
  */
 import { describe, it, expect } from 'vitest';
-import { runJob } from '../../src/utils/job-logger.js';
+import { runJob } from '../../src/cron/job-logger.js';
 
 describe('runJob', () => {
   it('успешный fn — не бросает, вызывающий код продолжает выполняться', async () => {

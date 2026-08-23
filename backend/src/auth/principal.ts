@@ -9,7 +9,7 @@
  * Не переименовано и не убрано намеренно — 20.9.0 создаёт границу, а не
  * ломает существующий код ради чистоты имени (см. README §22).
  */
-import * as employeesRepo from '../repositories/employees.js';
+import * as employeesRepo from '../data/repositories/employees.js';
 import type { Identity } from './identity.js';
 
 export type Role = 'trainee' | 'employee' | 'senior' | 'manager' | 'supervisor' | 'admin' | 'guest';

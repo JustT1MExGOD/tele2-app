@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query, withTransaction } from '../../src/db/index.js';
+import { query, withTransaction } from '../../src/data/db/index.js';
 
 describe('Audit Trail', () => {
   const fx = new TestFixtures();

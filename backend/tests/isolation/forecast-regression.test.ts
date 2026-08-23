@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 import { todayMoscow } from '../../src/utils/date.js';
-import { forecastStore } from '../../src/services/forecast.js';
+import { forecastStore } from '../../src/core/analytics/forecast.js';
 
 // 19.1 Forecast v2 — forecastStore() бэкпортировал фикс, уже проверенный
 // в forecastRemainingOfMonth (заполнение пропущенных дней явными нулями,

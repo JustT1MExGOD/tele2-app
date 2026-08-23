@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 import { todayMoscow } from '../../src/utils/date.js';
-import { buildNetworkDigestText, sendNetworkDigest } from '../../src/services/network-digest.js';
+import { buildNetworkDigestText, sendNetworkDigest } from '../../src/core/analytics/network-digest.js';
 
 // 18.9 Reports — недельная/месячная сводка по сети. Не новый расчётный
 // движок (buildSupervisorDashboard уже даёт план/факт/тренд), только

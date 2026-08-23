@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { claimCronSend } from '../../src/cron/reports.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 
 // Регрессия: ни micro/final отчёты, ни напоминания о завтрашней смене не
 // были защищены от повторной отправки. Два реальных сценария: (1) Railway

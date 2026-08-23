@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 
 // Shift 2.0 (18.7): смена как объект с фазами «до/во время/после» вместо
 // пары timestamp'ов. Проверяем три вещи, которых раньше не было вообще:

@@ -123,7 +123,7 @@ import type {
   CreateStoreRequest,
   NetworkLiveResponse
 } from '../../src/shared/api-types.js';
-import type { StoreRecord } from '../../src/repositories/stores.js';
+import type { StoreRecord } from '../../src/data/repositories/stores.js';
 
 /**
  * Бэкенд по всему API (глобальный setErrorHandler, 19.15.0) системно

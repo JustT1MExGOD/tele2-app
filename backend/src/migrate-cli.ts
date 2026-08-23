@@ -1,5 +1,5 @@
 import './env.js'; // должен быть первым — см. комментарий в env.ts
-import { runMigrations } from './db/migrate.js';
+import { runMigrations } from './data/db/migrate.js';
 
 runMigrations()
   .then(({ applied }) => {

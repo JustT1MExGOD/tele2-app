@@ -4,7 +4,7 @@
  * FK-safe порядке, ничего не остаётся после прогона. Каждый вызов create*()
  * запоминает созданную запись в this — cleanup() подчищает именно её.
  */
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 
 let counter = 0;
 /** Уникальный префикс на тестовый прогон — safety net на случай, если

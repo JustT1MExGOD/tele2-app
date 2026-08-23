@@ -1,14 +1,14 @@
 import './env.js'; // должен быть первым — см. комментарий в env.ts
 import { buildApp } from './app.js';
-import { runMigrations } from './db/migrate.js';
-import { startBot, notifyAdmin } from './bot/index.js';
+import { runMigrations } from './data/db/migrate.js';
+import { startBot, notifyAdmin } from './integrations/telegram/bot.js';
 import { startReportCron } from './cron/reports.js';
 import { startDigestCron } from './cron/digest.js';
 import { startAlertCron } from './cron/alerts.js';
 import { todayMoscow } from './utils/date.js';
-import { runSmartAlertsTick } from './services/alerts.js';
-import { announceReleaseIfNeeded } from './services/release-announce.js';
-import { runJob } from './utils/job-logger.js';
+import { runSmartAlertsTick } from './core/alerts/service.js';
+import { announceReleaseIfNeeded } from './platform/notifications/release-announce.js';
+import { runJob } from './cron/job-logger.js';
 
 /**
  * Раньше падение миграции/старта было видно только в Railway logs, которые

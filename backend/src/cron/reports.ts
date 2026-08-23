@@ -6,16 +6,16 @@
  * SCHEDULES, из-за чего новую точку нужно было вручную дописывать в код.
  */
 import { todayMoscow } from '../utils/date.js';
-import { getSalesSumColumns } from '../services/metrics-catalog.js';
-import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '../bot/index.js';
-import { shiftReminder, microReport, finalReport, microLines, finalLines } from '../bot/messages.js';
-import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../services/report-image.js';
-import { generateDipComment } from '../services/ai.js';
-import { materializeStoreDailyPlans } from '../services/plans.js';
-import { getStoreNotifyTarget } from '../services/tenant.js';
-import * as cronRepo from '../repositories/cron.js';
-import * as reportImageRepo from '../repositories/report-image.js';
-import { runJob } from '../utils/job-logger.js';
+import { getSalesSumColumns } from '../core/shared/metrics-catalog.js';
+import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '../integrations/telegram/bot.js';
+import { shiftReminder, microReport, finalReport, microLines, finalLines } from '../integrations/telegram/messages.js';
+import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../core/reports/image.js';
+import { generateDipComment } from '../integrations/ai/client.js';
+import { materializeStoreDailyPlans } from '../core/plans/service.js';
+import { getStoreNotifyTarget } from '../core/shared/tenant.js';
+import * as cronRepo from '../data/repositories/cron.js';
+import * as reportImageRepo from '../data/repositories/report-image.js';
+import { runJob } from './job-logger.js';
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)

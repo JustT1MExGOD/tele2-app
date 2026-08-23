@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSesModel, projectDay } from '../../src/services/forecast.js';
+import { buildSesModel, projectDay } from '../../src/core/analytics/forecast.js';
 
 // 19.1 Forecast v2 — числовая сердцевина, вынесенная из трёх раньше
 // раздельных копий (forecastStore, forecastRemainingOfMonth, и до этой

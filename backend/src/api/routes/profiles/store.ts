@@ -1,0 +1,108 @@
+/**
+ * Store Intelligence (18.5) — профиль точки: план/факт/прогноз, тренд,
+ * staffing, кассовая дисциплина, связанные задачи и алерты, плюс
+ * объяснимый Store Health Score. Не изобретает новый расчётный движок —
+ * почти целиком передаёт buildSupervisorDashboard() с scope из одной точки.
+ */
+import { FastifyInstance, FastifyReply } from 'fastify';
+import { requireAuth, requireStoreInOrg } from '../../../auth/guards.js';
+import { buildSupervisorDashboard } from '../../../core/analytics/supervisor.js';
+import { todayMoscow } from '../../../utils/date.js';
+import { serverError } from '../../../shared/errors.js';
+import * as schedulesRepo from '../../../data/repositories/schedules.js';
+import * as cashRepo from '../../../data/repositories/cash.js';
+import * as tasksRepo from '../../../data/repositories/tasks.js';
+import type { StoreProfileResponse } from '../../../shared/api-types.js';
+
+function canViewStoreProfile(user: { role?: string } | null | undefined): boolean {
+  if (!user?.role) return false;
+  return user.role === 'supervisor' || user.role === 'manager' || user.role === 'admin';
+}
+
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+export async function registerStoreProfileRoutes(app: FastifyInstance) {
+  app.get(
+    '/stores/:id/profile',
+    { preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })] },
+    async (request, reply): Promise<StoreProfileResponse | FastifyReply | undefined> => {
+    if (!requireAuth(request, reply)) return;
+    if (!canViewStoreProfile(request.user)) {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+    const { id } = request.params as { id: string };
+    const q = (request.query || {}) as { org_id?: string; days?: string };
+
+    let days = Number(q.days);
+    if (!Number.isFinite(days) || days < 7) days = 30;
+    if (days > 60) days = 60;
+    const date = todayMoscow();
+
+    try {
+      const dash = await buildSupervisorDashboard({ scope: [id], date, days });
+      const store = dash.stores[0] || null;
+      if (!store) return reply.code(404).send({ error: 'not found' });
+
+      const d = new Date(date + 'T12:00:00');
+      d.setDate(d.getDate() - (days - 1));
+      const from = d.toISOString().slice(0, 10);
+
+      // Staffing coverage — доля дней периода, когда на точке хоть кто-то
+      // был в графике. Простой, честный прокси — в системе нет отдельного
+      // поля "требуемый штат на точку", чтобы сравнивать факт с нормой.
+      const scheduledCnt = await schedulesRepo.countScheduledDaysForStore(id, from, date);
+      const staffingPct = clamp(Math.round(scheduledCnt / days * 100), 0, 100);
+
+      // Кассовая дисциплина — доля дней БЕЗ разрыва ≥1000 (тот же порог,
+      // что services/alerts.ts:83 использует для триггера cash_gap alert).
+      const cashRows = await cashRepo.findForStoreRange(id, from, date);
+      const cashDaysTotal = cashRows.length;
+      const cashDaysClean = cashRows.filter(
+        (r: any) => Math.abs((Number(r.cash_fact) || 0) - (Number(r.cash_1c) || 0)) < 1000
+      ).length;
+      // Нет данных по кассе за период — не штрафуем и не хвалим, нейтральные 100.
+      const cashPct = cashDaysTotal > 0 ? clamp(Math.round((cashDaysClean / cashDaysTotal) * 100), 0, 100) : 100;
+
+      const overallPct = clamp(store.today?.overall ?? 0, 0, 200);
+      const trendPct = clamp(50 + (dash.network?.pace_delta ?? 0), 0, 100);
+
+      const health = Math.round(
+        0.4 * Math.min(overallPct, 100) + 0.2 * trendPct + 0.2 * staffingPct + 0.2 * cashPct
+      );
+
+      const tasks = await tasksRepo.findOpenForStore(id);
+
+      return {
+        store: {
+          store_id: store.store_id,
+          name: store.name,
+          code: store.code,
+          color: store.color,
+          staff_count: store.staff_count,
+          staff: store.staff
+        },
+        today: store.today,
+        month: store.month,
+        trend: dash.trend,
+        alerts: store.alerts || [],
+        tasks,
+        health: {
+          score: clamp(health, 0, 100),
+          components: {
+            plan: { value: Math.round(Math.min(overallPct, 100)), weight: 0.4 },
+            trend: { value: trendPct, weight: 0.2 },
+            staffing: { value: staffingPct, weight: 0.2 },
+            cash_discipline: { value: cashPct, weight: 0.2 }
+          }
+        },
+        period: { from, to: date, days },
+        generated_at: new Date().toISOString()
+      };
+    } catch (e: any) {
+      return serverError(request, reply, 'store_profile_failed', e);
+    }
+  }
+  );
+}

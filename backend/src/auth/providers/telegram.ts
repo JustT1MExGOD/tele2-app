@@ -12,7 +12,7 @@
  * заголовок — только без BOT_TOKEN или при явном ALLOW_INSECURE_AUTH).
  */
 import { FastifyRequest } from 'fastify';
-import { verifyTelegramInitData } from '../../services/telegram-auth.js';
+import { verifyTelegramInitData } from './telegram-verify.js';
 import type { Identity } from '../identity.js';
 
 export function resolveTelegramIdentity(request: FastifyRequest): Identity | null {

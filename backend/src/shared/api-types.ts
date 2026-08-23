@@ -4,7 +4,7 @@
  * (frontend/src/api-client.ts) — растёт по мере миграции очередного
  * frontend-файла на TypeScript (см. README §22).
  */
-import type { StoreRecord } from '../repositories/stores.js';
+import type { StoreRecord } from '../data/repositories/stores.js';
 
 export interface OrgStoresResponse {
   org_id: string;

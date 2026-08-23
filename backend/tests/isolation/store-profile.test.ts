@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 import { todayMoscow } from '../../src/utils/date.js';
 
 // 18.5 Store Intelligence — профиль точки + объяснимый Store Health Score.

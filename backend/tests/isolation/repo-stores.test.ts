@@ -1,6 +1,6 @@
 /**
  * Data Access Layer, 19.22.0 — первые repository-уровня тесты (не через
- * HTTP/app.inject(), а прямой вызов src/repositories/stores.ts). Цель: сама
+ * HTTP/app.inject(), а прямой вызов src/data/repositories/stores.ts). Цель: сама
  * структура репозитория не даёт получить/поменять чужую сеть, а не просто
  * "роут сверху проверяет". Существующие HTTP-уровня тесты на /stores
  * (store-display-name.test.ts и т.д.) не тронуты этим коммитом и обязаны
@@ -8,9 +8,9 @@
  * поведение.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import * as storesRepo from '../../src/repositories/stores.js';
+import * as storesRepo from '../../src/data/repositories/stores.js';
 
 describe('repositories/stores — org-scoping на уровне репозитория', () => {
   const fx = new TestFixtures();

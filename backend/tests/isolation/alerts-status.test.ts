@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { query } from '../../src/db/index.js';
-import { insertAlertOnce } from '../../src/services/alerts.js';
+import { query } from '../../src/data/db/index.js';
+import { insertAlertOnce } from '../../src/core/alerts/service.js';
 
 // 18.6 Alerts 2.0 — полный жизненный цикл алерта (не только open->acked),
 // атомарная защита от дублей, авто-resolve через связанную задачу (18.4).

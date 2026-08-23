@@ -6,9 +6,9 @@
  * дубликаты строк. Теперь per-store UPSERT (миграция 0013).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { query } from '../../src/db/index.js';
+import { query } from '../../src/data/db/index.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { materializeStoreDailyPlans } from '../../src/services/plans.js';
+import { materializeStoreDailyPlans } from '../../src/core/plans/service.js';
 
 describe('materializeStoreDailyPlans — конкурентные вызовы не дублируют строки', () => {
   const fx = new TestFixtures();
