@@ -4,6 +4,18 @@
 > справочник структуры — обновляется вместе с кодом; README §5 держит
 > только короткую ссылку сюда.
 
+## Быстрые факты
+
+| | |
+|---|---|
+| **Backend** | Fastify + TypeScript, Node 22, layered (`api/` → `core/` → `data/`) |
+| **БД** | PostgreSQL (Railway), схема только через `backend/migrations/` |
+| **Frontend** | Классические `<script>`-файлы (`frontend/js/*.js`) + растущая typed-часть на Vite/iife (`frontend/src/`) |
+| **Бот** | Grammy, long-polling, 1 реплика (см. [ADR/002](./ADR/002-supervisor-scope-cache-in-memory.md)) |
+| **AI** | Groq (`llama-3.3-70b-versatile`), холодный путь — не в hot path запросов |
+| **Хостинг** | Railway, `backend/` — Root Directory, миграции накатываются сами при старте |
+| **Auth** | Telegram `initData`, HMAC на сервере — подробно в [SECURITY.md](./SECURITY.md) |
+
 ## Диаграмма
 
 ```mermaid
@@ -131,3 +143,11 @@ tele2-app/
 `data/db/index.js` напрямую (кроме `withTransaction()`, это оркестрация,
 не сам SQL). `npm run check:no-direct-sql` — CI-ratchet, растёт по мере
 переноса следующих файлов, не позволяет откат.
+
+## Связанные документы
+
+- [SECURITY.md](./SECURITY.md) — слои защиты поверх этой структуры (RBAC,
+  Data Access Layer, аудит).
+- [API.md](./API.md) — таблица эндпоинтов по модулям `api/routes/`.
+- [DEVELOPMENT.md](./DEVELOPMENT.md) — как запустить и проверить локально.
+- [ADR/](./ADR/) — почему структура именно такая, не другая.
