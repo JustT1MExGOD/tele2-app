@@ -21,8 +21,8 @@ function num(v: any) { return Number(v) || 0; }
 function resolveFontFiles(): string[] {
   const candidates = [
     path.join(process.cwd(), 'assets/fonts'),
-    path.join(__dirname, '../../assets/fonts'),
-    path.join(__dirname, '../assets/fonts')
+    path.join(__dirname, '../../../assets/fonts'),
+    path.join(__dirname, '../../assets/fonts')
   ];
   const files: string[] = [];
   for (const dir of candidates) {

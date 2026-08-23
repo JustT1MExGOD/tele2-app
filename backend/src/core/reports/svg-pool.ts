@@ -10,7 +10,7 @@
  */
 import { Worker } from 'node:worker_threads';
 
-const WORKER_URL = new URL('../workers/svg-render.worker.js', import.meta.url);
+const WORKER_URL = new URL('../../workers/svg-render.worker.js', import.meta.url);
 const POOL_SIZE = 2;
 
 type RenderPayload = {

@@ -24,7 +24,7 @@ function findMigrationsDir(): string {
   // backend/, чтобы deploy artifact и репозиторий не расходились.
   const candidates = [
     path.join(process.cwd(), 'migrations'),
-    path.join(__dirname, '../../migrations')
+    path.join(__dirname, '../../../migrations')
   ];
   for (const dir of candidates) {
     if (fs.existsSync(dir)) return dir;
