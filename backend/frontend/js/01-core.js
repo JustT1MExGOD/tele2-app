@@ -61,6 +61,52 @@
       } catch (_) {}
     }
 
+    // Мини-пружина для жестовых анимаций (свайп-закрытие модалки, свайп
+    // между панелями) — без внешней библиотеки. damping/response — те же
+    // параметры, что в apple-design skill (WWDC Designing Fluid Interfaces):
+    // damping 1.0 = критическое затухание без bounce (дефолт для UI),
+    // damping ~0.8-0.86 = лёгкий bounce (только когда жест уже нёс скорость).
+    // Ключевое отличие от CSS transition — value/velocity живут в JS, поэтому
+    // stop() можно вызвать в любой момент и продолжить новую пружину от
+    // текущего (не целевого) значения — это и даёт «перехватываемость»
+    // жеста на лету, а не рывок к началу при повторном хватании.
+    function createSpring({ from, velocity = 0, to, damping = 1, response = 0.3, onUpdate, onSettle }) {
+      const omega = (2 * Math.PI) / response;
+      const stiffness = omega * omega;
+      const dampCoef = 2 * damping * omega;
+      let value = from, vel = velocity, last = performance.now(), raf;
+      function tick(now) {
+        const dt = Math.min(0.032, (now - last) / 1000);
+        last = now;
+        const accel = -stiffness * (value - to) - dampCoef * vel;
+        vel += accel * dt;
+        value += vel * dt;
+        onUpdate(value);
+        if (Math.abs(value - to) < 0.5 && Math.abs(vel) < 30) {
+          onUpdate(to);
+          if (onSettle) onSettle();
+          return;
+        }
+        raf = requestAnimationFrame(tick);
+      }
+      raf = requestAnimationFrame(tick);
+      return { stop: () => cancelAnimationFrame(raf), getValue: () => value };
+    }
+
+    // Скорость жеста из истории точек {x|y, t}. dt < 5мс не считается
+    // надёжным (совпадающие таймстемпы бывают у синтетических событий и на
+    // некоторых WebView) — без этой защиты почти нулевой dt даёт огромную
+    // мнимую скорость и пружина улетает far за экран вместо мягкого сеттла.
+    function gestureVelocity(history, axis) {
+      if (history.length < 2) return 0;
+      const first = history[0], last = history[history.length - 1];
+      const dt = (last.t - first.t) / 1000;
+      if (dt < 0.005) return 0;
+      const v = (last[axis] - first[axis]) / dt;
+      const MAX = 4000; // px/s — быстрее реального пальца не бывает
+      return Math.max(-MAX, Math.min(MAX, v));
+    }
+
     // Экранирование пользовательского текста перед вставкой в innerHTML.
     // full_name/comment/message приходят от других пользователей (заявки
     // на доступ, тикеты, продажи) и не должны интерпретироваться как HTML.

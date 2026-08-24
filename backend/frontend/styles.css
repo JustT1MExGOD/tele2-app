@@ -2070,13 +2070,22 @@
 }
 
 /* prefers-reduced-motion — раньше нигде не учитывался, а есть бесконечные
-   анимации (пульс подсветки обучения, покачивание Арбузыча) */
+   анимации (пульс подсветки обучения, покачивание Арбузыча). 20.14.0
+   (apple-design skill, §14): "reduced motion" не значит "вообще без
+   обратной связи" — зацикленные/смещающие анимации (пульс, покачивание,
+   свайп-пружины) убираем совсем, а короткие opacity/color-переходы
+   (появление тоста, подсветка строки) оставляем — это не вызывает
+   vestibular-дискомфорт, а без них статус-переходы читаются как рывок,
+   а не как обратная связь. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+  *, *::before, *::after {
+    transition-property: opacity, color, background-color, border-color !important;
+    transition-duration: 200ms !important;
   }
 }
 

@@ -157,11 +157,20 @@
 
     /* Свайп между несколькими панелями в одном слоте (сейчас — «Мой день»
        ↔ «Сеть сегодня» на Главной, задел под свайп между вкладками позже).
-       Тот же приём, что pull-to-refresh (07-add-sale.js): жест отслеживается
-       целиком через touchmove, а не только по началу/концу — иначе
-       вертикальный скролл страницы будет постоянно путаться со свайпом.
-       Направление (гориз./вертик.) решается один раз в начале жеста и
-       больше не пересматривается. */
+       Жест отслеживается целиком через touchmove, а не только по началу/
+       концу — иначе вертикальный скролл страницы будет постоянно путаться
+       со свайпом. Направление (гориз./вертик.) решается один раз в начале
+       жеста и больше не пересматривается.
+       20.14.0 (apple-design skill): переход между панелями раньше решался
+       чисто по дистанции (dx >= 20% ширины) и ехал CSS transition'ом —
+       быстрый флик на маленькое расстояние не переключал, а повторный
+       захват трека ПОКА он ещё едет (transition ещё не кончился) считал
+       текущее положение равным `-current*width`, хотя реально трек мог
+       быть где-то на середине пути — видимый скачок при перехвате. Теперь
+       решение учитывает скорость релиза, а сеттл — через createSpring()
+       (01-core.js): её можно остановить и перезапустить от фактического
+       текущего X в любой момент. Высота панели по-прежнему меняется без
+       анимации (спорить с высотой контента реже нужно перехватывать). */
     function initSwipePanels(containerEl) {
       if (!containerEl || containerEl.dataset.swipeInit) return;
       const track = containerEl.querySelector('.swipe-track');
@@ -170,54 +179,83 @@
       if (!track || panels.length < 2) return;
       containerEl.dataset.swipeInit = '1';
 
+      const FLICK_VELOCITY = 500; // px/s
       let current = 0;
       let width = containerEl.clientWidth;
-      let startX = 0, startY = 0, dragging = false, horizontal = null;
+      let startX = 0, startY = 0, dragBaseX = 0, dragging = false, horizontal = null;
+      let history = [];
+      let activeSpring = null;
 
-      function settle(index, animate = true) {
+      function currentX() {
+        if (activeSpring) return activeSpring.getValue();
+        const m = /translateX\(([-\d.]+)px\)/.exec(track.style.transform || '');
+        return m ? parseFloat(m[1]) : -current * width;
+      }
+
+      function settle(index, animate = true, velocity = 0) {
         current = Math.max(0, Math.min(panels.length - 1, index));
-        track.style.transition = animate ? 'transform 0.25s ease, height 0.25s ease' : 'none';
-        track.style.transform = `translateX(${-current * width}px)`;
+        const target = -current * width;
         // Панели разной высоты (напр. «Мой день» на выходной короче, чем в
         // рабочий день) — без этого высота трека всегда была под самую
         // высокую панель (align-items: stretch по умолчанию), и в короткой
         // панели снизу висела пустая область.
         track.style.height = panels[current].scrollHeight + 'px';
         dots.forEach((d, i) => d.classList.toggle('active', i === current));
+        if (activeSpring) { activeSpring.stop(); activeSpring = null; }
+        if (!animate) {
+          track.style.transform = `translateX(${target}px)`;
+          return;
+        }
+        const hasMomentum = Math.abs(velocity) > 200;
+        activeSpring = createSpring({
+          from: currentX(), velocity, to: target,
+          damping: hasMomentum ? 0.86 : 1, response: 0.32,
+          onUpdate: (v) => { track.style.transform = `translateX(${v}px)`; },
+          onSettle: () => { activeSpring = null; }
+        });
       }
 
       window.addEventListener('resize', () => { width = containerEl.clientWidth; settle(current, false); });
 
       track.addEventListener('touchstart', (e) => {
+        if (activeSpring) { activeSpring.stop(); activeSpring = null; } // перехват на лету
+        dragBaseX = currentX();
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
+        history = [{ x: startX, t: performance.now() }];
         dragging = true;
         horizontal = null;
         width = containerEl.clientWidth;
-        track.style.transition = 'none';
       }, { passive: true });
 
       track.addEventListener('touchmove', (e) => {
         if (!dragging) return;
-        const dx = e.touches[0].clientX - startX;
-        const dy = e.touches[0].clientY - startY;
+        const x = e.touches[0].clientX;
+        const y = e.touches[0].clientY;
         if (horizontal === null) {
-          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-          horizontal = Math.abs(dx) > Math.abs(dy);
+          const dx0 = x - startX, dy0 = y - startY;
+          if (Math.abs(dx0) < 6 && Math.abs(dy0) < 6) return;
+          horizontal = Math.abs(dx0) > Math.abs(dy0);
           if (!horizontal) { dragging = false; return; }
         }
         if (!horizontal) return;
-        track.style.transform = `translateX(${-current * width + dx}px)`;
+        history.push({ x, t: performance.now() });
+        if (history.length > 5) history.shift();
+        track.style.transform = `translateX(${dragBaseX + (x - startX)}px)`;
       }, { passive: true });
 
       track.addEventListener('touchend', (e) => {
         if (!dragging || !horizontal) { dragging = false; return; }
         dragging = false;
-        const dx = e.changedTouches[0].clientX - startX;
+        const x = e.changedTouches[0].clientX;
+        const dx = (dragBaseX + (x - startX)) - (-current * width);
+        const velocity = gestureVelocity(history, 'x');
         const THRESHOLD = width * 0.2;
-        if (dx <= -THRESHOLD && current < panels.length - 1) settle(current + 1);
-        else if (dx >= THRESHOLD && current > 0) settle(current - 1);
-        else settle(current);
+
+        let target = current;
+        if ((dx <= -THRESHOLD || velocity <= -FLICK_VELOCITY) && current < panels.length - 1) target = current + 1;
+        else if ((dx >= THRESHOLD || velocity >= FLICK_VELOCITY) && current > 0) target = current - 1;
+        settle(target, true, velocity);
       }, { passive: true });
 
       dots.forEach((dot, i) => dot.addEventListener('click', () => settle(i)));

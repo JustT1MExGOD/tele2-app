@@ -288,37 +288,65 @@
     /* 15: свайп-вниз для закрытия модалки продажи. Жест ловим только на
        .sheet-modal (не на document) — и только если начался на ручке/
        заголовке, а не внутри #modalBody: иначе обычный скролл формы вниз
-       тоже закрывал бы её. */
+       тоже закрывал бы её.
+       20.14.0 (apple-design skill): раньше решение "закрыть/вернуть" было
+       чисто по дистанции (dy >= 80), а сеттл — CSS transition. Из-за этого
+       быстрый флик на 20px не закрывал, а повторное хватание модалки ПОКА
+       она ещё едет обратно вверх дёргало её в исходное положение — новый
+       drag стартовал от dy=0, а не от текущего визуального Y, давая видимый
+       скачок. Теперь решение учитывает скорость (флик закрывает даже на
+       маленькой дистанции), а сеттл — через createSpring() (01-core.js),
+       которую можно остановить и перезапустить от текущего значения в
+       любой момент — это и есть перехватываемость жеста. */
     function initModalSwipeClose() {
       const sheet = document.querySelector('.sheet-modal');
       if (!sheet) return;
       const SWIPE_CLOSE_THRESHOLD = 80;
-      let startY = 0, dragging = false;
+      const FLICK_VELOCITY = 500; // px/s — быстрый свайп закрывает даже на маленькой дистанции
+      let startY = 0, dragBaseY = 0, dragging = false, history = [];
+      let activeSpring = null;
+
+      function currentY() {
+        if (activeSpring) return activeSpring.getValue();
+        const m = /translateY\(([-\d.]+)px\)/.exec(sheet.style.transform || '');
+        return m ? parseFloat(m[1]) : 0;
+      }
 
       sheet.addEventListener('touchstart', (e) => {
         if (!e.target.closest('.grab, .modal-title')) { dragging = false; return; }
+        if (activeSpring) { activeSpring.stop(); activeSpring = null; } // перехват на лету
+        dragBaseY = currentY();
         startY = e.touches[0].clientY;
+        history = [{ y: startY, t: performance.now() }];
         dragging = true;
-        sheet.style.transition = 'none';
       }, { passive: true });
 
       sheet.addEventListener('touchmove', (e) => {
         if (!dragging) return;
-        const dy = Math.max(0, e.touches[0].clientY - startY);
+        const y = e.touches[0].clientY;
+        history.push({ y, t: performance.now() });
+        if (history.length > 5) history.shift();
+        const dy = Math.max(0, dragBaseY + (y - startY));
         sheet.style.transform = `translateY(${dy}px)`;
       }, { passive: true });
 
       function endDrag(e) {
         if (!dragging) return;
         dragging = false;
-        const dy = Math.max(0, (e.changedTouches?.[0]?.clientY ?? startY) - startY);
-        sheet.style.transition = 'transform 0.2s ease';
-        if (dy >= SWIPE_CLOSE_THRESHOLD) {
-          sheet.style.transform = 'translateY(100%)';
-          setTimeout(closeModal, 200);
-        } else {
-          sheet.style.transform = '';
-        }
+        const y = e.changedTouches?.[0]?.clientY ?? startY;
+        const dy = Math.max(0, dragBaseY + (y - startY));
+        const velocity = gestureVelocity(history, 'y');
+
+        const shouldClose = dy >= SWIPE_CLOSE_THRESHOLD || velocity >= FLICK_VELOCITY;
+        const target = shouldClose ? sheet.getBoundingClientRect().height + 40 : 0;
+        const hasMomentum = Math.abs(velocity) > 200;
+
+        activeSpring = createSpring({
+          from: dy, velocity, to: target,
+          damping: hasMomentum ? 0.86 : 1, response: 0.32,
+          onUpdate: (v) => { sheet.style.transform = `translateY(${v}px)`; },
+          onSettle: () => { activeSpring = null; if (shouldClose) closeModal(); }
+        });
       }
       sheet.addEventListener('touchend', endDrag, { passive: true });
       sheet.addEventListener('touchcancel', endDrag, { passive: true });
