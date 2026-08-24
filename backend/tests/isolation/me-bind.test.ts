@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
+import { fireConcurrent, countStatus } from '../helpers/concurrency.js';
 import { query } from '../../src/data/db/index.js';
 
 // Регрессия на КРИТИЧНУЮ дыру: POST /me/bind был вообще без авторизации —
@@ -98,5 +99,37 @@ describe('Изоляция привязки Telegram (POST /me/bind)', () => {
     const row = await query(`SELECT is_active, telegram_id FROM employees WHERE id = $1`, [fired.id]);
     expect(row.rows[0].is_active).toBe(false);
     expect(row.rows[0].telegram_id).toBeNull();
+  });
+
+  // 20.16.0 (adversarial race-condition suite): код в api/routes/me/index.ts
+  // сам документирует "узкое окно гонки" между SELECT-чеком карточки и
+  // UPDATE-привязкой — claim в комментарии, что employees.telegram_id UNIQUE
+  // (0002) спасает проигравший запрос, ловится и превращается в чистый 409,
+  // а не портит данные. Раньше это утверждение не было проверено реальным
+  // конкурентным запросом — только последовательными сценариями выше.
+  it('race: 5 параллельных bind одним telegram_id на 5 разных незанятых карточек — побеждает ровно одна', async () => {
+    const app = await getApp();
+    const raceTelegramId = Math.floor(9_000_000_000 + Math.random() * 900_000_000);
+    const candidates = await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        fx.createEmployee(orgA, { role: 'employee', fullName: `Race Candidate ${i}`, telegramId: null })
+      )
+    );
+
+    const results = await fireConcurrent(app, (i) => ({
+      method: 'POST',
+      url: '/me/bind',
+      headers: { 'x-telegram-id': String(raceTelegramId), 'content-type': 'application/json' },
+      payload: { employee_id: candidates[i].id }
+    }), 5);
+
+    expect(countStatus(results, [200])).toBe(1);
+    expect(countStatus(results, [409])).toBe(4);
+
+    const owners = await query(
+      `SELECT id FROM employees WHERE telegram_id = $1`,
+      [raceTelegramId]
+    );
+    expect(owners.rows.length).toBe(1);
   });
 });

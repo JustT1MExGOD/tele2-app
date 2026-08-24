@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
+import { fireConcurrent, countStatus } from '../helpers/concurrency.js';
 import { query } from '../../src/data/db/index.js';
 
 describe('Изоляция промокодов (/promos)', () => {
@@ -58,5 +59,34 @@ describe('Изоляция промокодов (/promos)', () => {
     const app = await getApp();
     const res = await app.inject({ method: 'POST', url: `/promos/${promoId}/use`, headers: authAs(managerA.telegramId) });
     expect(res.statusCode).toBe(200);
+  });
+
+  // 20.16.0 (adversarial race-condition suite): markUsed() — реальный CAS
+  // (UPDATE ... WHERE is_used=false), но до сих пор ни разу не проверен
+  // настоящим конкурентным запросом — только последовательно (тест выше).
+  // Промокод, использованный дважды — не абстрактный риск, а прямая потеря
+  // (код реально применён у клиента дважды).
+  it('race: 5 параллельных попыток забрать один код — побеждает ровно одна', async () => {
+    const app = await getApp();
+    const raceCreate = await app.inject({
+      method: 'POST',
+      url: '/promos',
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { code: 'TEST-CODE-17-RACE', note: 'race test' }
+    });
+    const racePromoId = raceCreate.json().item.id;
+
+    const results = await fireConcurrent(app, () => ({
+      method: 'POST',
+      url: `/promos/${racePromoId}/use`,
+      headers: authAs(managerA.telegramId)
+    }), 5);
+
+    expect(countStatus(results, [200])).toBe(1);
+    expect(countStatus(results, [404])).toBe(4);
+
+    const row = await query('SELECT is_used FROM rtk_promocodes WHERE id = $1', [racePromoId]);
+    expect(row.rows[0].is_used).toBe(true);
+    await query('DELETE FROM rtk_promocodes WHERE id = $1', [racePromoId]);
   });
 });

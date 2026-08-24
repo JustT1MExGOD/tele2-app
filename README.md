@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.15.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.16.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-294%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-296%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.15.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.16.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -444,11 +444,11 @@ Menu Button → URL `https://<service>.up.railway.app/`
 
 | Версия | Суть |
 |--------|------|
-| **20.11.0 – 20.11.1** | Repository Restructuring — backend на layered-структуру (`api/`/`core/`/`data/`), `docs/` вынесен из README, хотфикс путей |
 | **20.12.0** | Frontend rewrite — первый реальный срез (typed-роутер, состояние, первая feature-sliced страница) |
 | **20.13.0** | Security hardening — единое правило «продажи за другого» для роли `senior`, закрыты 2 XSS-пробела |
 | **20.14.0** | Жесты по apple-design skill — перехватываемые свайпы на самодельной пружине вместо CSS-transition, скорость жеста вместо чистой дистанции |
 | **20.15.0** | Concurrency & Reliability, часть 1 — idempotency-ключи на `POST /access/requests/:id/approve` (CAS-гонка) и `POST /tasks` |
+| **20.16.0** | Concurrency & Reliability, часть 2 — переиспользуемый стенд для race-тестов (N конкурентных запросов), закрыты 2 непроверенных пробела (`POST /me/bind`, `PUT /promos/:id/use`) |
 
 ---
 
@@ -676,9 +676,14 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
     Естественно-идемпотентная часть write-API (абсолютные перезаписи,
     upsert на реальных UNIQUE) отдельного фикса не потребовала (см. §21,
     20.15.0)
-  - `20.16` Adversarial race-condition suite — не запланировано отдельно
-    (регресс на найденную гонку уже в `tests/isolation/`, реального
-    `Promise.all()`-стенда под весь write-API пока нет)
+  - `20.16` Adversarial race-condition suite ✅ — переиспользуемый стенд
+    (`tests/helpers/concurrency.ts`, N конкурентных запросов, не только 2)
+    закрыл 2 реально непроверенных пробела: `POST /me/bind` (код сам
+    документировал «узкое окно гонки» комментарием, но ни разу не был
+    проверен настоящим конкурентным запросом) и `PUT /promos/:id/use`
+    (в 20.15.0 классифицирован «естественно идемпотентен» по чтению кода,
+    тоже без реальной проверки) — оба подтверждены эмпирически, не на
+    словах (см. §21, 20.16.0)
   - `20.17` Recovery — бэкапы, rollback миграций, graceful shutdown
 - **20.19-20.22 Platform Layer** — client-neutral API, Web/PWA,
   desktop-интерфейс для supervisor/admin, mobile-спайк (proof-of-concept)
@@ -728,6 +733,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.15.0 · август 2026*
+*README · актуально на v20.16.0 · август 2026*
 
 </div>
