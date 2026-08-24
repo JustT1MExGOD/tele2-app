@@ -40,7 +40,7 @@
 | Me / access | ✅ | `/me`, `/me/day`, `/me/bind`, `/me/access`, `/me/insight`, `/me/self-stats` | `me/index.ts` |
 | Avatar | 🔀 | `POST /me/avatar` (🔓), `GET /avatars/:employeeId` (🌐, rate-limit 30/мин) | `me/avatar.ts` |
 | Access requests | 🔀 | `/access/status` (🔓), `/access/request` (🔓), `/access/orgs`/`/access/requests` (👔🛡), `PUT /supervisor/:id/sector` (🔑) | `org/access.ts` |
-| Sales / shifts | 🔀 | `/sales` (✅, за другого — 👔 узко, см. `canWriteSalesForOthers`), `/sales/:id/zero` (👔), `/shifts/open\|close\|current` (🔓), `/sync/batch` (🔓) | `sales.ts`, `shifts.ts` |
+| Sales / shifts | 🔀 | `/sales` (✅ своя, `canWriteSalesForOthers()` узко для чужой — 👔 manager/admin, **не** senior), `/sales/quick` (🔓, та же `canWriteSalesForOthers()` для чужой), `/sales/:id/zero` (👔), `/shifts/open\|close\|current`/`/sales/parse` (🔓), `/sync/batch` (🔓, та же `canWriteSalesForOthers()` на каждой операции батча) | `sales.ts`, `shifts.ts` |
 | Plans / schedule | 🔀 | `GET /plans/*` (✅), запись — 👔; `/schedules` (✅ своя, 👔 за другого) | `plans.ts`, `schedules.ts` |
 | BFQ / cash | 🔀 | `GET /bfq/:employeeId` (✅), `/bfq` (👔); `/cash/table`+`PUT /cash` (👔) | `bfq.ts`, `cash.ts` |
 | Stores / org | 🔀 | `GET /stores` (✅), `POST /employees`/`/stores`, `PATCH /employees/:id/role` (👔, `canAssignRole` ограничивает роль сверху) | `org/stores.ts`, `org/employees.ts` |
@@ -60,6 +60,38 @@
 org-scope проверкой (`assertStoreInOrg`/`assertEmployeeInOrg`) поверх
 ролевого гварда — своя сеть по умолчанию, `admin` может явно запросить
 другую (`org_id` в теле/query). Подробности — [SECURITY.md](./SECURITY.md#3-авторизация-rbac).
+
+## Пример запроса
+
+```http
+POST /sales HTTP/1.1
+Host: <app>.up.railway.app
+X-Telegram-Init-Data: query_id=...&user=...&auth_date=...&hash=...
+Content-Type: application/json
+
+{"employee_id": 42, "store_id": "gureeva", "sim": 2, "mnp": 1, "client_id": "a1b2c3..."}
+```
+
+Локально/dev вместо `X-Telegram-Init-Data` — голый `X-Telegram-Id: 42`
+(только при `ALLOW_INSECURE_AUTH=true`, см. выше). `client_id` —
+необязательный ключ идемпотентности (UUID со стороны клиента) — без него
+эндпоинт работает как раньше, просто без защиты от задвоенного ретрая, см.
+[SECURITY.md — целостность данных](./SECURITY.md#6-целостность-данных-и-конкурентность).
+
+Успешный ответ (`200`):
+
+```json
+{
+  "id": 1234,
+  "employee_id": 42,
+  "store_id": "gureeva",
+  "sale_date": "2026-08-24",
+  "full_name": "Сидоров Игорь",
+  "store_name": "РТТ Гуреева",
+  "sim": 2,
+  "mnp": 1
+}
+```
 
 ## Формат ошибок
 

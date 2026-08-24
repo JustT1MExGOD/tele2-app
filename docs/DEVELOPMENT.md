@@ -6,6 +6,9 @@
 
 ## Быстрый старт
 
+Требуется **Node 22.x** (`backend/package.json` → `engines.node`) и доступ
+к PostgreSQL (`DATABASE_URL`).
+
 ```bash
 cd backend
 npm ci
@@ -49,13 +52,29 @@ start` выполняет CI (`.github/workflows/ci.yml`) на каждый push
 `localhost`/`127.0.0.1`).
 
 ```bash
-# создать backend/.env.test.local (в репозиторий не попадает):
-# DATABASE_URL=postgresql://postgres@127.0.0.1:5432/t2_test
+# 1. одноразовый Postgres — любым способом, репозиторий не диктует, каким
+#    именно; например одной командой через Docker (без docker-compose.yml,
+#    его в репозитории нет):
+docker run -d --name t2-test-pg -e POSTGRES_PASSWORD=test -p 5432:5432 postgres:18
+
+# 2. создать backend/.env.test.local (в репозиторий не попадает):
+# DATABASE_URL=postgresql://postgres:test@127.0.0.1:5432/postgres
 
 cd backend
 npm run migrate   # один раз — накатить схему (backend/migrations/)
 npm test
 ```
+
+Прогнать один конкретный файл (быстрее, чем весь набор, при точечной
+отладке):
+
+```bash
+npx vitest run tests/isolation/quick-sale-sync.test.ts
+npx vitest run tests/adversarial/cross-tenant-write.test.ts
+```
+
+Что-то не сходится (тест падает без понятной причины, `session_expired`
+в тестах, `409` при параллельном прогоне) — [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
 
 | Слой | Где | Что проверяет |
 |------|-----|-----------------|
@@ -102,8 +121,8 @@ npm test
       изменений
 - [ ] Версионирование — MINOR на каждую сущностную правку (фича, фикс,
       рефактор), changelog-запись в `src/platform/notifications/changelog.ts`
-      только для эпиков, не хотфиксов (README §21 — история версий длиннее,
-      чем changelog-анонсы)
+      только для эпиков, не хотфиксов ([CHANGELOG.md](../CHANGELOG.md) —
+      история версий длиннее, чем changelog-анонсы)
 
 ## Связанные документы
 
@@ -111,3 +130,5 @@ npm test
   потока запроса.
 - [SECURITY.md](./SECURITY.md) — слои защиты, RBAC, тестовое покрытие.
 - [API.md](./API.md) — таблица эндпоинтов и уровней доступа.
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) — симптом → причина.
+- [../CONTRIBUTING.md](../CONTRIBUTING.md) — конвенции коммитов.

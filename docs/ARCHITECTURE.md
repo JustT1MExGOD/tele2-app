@@ -64,8 +64,9 @@ SVG→PNG-картинок (отчёты, карточка анонса верс
 ```text
 tele2-app/
 ├── README.md
-├── PRESENTATION.md
-├── docs/                      (этот файл + API.md/DEVELOPMENT.md/SECURITY.md/ADR/archive/)
+├── CHANGELOG.md               (полная построчная история версий — README держит только последние)
+├── CONTRIBUTING.md
+├── docs/                      (этот файл + API.md/DEVELOPMENT.md/SECURITY.md/FEATURES.md/ADR/archive/…)
 ├── sql/                       (исторические ручные SQL-снимки, не источник схемы — см. sql/README.md)
 └── backend/                  ← Root Directory на Railway
     ├── package.json
@@ -128,10 +129,40 @@ tele2-app/
         ├── index.html    (разметка + подключение styles.css и js/*.js по порядку)
         ├── styles.css
         ├── fonts/        (Google Sans WOFF2 — фронтовый шрифт, отдельно от assets/fonts/ TTF для resvg)
-        ├── src/          (api-client.ts — typed API-клиент, Vite iife-бандл; растущая feature-sliced часть — см. §22 в README)
-        ├── js/           (легаси classic-script файлы, ещё не переехавшие на TypeScript)
+        ├── src/          (typed-мир — Vite, каждый файл собирается в свой iife-бандл, см. ADR/006)
+        │   ├── api-client.ts         (typed API-клиент — единственная точка сетевых вызовов для typed-мира)
+        │   ├── app/router.ts          (registerPage/renderPage — typed-реестр страниц, НЕ URL/hash-based)
+        │   ├── app/state.ts           (getSession() — читает легаси-глобал me, не дублирует источник правды)
+        │   ├── pages/reports/          (первая полностью мигрированная страница, файл-в-файл вместо frontend/js/19-reports.js)
+        │   ├── features/send-network-digest/  (первый addEventListener вместо onclick=)
+        │   └── shared/legacy-globals.d.ts     (ambient-типы для глобалов легаси-мира — me, canManage(), toast() и т.д.)
+        ├── js/           (легаси classic-script файлы, ещё не переехавшие — 19 из 20 экранов)
         └── offline-queue.js
 ```
+
+**Frontend — два мира одновременно** (переезд начат в 20.12.0, не
+закончен): `frontend/js/*.js` — классические non-module `<script>`, делят
+одну глобальную область (порядок подключения важен, `smoke-frontend.mjs`
+это проверяет); `frontend/src/` — настоящие ES-модули, типизированные,
+собираются Vite'ом. Мост между мирами — `legacy-globals.d.ts` (typed-код
+читает легаси-глобалы напрямую, не копирует их) и паттерн
+`window.loadXPage = () => renderPage(name)` (легаси `switchPage()`
+вызывает typed-страницу, ничего в диспетчере не меняя). **Критерий «файл
+мигрирован»**: у него есть модуль в `frontend/src/pages/` или `features/`,
+он собирается в свой `dist/pages/*.bundle.js`, и соответствующий файл в
+`frontend/js/` удалён (не просто продублирован) — сегодня это только
+`19-reports.js` → `pages/reports/`.
+
+**Правило зависимости слоёв**: `api → core → data`, только в одну
+сторону. `api/routes/*` может импортировать `core/` и `data/`; `core/*`
+может импортировать `data/`, но не `api/` (и на деле не импортирует —
+проверено); `data/repositories/*` в норме не должен импортировать из
+`core/`/`api/` — репозиторий не должен знать, кто его вызывает. Правило
+сегодня нарушено в 2 местах (не гипотетически, а по факту грепа):
+`data/repositories/sales.ts` и `supervisor-analytics.ts` тянут функцию/тип
+из `core/analytics/*` — известный, не скрытый долг, не фиксился отдельным
+заходом ради самого правила, чинить заодно с содержательной правкой этих
+файлов, не отдельным рефакторинговым PR.
 
 **Правило регистрации роутов**: каждый модуль в `api/routes/` отвечает за
 свой домен; добавление нового — новый файл + строка в
