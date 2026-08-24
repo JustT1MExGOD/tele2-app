@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.16.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.17.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-296%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.16.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.17.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -444,11 +444,11 @@ Menu Button → URL `https://<service>.up.railway.app/`
 
 | Версия | Суть |
 |--------|------|
-| **20.12.0** | Frontend rewrite — первый реальный срез (typed-роутер, состояние, первая feature-sliced страница) |
 | **20.13.0** | Security hardening — единое правило «продажи за другого» для роли `senior`, закрыты 2 XSS-пробела |
 | **20.14.0** | Жесты по apple-design skill — перехватываемые свайпы на самодельной пружине вместо CSS-transition, скорость жеста вместо чистой дистанции |
 | **20.15.0** | Concurrency & Reliability, часть 1 — idempotency-ключи на `POST /access/requests/:id/approve` (CAS-гонка) и `POST /tasks` |
 | **20.16.0** | Concurrency & Reliability, часть 2 — переиспользуемый стенд для race-тестов (N конкурентных запросов), закрыты 2 непроверенных пробела (`POST /me/bind`, `PUT /promos/:id/use`) |
+| **20.17.0** | Concurrency & Reliability, часть 3 (финал) — graceful shutdown на SIGTERM/SIGINT, закрывает эпоху 20.15-20.17 ровно по плану |
 
 ---
 
@@ -668,7 +668,8 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   жеста в решении «закрыть/переключить», не только дистанцию; заодно
   `prefers-reduced-motion` перестал быть «убить всё подряд» (см. §21,
   20.14.0)
-- **20.15-20.17 Concurrency & Reliability**
+- **20.15-20.17 Concurrency & Reliability** ✅ — закрыта целиком, ровно
+  по плану, без версий сверху
   - `20.15` Idempotency-ключи на критичных операциях ✅ — CAS-гонка в
     `POST /access/requests/:id/approve` (найдена аудитом, не гипотетически:
     два параллельных approve оба создавали сотрудника и слали уведомление),
@@ -684,7 +685,14 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
     (в 20.15.0 классифицирован «естественно идемпотентен» по чтению кода,
     тоже без реальной проверки) — оба подтверждены эмпирически, не на
     словах (см. §21, 20.16.0)
-  - `20.17` Recovery — бэкапы, rollback миграций, graceful shutdown
+  - `20.17` Recovery ✅ — из трёх заявленных тем реально нужна была
+    только одна: бэкапы — платформенная настройка Railway, не код;
+    откат миграций — уже задокументирован как политика «только вперёд»
+    (`docs/RUNBOOK.md`), сознательное решение, не пробел. Graceful
+    shutdown — единственное, что реально отсутствовало: `SIGTERM` на
+    каждом деплое убивал процесс мгновенно, без шанса доотдать начатые
+    HTTP-ответы; теперь `app.close()` → `bot.stop()` → `pool.end()`
+    по порядку, с жёстким таймаутом (см. §21, 20.17.0)
 - **20.19-20.22 Platform Layer** — client-neutral API, Web/PWA,
   desktop-интерфейс для supervisor/admin, mobile-спайк (proof-of-concept)
 
@@ -733,6 +741,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.16.0 · август 2026*
+*README · актуально на v20.17.0 · август 2026*
 
 </div>

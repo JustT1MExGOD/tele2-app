@@ -229,9 +229,11 @@ async function sendSingleFinalImage(
   }
 }
 
-export function startReportCron() {
+/** Возвращает handle — graceful shutdown (index.ts) должен уметь снять
+ * таймер, иначе процесс может тикнуть ещё раз в процессе останова. */
+export function startReportCron(): NodeJS.Timeout {
   console.log('📅 Cron T2: отчёты по точкам — расписание берётся из stores (micro_report_times / close_time_*)');
-  setInterval(() => {
+  return setInterval(() => {
     tick().catch((e) => console.error('cron tick', e?.message || e));
   }, 60_000);
 }

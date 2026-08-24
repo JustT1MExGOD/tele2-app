@@ -5,13 +5,15 @@
  * вручную через nowTimeMoscow()/todayMoscow() — без опции timezone у
  * node-cron, тот же паттерн, что уже используется в проекте.
  */
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
 import { sendNetworkDigest } from '../core/analytics/network-digest.js';
 import { runJob } from './job-logger.js';
 
-export function startDigestCron() {
-  cron.schedule('* * * * *', () => {
+/** Возвращает handle — graceful shutdown (index.ts) должен уметь снять
+ * таймер, иначе процесс может тикнуть ещё раз в процессе останова. */
+export function startDigestCron(): ScheduledTask {
+  return cron.schedule('* * * * *', () => {
     if (nowTimeMoscow() !== '09:00') return;
     const date = todayMoscow();
     const weekday = new Date(date + 'T12:00:00').getDay(); // 0=вс, 1=пн

@@ -4,7 +4,7 @@
  * - отставание точки от дневного плана
  */
 
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { bot, notifyChat } from '../integrations/telegram/bot.js';
 import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
 import { computeStoreDailyPlans } from '../core/plans/service.js';
@@ -118,8 +118,10 @@ export async function checkStoreLagAlert() {
   });
 }
 
-export function startAlertCron() {
-  cron.schedule('* * * * *', () => {
+/** Возвращает handle — graceful shutdown (index.ts) должен уметь снять
+ * таймер, иначе процесс может тикнуть ещё раз в процессе останова. */
+export function startAlertCron(): ScheduledTask {
+  const task = cron.schedule('* * * * *', () => {
     // Основная работа уже обёрнута в runJob() внутри каждой функции — этот
     // catch остаётся защитой только на код ДО runJob (time-gate/wasSent),
     // который практически никогда не падает, но не должен ронять процесс
@@ -128,4 +130,5 @@ export function startAlertCron() {
     checkStoreLagAlert().catch((e) => jobLogger.error({ job: 'alerts.store_lag', err: e?.message || String(e) }, 'pre-gate failed'));
   });
   console.log('🚨 Alert cron v6 started');
+  return task;
 }

@@ -1,7 +1,8 @@
 import './env.js'; // должен быть первым — см. комментарий в env.ts
 import { buildApp } from './app.js';
 import { runMigrations } from './data/db/migrate.js';
-import { startBot, notifyAdmin } from './integrations/telegram/bot.js';
+import { pool } from './data/db/index.js';
+import { bot, startBot, notifyAdmin } from './integrations/telegram/bot.js';
 import { startReportCron } from './cron/reports.js';
 import { startDigestCron } from './cron/digest.js';
 import { startAlertCron } from './cron/alerts.js';
@@ -72,19 +73,88 @@ try {
   console.log(`📅 Сегодня (МСК): ${todayMoscow()}`);
 
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
-  startReportCron();
-  startDigestCron();
+  const reportCronHandle = startReportCron();
+  const digestCronTask = startDigestCron();
   // 20.10.0 — раньше был написан (services/alerts.ts docstring это явно
   // предполагало — "подключи в startReportCron или отдельный cron"), но
   // нигде не вызывался: «Контроль 14:00» (сотрудники без продаж на смене)
   // и «Отставание точек 16:00» никогда не срабатывали в проде.
-  startAlertCron();
+  const alertCronTask = startAlertCron();
   announceReleaseIfNeeded().catch((e) => console.error('release announce:', e?.message || e));
 
   // умные алерты каждые 30 мин (внутри — только 11–21 МСК)
-  setInterval(() => {
+  const smartAlertsHandle = setInterval(() => {
     runJob('alerts.smart_tick', () => runSmartAlertsTick());
   }, 30 * 60 * 1000);
+
+  /**
+   * 20.17.0 (Recovery — graceful shutdown). Раньше SIGTERM (Railway шлёт
+   * его старому контейнеру на каждом деплое, когда новый уже прошёл
+   * healthcheck — README §17) убивал процесс дефолтным поведением Node:
+   * мгновенно, без единого шанса доотдать уже начатые HTTP-ответы. На
+   * практике это тихо било по каждому деплою — не 409 (тот уже закрыт
+   * Replicas=1 + деплой-гейтом на CI + atomic-claim в cron_send_log), а
+   * оборванные на середине запросы к клиенту, тому самому единственному
+   * старому контейнеру, что как раз доживал последние миллисекунды.
+   *
+   * Порядок важен: сначала перестаём принимать НОВУЮ работу (HTTP,
+   * крон-тики, бот-поллинг), потом закрываем пул — не наоборот, иначе
+   * ещё летящий запрос лишится соединения с БД посреди обработки.
+   * Фоновые джобы, уже начатые ДО сигнала (не HTTP-запросы, а внутренний
+   * cron tick) — не дожидаемся отдельно; это тот же риск обрыва, что был
+   * и раньше, graceful shutdown его не увеличивает и не решает.
+   *
+   * Жёсткий таймаут — Railway даёт какой-то grace period между SIGTERM и
+   * SIGKILL, но не документирует точное значение публично; 8с — заведомо
+   * консервативный запас, лучше выйти самим чуть раньше, чем получить
+   * SIGKILL посреди уже начатого graceful-останова.
+   */
+  let shuttingDown = false;
+  async function gracefulShutdown(signal: string) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} получен — начинаю graceful shutdown`);
+
+    const hardTimeout = setTimeout(() => {
+      console.error('graceful shutdown не уложился в таймаут — process.exit(1)');
+      process.exit(1);
+    }, 8_000);
+    hardTimeout.unref();
+
+    clearInterval(reportCronHandle);
+    digestCronTask.stop();
+    alertCronTask.stop();
+    clearInterval(smartAlertsHandle);
+
+    try {
+      await app.close(); // добивает начатые HTTP-ответы, новые не принимает
+    } catch (e: any) {
+      console.error('app.close() failed:', e?.message || e);
+    }
+
+    // isRunning() — только если polling реально шёл (BOT_POLLING=false или
+    // bot ещё не успел стартовать — bot.stop() иначе лишний раз сходил бы
+    // в Telegram API подтвердить последний offset, которого не было).
+    if (bot?.isRunning()) {
+      try {
+        await bot.stop();
+      } catch (e: any) {
+        console.error('bot.stop() failed:', e?.message || e);
+      }
+    }
+
+    try {
+      await pool.end();
+    } catch (e: any) {
+      console.error('pool.end() failed:', e?.message || e);
+    }
+
+    console.log('graceful shutdown завершён');
+    clearTimeout(hardTimeout);
+    process.exit(0);
+  }
+  process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
 } catch (err) {
   app.log.error(err);
   await alertAndExit('❌ Сервер не смог запуститься (listen)', err);
