@@ -77,16 +77,29 @@ export async function findByIdWithEffectiveOrg(id: number): Promise<AccessReques
   return res.rows[0] || null;
 }
 
-export async function markApproved(id: number, reviewedBy: number | null): Promise<void> {
-  await query(
-    `UPDATE access_requests SET status = 'approved', reviewed_by = $1, reviewed_at = now() WHERE id = $2`,
+/**
+ * CAS: переводит заявку в approved только если она ещё pending — двойной
+ * тап/ретрай на медленной сети раньше проходил оба раза (findByIdWithEffectiveOrg
+ * читал status до мутации, сама mark-запись ничего не перепроверяла), из-за
+ * чего мог уйти второй "✅ Доступ открыт" в Telegram, а на claim-less пути —
+ * создаться второй сотрудник (спасал только случайный UNIQUE на telegram_id,
+ * который на это не рассчитан и просто падал 500-кой). Возвращает false,
+ * если заявку уже успели обработать — вызывающий код тогда не должен
+ * повторно создавать/подтверждать сотрудника и слать уведомление.
+ */
+export async function markApproved(id: number, reviewedBy: number | null, q: typeof query = query): Promise<boolean> {
+  const res = await q(
+    `UPDATE access_requests SET status = 'approved', reviewed_by = $1, reviewed_at = now() WHERE id = $2 AND status = 'pending'`,
     [reviewedBy, id]
   );
+  return (res.rowCount ?? 0) > 0;
 }
 
-export async function markRejected(id: number, reviewedBy: number | null): Promise<void> {
-  await query(
-    `UPDATE access_requests SET status = 'rejected', reviewed_by = $1, reviewed_at = now() WHERE id = $2`,
+/** Тот же CAS, что markApproved — см. комментарий там. */
+export async function markRejected(id: number, reviewedBy: number | null, q: typeof query = query): Promise<boolean> {
+  const res = await q(
+    `UPDATE access_requests SET status = 'rejected', reviewed_by = $1, reviewed_at = now() WHERE id = $2 AND status = 'pending'`,
     [reviewedBy, id]
   );
+  return (res.rowCount ?? 0) > 0;
 }

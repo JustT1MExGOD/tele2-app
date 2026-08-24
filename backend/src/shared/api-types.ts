@@ -232,6 +232,7 @@ export interface CreateTaskRequest {
   priority?: string;
   due_at?: string | null;
   org_id?: string;
+  client_id?: string;
 }
 
 export type CreateTaskResponse = TaskItem;
@@ -532,6 +533,9 @@ export interface ApproveAccessResponse {
   ok: true;
   employee_id: number | null;
   role: string;
+  /** true, если заявку уже успели одобрить/отклонить другим запросом
+   * (двойной тап/ретрай) — сотрудник не создавался и не менялся повторно. */
+  deduped?: true;
 }
 
 export interface RejectAccessRequest {

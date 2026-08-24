@@ -125,6 +125,12 @@ async function openCreateTaskModal(ctx) {
     employees = await window.apiClient.getEmployees(authHeaders(), empParam);
   } catch (_) {}
 
+  // Один client_id на всю сессию формы — тот же приём, что у submitSale()
+  // (07-add-sale.js): сетевой ретрай после потерянного ответа или повторный
+  // тап "Создать" до дизейбла кнопки дедупятся бэкендом вместо второй
+  // задачи + второго уведомления в Telegram.
+  window.__taskClientId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+
   document.getElementById('modalTitle').textContent = 'Новая задача';
   document.getElementById('modalBody').innerHTML = `
     <div class="field">
@@ -180,7 +186,8 @@ async function submitCreateTask(ctx) {
     priority,
     store_id: ctx.store_id || undefined,
     alert_id: ctx.alert_id || undefined,
-    due_at: dueAtRaw ? new Date(dueAtRaw).toISOString() : undefined
+    due_at: dueAtRaw ? new Date(dueAtRaw).toISOString() : undefined,
+    client_id: window.__taskClientId
   };
   if (me?.role === 'admin' && adminViewOrgId) payload.org_id = adminViewOrgId;
 

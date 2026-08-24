@@ -231,4 +231,43 @@ describe('Tasks (/tasks)', () => {
     const body = res.json();
     expect((body.tasks || []).find((t: any) => Number(t.id) === newTaskId)).toBeDefined();
   });
+
+  // 20.15.0 (Concurrency & Reliability): раньше POST /tasks не имело вообще
+  // никакой защиты от дубля — сетевой ретрай после потерянного ответа или
+  // повторный тап "Создать" плодил вторую задачу и второе уведомление в
+  // Telegram. Тот же client_id/offline_sync_log приём, что у POST /sales.
+  it('POST /tasks — параллельный дубль с одним client_id создаёт только одну задачу', async () => {
+    const app = await getApp();
+    const headers = { ...authAs(managerA.telegramId), 'content-type': 'application/json' };
+    const clientId = 'test17-task-' + Date.now();
+    const payload = { title: 'Идемпотентная задача', assigned_to: employeeA.id, client_id: clientId };
+
+    const [r1, r2] = await Promise.all([
+      app.inject({ method: 'POST', url: '/tasks', headers, payload }),
+      app.inject({ method: 'POST', url: '/tasks', headers, payload })
+    ]);
+    const bodies = [r1.json(), r2.json()];
+    const created = bodies.filter((b) => b.id);
+    const deduped = bodies.filter((b) => b.deduped);
+    expect(created.length).toBe(1);
+    expect(deduped.length).toBe(1);
+
+    const count = await query(
+      `SELECT count(*)::int AS n FROM tasks WHERE created_by = $1 AND title = 'Идемпотентная задача'`,
+      [managerA.id]
+    );
+    expect(count.rows[0].n).toBe(1);
+  });
+
+  it('POST /tasks — без client_id (легаси-клиент) работает как раньше, без дедупа', async () => {
+    const app = await getApp();
+    const headers = { ...authAs(managerA.telegramId), 'content-type': 'application/json' };
+    const payload = { title: 'Без client_id', assigned_to: employeeA.id };
+
+    const r1 = await app.inject({ method: 'POST', url: '/tasks', headers, payload });
+    const r2 = await app.inject({ method: 'POST', url: '/tasks', headers, payload });
+    expect(r1.json().id).toBeTruthy();
+    expect(r2.json().id).toBeTruthy();
+    expect(Number(r1.json().id)).not.toBe(Number(r2.json().id));
+  });
 });

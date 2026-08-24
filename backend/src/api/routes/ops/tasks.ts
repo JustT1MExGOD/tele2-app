@@ -19,6 +19,7 @@ import { notifyUser } from '../../../integrations/telegram/bot.js';
 import * as tasksRepo from '../../../data/repositories/tasks.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as alertsRepo from '../../../data/repositories/alerts.js';
+import { claimIdempotencyKey } from '../../../data/repositories/sync-log.js';
 import type {
   TasksListResponse,
   TaskDetailResponse,
@@ -39,7 +40,10 @@ const PostTaskBody = Type.Object({
   alert_id: Type.Optional(Type.Number()),
   priority: Type.Optional(Type.String()),
   due_at: Type.Optional(Type.Union([Type.Null(), Type.String()])),
-  org_id: Type.Optional(Type.String())
+  org_id: Type.Optional(Type.String()),
+  // Необязательный — старые клиенты без него работают как раньше, просто
+  // без защиты (см. claimIdempotencyKey ниже, тот же приём, что у /sales).
+  client_id: Type.Optional(Type.String({ maxLength: 128 }))
 });
 type PostTaskBody = Static<typeof PostTaskBody>;
 
@@ -98,7 +102,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
       ],
       schema: { body: PostTaskBody }
     },
-    async (request, reply): Promise<CreateTaskResponse | FastifyReply | undefined> => {
+    async (request, reply): Promise<CreateTaskResponse | { ok: true; deduped: true } | FastifyReply | undefined> => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const b = request.body as PostTaskBody;
     const title = String(b.title || '').trim();
@@ -110,6 +114,15 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     const storeId = b.store_id ? String(b.store_id) : null;
     const priority = VALID_PRIORITIES.has(b.priority) ? b.priority : 'normal';
     const dueAt = b.due_at ? new Date(b.due_at) : null;
+
+    // Дублирующий тап "Создать" или ретрай после потерянного ответа
+    // раньше просто плодил вторую задачу и второе уведомление в Telegram —
+    // тот же client_id/offline_sync_log приём, что у POST /sales.
+    if (b.client_id) {
+      const tg = request.user!.telegram_id ? Number(request.user!.telegram_id) : null;
+      const fresh = await claimIdempotencyKey(String(b.client_id).slice(0, 128), request.user!.employee_id, tg, b);
+      if (!fresh) return { ok: true, deduped: true };
+    }
 
     const task = await tasksRepo.create({
       orgId,

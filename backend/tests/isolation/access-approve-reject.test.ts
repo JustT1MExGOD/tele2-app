@@ -14,8 +14,10 @@ describe('Изоляция одобрения/отклонения заявок 
   let managerB: { id: number; telegramId: number };
   let requestIdA: number;
   let requestIdB: number;
+  let requestIdC: number;
   const guestTgA = Math.floor(9_000_000_000 + Math.random() * 900_000_000);
   const guestTgB = Math.floor(9_000_000_000 + Math.random() * 900_000_000);
+  const guestTgC = Math.floor(9_000_000_000 + Math.random() * 900_000_000);
 
   beforeAll(async () => {
     orgA = await fx.createOrg('Org A');
@@ -33,10 +35,15 @@ describe('Изоляция одобрения/отклонения заявок 
       [guestTgB, orgB]
     );
     requestIdB = rb.rows[0].id;
+    const rc = await query(
+      `INSERT INTO access_requests (telegram_id, full_name, status, org_id) VALUES ($1, 'Guest C', 'pending', $2) RETURNING id`,
+      [guestTgC, orgA]
+    );
+    requestIdC = rc.rows[0].id;
   });
 
   afterAll(async () => {
-    await query('DELETE FROM access_requests WHERE id = ANY($1)', [[requestIdA, requestIdB]]);
+    await query('DELETE FROM access_requests WHERE id = ANY($1)', [[requestIdA, requestIdB, requestIdC]]);
     await fx.cleanup();
   });
 
@@ -73,5 +80,29 @@ describe('Изоляция одобрения/отклонения заявок 
     expect(res.statusCode).toBe(200);
     const body = res.json();
     fx.employeeIds.push(body.employee_id);
+  });
+
+  // 20.15.0 (Concurrency & Reliability): раньше markApproved не проверяла
+  // status в самом UPDATE — два одновременных approve на одну заявку (два
+  // клика/ретрай на медленной сети) оба проходили early "pending"-чек до
+  // того, как первый успевал закоммититься, и оба создавали сотрудника +
+  // слали "Доступ открыт". Теперь approve — CAS внутри транзакции.
+  it('approve — параллельный дубль (двойной тап/ретрай) не создаёт второго сотрудника', async () => {
+    const app = await getApp();
+    const headers = { ...authAs(managerA.telegramId), 'content-type': 'application/json' };
+    const [r1, r2] = await Promise.all([
+      app.inject({ method: 'POST', url: `/access/requests/${requestIdC}/approve`, headers, payload: {} }),
+      app.inject({ method: 'POST', url: `/access/requests/${requestIdC}/approve`, headers, payload: {} })
+    ]);
+    const bodies = [r1.json(), r2.json()];
+    const won = bodies.filter((b) => !b.deduped);
+    const deduped = bodies.filter((b) => b.deduped);
+    expect(won.length).toBe(1);
+    expect(deduped.length).toBe(1);
+    expect(won[0].employee_id).toBeTruthy();
+    fx.employeeIds.push(won[0].employee_id);
+
+    const row = await query('SELECT status FROM access_requests WHERE id = $1', [requestIdC]);
+    expect(row.rows[0].status).toBe('approved');
   });
 });

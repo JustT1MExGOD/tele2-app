@@ -225,9 +225,10 @@ export async function findManagersToNotify(orgId: string): Promise<{ telegram_id
 
 /** Approve заявки на существующую (claimed) карточку сотрудника. */
 export async function approveExisting(
-  employeeId: number, telegramId: string | number, role: string | null, verifiedBy: number | null, fullNameFallback: string
+  employeeId: number, telegramId: string | number, role: string | null, verifiedBy: number | null, fullNameFallback: string,
+  q: typeof query = query
 ): Promise<void> {
-  await query(
+  await q(
     `UPDATE employees SET
        telegram_id = $1,
        access_status = 'active',
@@ -242,9 +243,10 @@ export async function approveExisting(
 
 /** Approve заявки без claim — заводит нового сотрудника в сети заявки. */
 export async function createFromApproval(
-  fullName: string, telegramId: string | number, role: string, verifiedBy: number | null, orgId: string
+  fullName: string, telegramId: string | number, role: string, verifiedBy: number | null, orgId: string,
+  q: typeof query = query
 ): Promise<number> {
-  const res = await query(
+  const res = await q(
     `INSERT INTO employees (full_name, telegram_id, role, access_status, is_active, verified_by, verified_at, org_id)
      VALUES ($1,$2,$3,'active',true,$4,now(),$5)
      RETURNING id`,

@@ -19,6 +19,7 @@ import {
   type Role
 } from '../../../auth/guards.js';
 import { bot } from '../../../integrations/telegram/bot.js';
+import { withTransaction } from '../../../data/db/index.js';
 import { listActiveOrgsPublic } from '../../../core/shared/tenant.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as accessRequestsRepo from '../../../data/repositories/access-requests.js';
@@ -211,25 +212,46 @@ export async function registerAccessRoutes(app: FastifyInstance) {
     const role: Role = canAssignRole(request.user!.role, requestedRole) ? requestedRole : 'employee';
 
     const req = await accessRequestsRepo.findByIdWithEffectiveOrg(Number(id));
-    if (!req || req.status !== 'pending') {
+    if (!req) {
       return reply.code(404).send({ error: 'request not found' });
     }
     // Список заявок (GET /access/requests) уже фильтруется по этому же
     // условию — но сам approve/reject это раньше не перепроверял: manager
     // одной сети, зная/угадав id заявки другой сети, мог одобрить/отклонить
-    // её напрямую через API, в обход списка.
+    // её напрямую через API, в обход списка. Проверяется независимо от
+    // status — не хотим подтверждать существование/детали чужой заявки
+    // даже если её уже кто-то обработал.
     const orgId = resolveViewOrgId(request.user!, b.org_id);
     if (req.effective_org_id !== orgId) {
       return reply.code(403).send({ error: 'forbidden', message: 'Заявка не принадлежит вашей сети' });
     }
 
-    let employeeId = req.claimed_employee_id ? Number(req.claimed_employee_id) : null;
+    // 20.15.0: раньше "уже не pending" проверялось ЗДЕСЬ, до транзакции —
+    // это читало status нативно (не CAS), поэтому при двух одновременных
+    // approve тот, что дошёл до этой строки чуть позже, чем первый успел
+    // закоммититься, получал голый 404 вместо аккуратного deduped-ответа.
+    // Теперь единственный источник "уже обработано" — сам CAS ниже, что
+    // даёт одинаково опрятный ответ и при гонке, и при повторном ретрае
+    // после того как первый запрос уже реально завершился.
+    //
+    // CAS: markApproved первым делом в транзакции — если заявку уже успел
+    // обработать параллельный запрос (двойной тап/ретрай на медленной
+    // сети), UPDATE затронет 0 строк и мы не создадим второго сотрудника
+    // и не пошлём второе "Доступ открыт". Если create/approveExisting
+    // упадёт — транзакция откатится целиком, включая сам markApproved,
+    // так что заявка вернётся в pending и останется ретраябельной, а не
+    // застрянет в approved без реально созданного/обновлённого сотрудника.
+    const employeeId = await withTransaction(async (q) => {
+      const claimed = await accessRequestsRepo.markApproved(Number(id), request.user!.employee_id, q);
+      if (!claimed) return null;
 
-    if (employeeId) {
-      await employeesRepo.approveExisting(
-        employeeId, req.telegram_id, role === 'employee' ? null : role, request.user!.employee_id, req.full_name
-      );
-    } else {
+      if (req.claimed_employee_id) {
+        const existingId = Number(req.claimed_employee_id);
+        await employeesRepo.approveExisting(
+          existingId, req.telegram_id, role === 'employee' ? null : role, request.user!.employee_id, req.full_name, q
+        );
+        return existingId;
+      }
       // Создать нового — попадает в сеть заявки (гость выбрал в пикере при
       // регистрации), а не в сеть одобряющего. Важно с тех пор, как admin
       // получает cc по заявкам любой сети (эпик 16.0) — иначе admin,
@@ -238,10 +260,12 @@ export async function registerAccessRoutes(app: FastifyInstance) {
       // вообще нет org_id (не должно происходить после миграции, кроме
       // как для уже неактуальных пред-миграционных строк).
       const orgId = req.org_id || request.user!.org_id;
-      employeeId = await employeesRepo.createFromApproval(req.full_name, req.telegram_id, role, request.user!.employee_id, orgId);
-    }
+      return employeesRepo.createFromApproval(req.full_name, req.telegram_id, role, request.user!.employee_id, orgId, q);
+    });
 
-    await accessRequestsRepo.markApproved(Number(id), request.user!.employee_id);
+    if (employeeId === null) {
+      return { ok: true, deduped: true, employee_id: null, role };
+    }
 
     if (bot && req.telegram_id) {
       await bot.api
@@ -271,7 +295,12 @@ export async function registerAccessRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Заявка не принадлежит вашей сети' });
     }
 
-    await accessRequestsRepo.markRejected(Number(id), request.user!.employee_id);
+    // CAS — тот же приём, что approve (см. комментарий там): двойной
+    // тап/ретрай не должен слать второе "в доступе отказано".
+    const rejected = await accessRequestsRepo.markRejected(Number(id), request.user!.employee_id);
+    if (!rejected) {
+      return { ok: true, deduped: true };
+    }
 
     if (bot && req.telegram_id) {
       await bot.api

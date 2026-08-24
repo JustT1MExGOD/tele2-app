@@ -303,7 +303,7 @@ export async function getEmployees(
 export async function createTask(
   headers: Record<string, string>,
   body: CreateTaskRequest
-): Promise<CreateTaskResponse> {
+): Promise<CreateTaskResponse | { ok: true; deduped: true }> {
   return request('/tasks', headers, { method: 'POST', body });
 }
 
