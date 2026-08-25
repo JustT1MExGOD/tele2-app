@@ -138,4 +138,23 @@ describe('GET /stores/:id/profile', () => {
     // 2 sim + 1 mnp + 1 pa + 1 combo = 5 юнитов в день, семь дней подряд.
     expect(nonZeroDays.every((t: any) => t.units === 5)).toBe(true);
   });
+
+  // Регрессия: buildSupervisorDashboard() уже считает display_name
+  // (supervisor.ts), но этот роут строил свой store-объект вручную и
+  // забывал его пробросить — ответ всегда отдавал undefined, даже если
+  // кастомное название точки реально стояло. editStoreDisplayName() на
+  // фронте читает это поле как "текущее" значение для подсказки в
+  // prompt() — подсказка была всегда пустой. Найдено при миграции
+  // 16-store-profile.js на TS (типизированный StoreProfileResponse не
+  // содержал этого поля вовсе).
+  it('display_name кастомного названия реально доходит до ответа', async () => {
+    await query(`UPDATE stores SET display_name = $1 WHERE id = $2`, ['Кастомное имя', storeA]);
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/stores/${storeA}/profile?days=7`,
+      headers: authAs(managerA.telegramId)
+    });
+    expect(res.json().store.display_name).toBe('Кастомное имя');
+  });
 });

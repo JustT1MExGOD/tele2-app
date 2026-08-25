@@ -928,7 +928,7 @@ export interface WhatIfApplyResponse {
 // ---------- /stores/:id/profile, /employees/:id/profile ----------
 export interface StoreProfileResponse {
   store: {
-    store_id: string; name: string; code: string; color: string | null;
+    store_id: string; name: string; display_name: string | null; code: string; color: string | null;
     staff_count: number; staff: Array<{ name?: string; full_name?: string }>;
   };
   today?: { metrics?: Record<string, { fact: number; plan: number }> };

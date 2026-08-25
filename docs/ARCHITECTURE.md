@@ -133,10 +133,10 @@ tele2-app/
         │   ├── api-client.ts         (typed API-клиент — единственная точка сетевых вызовов для typed-мира)
         │   ├── app/router.ts          (registerPage/renderPage — typed-реестр страниц, НЕ URL/hash-based)
         │   ├── app/state.ts           (getSession() — читает легаси-глобал me, не дублирует источник правды)
-        │   ├── pages/reports/          (первая полностью мигрированная страница, файл-в-файл вместо frontend/js/19-reports.js)
-        │   ├── features/send-network-digest/  (первый addEventListener вместо onclick=)
+        │   ├── pages/            (router.ts-страницы: reports/, alerts/, employee-profile/, store-profile/)
+        │   ├── features/         (НЕ router.ts-страницы — send-network-digest/, promos/ (самостоятельная модалка))
         │   └── shared/legacy-globals.d.ts     (ambient-типы для глобалов легаси-мира — me, canManage(), toast() и т.д.)
-        ├── js/           (легаси classic-script файлы, ещё не переехавшие — 19 из 20 экранов)
+        ├── js/           (легаси classic-script файлы, ещё не переехавшие — 15 из 20 экранов)
         └── offline-queue.js
 ```
 
@@ -144,14 +144,28 @@ tele2-app/
 закончен): `frontend/js/*.js` — классические non-module `<script>`, делят
 одну глобальную область (порядок подключения важен, `smoke-frontend.mjs`
 это проверяет); `frontend/src/` — настоящие ES-модули, типизированные,
-собираются Vite'ом. Мост между мирами — `legacy-globals.d.ts` (typed-код
-читает легаси-глобалы напрямую, не копирует их) и паттерн
-`window.loadXPage = () => renderPage(name)` (легаси `switchPage()`
-вызывает typed-страницу, ничего в диспетчере не меняя). **Критерий «файл
+собираются Vite'ом, каждая мигрированная страница/фича — свой независимый
+`vite build` (Rollup iife требует ровно один global namespace на сборку,
+см. `vite.*.config.ts` в `frontend/`, склеены в `build:frontend`). Мост
+между мирами — `legacy-globals.d.ts` (typed-код читает легаси-глобалы
+напрямую, не копирует их) и паттерн `window.<имя> = () => renderPage(name)`
+(легаси `switchPage()`/nav-диспетчер вызывает typed-страницу, ничего в
+диспетчере не меняя) — **имя моста подбирается под то, что диспетчер уже
+зовёт**: обычно `window.loadXPage`, но `employee-profile`/`store-profile`
+диспетчер вызывает напрямую `renderEmployeeProfile()`/`renderStoreProfile()`
+без `load`-префикса, и мост назван под это, а не под общую конвенцию —
+переписывать сам легаси-диспетчер ради единообразия не стали. Для
+НЕ-страниц (`features/promos/` — самостоятельная модалка, не подключена к
+`switchPage()` вообще) на `window.*` подвешены ВСЕ экспортированные
+функции разом, не одна точка входа — легаси-HTML зовёт их обратно через
+`onclick="..."` строки в сгенерированной innerHTML. **Критерий «файл
 мигрирован»**: у него есть модуль в `frontend/src/pages/` или `features/`,
-он собирается в свой `dist/pages/*.bundle.js`, и соответствующий файл в
-`frontend/js/` удалён (не просто продублирован) — сегодня это только
-`19-reports.js` → `pages/reports/`.
+он собирается в свой `dist/{pages,features}/*.bundle.js`, и
+соответствующий файл в `frontend/js/` удалён (не просто продублирован) —
+сегодня это пять: `19-reports.js` → `pages/reports/`, `12-promos.js` →
+`features/promos/`, `17-alerts.js` → `pages/alerts/`,
+`18-employee-profile.js` → `pages/employee-profile/`,
+`16-store-profile.js` → `pages/store-profile/`.
 
 **Правило зависимости слоёв**: `api → core → data`, только в одну
 сторону. `api/routes/*` может импортировать `core/` и `data/`; `core/*`

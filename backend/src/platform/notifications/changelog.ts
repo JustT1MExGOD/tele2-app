@@ -1083,5 +1083,17 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Пятый per-page vite-конфиг (vite.employee-profile.config.ts, тот же паттерн)',
       '6 новых тестов (frontend/tests, 87 → 93) — openEmployeeProfile не рендерит напрямую (нет рекурсии), рендер без выбранного сотрудника — no-op без похода в API, полный рендер (имя/health-тон/компоненты/BFQ/геймификация/бейджи/смены), пустое состояние без закрытых смен, ошибка API не роняет страницу, оба моста (openEmployeeProfile/renderEmployeeProfile) реально работают сквозь весь путь'
     ]
+  },
+  {
+    version: '20.27.0',
+    title: 'Frontend rewrite продолжен — пятый мигрированный экран (профиль точки), найден и исправлен реальный баг',
+    bullets: [
+      'Пятый мигрированный файл, последний из четырёх изначально самых маленьких кандидатов: frontend/js/16-store-profile.js → frontend/src/pages/store-profile/, файл-в-файл. Тот же нестандартный мост, что у employee-profile (20.26.0) — nav-диспетчер зовёт renderStoreProfile() напрямую, без load-префикса',
+      'Пойман и исправлен реальный бэкенд-баг при типизации: buildSupervisorDashboard() уже считал display_name точки, но GET /stores/:id/profile строил свой store-объект вручную и забывал его пробросить — ответ всегда отдавал undefined, даже если кастомное название уже стояло. Из-за этого подсказка "текущее название" в prompt() редактирования была ВСЕГДА пустой — TypeBox не ловит такое (это не JSON-схема запроса, а форма ответа), но typed StoreProfileResponse не давал молча дописать display_name во frontend-модуль, не заметив, что бэкенд его не отдаёт. Исправлено в самом роуте (src/api/routes/profiles/store.ts) + новый regression-тест на бэкенде, не обход на фронте',
+      'window.__storeProfileDisplayName (легаси-костыль для передачи state между renderStoreProfile() и editStoreDisplayName() через общую classic-script область) заменён на приватную module-scoped переменную — подтверждено grep\'ом, что снаружи файла это поле никогда не читалось, реальному внешнему поведению ничего не изменилось',
+      'legacy-globals.d.ts пополнен (progressHTML(), metricLabel())',
+      'Шестой per-page vite-конфиг (vite.store-profile.config.ts)',
+      '13 новых тестов — 12 фронтенд (frontend/tests, 93 → 105: полный рендер health/штат/компонентов/метрик/тренда/задач/алертов, видимость кнопки «Название» по canManage(), пустые состояния, ошибка API, все три ветки editStoreDisplayName — отмена/сброс/сохранение/ошибка API, весь window.*-мост) + 1 бэкенд (было 328, стало 329) на исправленный display_name'
+    ]
   }
 ];

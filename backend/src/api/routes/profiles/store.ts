@@ -78,6 +78,15 @@ export async function registerStoreProfileRoutes(app: FastifyInstance) {
         store: {
           store_id: store.store_id,
           name: store.name,
+          // buildSupervisorDashboard() уже считает display_name (см.
+          // supervisor.ts) — здесь просто забыли пробросить его в ответ.
+          // Единственный потребитель этого поля — editStoreDisplayName()
+          // на фронте, читающий "текущее" название для prompt() — без
+          // него подсказка всегда была пустой, даже если кастомное имя
+          // уже стояло. Найдено при миграции 16-store-profile.js на TS
+          // (см. §21, 21.x) — типизированный StoreProfileResponse не
+          // содержал поля, которое легаси-JS молча читал как undefined.
+          display_name: store.display_name,
           code: store.code,
           color: store.color,
           staff_count: store.staff_count,

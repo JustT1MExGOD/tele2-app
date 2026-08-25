@@ -44,4 +44,8 @@ declare global {
   function openTaskDetail(id: number): void | Promise<void>;
   /** 03-home.js — health score (0-100) -> 'good'/'mid'/'bad' for the cc-health/tone CSS classes. */
   function commandCenterTone(health: number): string;
+  /** 02-nav-utils.js — fact/plan progress bar row markup. */
+  function progressHTML(label: string, fact: unknown, plan: unknown): string;
+  /** 01-core.js — metric id -> display label, single source of truth. */
+  function metricLabel(id: string): string;
 }
