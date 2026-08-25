@@ -7,6 +7,7 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { requireAuth, resolveViewOrgId } from '../../../auth/guards.js';
 import * as alertsRepo from '../../../data/repositories/alerts.js';
+import { suggestAction } from '../../../core/alerts/recommend.js';
 import {
   resolveSupervisorStores,
   buildSupervisorDashboard,
@@ -87,17 +88,24 @@ export async function registerCommandCenterRoutes(app: FastifyInstance) {
             }
           ]
         })),
-        ...openAlerts.map((a: any): CommandCenterProblem => ({
-          severity: a.severity,
-          message: a.title,
-          store_id: a.store_id,
-          store_name: a.store_name,
-          alert_id: a.id,
-          actions: [
-            ...(a.store_id ? [{ type: 'open_store' as const, id: a.store_id }] : []),
-            { type: 'create_task' as const, store_id: a.store_id || null, employee_id: null, alert_id: a.id, message: a.title }
-          ]
-        }))
+        ...openAlerts.map((a: any): CommandCenterProblem => {
+          // Recommend (21.0) — детерминированная подсказка "что сделать" по
+          // типу/причине алерта, вместо пустого поля в форме задачи. null —
+          // для этого алерта подсказки нет (в т.ч. намеренно для network_wide
+          // и для триггеров до Explain/Predict) — заголовок алерта как раньше.
+          const suggested = suggestAction(a.alert_type, a.payload);
+          return {
+            severity: a.severity,
+            message: a.title,
+            store_id: a.store_id,
+            store_name: a.store_name,
+            alert_id: a.id,
+            actions: [
+              ...(a.store_id ? [{ type: 'open_store' as const, id: a.store_id }] : []),
+              { type: 'create_task' as const, store_id: a.store_id || null, employee_id: null, alert_id: a.id, message: suggested || a.title }
+            ]
+          };
+        })
       ];
 
       return {

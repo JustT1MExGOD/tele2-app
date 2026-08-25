@@ -115,4 +115,47 @@ describe('GET /command-center', () => {
     );
     expect(notFlagged).toBeUndefined();
   });
+
+  // 21.0 Recommend — create_task действие для алерта берёт message из
+  // suggestAction(alert_type, payload), не из голого заголовка алерта,
+  // когда для причины есть детерминированная подсказка.
+  it('anomaly_vs_forecast с understaffing в possible_causes — create_task message содержит совет, не голый заголовок', async () => {
+    const ins = await query(
+      `INSERT INTO smart_alerts (store_id, alert_type, severity, title, body, payload, status, alert_date)
+       VALUES ($1,'anomaly_vs_forecast','warn','Точка А: необычно тихий день','...',$2,'open',CURRENT_DATE)
+       RETURNING id`,
+      [storeA, JSON.stringify({ possible_causes: [{ type: 'understaffing', detail: 'x' }] })]
+    );
+    const alertId = Number(ins.rows[0].id);
+
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: '/command-center', headers: authAs(managerA.telegramId) });
+    const body = res.json();
+    const problem = body.problems.find((p: any) => Number(p.alert_id) === alertId);
+    expect(problem).toBeDefined();
+    const createTask = problem.actions.find((a: any) => a.type === 'create_task');
+    expect(createTask.message).toContain('график');
+    expect(createTask.message).not.toBe('Точка А: необычно тихий день');
+
+    await query(`DELETE FROM smart_alerts WHERE id = $1`, [alertId]);
+  });
+
+  it('алерт без известной причины (старый тип/пустой payload) — create_task message падает обратно на заголовок алерта', async () => {
+    const ins = await query(
+      `INSERT INTO smart_alerts (store_id, alert_type, severity, title, body, status, alert_date)
+       VALUES ($1,'cash_gap','warn','Точка А: расхождение кассы','...','open',CURRENT_DATE)
+       RETURNING id`,
+      [storeA]
+    );
+    const alertId = Number(ins.rows[0].id);
+
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: '/command-center', headers: authAs(managerA.telegramId) });
+    const body = res.json();
+    const problem = body.problems.find((p: any) => Number(p.alert_id) === alertId);
+    const createTask = problem.actions.find((a: any) => a.type === 'create_task');
+    expect(createTask.message).toBe('Точка А: расхождение кассы');
+
+    await query(`DELETE FROM smart_alerts WHERE id = $1`, [alertId]);
+  });
 });
