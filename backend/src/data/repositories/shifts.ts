@@ -173,3 +173,20 @@ export async function hasOtherClosedToday(employeeId: number, date: string, excl
   );
   return !!res.rows[0];
 }
+
+/** core/analytics/anomaly.ts (Explain, 21.0) — сколько уникальных сотрудников
+ * реально открыли смену на точке в эту дату (любой статус — open/closed/
+ * auto_closed), по всем точкам разом. НЕ то же самое, что countOpenForStoreDay
+ * (только те, что открыты ПРЯМО СЕЙЧАС) — здесь интересует явка за весь день. */
+export async function findSessionCountForDate(
+  storeIds: string[], date: string
+): Promise<{ store_id: string; opened: number }[]> {
+  const res = await query(
+    `SELECT store_id, COUNT(DISTINCT employee_id)::int as opened
+     FROM shift_sessions
+     WHERE store_id = ANY($1) AND work_date = $2::date
+     GROUP BY store_id`,
+    [storeIds, date]
+  );
+  return res.rows;
+}

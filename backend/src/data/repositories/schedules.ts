@@ -193,3 +193,34 @@ export async function findStoreIdFor(employeeId: number, workDate: string): Prom
 export async function deleteOne(employeeId: number, workDate: string): Promise<void> {
   await query(`DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2`, [employeeId, workDate]);
 }
+
+/** core/analytics/anomaly.ts (Explain, 21.0) — история укомплектованности по
+ * графику (hours>0), тот же батч-по-точкам паттерн, что sales.ts::findHistoricalTotals. */
+export async function findHeadcountHistory(
+  storeIds: string[], beforeDate: string
+): Promise<{ store_id: string; d: string; headcount: number }[]> {
+  const res = await query(
+    `SELECT store_id, work_date::date::text as d, COUNT(DISTINCT employee_id)::int as headcount
+     FROM schedules
+     WHERE store_id = ANY($1) AND work_date::date >= ($2::date - interval '120 days') AND work_date::date < $2::date
+       AND COALESCE(hours,0) > 0
+     GROUP BY store_id, work_date::date`,
+    [storeIds, beforeDate]
+  ).catch(() => ({ rows: [] as any[] }));
+  return res.rows;
+}
+
+/** core/analytics/anomaly.ts (Explain) — факт укомплектованности по графику на
+ * конкретную дату, по всем точкам разом. */
+export async function findHeadcountForDate(
+  storeIds: string[], date: string
+): Promise<{ store_id: string; headcount: number }[]> {
+  const res = await query(
+    `SELECT store_id, COUNT(DISTINCT employee_id)::int as headcount
+     FROM schedules
+     WHERE store_id = ANY($1) AND work_date::date = $2::date AND COALESCE(hours,0) > 0
+     GROUP BY store_id`,
+    [storeIds, date]
+  );
+  return res.rows;
+}
