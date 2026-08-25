@@ -8,6 +8,39 @@ function num(v: any) {
   return Number(v) || 0;
 }
 
+/**
+ * Predict (21.0) — «выйдешь ли на план к концу дня», не постфактум.
+ * Чистая функция: веса часов + факт/план уже посчитаны вызывающим
+ * (buildShiftInsight ниже, будущий стор-уровневый триггер в
+ * core/alerts/service.ts) — здесь только экстраполяция, без запросов к БД,
+ * поэтому легко проверяется юнит-тестами и переиспользуется на двух уровнях
+ * (сотрудник/точка) без дублирования математики.
+ */
+const MIN_FRACTION_DONE = 0.15; // раньше — единичная продажа даёт прогноз в разы больше нормы, шум, не сигнал
+const ON_TRACK_TOLERANCE = 0.9; // проекция чуть ниже плана — в пределах погрешности экстраполяции, не считаем "не выйдет"
+
+export interface EndOfDayProjection {
+  fractionDone: number;
+  projectedTotal: number;
+  onTrack: boolean;
+}
+
+export function projectEndOfDay(
+  weights: { hour: number; weight: number }[], nowHour: number, factTotal: number, planTotal: number
+): EndOfDayProjection | null {
+  const totalW = weights.reduce((s, w) => s + w.weight, 0);
+  if (totalW <= 0) return null;
+  const elapsedW = weights.filter((w) => w.hour < nowHour).reduce((s, w) => s + w.weight, 0);
+  const fractionDone = elapsedW / totalW;
+  if (fractionDone < MIN_FRACTION_DONE) return null;
+  const projectedTotal = factTotal / fractionDone;
+  return {
+    fractionDone: Number(fractionDone.toFixed(2)),
+    projectedTotal: Math.round(projectedTotal),
+    onTrack: projectedTotal >= planTotal * ON_TRACK_TOLERANCE
+  };
+}
+
 /** Профиль часов точки: доля продаж по часам для дня недели */
 export async function getStoreHourWeights(storeId: string, dow: number) {
   const rows = await repo.findHourProfile(storeId, dow);
@@ -119,6 +152,14 @@ export async function buildShiftInsight(opts: {
     message = `Темп нормальный: ~${actualPct}% при ожидаемых ~${expectedPct}% к этому часу.`;
   }
 
+  // Predict — та же экстраполяция, что и expectedPct выше (одни и те же
+  // weights), но не "отставание в п.п.", а прямой прогноз итога дня.
+  // null, если ещё слишком рано (< MIN_FRACTION_DONE) — веса могут быть
+  // равномерным фолбэком (getStoreHourWeights, нет реальных данных по
+  // точке), проекция от этого не перестаёт быть математически корректной,
+  // просто менее точной, отдельно это не помечаем.
+  const projection = planUnits > 0 ? projectEndOfDay(weights, nowHour, factUnits, planUnits) : null;
+
   return {
     actual_pct: actualPct,
     expected_pct: expectedPct,
@@ -126,7 +167,10 @@ export async function buildShiftInsight(opts: {
     hour: nowHour,
     message,
     focus,
-    split
+    split,
+    plan_total: planUnits,
+    projected_total: projection?.projectedTotal ?? null,
+    on_track: projection?.onTrack ?? null
   };
 }
 
@@ -177,22 +221,4 @@ function addDays(iso: string, delta: number) {
   const d = new Date(iso + 'T12:00:00');
   d.setDate(d.getDate() + delta);
   return d.toISOString().slice(0, 10);
-}
-
-/** Пересчёт hour profile из истории sales (если есть timestamp — иначе равномерно по сменам) */
-export async function rebuildHourProfiles() {
-  // Без точного часа продажи строим прокси: равномерный вес 10–21
-  const storeIds = await repo.listActiveStoreIds();
-  for (const storeId of storeIds) {
-    for (let dow = 0; dow <= 6; dow++) {
-      for (let hour = 10; hour <= 21; hour++) {
-        // чуть выше вес 12–14 и 17–19
-        let w = 1;
-        if (hour >= 12 && hour <= 14) w = 1.3;
-        if (hour >= 17 && hour <= 19) w = 1.4;
-        await repo.upsertHourWeight(storeId, dow, hour, w);
-      }
-    }
-  }
-  return { ok: true, stores: storeIds.length };
 }

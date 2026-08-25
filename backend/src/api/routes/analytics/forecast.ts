@@ -4,8 +4,8 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { requireAuth, requireManager, resolveViewOrgId, requireStoreInOrg } from '../../../auth/guards.js';
-import { forecastStore, salesHeatmap, newbieCohorts, getStaffingHints } from '../../../core/analytics/forecast.js';
-import { rebuildHourProfiles } from '../../../core/analytics/insights.js';
+import { forecastStore, newbieCohorts, getStaffingHints } from '../../../core/analytics/forecast.js';
+import { rebuildHourProfiles } from '../../../core/analytics/heatmap.js';
 import { getLiveNetworkMap } from '../../../core/analytics/live-map.js';
 import { generateForecastSummary, getLatestForecastSummary } from '../../../integrations/ai/client.js';
 import { todayMoscow } from '../../../utils/date.js';
@@ -49,16 +49,6 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     const days = Math.min(Number((request.query as any)?.days) || 7, 14);
     return { items: await getStaffingHints(days, resolveViewOrgId(request.user!, org_id)) };
   });
-
-  app.get(
-    '/heatmap/:storeId',
-    { preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })] },
-    async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
-    const { storeId } = request.params as { storeId: string };
-    return salesHeatmap(storeId);
-    }
-  );
 
   app.get('/cohorts/newbies', async (request, reply) => {
     if (!requireManager(request, reply)) return;

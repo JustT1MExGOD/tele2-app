@@ -32,18 +32,3 @@ export async function findDailySalesHistory(employeeId: number, today: string): 
   );
   return res.rows;
 }
-
-export async function listActiveStoreIds(): Promise<string[]> {
-  const res = await query(`SELECT id FROM stores WHERE COALESCE(is_active,true)=true`);
-  return res.rows.map((r: any) => r.id);
-}
-
-export async function upsertHourWeight(storeId: string, dow: number, hour: number, weight: number): Promise<void> {
-  await query(
-    `INSERT INTO store_hour_profile (store_id, dow, hour, weight, sample_count)
-     VALUES ($1,$2,$3,$4,0)
-     ON CONFLICT (store_id, dow, hour)
-     DO UPDATE SET weight = EXCLUDED.weight`,
-    [storeId, dow, hour, weight]
-  );
-}

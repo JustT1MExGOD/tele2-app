@@ -7,11 +7,13 @@
 import { todayMoscow } from '../../utils/date.js';
 import { notifyAdmin, notifyChat } from '../../integrations/telegram/bot.js';
 import { checkAnomalyVsForecast } from '../analytics/anomaly.js';
+import { getStoreHourWeights, projectEndOfDay } from '../analytics/insights.js';
 import * as alertsRepo from '../../data/repositories/alerts.js';
 import * as storesRepo from '../../data/repositories/stores.js';
 import * as salesRepo from '../../data/repositories/sales.js';
 import * as shiftsRepo from '../../data/repositories/shifts.js';
 import * as cashRepo from '../../data/repositories/cash.js';
+import * as cronRepo from '../../data/repositories/cron.js';
 
 function num(v: any) {
   return Number(v) || 0;
@@ -71,6 +73,33 @@ export async function runSmartAlertsTick() {
           title: `${st.name}: тишина до ${hour}:00`,
           body: `Смена открыта, продаж нет. Загляни на точку или напиши смене.`,
           payload: { hour, date: today },
+          alert_date: today
+        });
+        if (alert) created.push(alert);
+      }
+    }
+
+    // Predict (21.0) — вероятно не выйдет на дневной план, ДО конца дня,
+    // пока время ещё есть, не постфактум как anomaly_vs_forecast. Та же
+    // projectEndOfDay(), что и в buildShiftInsight (insights.ts), но
+    // на уровне точки: факт-точки-сейчас + типичная внутридневная форма
+    // (store_hour_profile) → проекция итога дня. Верхняя граница окна
+    // (0.85) — не сигналить в последний час, когда действовать уже поздно.
+    const dayPlan = await cronRepo.findDayOrTemplatePlanResilient(st.id, today);
+    const planTotal = num(dayPlan.sim) + num(dayPlan.mnp) + num(dayPlan.pa) + num(dayPlan.combo);
+    if (planTotal > 0) {
+      const factTotal = sim + mnp + num(s.pa) + num(s.combo);
+      const dow = new Date(today + 'T12:00:00').getDay();
+      const weights = await getStoreHourWeights(st.id, dow);
+      const projection = projectEndOfDay(weights, hour, factTotal, planTotal);
+      if (projection && !projection.onTrack && projection.fractionDone <= 0.85) {
+        const alert = await alertsRepo.insertOnce({
+          store_id: st.id,
+          alert_type: 'plan_miss_projected',
+          severity: 'warn',
+          title: `${st.name}: вероятно не выйдет на план`,
+          body: `К ${hour}:00 пройдено ~${Math.round(projection.fractionDone * 100)}% типичного дня, факт ${factTotal} → прогноз к концу дня ~${projection.projectedTotal} против плана ${planTotal}. Ещё есть время скорректировать.`,
+          payload: { factTotal, planTotal, projectedTotal: projection.projectedTotal, fractionDone: projection.fractionDone, hour, date: today },
           alert_date: today
         });
         if (alert) created.push(alert);

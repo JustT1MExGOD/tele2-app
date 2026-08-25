@@ -41,28 +41,6 @@ export async function findHeadcountByStoreDate(start: string, days: number): Pro
   return res.rows;
 }
 
-export async function findHourProfileForStore(storeId: string): Promise<any[]> {
-  const res = await query(
-    `SELECT dow, hour, weight FROM store_hour_profile
-     WHERE store_id = $1 ORDER BY dow, hour`,
-    [storeId]
-  );
-  return res.rows;
-}
-
-export async function findDowTotals(storeId: string, weeks: number): Promise<any[]> {
-  const res = await query(
-    `SELECT EXTRACT(DOW FROM sale_date)::int as dow,
-            COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp
-     FROM sales
-     WHERE store_id = $1
-       AND sale_date >= CURRENT_DATE - ($2 * 7)
-     GROUP BY 1`,
-    [storeId, weeks]
-  );
-  return res.rows;
-}
-
 export async function listNewHiresForOrg(orgId: string): Promise<any[]> {
   const res = await query(
     `SELECT id, full_name, hire_date, created_at

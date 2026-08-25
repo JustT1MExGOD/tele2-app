@@ -36,9 +36,12 @@ describe('Изоляция прогноза/heatmap/когорт/BI-экспор
     expect(res.statusCode).toBe(200);
   });
 
-  it('GET /heatmap/:storeId — 403 на чужой точке', async () => {
+  // GET /heatmap/:storeId (proxy без реальных данных, дублировал
+  // /heatmap/precise) удалён в 21.0 (Predict) — фронтенд им не пользовался,
+  // единственный живой heatmap-роут теперь /heatmap/precise/:storeId.
+  it('GET /heatmap/precise/:storeId — 403 на чужой точке', async () => {
     const app = await getApp();
-    const res = await app.inject({ method: 'GET', url: `/heatmap/${storeA}`, headers: authAs(employeeB.telegramId) });
+    const res = await app.inject({ method: 'GET', url: `/heatmap/precise/${storeA}`, headers: authAs(employeeB.telegramId) });
     expect(res.statusCode).toBe(403);
   });
 

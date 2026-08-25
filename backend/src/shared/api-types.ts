@@ -756,7 +756,14 @@ export interface MyInsightResponse {
   message?: string;
   fact?: MetricValues;
   day_plan?: MetricValues;
-  insight?: { message: string; focus?: string[]; split?: Record<string, unknown> } | null;
+  insight?: {
+    message: string;
+    focus?: string[];
+    split?: Record<string, unknown>;
+    plan_total?: number;
+    projected_total?: number | null;
+    on_track?: boolean | null;
+  } | null;
 }
 
 export interface SelfStatsResponse {

@@ -12,6 +12,7 @@ import { shiftReminder, microReport, finalReport, microLines, finalLines } from 
 import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../core/reports/image.js';
 import { generateDipComment } from '../integrations/ai/client.js';
 import { materializeStoreDailyPlans } from '../core/plans/service.js';
+import { rebuildHourProfiles } from '../core/analytics/heatmap.js';
 import { getStoreNotifyTarget } from '../core/shared/tenant.js';
 import * as cronRepo from '../data/repositories/cron.js';
 import * as reportImageRepo from '../data/repositories/report-image.js';
@@ -250,6 +251,15 @@ async function tick() {
   // напоминания о завтрашней смене — как было
   if (hh === 20 && mm === 0 && (await claimCronSend(`tomorrow_reminders:${date}`))) {
     await runJob('report.tomorrow_reminders', () => sendTomorrowReminders(date));
+  }
+
+  // Predict (21.0) — почасовой профиль точек (store_hour_profile) раньше
+  // обновлялся только вручную кнопкой «Пересчитать» (POST
+  // /admin/rebuild-hour-profiles) — если никто не нажал, профиль либо
+  // пуст, либо стал устаревшим по мере роста sales_events. Автоматический
+  // ежедневный пересчёт, рано утром, до открытия точек.
+  if (hh === 5 && mm === 0 && (await claimCronSend(`rebuild_hour_profiles:${date}`))) {
+    await runJob('report.rebuild_hour_profiles', () => rebuildHourProfiles());
   }
 
   // Дневные планы точек раньше материализовались только вручную кнопкой

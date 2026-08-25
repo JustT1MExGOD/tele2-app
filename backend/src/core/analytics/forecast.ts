@@ -209,20 +209,6 @@ export async function getStaffingHints(days = 7, orgId = 'default') {
   return hints.slice(0, 6);
 }
 
-/** Heatmap: агрегация продаж по часу — proxy без timestamp = по сменам равномерно */
-export async function salesHeatmap(storeId: string, weeks = 4) {
-  // Реальный heatmap нужен sale_hour; пока отдаём профиль store_hour_profile + факт по дням недели
-  const profileRows = await repo.findHourProfileForStore(storeId);
-  const byDowRows = await repo.findDowTotals(storeId, weeks);
-
-  return {
-    store_id: storeId,
-    hour_weights: profileRows,
-    dow_totals: byDowRows,
-    note: 'Для точного heatmap добавьте sale_hour в sales при внесении'
-  };
-}
-
 /** Когорты новичков: выход на план за 2/4/8 недель */
 export async function newbieCohorts(orgId = 'default') {
   // orgId был в сигнатуре и раньше, но нигде не читался в самом запросе —

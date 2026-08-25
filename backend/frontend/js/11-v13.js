@@ -272,11 +272,21 @@
               После: SIM ${split.after_lunch.sim || 0} · MNP ${split.after_lunch.mnp || 0}
             </div>`;
           }
+          // Predict (21.0) — прогноз итога дня по текущему темпу; null,
+          // если ещё слишком рано в смене (see core/analytics/insights.ts).
+          let projectionHtml = '';
+          if (i.projected_total != null) {
+            const color = i.on_track ? 'var(--hint)' : '#e74c3c';
+            const verdict = i.on_track ? '' : ' — вероятно, не хватит';
+            projectionHtml = `<div style="margin-top:10px;font-size:12px;color:${color}">
+              При текущем темпе к концу дня: ~${i.projected_total} (план ${i.plan_total || 0})${verdict}
+            </div>`;
+          }
           insightEl.innerHTML = `
             <div class="progress-block" style="margin-bottom:12px">
               <div class="section-title" style="margin-bottom:8px">Фокус сейчас</div>
               <div style="font-size:14px;line-height:1.4">${esc(i.message || '')}</div>
-              ${focus}${splitHtml}
+              ${focus}${splitHtml}${projectionHtml}
             </div>`;
         }
 

@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.18.1-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.19.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-301%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-308%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.18.1` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.19.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -445,10 +445,10 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | Версия | Суть |
 |--------|------|
 | **20.14.0** | Жесты по apple-design skill — перехватываемые свайпы на самодельной пружине вместо CSS-transition, скорость жеста вместо чистой дистанции |
-| **20.15.0** | Concurrency & Reliability, часть 1 — idempotency-ключи на `POST /access/requests/:id/approve` (CAS-гонка) и `POST /tasks` |
 | **20.16.0** | Concurrency & Reliability, часть 2 — переиспользуемый стенд для race-тестов (N конкурентных запросов), закрыты 2 непроверенных пробела (`POST /me/bind`, `PUT /promos/:id/use`) |
 | **20.17.0** | Concurrency & Reliability, часть 3 (финал) — graceful shutdown на SIGTERM/SIGINT, закрывает эпоху 20.15-20.17 ровно по плану |
-| **20.18.0** | Explain — первый шаг Intelligence Layer: анализ причин просевшего дня (недоукомплектованность/разрыв явки/сетевая просадка) в `anomaly_vs_forecast`; Platform Layer отложен в backlog за отсутствием реального сигнала |
+| **20.18.0-20.18.1** | Explain — первый шаг Intelligence Layer: анализ причин просевшего дня в `anomaly_vs_forecast`; Platform Layer отложен в backlog; 20.18.1 — хотфикс не связанного race-бага в `POST /me/bind`, пойманного CI |
+| **20.19.0** | Predict — прогноз конца дня по темпу (`GET /me/insight`, новый триггер `plan_miss_projected`); заодно найдены и починены две мёртвые фейковые реализации почасового профиля точки, живые роуты звали не ту |
 
 ---
 
@@ -712,6 +712,17 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   (understaffing/shift_gap/network_wide) дописываются в тот же алерт (см.
   §21, 20.18.0-20.18.1 — CI на 20.18.0 поймал не связанный с Explain
   race-баг в `POST /me/bind`, хотфикс 20.18.1)
+- **20.19 Predict** ✅ — прогноз конца дня по текущему темпу, экстраполяция
+  факта на типичную внутридневную форму (`store_hour_profile`). На уровне
+  сотрудника — `GET /me/insight` (видно прямо в live-смене), на уровне
+  точки — новый `smart_alerts`-триггер `plan_miss_projected` (warn, окно
+  15-85% дня, чтобы предупреждать, пока ещё есть время скорректировать, а
+  не постфактум). Попутно найдено и починено: у почасового профиля точки
+  было по ДВЕ параллельные реализации (реальная на `sales_events` и
+  захардкоженная заглушка-кривая) — живые роуты вызывали заглушки, реальные
+  простаивали неиспользуемыми; переключено на реальные + добавлен
+  автоматический ежедневный пересчёт (было — только вручную кнопкой) (см.
+  §21, 20.19.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -759,6 +770,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.18.1 · август 2026*
+*README · актуально на v20.19.0 · август 2026*
 
 </div>
