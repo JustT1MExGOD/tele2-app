@@ -1071,5 +1071,17 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Четвёртый per-page vite-конфиг (vite.alerts.config.ts, тот же паттерн, что у reports/promos) — свой independent `vite build`, склеенный в build:frontend',
       '13 новых тестов (frontend/tests, 74 → 87) — фильтр-табы и активный таб, рендер списка (title/точка/статус/«есть задача»), critical vs warn иконка, ошибка API не роняет страницу, смена фильтра перезагружает список, деталь алерта (в т.ч. синтетическая заглушка, если алерт ушёл из текущего фильтра), кнопки статусов кроме текущего, кнопка связанной задачи только при task_id, смена статуса — тост + перерисовка деталей + условная перезагрузка списка (только если page===\'alerts\'), disabled-гейт от двойного клика, весь window.*-мост'
     ]
+  },
+  {
+    version: '20.26.0',
+    title: 'Frontend rewrite продолжен — четвёртый мигрированный экран (профиль сотрудника)',
+    bullets: [
+      'Четвёртый мигрированный файл: frontend/js/18-employee-profile.js → frontend/src/pages/employee-profile/, файл-в-файл. Настоящая router.ts-страница, но легаси nav-диспетчер (02-nav-utils.js) зовёт её ПО-ДРУГОМУ, чем обычный loadXPage() — напрямую renderEmployeeProfile(), без load-префикса — мост здесь назван под это конкретное имя, а не под новую конвенцию, ради которой пришлось бы лезть в 02-nav-utils.js',
+      'openEmployeeProfile(employeeId) — точка входа, которую зовут ДРУГИЕ легаси-файлы (06-team-bfq.js, 14-command-center.js) — на window.*, как и раньше, эти файлы не тронуты и не знают, что реализация переехала. Она только ставит state и зовёт switchPage() — не рендерит напрямую, чтобы не срекурсить через switchPage(), тот же приём, что был в оригинале',
+      'bfq/gamification/shifts.recent из EmployeeProfileResponse нарочно слабо типизированы (Record<string, unknown>/unknown[]) — тот же осознанный компромисс для больших ad-hoc дашбордов, что и раньше (см. §21, 20.7.0), локальный `any`-каст вместо борьбы с типами, которые больше нигде не нужны настолько подробно',
+      'legacy-globals.d.ts пополнен (commandCenterTone()) — health score (0-100) в good/mid/bad для CSS-тона карточки',
+      'Пятый per-page vite-конфиг (vite.employee-profile.config.ts, тот же паттерн)',
+      '6 новых тестов (frontend/tests, 87 → 93) — openEmployeeProfile не рендерит напрямую (нет рекурсии), рендер без выбранного сотрудника — no-op без похода в API, полный рендер (имя/health-тон/компоненты/BFQ/геймификация/бейджи/смены), пустое состояние без закрытых смен, ошибка API не роняет страницу, оба моста (openEmployeeProfile/renderEmployeeProfile) реально работают сквозь весь путь'
+    ]
   }
 ];
