@@ -37,4 +37,9 @@ declare global {
   function orgQueryParam(): string;
   /** Shows the shared #overlay/#modalTitle/#modalBody modal — 07-add-sale.js. */
   function openModal(): void;
+  /** Set by 02-nav-utils.js's switchPage() — current page name, e.g. 'alerts'. */
+  const page: string;
+  function esc(s: unknown): string;
+  /** 15-tasks.js — opens the task detail modal for the given task id. */
+  function openTaskDetail(id: number): void | Promise<void>;
 }
