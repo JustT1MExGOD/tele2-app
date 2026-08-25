@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { dbQueryDuration, dbQueryErrorsTotal } from '../../platform/observability/metrics.js';
 
 const { Pool } = pg;
 
@@ -7,8 +8,26 @@ const pool = new Pool({
   ssl: process.env.PGSSL === 'false' ? false : undefined
 });
 
+/** Замеряет длительность/ошибки любого раунд-трипа к Postgres, каким бы
+ * клиентом он ни выполнялся (пул напрямую или клиент транзакции внутри
+ * withTransaction ниже) — единственная точка, через которую физически идут
+ * все запросы. Агрегатно (без лейбла по домену/операции) — см. комментарий
+ * в metrics.ts о том, почему per-repository разбивка отложена. */
+async function timedQuery<T>(exec: () => Promise<T>): Promise<T> {
+  const end = dbQueryDuration.startTimer();
+  try {
+    const result = await exec();
+    end();
+    return result;
+  } catch (e) {
+    end();
+    dbQueryErrorsTotal.inc();
+    throw e;
+  }
+}
+
 export async function query(text: string, params?: any[]) {
-  return pool.query(text, params);
+  return timedQuery(() => pool.query(text, params));
 }
 
 /**
@@ -21,7 +40,7 @@ export async function query(text: string, params?: any[]) {
  */
 export async function withTransaction<T>(fn: (q: typeof query) => Promise<T>): Promise<T> {
   const client = await pool.connect();
-  const scopedQuery = ((text: string, params?: any[]) => client.query(text, params)) as typeof query;
+  const scopedQuery = ((text: string, params?: any[]) => timedQuery(() => client.query(text, params))) as typeof query;
   try {
     await client.query('BEGIN');
     const result = await fn(scopedQuery);

@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.30.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.32.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-329%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-341%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.30.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.32.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -458,6 +458,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.28.0** | Frontend rewrite продолжен — шестой мигрированный экран (задачи, `frontend/js/15-tasks.js` → `src/pages/tasks/`) |
 | **20.29.0** | Frontend rewrite — батч из 13 файлов одним заходом; `frontend/js/` мигрирован полностью, кроме `01-core.js`/`02-nav-utils.js` (общий фундамент, отдельный заход) |
 | **20.30.0** | Frontend rewrite закрыт полностью — `01-core.js`/`02-nav-utils.js` → `app/core.ts`/`app/nav.ts`; `frontend/js/` как директория больше не существует |
+| **20.32.0** | Production Observability — `/healthz`+`/readyz` с настоящей readiness-семантикой, Prometheus-совместимый `/metrics` (HTTP/DB/jobs/AI) |
 
 ---
 
@@ -824,6 +825,19 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   объект — проверено отдельным Node-репро, полным `smoke-frontend.mjs` и
   32 новыми тестами. Ни один из уже смигрированных 19 файлов не тронут.
   `frontend/js/` как директория больше не существует (см. §21, 20.30.0)
+- **20.32 Production Observability** ✅ — предложенный "20.31 Repository
+  Consolidation" оказался не нужен: backend уже полностью на layered-
+  структуре с 20.11.0, Full DAL закрыт с 20.8.0, `check:no-direct-sql`
+  давно в CI — вычеркнут без единой строчки кода. `/healthz` (жив ли
+  процесс, без внешних зависимостей) + `/readyz` (bootstrap-флаг + живой
+  `SELECT 1`, намеренно без bot polling в критерии готовности) +
+  `/integrations/health` (конфигурация Telegram/AI, без живых запросов) +
+  `/metrics` (Prometheus exposition через `prom-client`, четыре группы:
+  HTTP с route-ПАТТЕРНОМ вместо резолвнутого URL, DB агрегатно, Jobs через
+  уже существующий `runJob()`, AI через `callGroq()` с новым `operation`).
+  Структурные логи не потребовали кода — Fastify's pino + `authPlugin`'s
+  child-логгер с 20.9.0 уже всё это отдают. 12 новых тестов + живой smoke
+  реального процесса (см. §21, 20.32.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -871,6 +885,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.30.0 · август 2026*
+*README · актуально на v20.32.0 · август 2026*
 
 </div>

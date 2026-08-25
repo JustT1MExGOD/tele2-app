@@ -1,4 +1,5 @@
 import * as repo from '../../data/repositories/ai.js';
+import { aiRequestsTotal, aiRequestDuration, aiRequestFailuresTotal } from '../../platform/observability/metrics.js';
 
 // Groq: бесплатный API поверх открытых моделей (без карты на free-тарифе).
 // Free-план: 1000 запросов/день, 100k токенов/день на llama-3.3-70b-versatile —
@@ -6,10 +7,17 @@ import * as repo from '../../data/repositories/ai.js';
 const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const DIP_THRESHOLD_PCT = 85;
 
-async function callGroq(prompt: string, maxTokens: number): Promise<string | null> {
+type AiOperation = 'shift_summary' | 'dip_comment' | 'forecast_summary';
+
+/** operation — тот же словарь, что ai_audit.kind (logAudit ниже), никогда
+ * не сам prompt/пользовательские идентификаторы — лейбл метрики должен
+ * оставаться маленьким фиксированным набором значений. */
+async function callGroq(prompt: string, maxTokens: number, operation: AiOperation): Promise<string | null> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return null;
 
+  aiRequestsTotal.inc({ operation });
+  const endTimer = aiRequestDuration.startTimer({ operation });
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -23,7 +31,9 @@ async function callGroq(prompt: string, maxTokens: number): Promise<string | nul
         messages: [{ role: 'user', content: prompt }]
       })
     });
+    endTimer();
     if (!res.ok) {
+      aiRequestFailuresTotal.inc({ operation });
       console.warn('Groq API error:', res.status, await res.text().catch(() => ''));
       return null;
     }
@@ -31,6 +41,8 @@ async function callGroq(prompt: string, maxTokens: number): Promise<string | nul
     const text = data?.choices?.[0]?.message?.content?.trim();
     return text || null;
   } catch (e: any) {
+    endTimer();
+    aiRequestFailuresTotal.inc({ operation });
     console.warn('Groq call failed:', e?.message || e);
     return null;
   }
@@ -76,7 +88,7 @@ export async function generateShiftSummary(opts: {
 Получено XP за смену: ${opts.xpGained}${opts.leveledUp ? ' (новый уровень!)' : ''}
 Серия дней подряд: ${opts.streakDays}`;
 
-  const text = await callGroq(prompt, 400);
+  const text = await callGroq(prompt, 400, 'shift_summary');
   if (text) {
     await logAudit({ kind: 'shift_summary', employeeId: opts.employeeId, prompt, response: text });
   }
@@ -144,7 +156,7 @@ export async function generateDipComment(opts: {
 План дня закрыт на ${actualPct}%
 Факт/план по каждому показателю с ненулевым планом: ${breakdown}`;
 
-  const text = await callGroq(prompt, 250);
+  const text = await callGroq(prompt, 250, 'dip_comment');
   if (!text) return { text: fallback, isAi: false, actualPct };
 
   await logAudit({ kind: 'dip_comment', storeId: opts.storeId, refDate: opts.date, prompt, response: text });
@@ -190,7 +202,7 @@ export async function generateForecastSummary(opts: {
 Прогноз по дням:
 ${lines}`;
 
-  const text = await callGroq(prompt, 250);
+  const text = await callGroq(prompt, 250, 'forecast_summary');
   if (!text) return null;
 
   await logAudit({ kind: 'forecast_summary', storeId: opts.storeId, refDate: opts.date, prompt, response: text });

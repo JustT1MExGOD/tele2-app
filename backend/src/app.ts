@@ -18,6 +18,9 @@ import { fileURLToPath } from 'url';
 import { todayMoscow } from './utils/date.js';
 import { authPlugin } from './auth/guards.js';
 import { registerAllRoutes } from './api/routes/index.js';
+import { pool } from './data/db/index.js';
+import { markApplicationReady, isApplicationReady } from './platform/observability/readiness.js';
+import { metricsRegistry, httpRequestsTotal, httpRequestDuration, httpRequestsInFlight } from './platform/observability/metrics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -122,6 +125,24 @@ export async function buildApp(): Promise<FastifyInstance> {
     timeWindow: '1 minute'
   });
 
+  // ===== HTTP-метрики (20.32.0) =====
+  // route = паттерн (`/employees/:id`), не резолвнутый URL — иначе каждый
+  // конкретный id даёт свою time-серию навсегда (unbounded cardinality).
+  // request.routeOptions.url — undefined на 404 (роут не найден вообще),
+  // тогда лейбл 'not_found' — без него сюда утёк бы сырой request.url,
+  // тот же риск кардинальности от сканеров/ботов, что перебирают пути.
+  app.addHook('onRequest', async (request) => {
+    const route = request.routeOptions?.url || 'not_found';
+    httpRequestsInFlight.inc({ method: request.method, route });
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    const route = request.routeOptions?.url || 'not_found';
+    const status = String(reply.statusCode);
+    httpRequestsInFlight.dec({ method: request.method, route });
+    httpRequestsTotal.inc({ method: request.method, route, status });
+    httpRequestDuration.observe({ method: request.method, route, status }, reply.elapsedTime / 1000);
+  });
+
   // Единая точка резолва пользователя (telegram_id проверяется по подписи
   // Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.
   app.addHook('preHandler', authPlugin);
@@ -165,10 +186,58 @@ export async function buildApp(): Promise<FastifyInstance> {
     today: todayMoscow(),
   }));
 
+  // ===== Health/readiness semantics (20.32.0) =====
+  // /healthz — жив ли процесс. Никаких внешних зависимостей (БД, Telegram) —
+  // если Postgres временно недоступен, процесс всё ещё жив и может это
+  // пережить, это не повод перезапускать контейнер.
+  app.get('/healthz', async () => ({ status: 'ok' }));
+
+  // /readyz — может ли ЭТОТ инстанс прямо сейчас обслуживать нагрузку.
+  // bootstrap (миграции + buildApp()) уже гарантированно завершён к моменту,
+  // когда сюда вообще может прийти запрос (index.ts гоняет миграции ДО
+  // buildApp(), см. platform/observability/readiness.ts) — единственное,
+  // что реально может стать false ПОСЛЕ старта, это доступность БД, поэтому
+  // проверяем оба: и флаг (на случай будущего async warmup), и живой пинг.
+  // Намеренно НЕ включает bot polling — это интеграция, а не условие
+  // способности Core API обслуживать HTTP; если polling завтра переедет в
+  // отдельный процесс, readiness не должен внезапно стать 503.
+  app.get('/readyz', async (_request, reply) => {
+    if (!isApplicationReady()) {
+      reply.code(503);
+      return { status: 'not_ready', reason: 'bootstrap_incomplete' };
+    }
+    try {
+      await pool.query('SELECT 1');
+    } catch (e: any) {
+      reply.code(503);
+      return { status: 'not_ready', reason: 'database_unreachable' };
+    }
+    return { status: 'ready' };
+  });
+
+  // /integrations/health — необязательный диагностический срез: какие
+  // внешние интеграции сконфигурированы. НЕ бьёт живым запросом ни в
+  // Telegram, ни в Groq (тратить AI-квоту/добавлять задержку на health-чек
+  // бессмысленно) — только наличие нужных env-переменных.
+  app.get('/integrations/health', async () => ({
+    telegram: { configured: !!process.env.BOT_TOKEN },
+    ai: { configured: !!process.env.GROQ_API_KEY }
+  }));
+
+  // /metrics — Prometheus exposition format. Пока никто не обязан её
+  // scrape'ить постоянно — сама возможность появляется сейчас, коллектор
+  // (Grafana/Prometheus-совместимый бэкенд) подключается отдельно, когда
+  // реально понадобится, без переделки приложения.
+  app.get('/metrics', async (_request, reply) => {
+    reply.header('Content-Type', metricsRegistry.contentType);
+    return metricsRegistry.metrics();
+  });
+
   // ===== Регистрация всех модулей с роутами =====
   // Что где искать — см. docs/ARCHITECTURE.md. Список модулей и порядок
   // регистрации живут в api/routes/index.ts, не здесь.
   await registerAllRoutes(app);
 
+  markApplicationReady();
   return app;
 }

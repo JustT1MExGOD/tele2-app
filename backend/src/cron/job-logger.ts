@@ -16,16 +16,23 @@
  * там ошибка должна долетать до route-обработчика как обычно.
  */
 import pino from 'pino';
+import { jobsTotal, jobsDuration, jobsFailuresTotal } from '../platform/observability/metrics.js';
 
 export const jobLogger = pino({ name: 'cron' });
 
 export async function runJob(jobName: string, fn: () => Promise<unknown>): Promise<void> {
   const start = Date.now();
+  const endTimer = jobsDuration.startTimer({ job: jobName });
   jobLogger.info({ job: jobName }, 'job started');
   try {
     await fn();
+    endTimer();
+    jobsTotal.inc({ job: jobName, result: 'success' });
     jobLogger.info({ job: jobName, duration_ms: Date.now() - start }, 'job finished');
   } catch (e: any) {
+    endTimer();
+    jobsTotal.inc({ job: jobName, result: 'failure' });
+    jobsFailuresTotal.inc({ job: jobName });
     jobLogger.error(
       { job: jobName, duration_ms: Date.now() - start, err: e?.message || String(e) },
       'job failed'
