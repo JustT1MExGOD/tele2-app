@@ -270,6 +270,20 @@ Optimistic locking (версионирование строк) нигде не �
 присланные поля>`, не перезапись всей строки, поэтому классический
 lost-update сценарий физически не возникает.
 
+**Domain Integrity (20.33.0)** — org-scoping (пункт 5 выше) держала
+приложение (`tenant.ts`), но до этой версии ни разу не была закреплена в
+самой схеме: `employees.org_id`/`stores.org_id`/`announcements.org_id`/
+`channels.org_id`/`channels.store_id` были обычными text-колонками без
+`REFERENCES`, в отличие от `access_requests.org_id`/`regions.org_id`/
+`rtk_promocodes.org_id`, у которых FK был с baseline. `0016_org_scoping_fk.sql`
+закрыл все пять — новый endpoint/воркер, забывший проверить существование
+сети/точки перед `INSERT`, получит отказ от Postgres, а не тихую запись
+осиротевшей строки. Перед миграцией — read-only проверка прод-БД (0 строк-сирот
+по каждой колонке). Дилер→Сектор (`sectors.dealer_id`, 0015) и Сеть→Сектор
+(`organizations.sector_id`, baseline) уже были закрыты FK раньше — граф
+плоский (ни `sectors`, ни `dealers` не ссылаются сами на себя), циклов
+структурно не бывает.
+
 ### 7. Audit Trail и Observability
 
 `audit_log` (`data/repositories/audit.ts`, 19.23.0, расширено в 20.10.0) —

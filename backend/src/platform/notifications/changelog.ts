@@ -1149,5 +1149,18 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Живой smoke-тест реального процесса (не только app.inject()) — поднят локальный dev-сервер, curl по всем пяти эндпоинтам подтвердил и формат ответов, и что случайный путь со сканера коллапсирует в route="not_found", прежде чем считать фичу готовой',
       'Явно НЕ входит в эту версию (по решению владельца продукта): Grafana, Prometheus-сервер, OpenTelemetry collector, distributed tracing, отдельный monitoring-сервис, alerting — следующий уровень, без подтверждённой необходимости сейчас'
     ]
+  },
+  {
+    version: '20.33.0',
+    title: 'Domain Integrity — org-scoping инвариант закреплён в БД, не только в TypeScript',
+    bullets: [
+      'Владелец продукта сформулировал вопрос иначе, чем обычный security-аудит: не "что нового сломано", а "какие бизнес-инварианты существуют только в TypeScript и ни разу не закреплены в PostgreSQL" — Employee/Store принадлежат Organization, целостность владения Дилера, граф Сектор→Дилер',
+      'Аудит (не код сначала) — grep по всем 15 миграциям на REFERENCES/FOREIGN KEY против всех *_id text-колонок: из 7 org_id-колонок в схеме только 3 (access_requests/regions/rtk_promocodes) имели FK с baseline, ещё 4 (employees/stores/announcements/channels) — обычные text-колонки, ничем не защищённые от несуществующего org_id, кроме приложения (tenant.ts::assertStoreInOrg/assertEmployeeInOrg). channels.store_id — та же история',
+      'Прежде чем писать ALTER TABLE — read-only проверка прод-БД (Railway-прокси, DATABASE_URL из .env.test, только SELECT): 0 строк-сирот по каждой из 5 колонок, org_id нигде не NULL у employees/stores. NULL как таковой миграция не трогает — COALESCE(org_id, \'default\') остаётся рабочей конвенцией, \'default\' сама существует как настоящая строка organizations',
+      '0016_org_scoping_fk.sql — 5 новых FK: employees.org_id/stores.org_id/announcements.org_id/channels.org_id → organizations(id), channels.store_id → stores(id). Дилер→Сектор (sectors.dealer_id, 0015) и Сеть→Сектор (organizations.sector_id, baseline) уже были закрыты раньше — граф плоский (ни sectors, ни dealers не ссылаются сами на себя), циклов структурно не бывает, новых constraint\'ов там не потребовалось — "Sector hierarchy must not create invalid graph" из спеки уже выполнено, без единой строчки миграции',
+      'Теперь даже новый endpoint или воркер, который забудет проверить существование сети/точки перед INSERT, получит отказ от самой БД, а не тихую запись мусора — business rule → API validation → core invariant → database constraint, весь путь до конца, не только первые два звена',
+      '6 новых тестов (backend, 347 → 353, tests/isolation/org-scoping-fk.test.ts) — по одному INSERT-отказу на каждую из 5 FK-колонок plus два позитивных кейса (NULL org_id по-прежнему проходит, валидный org_id по-прежнему проходит) — не только "падает", но и "не ломает существующее поведение"',
+      'Прогнано на одноразовом локальном Postgres (initdb + pg_ctl на отдельном порту, не постоянный сервис) — полная миграция 0001→0016 с нуля накатывается чисто, весь набор (353 теста) зелёный, check:no-direct-sql не задет (миграция — чистый SQL, не TypeScript)'
+    ]
   }
 ];

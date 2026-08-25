@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.32.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.33.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-341%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-353%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.32.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.33.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -459,6 +459,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.29.0** | Frontend rewrite — батч из 13 файлов одним заходом; `frontend/js/` мигрирован полностью, кроме `01-core.js`/`02-nav-utils.js` (общий фундамент, отдельный заход) |
 | **20.30.0** | Frontend rewrite закрыт полностью — `01-core.js`/`02-nav-utils.js` → `app/core.ts`/`app/nav.ts`; `frontend/js/` как директория больше не существует |
 | **20.32.0** | Production Observability — `/healthz`+`/readyz` с настоящей readiness-семантикой, Prometheus-совместимый `/metrics` (HTTP/DB/jobs/AI) |
+| **20.33.0** | Domain Integrity — org-scoping инвариант (Employee/Store/Announcement/Channel → Organization, Channel → Store) закреплён в PostgreSQL пятью новыми FK (`0016_org_scoping_fk.sql`), не только в TypeScript |
 
 ---
 
@@ -838,6 +839,18 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   Структурные логи не потребовали кода — Fastify's pino + `authPlugin`'s
   child-логгер с 20.9.0 уже всё это отдают. 12 новых тестов + живой smoke
   реального процесса (см. §21, 20.32.0)
+- **20.33 Domain Integrity** ✅ — не очередной security-аудит, а вопрос
+  "какие бизнес-инварианты живут только в TypeScript, ни разу не закреплены
+  в PostgreSQL". Аудит по всем 15 миграциям нашёл: из 7 `org_id`-колонок в
+  схеме только 3 (`access_requests`/`regions`/`rtk_promocodes`) имели FK с
+  baseline, ещё 4 (`employees`/`stores`/`announcements`/`channels`) — просто
+  text-колонки, ничем не защищённые от несуществующего `org_id`, кроме
+  приложения (`tenant.ts`); `channels.store_id` — та же история. Перед
+  ALTER TABLE — read-only проверка прод-БД: 0 строк-сирот по всем пяти
+  колонкам. `0016_org_scoping_fk.sql` закрыл все пять. Дилер→Сектор/Сеть→
+  Сектор были закрыты FK ещё в 20.15/baseline, граф плоский — циклов
+  структурно не бывает, "Sector hierarchy" из спеки уже была выполнена без
+  единой строчки миграции. 6 новых тестов (см. §21, 20.33.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -885,6 +898,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.32.0 · август 2026*
+*README · актуально на v20.33.0 · август 2026*
 
 </div>
