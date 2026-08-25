@@ -133,10 +133,10 @@ tele2-app/
         │   ├── api-client.ts         (typed API-клиент — единственная точка сетевых вызовов для typed-мира)
         │   ├── app/router.ts          (registerPage/renderPage — typed-реестр страниц, НЕ URL/hash-based)
         │   ├── app/state.ts           (getSession() — читает легаси-глобал me, не дублирует источник правды)
-        │   ├── pages/            (router.ts-страницы: reports/, alerts/, employee-profile/, store-profile/)
+        │   ├── pages/            (router.ts-страницы: reports/, alerts/, employee-profile/, store-profile/, tasks/)
         │   ├── features/         (НЕ router.ts-страницы — send-network-digest/, promos/ (самостоятельная модалка))
         │   └── shared/legacy-globals.d.ts     (ambient-типы для глобалов легаси-мира — me, canManage(), toast() и т.д.)
-        ├── js/           (легаси classic-script файлы, ещё не переехавшие — 15 из 20 экранов)
+        ├── js/           (легаси classic-script файлы, ещё не переехавшие — 14 из 20 экранов)
         └── offline-queue.js
 ```
 
@@ -162,10 +162,18 @@ tele2-app/
 мигрирован»**: у него есть модуль в `frontend/src/pages/` или `features/`,
 он собирается в свой `dist/{pages,features}/*.bundle.js`, и
 соответствующий файл в `frontend/js/` удалён (не просто продублирован) —
-сегодня это пять: `19-reports.js` → `pages/reports/`, `12-promos.js` →
+сегодня это шесть: `19-reports.js` → `pages/reports/`, `12-promos.js` →
 `features/promos/`, `17-alerts.js` → `pages/alerts/`,
 `18-employee-profile.js` → `pages/employee-profile/`,
-`16-store-profile.js` → `pages/store-profile/`.
+`16-store-profile.js` → `pages/store-profile/`, `15-tasks.js` →
+`pages/tasks/`. Мигрированные модули могут зависеть друг от друга тем же
+`onclick="..."`-строковым способом, что и на легаси-функции —
+`pages/alerts/`/`pages/store-profile/` зовут `openTaskDetail(...)`,
+которую теперь по-настоящему реализует `pages/tasks/`, а не легаси-файл;
+раз это только текст внутри строки, а не настоящая TS-ссылка, порядок
+миграции между такими файлами не имеет значения для типов — `tsc` увидел
+бы ошибку только при обращении к `openTaskDetail` как к реальному
+идентификатору, чего в шаблонных строках нет.
 
 **Правило зависимости слоёв**: `api → core → data`, только в одну
 сторону. `api/routes/*` может импортировать `core/` и `data/`; `core/*`

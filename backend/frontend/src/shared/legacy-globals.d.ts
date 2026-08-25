@@ -40,8 +40,6 @@ declare global {
   /** Set by 02-nav-utils.js's switchPage() — current page name, e.g. 'alerts'. */
   const page: string;
   function esc(s: unknown): string;
-  /** 15-tasks.js — opens the task detail modal for the given task id. */
-  function openTaskDetail(id: number): void | Promise<void>;
   /** 03-home.js — health score (0-100) -> 'good'/'mid'/'bad' for the cc-health/tone CSS classes. */
   function commandCenterTone(health: number): string;
   /** 02-nav-utils.js — fact/plan progress bar row markup. */

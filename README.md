@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.27.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.28.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-329%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.27.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.28.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -455,6 +455,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.25.0** | Frontend rewrite продолжен — третий мигрированный экран (алерты, `frontend/js/17-alerts.js` → `src/pages/alerts/`) |
 | **20.26.0** | Frontend rewrite продолжен — четвёртый мигрированный экран (профиль сотрудника, `frontend/js/18-employee-profile.js` → `src/pages/employee-profile/`) |
 | **20.27.0** | Frontend rewrite продолжен — пятый мигрированный экран (профиль точки); найден и исправлен реальный баг — `GET /stores/:id/profile` никогда не отдавал `display_name` |
+| **20.28.0** | Frontend rewrite продолжен — шестой мигрированный экран (задачи, `frontend/js/15-tasks.js` → `src/pages/tasks/`) |
 
 ---
 
@@ -788,6 +789,14 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   роут забывал пробросить их в свой ответ) — подсказка «текущее название»
   при переименовании точки была всегда пустой. Исправлено на бэкенде, не
   обойдено на фронте (см. §21, 20.27.0)
+- **20.28 Frontend rewrite продолжен** ✅ — шестой мигрированный файл:
+  `15-tasks.js` → `src/pages/tasks/`, файл-в-файл, почти зеркальная
+  форма `pages/alerts/` (20.25.0) плюс тред комментариев. `openTaskDetail`
+  — первый случай зависимости МЕЖДУ мигрированными модулями: `pages/alerts/`
+  и `pages/store-profile/` уже ссылались на неё через ambient-декларацию,
+  теперь `pages/tasks/` даёт настоящую реализацию под тем же именем на
+  `window.*` — оба модуля продолжили работать без единой правки (см. §21,
+  20.28.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -835,6 +844,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.27.0 · август 2026*
+*README · актуально на v20.28.0 · август 2026*
 
 </div>
