@@ -1,21 +1,12 @@
 /**
- * 21.1 — каскадный Дилер → Сектор → Сеть переключатель в 06-team-bfq.js.
- * Классический скрипт (не frontend/src/ ES-модуль) — нет реального браузера
- * с настоящей Telegram WebApp identity в этой среде (authHeaders() читает
- * window.Telegram.WebApp, которого здесь нет), поэтому кликового E2E через
- * настоящую авторизацию не было. Вместо этого — тот же jsdom-подход, что
- * уже применялся к пилотной странице (reports-page.test.ts), но напрямую
- * к реальному файлу classic-script (indirect eval в global scope, как он
- * и загружается в index.html), не к переписанной копии логики.
+ * 21.1 — каскадный Дилер → Сектор → Сеть переключатель, теперь в
+ * src/pages/team (migrated from the classic-script frontend/js/06-team-bfq.js
+ * in the batch-of-13 frontend rewrite — that file no longer exists on disk).
+ * Kept as its own focused file (dealer-bucketing edge cases) rather than
+ * folded into team-page.test.ts's lighter batch-calibrated coverage, since
+ * this cascading logic has enough edge cases to deserve dedicated tests.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
-
-const SRC = fs.readFileSync(
-  path.resolve(import.meta.dirname, '../js/06-team-bfq.js'),
-  'utf8'
-);
 
 function esc(s: unknown) {
   return String(s ?? '')
@@ -26,26 +17,27 @@ function esc(s: unknown) {
     .replace(/'/g, '&#39;');
 }
 
-function loadSwitcher(orgs: any[], meRole = 'admin', currentOrgId = 'orgA') {
+function setupGlobals(meRole = 'admin', currentOrgId = 'orgA') {
   document.body.innerHTML = '<div id="orgSwitcher"></div><div id="teamList"></div>';
   vi.stubGlobal('esc', esc);
   vi.stubGlobal('me', { employee_id: 1, role: meRole, org_id: currentOrgId });
   vi.stubGlobal('adminViewOrgId', null);
   vi.stubGlobal('authHeaders', () => ({}));
+  vi.stubGlobal('orgQueryParam', () => '');
   vi.stubGlobal('canManage', () => true);
   vi.stubGlobal('canAdmin', () => true);
+  vi.stubGlobal('todayMoscow', () => '2026-08-25');
+  vi.stubGlobal('roleLabel', (r: string) => r);
+  vi.stubGlobal('assignableRoles', () => []);
+  vi.stubGlobal('applyAvatarImg', vi.fn());
   vi.stubGlobal('stores', []);
-  const getOrgsAdmin = vi.fn().mockResolvedValue(orgs);
-  (globalThis as any).window.apiClient = { getOrgsAdmin };
-  // loadTeam() гоняет ещё несколько apiClient-вызовов и рендерит #teamList —
-  // не предмет этого теста (сам переключатель — предмет), стаб не даёт
-  // цепочке switchAdminOrg→loadTeam упасть на отсутствующих моках.
-  vi.stubGlobal('loadTeam', vi.fn());
-  // Indirect eval — та же семантика, что <script> без type="module" в
-  // index.html: top-level function-декларации становятся настоящими
-  // глобалами, доступными вызовом ниже.
-  (0, eval)(SRC);
-  return { getOrgsAdmin };
+  vi.stubGlobal('employees', []);
+  (window as any).__stores = null;
+  const getOrgsAdmin = vi.fn().mockResolvedValue(ORGS);
+  const getEmployees = vi.fn().mockResolvedValue([]);
+  const getSales = vi.fn().mockResolvedValue([]);
+  (window as any).apiClient = { getOrgsAdmin, getEmployees, getSales };
+  return { getOrgsAdmin, getEmployees, getSales };
 }
 
 const ORGS = [
@@ -57,12 +49,14 @@ const ORGS = [
 
 describe('Команда — каскадный переключатель Дилер → Сектор → Сеть (21.1)', () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.unstubAllGlobals();
   });
 
   it('рендерит три select и предвыбирает дилера/сектор/сеть текущей сети admin', async () => {
-    loadSwitcher(ORGS, 'admin', 'orgA');
-    await (globalThis as any).renderOrgSwitcher();
+    setupGlobals('admin', 'orgA');
+    const { renderOrgSwitcher } = await import('../src/pages/team/index.js');
+    await renderOrgSwitcher();
 
     const dealerSel = document.getElementById('swDealer') as HTMLSelectElement;
     const sectorSel = document.getElementById('swSector') as HTMLSelectElement;
@@ -72,12 +66,17 @@ describe('Команда — каскадный переключатель Ди�
     expect(sectorSel.value).toBe('sectorX');
     expect(orgSel.value).toBe('orgA');
     // Обе сети сектора X (orgA, orgB) видны в третьем select — не только текущая.
-    expect(Array.from(orgSel.options).map((o) => o.value).sort()).toEqual(['orgA', 'orgB']);
+    expect(
+      Array.from(orgSel.options)
+        .map((o) => o.value)
+        .sort()
+    ).toEqual(['orgA', 'orgB']);
   });
 
   it('сеть без dealer_name попадает в бакет «Без дилера», не теряется и не падает', async () => {
-    loadSwitcher(ORGS, 'admin', 'orgD');
-    await (globalThis as any).renderOrgSwitcher();
+    setupGlobals('admin', 'orgD');
+    const { renderOrgSwitcher } = await import('../src/pages/team/index.js');
+    await renderOrgSwitcher();
 
     const dealerSel = document.getElementById('swDealer') as HTMLSelectElement;
     expect(dealerSel.value).toBe('Без дилера');
@@ -85,33 +84,37 @@ describe('Команда — каскадный переключатель Ди�
   });
 
   it('список дилеров содержит все различные dealer_name без дублей', async () => {
-    loadSwitcher(ORGS, 'admin', 'orgA');
-    await (globalThis as any).renderOrgSwitcher();
+    setupGlobals('admin', 'orgA');
+    const { renderOrgSwitcher } = await import('../src/pages/team/index.js');
+    await renderOrgSwitcher();
 
     const dealerSel = document.getElementById('swDealer') as HTMLSelectElement;
-    const values = Array.from(dealerSel.options).map((o) => o.value).sort();
+    const values = Array.from(dealerSel.options)
+      .map((o) => o.value)
+      .sort();
     expect(values).toEqual(['Без дилера', 'ИП Иванов', 'ООО Ромашка']);
   });
 
-  it('смена дилера сужает список секторов до его секторов (renderSwitcherSectors напрямую, без loadTeam-цепочки)', async () => {
-    loadSwitcher(ORGS, 'admin', 'orgA');
-    await (globalThis as any).renderOrgSwitcher();
+  it('смена дилера сужает список секторов до его секторов и сходится на первой сети (switchAdminDealer)', async () => {
+    const { getEmployees } = setupGlobals('admin', 'orgA');
+    const { renderOrgSwitcher, switchAdminDealer } = await import('../src/pages/team/index.js');
+    await renderOrgSwitcher();
 
-    // Симулируем "что покажет форма", если бы выбрали ИП Иванов — тот же
-    // путь, что switchAdminDealer(), но без хвоста switchAdminOrg→loadTeam,
-    // который тестировать здесь не нужно (не предмет фичи).
-    (globalThis as any).renderSwitcherSectors('ИП Иванов', 'sectorY');
+    switchAdminDealer('ИП Иванов');
+
     const sectorSel = document.getElementById('swSector') as HTMLSelectElement;
     expect(Array.from(sectorSel.options).map((o) => o.value)).toEqual(['sectorY']);
-
-    (globalThis as any).renderSwitcherOrgs('ИП Иванов', 'sectorY', 'orgC');
     const orgSel = document.getElementById('swOrg') as HTMLSelectElement;
     expect(Array.from(orgSel.options).map((o) => o.value)).toEqual(['orgC']);
+    expect((globalThis as any).adminViewOrgId).toBe('orgC');
+    // switchAdminDealer -> switchAdminOrg -> loadTeam() re-fetches employees for the new org.
+    expect(getEmployees).toHaveBeenCalled();
   });
 
-  it('admin не видит переключатель — display:none, не блокирует остальных ролей', async () => {
-    loadSwitcher(ORGS, 'manager', 'orgA');
-    await (globalThis as any).renderOrgSwitcher();
+  it('не-admin не видит переключатель — display:none', async () => {
+    setupGlobals('manager', 'orgA');
+    const { renderOrgSwitcher } = await import('../src/pages/team/index.js');
+    await renderOrgSwitcher();
     const sw = document.getElementById('orgSwitcher') as HTMLElement;
     expect(sw.style.display).toBe('none');
   });

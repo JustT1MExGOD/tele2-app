@@ -133,10 +133,14 @@ tele2-app/
         │   ├── api-client.ts         (typed API-клиент — единственная точка сетевых вызовов для typed-мира)
         │   ├── app/router.ts          (registerPage/renderPage — typed-реестр страниц, НЕ URL/hash-based)
         │   ├── app/state.ts           (getSession() — читает легаси-глобал me, не дублирует источник правды)
-        │   ├── pages/            (router.ts-страницы: reports/, alerts/, employee-profile/, store-profile/, tasks/)
-        │   ├── features/         (НЕ router.ts-страницы — send-network-digest/, promos/ (самостоятельная модалка))
+        │   ├── pages/            (router.ts-страницы: reports/, alerts/, employee-profile/, store-profile/,
+        │   │                       tasks/, cash-metrics/, command-center/, support/, team/, home/, plans-bfq/,
+        │   │                       schedule/, my-plan/, shift/, network-admin/, access-supervisor/)
+        │   ├── features/         (НЕ router.ts-страницы — send-network-digest/, promos/, add-sale/, tutorial/)
         │   └── shared/legacy-globals.d.ts     (ambient-типы для глобалов легаси-мира — me, canManage(), toast() и т.д.)
-        ├── js/           (легаси classic-script файлы, ещё не переехавшие — 14 из 20 экранов)
+        ├── js/           (легаси classic-script файлы, ещё не переехавшие — 01-core.js, 02-nav-utils.js:
+        │                  2 из 21 экрана, оба намеренно последние — на них читают ambient-глобалы все
+        │                  мигрированные модули, инверсия направления зависимости требует отдельного захода)
         └── offline-queue.js
 ```
 
@@ -162,18 +166,36 @@ tele2-app/
 мигрирован»**: у него есть модуль в `frontend/src/pages/` или `features/`,
 он собирается в свой `dist/{pages,features}/*.bundle.js`, и
 соответствующий файл в `frontend/js/` удалён (не просто продублирован) —
-сегодня это шесть: `19-reports.js` → `pages/reports/`, `12-promos.js` →
+сегодня это 19 из 21: `19-reports.js` → `pages/reports/`, `12-promos.js` →
 `features/promos/`, `17-alerts.js` → `pages/alerts/`,
 `18-employee-profile.js` → `pages/employee-profile/`,
 `16-store-profile.js` → `pages/store-profile/`, `15-tasks.js` →
-`pages/tasks/`. Мигрированные модули могут зависеть друг от друга тем же
-`onclick="..."`-строковым способом, что и на легаси-функции —
-`pages/alerts/`/`pages/store-profile/` зовут `openTaskDetail(...)`,
-которую теперь по-настоящему реализует `pages/tasks/`, а не легаси-файл;
-раз это только текст внутри строки, а не настоящая TS-ссылка, порядок
-миграции между такими файлами не имеет значения для типов — `tsc` увидел
-бы ошибку только при обращении к `openTaskDetail` как к реальному
-идентификатору, чего в шаблонных строках нет.
+`pages/tasks/` (эти шесть — первая волна, 20.x); затем одним батчем (21.x):
+`09-cash-metrics.js` → `pages/cash-metrics/`, `14-command-center.js` →
+`pages/command-center/`, `06c-support-tickets.js` → `pages/support/`,
+`07-add-sale.js` → `features/add-sale/`, `06-team-bfq.js` → `pages/team/`,
+`03-home.js` → `pages/home/`, `06b-plans-bfq.js` → `pages/plans-bfq/`,
+`04-schedule.js` → `pages/schedule/`, `05-my-plan.js` → `pages/my-plan/`,
+`11-v13.js` → `pages/shift/`, `13-v14.js` → `pages/network-admin/`,
+`10-tutorial.js` → `features/tutorial/`, `08-access-supervisor.js` →
+`pages/access-supervisor/`. Только `01-core.js`/`02-nav-utils.js` остаются
+легаси — они не отдельные «экраны», а общий фундамент (сессия/навигация/
+хелперы), который читают ambient-декларациями все остальные модули;
+переносить их означало бы разворачивать направление зависимости для всего
+уже мигрированного кода разом, поэтому это отдельный, более осторожный
+заход, не часть механического батча. Мигрированные модули могут зависеть
+друг от друга тем же `onclick="..."`-строковым способом, что и на
+легаси-функции — `pages/alerts/`/`pages/store-profile/` зовут
+`openTaskDetail(...)`, которую теперь по-настоящему реализует
+`pages/tasks/`, а не легаси-файл; раз это только текст внутри строки, а не
+настоящая TS-ссылка, порядок миграции между такими файлами не имеет
+значения для типов — `tsc` увидел бы ошибку только при обращении к
+`openTaskDetail` как к реальному идентификатору, чего в шаблонных строках
+нет. Часть новых ambient-глобалов в `legacy-globals.d.ts` теперь
+писабельные (`let`, не `const`/`function`) — `me`, `adminViewOrgId`,
+`historyEmployeeFilter`, `stores`, `saleSelection`, `employees` — потому
+что их реальные владельцы (`bindMe()`/`switchAdminOrg()`/и т.д.) сами
+переехали в typed-мир и пишут в них по-настоящему, а не только читают.
 
 **Правило зависимости слоёв**: `api → core → data`, только в одну
 сторону. `api/routes/*` может импортировать `core/` и `data/`; `core/*`
