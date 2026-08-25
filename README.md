@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.21.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.22.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-322%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-327%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.21.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.22.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -449,6 +449,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.19.0** | Predict — прогноз конца дня по темпу (`GET /me/insight`, новый триггер `plan_miss_projected`); заодно найдены и починены две мёртвые фейковые реализации почасового профиля точки, живые роуты звали не ту |
 | **20.20.0** | Recommend — детерминированная подсказка «что сделать» (cause→действие, без LLM) предзаполняет создание задачи из алерта в Command Center |
 | **20.21.0** | Дилер — новый уровень иерархии над Сектором (ООО/ИП, владеет несколькими секторами), только ownership-запись без своего входа/роли |
+| **20.22.0** | Каскадный переключатель Дилер → Сектор → Сеть у admin вместо одного плоского списка сетей |
 
 ---
 
@@ -739,6 +740,12 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   самого сектора (заводится по имени из формы редактирования сети, не
   отдельный CRUD-экран). Один дилер может владеть несколькими секторами
   разом (см. §21, 20.21.0)
+- **20.22 Каскадный переключатель admin** ✅ — прямое продолжение 20.21.0:
+  один плоский список сетей у admin тяжело листать, когда дилеров/секторов
+  много. Три select (Дилер → Сектор → Сеть) вместо одного, выбор всё равно
+  сходится к одной сети — никакого нового агрегированного вида по
+  дилеру/сектору. Чисто фронтенд, `GET /orgs` не менялся с 20.21.0 (см.
+  §21, 20.22.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -786,6 +793,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.21.0 · август 2026*
+*README · актуально на v20.22.0 · август 2026*
 
 </div>

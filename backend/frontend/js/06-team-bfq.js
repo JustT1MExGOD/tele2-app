@@ -5,6 +5,29 @@
     // ===== TEAM =====
     // Переключатель сети — только у admin (видит по умолчанию свою рабочую
     // сеть, «Команда» больше не мешает всех сотрудников всех сетей в кучу).
+    // 21.1: каскадный Дилер → Сектор → Сеть вместо одного плоского списка —
+    // выбор всё равно сходится к ОДНОЙ сети (adminViewOrgId не меняется по
+    // смыслу), три select'а только упрощают навигацию, когда сетей много.
+    // Никакого нового агрегированного вида по дилеру/сектору — то, что уже
+    // явно решено при вводе самого дилера (21.0, только ownership-запись).
+    let switcherOrgsCache = [];
+
+    function switcherHierarchy() {
+      // dealerLabel -> sectorId -> orgs[] — группировка чисто клиентская,
+      // GET /orgs уже отдаёт dealer_name/sector_id на каждой сети, отдельный
+      // эндпоинт не нужен.
+      const byDealer = new Map();
+      for (const o of switcherOrgsCache) {
+        const dealerLabel = o.dealer_name || 'Без дилера';
+        const sectorId = o.sector_id || 'default';
+        if (!byDealer.has(dealerLabel)) byDealer.set(dealerLabel, new Map());
+        const bySector = byDealer.get(dealerLabel);
+        if (!bySector.has(sectorId)) bySector.set(sectorId, []);
+        bySector.get(sectorId).push(o);
+      }
+      return byDealer;
+    }
+
     async function renderOrgSwitcher() {
       const sw = document.getElementById('orgSwitcher');
       if (!sw) return;
@@ -13,14 +36,63 @@
       if (sw.dataset.loaded) return;
       try {
         const orgs = await window.apiClient.getOrgsAdmin(authHeaders());
+        switcherOrgsCache = Array.isArray(orgs) ? orgs : [];
         const current = adminViewOrgId || me.org_id;
-        sw.innerHTML = `<div class="field"><label>Сеть</label>
-          <select onchange="switchAdminOrg(this.value)">
-            ${(Array.isArray(orgs) ? orgs : []).map((o) => `<option value="${o.id}"${o.id === current ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}
-          </select>
-        </div>`;
+        const currentOrg = switcherOrgsCache.find((o) => o.id === current);
+        const dealerLabel = currentOrg?.dealer_name || 'Без дилера';
+        const sectorId = currentOrg?.sector_id || 'default';
+        sw.innerHTML = `
+          <div class="field"><label>Дилер</label><select id="swDealer" onchange="switchAdminDealer(this.value)"></select></div>
+          <div class="field"><label>Сектор</label><select id="swSector" onchange="switchAdminSector(this.value)"></select></div>
+          <div class="field"><label>Сеть</label><select id="swOrg" onchange="switchAdminOrg(this.value)"></select></div>
+        `;
+        renderSwitcherDealers(dealerLabel);
+        renderSwitcherSectors(dealerLabel, sectorId);
+        renderSwitcherOrgs(dealerLabel, sectorId, current);
         sw.dataset.loaded = '1';
       } catch (_) {}
+    }
+
+    function renderSwitcherDealers(selectedDealer) {
+      const el = document.getElementById('swDealer');
+      if (!el) return;
+      const dealers = [...switcherHierarchy().keys()].sort();
+      el.innerHTML = dealers.map((d) => `<option value="${esc(d)}"${d === selectedDealer ? ' selected' : ''}>${esc(d)}</option>`).join('');
+    }
+
+    function renderSwitcherSectors(dealerLabel, selectedSector) {
+      const el = document.getElementById('swSector');
+      if (!el) return;
+      const bySector = switcherHierarchy().get(dealerLabel) || new Map();
+      const sectors = [...bySector.keys()].sort();
+      el.innerHTML = sectors.map((s) => `<option value="${esc(s)}"${s === selectedSector ? ' selected' : ''}>${esc(s)}</option>`).join('');
+    }
+
+    function renderSwitcherOrgs(dealerLabel, sectorId, selectedOrgId) {
+      const el = document.getElementById('swOrg');
+      if (!el) return;
+      const orgs = (switcherHierarchy().get(dealerLabel) || new Map()).get(sectorId) || [];
+      el.innerHTML = orgs.map((o) => `<option value="${o.id}"${o.id === selectedOrgId ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
+    }
+
+    // Смена дилера/сектора сама сужает нижние select'ы и сходится на первой
+    // доступной сети в новой ветке — тот же принцип, что «выбор всё равно
+    // одна сеть», просто через два промежуточных клика вместо поиска в
+    // длинном плоском списке.
+    function switchAdminDealer(dealerLabel) {
+      const bySector = switcherHierarchy().get(dealerLabel) || new Map();
+      const firstSector = [...bySector.keys()].sort()[0] || 'default';
+      renderSwitcherSectors(dealerLabel, firstSector);
+      const firstOrg = (bySector.get(firstSector) || [])[0];
+      renderSwitcherOrgs(dealerLabel, firstSector, firstOrg?.id);
+      if (firstOrg) switchAdminOrg(firstOrg.id);
+    }
+
+    function switchAdminSector(sectorId) {
+      const dealerLabel = document.getElementById('swDealer')?.value;
+      const orgs = (switcherHierarchy().get(dealerLabel) || new Map()).get(sectorId) || [];
+      renderSwitcherOrgs(dealerLabel, sectorId, orgs[0]?.id);
+      if (orgs[0]) switchAdminOrg(orgs[0].id);
     }
 
     function switchAdminOrg(orgId) {
