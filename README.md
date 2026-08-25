@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.23.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.24.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-328%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.23.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.24.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -451,6 +451,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.21.0** | Дилер — новый уровень иерархии над Сектором (ООО/ИП, владеет несколькими секторами), только ownership-запись без своего входа/роли |
 | **20.22.0** | Каскадный переключатель Дилер → Сектор → Сеть у admin вместо одного плоского списка сетей |
 | **20.23.0** | Learn — сработала ли рекомендация (пятый шаг, закрывает конвейер Explain → Predict → Recommend → Act → Learn); новая admin-сводка `GET /alerts/effectiveness` |
+| **20.24.0** | Frontend rewrite продолжен — второй мигрированный экран (промокоды РТК, `frontend/js/12-promos.js` → `src/features/promos/`) |
 
 ---
 
@@ -755,6 +756,14 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   и "без" — не просто "стало лучше", а "помог ли вообще Act". Новая
   admin-сводка `GET /alerts/effectiveness`, видна в «Отчётах» (см. §21,
   20.23.0)
+- **20.24 Frontend rewrite продолжен** ✅ — план владельца продукта:
+  сначала закрыть цикл Intelligence Layer, потом вернуться к фронту.
+  Второй мигрированный файл после пилота (`19-reports.js`, 20.12.0):
+  `12-promos.js` → `src/features/promos/`, файл-в-файл. Выбран по той же
+  логике, что пилот — из 4 самых маленьких оставшихся легаси-файлов
+  наименее связанный: ни один другой `frontend/js/*.js` не зовёт его
+  функции, нет локального state, даже не подключён к `switchPage()`-
+  диспетчеру (см. §21, 20.24.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -802,6 +811,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.23.0 · август 2026*
+*README · актуально на v20.24.0 · август 2026*
 
 </div>

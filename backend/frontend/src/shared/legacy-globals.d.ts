@@ -24,9 +24,17 @@ declare global {
     is_manager?: boolean;
   } | null;
 
+  /** Set by 06-team-bfq.js's switchAdminOrg() — null unless admin switched
+   * away from their own network via the org switcher. */
+  const adminViewOrgId: string | null;
+
   function canManage(): boolean;
   function authHeaders(json?: boolean): Record<string, string>;
   function toast(msg: string, type?: string): void;
   function switchPage(name: string): void;
   function exportCSV(kind: string): void;
+  /** '&org_id=...' if admin switched networks, '' otherwise — 01-core.js. */
+  function orgQueryParam(): string;
+  /** Shows the shared #overlay/#modalTitle/#modalBody modal — 07-add-sale.js. */
+  function openModal(): void;
 }
