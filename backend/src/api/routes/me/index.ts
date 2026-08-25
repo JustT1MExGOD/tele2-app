@@ -91,15 +91,16 @@ export async function registerMeRoutes(app: FastifyInstance) {
       return reply.code(409).send({ error: 'already_bound', message: 'Карточка уже привязана к другому Telegram' });
     }
 
-    // снять tg с других карточек, привязать к выбранной. Между SELECT-чеком
-    // выше и этим UPDATE — узкое окно гонки при двух одновременных bind на
-    // один telegram_id; employees.telegram_id теперь UNIQUE (0002), так что
-    // проигравший запрос падает по constraint, а не молча портит данные —
-    // ловим это здесь и отдаём тот же понятный 409, а не голую ошибку SQL.
-    await employeesRepo.clearTelegramId(telegram_id);
+    // снять tg с других карточек и привязать к выбранной — одним атомарным
+    // запросом (claimTelegramId), не двумя отдельными: между SELECT-чеком
+    // выше и этой операцией всё ещё есть узкое окно гонки при нескольких
+    // одновременных bind на один telegram_id, но employees.telegram_id
+    // UNIQUE (0002) — единственный источник правды "кто победил", проигравший
+    // запрос падает по constraint, а не молча портит данные — ловим это
+    // здесь и отдаём тот же понятный 409, а не голую ошибку SQL.
     let bound: any;
     try {
-      bound = await employeesRepo.bindTelegram(telegram_id, employee_id);
+      bound = await employeesRepo.claimTelegramId(telegram_id, employee_id);
     } catch (e: any) {
       if (e?.code === '23505') {
         return reply.code(409).send({ error: 'already_bound', message: 'Карточка уже привязана к другому Telegram' });

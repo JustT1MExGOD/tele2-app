@@ -96,15 +96,32 @@ export async function findBindTarget(employeeId: number): Promise<{ telegram_id:
   return res.rows[0] || null;
 }
 
-/** POST /me/bind — снять Telegram с любой другой карточки, на которой он раньше висел. */
-export async function clearTelegramId(telegramId: number): Promise<void> {
-  await query(`UPDATE employees SET telegram_id = NULL WHERE telegram_id = $1`, [telegramId]);
-}
-
-/** POST /me/bind — привязать Telegram к выбранной карточке (реактивирует её). */
-export async function bindTelegram(telegramId: number, employeeId: number): Promise<any | null> {
+/**
+ * POST /me/bind — снять Telegram с любой другой карточки и привязать к
+ * выбранной ОДНИМ атомарным выражением (WITH ... UPDATE), не двумя
+ * отдельными автокоммитящимися запросами (как было до этой правки —
+ * clearTelegramId()+bindTelegram()). Раньше между "снять" и "поставить"
+ * было окно: при нескольких конкурентных /me/bind ОДНИМ и тем же
+ * telegram_id на РАЗНЫЕ карточки чей-то уже совершившийся bind мог быть
+ * стёрт чужим clearTelegramId(), выполнившимся ПОСЛЕ него, — тот запрос
+ * уже успел отдать клиенту 200, хотя финальным владельцем становился
+ * кто-то другой. Adversarial race-тест (5 параллельных bind) поймал это
+ * эмпирически: за один прогон могло быть больше одного 200, не только
+ * при столкновении на одной и той же карточке — employees_telegram_id_unique
+ * (0002) сам по себе не спасал, потому что конфликта на УРОВНЕ ЗНАЧЕНИЯ
+ * в момент каждого отдельного bindTelegram() могло и не быть: он всегда
+ * успевал сработать на СВОБОДНОЙ в этот момент карточке. Один CTE делает
+ * "снять отовсюду + поставить сюда" неделимой операцией — ни одна
+ * конкурентная транзакция больше не может встрять между этими двумя
+ * шагами, и UNIQUE-конфликт остаётся единственным источником "кто
+ * победил", как и было задумано изначально.
+ */
+export async function claimTelegramId(telegramId: number, employeeId: number): Promise<any | null> {
   const res = await query(
-    `UPDATE employees
+    `WITH cleared AS (
+       UPDATE employees SET telegram_id = NULL WHERE telegram_id = $1
+     )
+     UPDATE employees
      SET telegram_id = $1,
          access_status = COALESCE(NULLIF(access_status, ''), 'active'),
          is_active = true
