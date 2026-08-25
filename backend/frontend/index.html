@@ -776,8 +776,13 @@
 
   <script src="/offline-queue.js"></script>
   <script src="/dist/api-client.bundle.js"></script>
-  <script src="/js/01-core.js"></script>
-  <script src="/js/02-nav-utils.js"></script>
+  <!-- core.bundle.js/nav.bundle.js establish window.me/stores/METRICS/etc.
+       as real global-object properties and every window.* helper function —
+       every other bundle below reads/writes these as bare identifiers
+       (esc, toast, authHeaders, me, stores, ...), so these two must load
+       first, same position 01-core.js/02-nav-utils.js always had. -->
+  <script src="/dist/app/core.bundle.js"></script>
+  <script src="/dist/app/nav.bundle.js"></script>
   <script src="/dist/pages/reports.bundle.js"></script>
   <script src="/dist/features/promos.bundle.js"></script>
   <script src="/dist/pages/alerts.bundle.js"></script>

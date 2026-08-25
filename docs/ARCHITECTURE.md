@@ -10,7 +10,7 @@
 |---|---|
 | **Backend** | Fastify + TypeScript, Node 22, layered (`api/` → `core/` → `data/`) |
 | **БД** | PostgreSQL (Railway), схема только через `backend/migrations/` |
-| **Frontend** | Классические `<script>`-файлы (`frontend/js/*.js`) + растущая typed-часть на Vite/iife (`frontend/src/`) |
+| **Frontend** | Полностью typed, Vite/iife (`frontend/src/`) — `frontend/js/` classic-script мир закрыт (21.x) |
 | **Бот** | Grammy, long-polling, 1 реплика (см. [ADR/002](./ADR/002-supervisor-scope-cache-in-memory.md)) |
 | **AI** | Groq (`llama-3.3-70b-versatile`), холодный путь — не в hot path запросов |
 | **Хостинг** | Railway, `backend/` — Root Directory, миграции накатываются сами при старте |
@@ -126,76 +126,109 @@ tele2-app/
     │   └── utils/date.ts                 (todayMoscow() и другие МСК-хелперы)
     │
     └── frontend/
-        ├── index.html    (разметка + подключение styles.css и js/*.js по порядку)
+        ├── index.html    (разметка + подключение styles.css и dist/*.bundle.js по порядку)
         ├── styles.css
         ├── fonts/        (Google Sans WOFF2 — фронтовый шрифт, отдельно от assets/fonts/ TTF для resvg)
-        ├── src/          (typed-мир — Vite, каждый файл собирается в свой iife-бандл, см. ADR/006)
-        │   ├── api-client.ts         (typed API-клиент — единственная точка сетевых вызовов для typed-мира)
+        ├── src/          (весь frontend — Vite, каждый файл собирается в свой iife-бандл, см. ADR/006)
+        │   ├── api-client.ts         (typed API-клиент — единственная точка сетевых вызовов)
+        │   ├── app/core.ts            (сессия/роли/каталог метрик/gesture-физика — бывший 01-core.js;
+        │   │                           владеет window.me/stores/employees/saleSelection/METRICS/...)
+        │   ├── app/nav.ts             (toast/тема/switchPage()+loadPage()-диспетчер/swipe — бывший
+        │   │                           02-nav-utils.js; грузится сразу после core.ts, тоже первым)
         │   ├── app/router.ts          (registerPage/renderPage — typed-реестр страниц, НЕ URL/hash-based)
-        │   ├── app/state.ts           (getSession() — читает легаси-глобал me, не дублирует источник правды)
-        │   ├── pages/            (router.ts-страницы: reports/, alerts/, employee-profile/, store-profile/,
-        │   │                       tasks/, cash-metrics/, command-center/, support/, team/, home/, plans-bfq/,
-        │   │                       schedule/, my-plan/, shift/, network-admin/, access-supervisor/)
+        │   ├── app/state.ts           (getSession() — читает window.me, не дублирует источник правды)
+        │   ├── pages/            (router.ts-страницы и все остальные: reports/, alerts/,
+        │   │                       employee-profile/, store-profile/, tasks/, cash-metrics/,
+        │   │                       command-center/, support/, team/, home/, plans-bfq/, schedule/,
+        │   │                       my-plan/, shift/, network-admin/, access-supervisor/)
         │   ├── features/         (НЕ router.ts-страницы — send-network-digest/, promos/, add-sale/, tutorial/)
-        │   └── shared/legacy-globals.d.ts     (ambient-типы для глобалов легаси-мира — me, canManage(), toast() и т.д.)
-        ├── js/           (легаси classic-script файлы, ещё не переехавшие — 01-core.js, 02-nav-utils.js:
-        │                  2 из 21 экрана, оба намеренно последние — на них читают ambient-глобалы все
-        │                  мигрированные модули, инверсия направления зависимости требует отдельного захода)
+        │   └── shared/legacy-globals.d.ts     (ambient-типы для общих глобалов — me, canManage(), toast() и т.д.)
         └── offline-queue.js
 ```
 
-**Frontend — два мира одновременно** (переезд начат в 20.12.0, не
-закончен): `frontend/js/*.js` — классические non-module `<script>`, делят
-одну глобальную область (порядок подключения важен, `smoke-frontend.mjs`
-это проверяет); `frontend/src/` — настоящие ES-модули, типизированные,
-собираются Vite'ом, каждая мигрированная страница/фича — свой независимый
-`vite build` (Rollup iife требует ровно один global namespace на сборку,
-см. `vite.*.config.ts` в `frontend/`, склеены в `build:frontend`). Мост
-между мирами — `legacy-globals.d.ts` (typed-код читает легаси-глобалы
-напрямую, не копирует их) и паттерн `window.<имя> = () => renderPage(name)`
-(легаси `switchPage()`/nav-диспетчер вызывает typed-страницу, ничего в
-диспетчере не меняя) — **имя моста подбирается под то, что диспетчер уже
-зовёт**: обычно `window.loadXPage`, но `employee-profile`/`store-profile`
-диспетчер вызывает напрямую `renderEmployeeProfile()`/`renderStoreProfile()`
-без `load`-префикса, и мост назван под это, а не под общую конвенцию —
-переписывать сам легаси-диспетчер ради единообразия не стали. Для
-НЕ-страниц (`features/promos/` — самостоятельная модалка, не подключена к
-`switchPage()` вообще) на `window.*` подвешены ВСЕ экспортированные
-функции разом, не одна точка входа — легаси-HTML зовёт их обратно через
-`onclick="..."` строки в сгенерированной innerHTML. **Критерий «файл
-мигрирован»**: у него есть модуль в `frontend/src/pages/` или `features/`,
-он собирается в свой `dist/{pages,features}/*.bundle.js`, и
-соответствующий файл в `frontend/js/` удалён (не просто продублирован) —
-сегодня это 19 из 21: `19-reports.js` → `pages/reports/`, `12-promos.js` →
-`features/promos/`, `17-alerts.js` → `pages/alerts/`,
+**Frontend — один typed-мир** (переезд занял 20.12.0 → 21.x, закрыт
+полностью): все 21 экран — настоящие ES-модули, типизированные, собираются
+Vite'ом, каждая страница/фича — свой независимый `vite build` (Rollup iife
+требует ровно один global namespace на сборку, см. `vite.*.config.ts` в
+`frontend/`, склеены в `build:frontend`). `frontend/js/*.js` classic-script
+мир, где всё это раньше жило одной общей non-module `<script>`-областью
+(порядок подключения важен, `smoke-frontend.mjs` до сих пор это
+проверяет — уже для бандлов, не файлов), закрыт последним: `app/core.ts`/
+`app/nav.ts` — сегодня формально такие же typed-модули, как и все
+остальные, просто грузятся первыми и **владеют** общим состоянием
+(`window.me`, `stores`, `employees`, `saleSelection`, `scheduleMonth`,
+`planMonth`, `adminViewOrgId`, `METRICS`, `page`), а не просто читают его,
+как остальные 19.
+
+Мост между модулями — тот же, что был мостом «typed↔легаси» до 21.x, и не
+изменился при закрытии последних двух файлов: `legacy-globals.d.ts`
+(модуль читает чужой глобал напрямую, не копирует его логику) и паттерн
+`window.<имя> = () => renderPage(name)` (для router.ts-страниц) или
+`window.<имя> = <настоящая функция>` (для всего остального) — конвенция
+«имя моста подбирается под то, что диспетчер уже зовёт» сохранена и после
+того, как сам диспетчер (`app/nav.ts`'s `loadPage()`) стал typed-кодом:
+`employee-profile`/`store-profile` диспетчер по-прежнему вызывает
+`renderEmployeeProfile()`/`renderStoreProfile()` без `load`-префикса —
+переписывать саму конвенцию ради единообразия не стали, раз бага в этом
+никакого нет. Для НЕ-страниц (`features/promos/` — модалка, не подключена
+к `switchPage()`) на `window.*` подвешены ВСЕ экспортированные функции
+разом — HTML зовёт их обратно через `onclick="..."` строки в
+сгенерированной innerHTML.
+
+Отдельный механизм — для общего МУТИРУЕМОГО состояния (`me`, `stores`,
+`employees`, `saleSelection`, `scheduleMonth`, `planMonth`,
+`adminViewOrgId`, `METRICS`, `page`), которое читают/пишут ГОЛЫМ
+идентификатором (`me = x`, не `window.me = x`) полтора десятка модулей.
+Работает благодаря ECMA-262 Global Environment Record: неквалифицированный
+идентификатор резолвится через Declarative Record (что раньше давал
+верхнеуровневый `let` classic-скрипта) И Object Record (настоящие
+`window.*`-свойства) как единый lookup — так что `app/core.ts`, делая
+`window.me = null`, даёт ровно ту же видимость для голого `me` в любом
+другом бандле, что раньше давал `let me` в 01-core.js. Присвоение таким
+голым идентификатором из другого модуля (`me = await getMe()` в
+`src/pages/my-plan`) работает без ошибок даже в строгом режиме — строгий
+режим запрещает только СОЗДАНИЕ нового implicit-глобала голым присвоением,
+а не запись в уже существующий; `app/core.ts` гарантированно устанавливает
+все эти свойства до того, как выполнится код любого другого бандла (он
+первый в index.html). Эмпирически проверено — отдельным Node-репро
+(`window.X = ...` в одной функции-замыкании, голое `X = y` в другой, без
+общего `var`/`let`) и полным прогоном `smoke-frontend.mjs` на реальном
+порядке подключения. **Важно**: сам `app/core.ts`/`app/nav.ts` НИКОГДА не
+объявляет эти переменные как локальный `let` — только `window.me = ...`,
+иначе локальное объявление затенило бы глобал в пределах СОБСТВЕННОГО
+бандла и сделало бы его невидимым для всех остальных.
+
+**Критерий «файл мигрирован»**: у него есть модуль в `frontend/src/pages/`
+или `features/`, он собирается в свой `dist/{pages,features,app}/*.bundle.js`,
+и соответствующий файл в бывшем `frontend/js/` удалён (не просто
+продублирован) — сегодня это все 21: `19-reports.js` → `pages/reports/`,
+`12-promos.js` → `features/promos/`, `17-alerts.js` → `pages/alerts/`,
 `18-employee-profile.js` → `pages/employee-profile/`,
 `16-store-profile.js` → `pages/store-profile/`, `15-tasks.js` →
-`pages/tasks/` (эти шесть — первая волна, 20.x); затем одним батчем (21.x):
-`09-cash-metrics.js` → `pages/cash-metrics/`, `14-command-center.js` →
-`pages/command-center/`, `06c-support-tickets.js` → `pages/support/`,
-`07-add-sale.js` → `features/add-sale/`, `06-team-bfq.js` → `pages/team/`,
-`03-home.js` → `pages/home/`, `06b-plans-bfq.js` → `pages/plans-bfq/`,
-`04-schedule.js` → `pages/schedule/`, `05-my-plan.js` → `pages/my-plan/`,
-`11-v13.js` → `pages/shift/`, `13-v14.js` → `pages/network-admin/`,
-`10-tutorial.js` → `features/tutorial/`, `08-access-supervisor.js` →
-`pages/access-supervisor/`. Только `01-core.js`/`02-nav-utils.js` остаются
-легаси — они не отдельные «экраны», а общий фундамент (сессия/навигация/
-хелперы), который читают ambient-декларациями все остальные модули;
-переносить их означало бы разворачивать направление зависимости для всего
-уже мигрированного кода разом, поэтому это отдельный, более осторожный
-заход, не часть механического батча. Мигрированные модули могут зависеть
-друг от друга тем же `onclick="..."`-строковым способом, что и на
-легаси-функции — `pages/alerts/`/`pages/store-profile/` зовут
-`openTaskDetail(...)`, которую теперь по-настоящему реализует
-`pages/tasks/`, а не легаси-файл; раз это только текст внутри строки, а не
-настоящая TS-ссылка, порядок миграции между такими файлами не имеет
+`pages/tasks/` (первая волна, 20.x, по файлу за версию); затем 13 файлов
+одним батчем (21.x): `09-cash-metrics.js` → `pages/cash-metrics/`,
+`14-command-center.js` → `pages/command-center/`, `06c-support-tickets.js`
+→ `pages/support/`, `07-add-sale.js` → `features/add-sale/`,
+`06-team-bfq.js` → `pages/team/`, `03-home.js` → `pages/home/`,
+`06b-plans-bfq.js` → `pages/plans-bfq/`, `04-schedule.js` →
+`pages/schedule/`, `05-my-plan.js` → `pages/my-plan/`, `11-v13.js` →
+`pages/shift/`, `13-v14.js` → `pages/network-admin/`, `10-tutorial.js` →
+`features/tutorial/`, `08-access-supervisor.js` → `pages/access-supervisor/`;
+и наконец `01-core.js`/`02-nav-utils.js` → `app/core.ts`/`app/nav.ts`
+(последний, отдельный заход — не часть батча, требовал перевернуть
+направление владения общим состоянием, см. выше). `frontend/js/` как
+директория больше не существует. Мигрированные модули могут зависеть друг
+от друга тем же `onclick="..."`-строковым способом, что и раньше —
+`pages/alerts/`/`pages/store-profile/` зовут `openTaskDetail(...)`,
+которую реализует `pages/tasks/`; раз это только текст внутри строки, а не
+настоящая TS-ссылка, порядок миграции между такими файлами не имел
 значения для типов — `tsc` увидел бы ошибку только при обращении к
-`openTaskDetail` как к реальному идентификатору, чего в шаблонных строках
-нет. Часть новых ambient-глобалов в `legacy-globals.d.ts` теперь
-писабельные (`let`, не `const`/`function`) — `me`, `adminViewOrgId`,
-`historyEmployeeFilter`, `stores`, `saleSelection`, `employees` — потому
-что их реальные владельцы (`bindMe()`/`switchAdminOrg()`/и т.д.) сами
-переехали в typed-мир и пишут в них по-настоящему, а не только читают.
+идентификатору напрямую, чего в шаблонных строках нет. Часть
+ambient-глобалов в `legacy-globals.d.ts` писабельные (`let`, не
+`const`/`function`) именно по этой причине — `me`, `adminViewOrgId`,
+`historyEmployeeFilter`, `stores`, `saleSelection`, `employees`,
+`scheduleMonth`, `planMonth`, `METRICS`, `page` — их реальные владельцы
+сами typed-код и пишут в них по-настоящему, а не только читают.
 
 **Правило зависимости слоёв**: `api → core → data`, только в одну
 сторону. `api/routes/*` может импортировать `core/` и `data/`; `core/*`

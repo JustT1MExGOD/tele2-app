@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.29.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.30.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-329%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.29.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.30.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -457,6 +457,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.27.0** | Frontend rewrite продолжен — пятый мигрированный экран (профиль точки); найден и исправлен реальный баг — `GET /stores/:id/profile` никогда не отдавал `display_name` |
 | **20.28.0** | Frontend rewrite продолжен — шестой мигрированный экран (задачи, `frontend/js/15-tasks.js` → `src/pages/tasks/`) |
 | **20.29.0** | Frontend rewrite — батч из 13 файлов одним заходом; `frontend/js/` мигрирован полностью, кроме `01-core.js`/`02-nav-utils.js` (общий фундамент, отдельный заход) |
+| **20.30.0** | Frontend rewrite закрыт полностью — `01-core.js`/`02-nav-utils.js` → `app/core.ts`/`app/nav.ts`; `frontend/js/` как директория больше не существует |
 
 ---
 
@@ -810,6 +811,19 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   которого сознательно отложен как отдельный, более осторожный заход.
   185 новых фронтенд-тестов (120 → 305), бэкенд не тронут (см. §21,
   20.29.0)
+- **20.30 Frontend rewrite закрыт полностью** ✅ — последние два файла,
+  `01-core.js`/`02-nav-utils.js` → `app/core.ts`/`app/nav.ts`. Другой класс
+  миграции, не просто "ещё два файла": единственный источник ~9
+  разделяемых мутируемых переменных (`me`, `stores`, `employees`,
+  `saleSelection`, `METRICS`, ...), которые полтора десятка уже
+  смигрированных модулей читают/пишут ГОЛЫМ идентификатором, унаследовано
+  от classic-script эры. Решение — эти два файла устанавливают всё как
+  настоящие `window.*` свойства, никогда как локальный `let` (иначе он
+  затенил бы глобал в пределах собственного бандла); работает благодаря
+  тому, как JS резолвит неквалифицированные идентификаторы через глобальный
+  объект — проверено отдельным Node-репро, полным `smoke-frontend.mjs` и
+  32 новыми тестами. Ни один из уже смигрированных 19 файлов не тронут.
+  `frontend/js/` как директория больше не существует (см. §21, 20.30.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -857,6 +871,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.29.0 · август 2026*
+*README · актуально на v20.30.0 · август 2026*
 
 </div>
