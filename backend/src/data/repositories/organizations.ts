@@ -18,6 +18,9 @@ export interface OrgRow {
   sales_thread_id?: string | null;
   reports_thread_id?: string | null;
   is_active?: boolean;
+  /** Только для listAll() (21.0) — имя дилера сектора этой сети, для формы
+   * редактирования; не колонка organizations, читается через JOIN. */
+  dealer_name?: string | null;
 }
 
 export interface OrgPatch {
@@ -77,12 +80,17 @@ export async function listWithChat(): Promise<{ id: string; chat_id: string }[]>
   return res.rows;
 }
 
-/** listOrgs() — все сети, без фильтра is_active (admin-переключатель/экран «Сети»). */
+/** listOrgs() — все сети, без фильтра is_active (admin-переключатель/экран «Сети»).
+ * dealer_name (21.0) — через сектор сети, LEFT JOIN, не у всех секторов есть дилер. */
 export async function listAll(): Promise<OrgRow[]> {
   const res = await query(
-    `SELECT id, name, brand_name, primary_color, sector_id, chat_id,
-            sales_thread_id, reports_thread_id, COALESCE(is_active,true) as is_active
-     FROM organizations ORDER BY name`
+    `SELECT o.id, o.name, o.brand_name, o.primary_color, o.sector_id, o.chat_id,
+            o.sales_thread_id, o.reports_thread_id, COALESCE(o.is_active,true) as is_active,
+            d.name as dealer_name
+     FROM organizations o
+     LEFT JOIN sectors s ON s.id = o.sector_id
+     LEFT JOIN dealers d ON d.id = s.dealer_id
+     ORDER BY o.name`
   );
   return res.rows;
 }

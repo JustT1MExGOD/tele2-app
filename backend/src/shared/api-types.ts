@@ -792,6 +792,8 @@ export interface OrgAdminItem {
   sales_thread_id?: string | null;
   reports_thread_id?: string | null;
   is_active?: boolean;
+  /** Только для листинга (21.0) — имя дилера сектора этой сети. */
+  dealer_name?: string | null;
 }
 
 export type OrgsListResponse = OrgAdminItem[];
@@ -805,6 +807,9 @@ export interface UpsertOrgRequest {
   sales_thread_id?: string;
   reports_thread_id?: string;
   is_active?: boolean;
+  /** Заводит/переиспользует дилера по имени и привязывает его к сектору
+   * сети (не к самой сети) — тот же лёгкий приём, что sector_id. */
+  dealer_name?: string;
 }
 
 export type UpsertOrgResponse = OrgAdminItem;

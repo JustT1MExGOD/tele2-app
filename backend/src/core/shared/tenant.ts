@@ -12,6 +12,7 @@
 import * as orgsRepo from '../../data/repositories/organizations.js';
 import * as storesRepo from '../../data/repositories/stores.js';
 import * as employeesRepo from '../../data/repositories/employees.js';
+import * as dealersRepo from '../../data/repositories/dealers.js';
 
 export type Org = {
   id: string;
@@ -138,6 +139,7 @@ export async function listOrgs(): Promise<
     sales_thread_id: string | null;
     reports_thread_id: string | null;
     is_active: boolean;
+    dealer_name: string | null;
   }[]
 > {
   try {
@@ -172,15 +174,29 @@ export async function listActiveOrgsPublic(): Promise<
   }
 }
 
-export async function upsertOrg(body: Partial<Org> & { id: string }) {
+export async function upsertOrg(body: Partial<Org> & { id: string; dealer_name?: string }) {
   // Секторов пока нет отдельного CRUD-экрана (sql/sectors-networks.sql,
   // сейчас один 'default') — печатаешь новое имя сектора в форме сети,
   // он заводится тут же по имени = id. Обязательно ДО апсерта самой
   // организации: organizations.sector_id — FK на sectors(id).
+  let sectorId: string | null = null;
   if (body.sector_id) {
-    const sectorId = String(body.sector_id).trim();
+    sectorId = String(body.sector_id).trim() || null;
     if (sectorId) {
       await orgsRepo.upsertSector(sectorId);
+    }
+  }
+
+  // Дилер (21.0) — тот же лёгкий приём, что сектор: печатаешь имя компании
+  // в той же форме сети, заводится тут же. Привязывается к СЕКТОРУ, не к
+  // сети (владение — на уровне сектора), поэтому нужен реальный sectorId,
+  // не только что введённый в body — если поле "Сектор" не менялось,
+  // sectorId выше остаётся null, берём текущий сектор сети из БД.
+  if (body.dealer_name && String(body.dealer_name).trim()) {
+    const targetSector = sectorId || (await orgsRepo.findByIdAdmin(body.id))?.sector_id || null;
+    if (targetSector) {
+      const dealer = await dealersRepo.upsertDealerByName(String(body.dealer_name).trim());
+      await dealersRepo.setSectorDealer(targetSector, dealer.id);
     }
   }
 

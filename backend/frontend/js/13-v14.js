@@ -471,7 +471,7 @@
             <div class="row-icon">${o.is_active === false ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M4.929 4.929 19.07 19.071" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" /> </svg>'}</div>
             <div class="row-body">
               <div class="row-title">${esc(o.name)}${o.is_active === false ? ' · выключена' : ''}</div>
-              <div class="row-sub">${esc(o.id)} · сектор ${esc(o.sector_id || 'default')}${o.chat_id ? ' · чат подключён' : ' · чат не настроен'}</div>
+              <div class="row-sub">${esc(o.id)} · сектор ${esc(o.sector_id || 'default')}${o.dealer_name ? ' · дилер ' + esc(o.dealer_name) : ''}${o.chat_id ? ' · чат подключён' : ' · чат не настроен'}</div>
             </div>
             <div class="row-chevron">›</div>
           </button>`).join('') || '<div class="empty">🍉 Сетей пока нет</div>';
@@ -526,6 +526,7 @@
         <div class="field"><label>Бренд (короткое имя)</label><input id="no_brand" value="${esc(o.brand_name || '')}"></div>
         <div class="field"><label>Основной цвет</label><input id="no_color" value="${esc(o.primary_color || '#2AABEE')}"></div>
         <div class="field"><label>Сектор</label><input id="no_sector" value="${esc(o.sector_id || 'default')}"></div>
+        <div class="field"><label>Дилер (владелец сектора)</label><input id="no_dealer" placeholder="ООО «Ромашка»" value="${esc(o.dealer_name || '')}"></div>
         <div class="field"><label>Chat ID группы</label><input id="no_chat" placeholder="-100…" value="${esc(o.chat_id || '')}"></div>
         <div class="field"><label>Thread ID · продажи</label><input id="no_sales_thread" placeholder="необязательно" value="${esc(o.sales_thread_id || '')}"></div>
         <div class="field"><label>Thread ID · отчёты</label><input id="no_reports_thread" placeholder="необязательно" value="${esc(o.reports_thread_id || '')}"></div>
@@ -563,6 +564,7 @@
         brand_name: document.getElementById('no_brand').value.trim() || undefined,
         primary_color: document.getElementById('no_color').value.trim() || undefined,
         sector_id: document.getElementById('no_sector').value.trim() || undefined,
+        dealer_name: document.getElementById('no_dealer').value.trim() || undefined,
         chat_id: document.getElementById('no_chat').value.trim() || undefined,
         sales_thread_id: document.getElementById('no_sales_thread').value.trim() || undefined,
         reports_thread_id: document.getElementById('no_reports_thread').value.trim() || undefined
