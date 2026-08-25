@@ -11,6 +11,7 @@
  */
 import { registerPage, renderPage } from '../../app/router.js';
 import { bindSendDigestButtons } from '../../features/send-network-digest/index.js';
+import type { OutcomeBucket } from '../../../../src/shared/api-types.js';
 
 function reportImageRowHTML(): string {
   return `
@@ -43,6 +44,58 @@ function exportCsvSectionHTML(): string {
     </div>`;
 }
 
+// Learn (21.x) — сработала ли рекомендация: agg-сводка по всей сети,
+// admin-only (эндпоинт сам это требует, gate здесь только чтобы не
+// показывать пустой/403-блок остальным ролям).
+const OUTCOME_LABEL: Record<string, string> = {
+  recovered: 'исправилось',
+  still_missed: 'не исправилось',
+  recurred: 'повторилось'
+};
+
+function bucketRateHTML(label: string, bucket: OutcomeBucket): string {
+  const entries = Object.entries(bucket).filter((e): e is [string, number] => (e[1] || 0) > 0);
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+  if (!total) return `<div class="row-sub">${label}: пока нет данных</div>`;
+  const parts = entries.map(([k, v]) => `${OUTCOME_LABEL[k] || k} ${v} (${Math.round((v / total) * 100)}%)`);
+  return `<div class="row-sub">${label} (${total}): ${parts.join(' · ')}</div>`;
+}
+
+function typeEffectivenessHTML(title: string, data: { with_task: OutcomeBucket; without_task: OutcomeBucket }): string {
+  return `
+    <div style="margin-top:10px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${title}</div>
+      ${bucketRateHTML('С выполненной задачей', data.with_task)}
+      ${bucketRateHTML('Без задачи', data.without_task)}
+    </div>`;
+}
+
+async function loadLearnSummary(box: HTMLElement) {
+  try {
+    const summary = await window.apiClient.getAlertsEffectiveness(authHeaders());
+    box.innerHTML =
+      typeEffectivenessHTML('Прогноз конца дня (plan_miss_projected)', summary.plan_miss_projected) +
+      typeEffectivenessHTML('Просевшие дни (anomaly_vs_forecast)', summary.anomaly_vs_forecast);
+  } catch {
+    box.innerHTML = '<div class="row-sub">Не удалось загрузить</div>';
+  }
+}
+
+function learnSummarySectionHTML(): string {
+  return `
+    <div class="section">
+      <div class="section-title">Эффективность рекомендаций</div>
+      <div class="empty" style="text-align:left;padding:0 16px 10px">
+        Explain/Predict находят причину и предупреждают заранее, Recommend
+        подсказывает действие в задаче — здесь видно, помогает ли это на
+        самом деле: сравнение алертов с доведённой до конца задачей и без.
+      </div>
+      <div id="learnSummaryBody" style="padding:0 16px 16px">
+        <div class="row-sub">Загрузка…</div>
+      </div>
+    </div>`;
+}
+
 function digestSectionHTML(canSend: boolean): string {
   return `
     <div class="section">
@@ -63,13 +116,20 @@ export function renderReportsPage(): void {
   const box = document.getElementById('reportsPageBody');
   if (!box) return;
   const canSend = canManage();
+  const isAdmin = me?.role === 'admin';
 
   box.innerHTML =
     digestSectionHTML(canSend) +
     reportImageRowHTML() +
-    (canSend ? exportCsvSectionHTML() : '');
+    (canSend ? exportCsvSectionHTML() : '') +
+    (isAdmin ? learnSummarySectionHTML() : '');
 
   bindSendDigestButtons(box);
+
+  if (isAdmin) {
+    const learnBox = document.getElementById('learnSummaryBody');
+    if (learnBox) loadLearnSummary(learnBox);
+  }
 }
 
 registerPage('reports', renderReportsPage);

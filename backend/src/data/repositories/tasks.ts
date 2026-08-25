@@ -111,6 +111,17 @@ export async function touchUpdatedAt(taskId: number): Promise<void> {
   await query(`UPDATE tasks SET updated_at = now() WHERE id = $1`, [taskId]);
 }
 
+/** Learn (21.x) — среди этих alert_id, у каких есть ДОВЕДЁННАЯ до конца
+ * (status='done') задача — отвечает не "была ли задача", а "довели ли её". */
+export async function findCompletedAlertIds(alertIds: number[]): Promise<number[]> {
+  if (!alertIds.length) return [];
+  const res = await query(
+    `SELECT DISTINCT alert_id FROM tasks WHERE alert_id = ANY($1) AND status = 'done'`,
+    [alertIds]
+  );
+  return res.rows.map((r: any) => Number(r.alert_id));
+}
+
 export async function setStatus(taskId: number, status: string): Promise<any> {
   const completedAt = status === 'done' ? 'now()' : 'NULL';
   const res = await query(

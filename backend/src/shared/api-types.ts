@@ -158,6 +158,18 @@ export interface ChangeAlertStatusRequest {
 
 export type ChangeAlertStatusResponse = AlertItem;
 
+// ---------- /alerts/effectiveness (Learn, 21.x) ----------
+export interface OutcomeBucket {
+  recovered: number;
+  still_missed?: number;
+  recurred?: number;
+}
+
+export interface EffectivenessSummaryResponse {
+  plan_miss_projected: { with_task: OutcomeBucket; without_task: OutcomeBucket };
+  anomaly_vs_forecast: { with_task: OutcomeBucket; without_task: OutcomeBucket };
+}
+
 export interface TaskItem {
   id: number;
   org_id: string;

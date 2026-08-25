@@ -119,3 +119,74 @@ export async function resolveFromTask(alertId: number, resolvedBy: number | null
     [resolvedBy, alertId]
   );
 }
+
+/** Learn (21.x) — plan_miss_projected алерты конкретной даты, ещё без
+ * посчитанного исхода (payload.outcome). alert_date::text — иначе pg
+ * вернул бы JS Date, а не ISO-строку (тот же баг класс, что уже ловили в
+ * newbieCohorts, 19.x). */
+export async function findUnevaluatedPlanMiss(date: string): Promise<any[]> {
+  const res = await query(
+    `SELECT id, store_id, payload, alert_date::text as alert_date
+     FROM smart_alerts
+     WHERE alert_type = 'plan_miss_projected' AND alert_date = $1::date
+       AND NOT (payload ? 'outcome')`,
+    [date]
+  );
+  return res.rows;
+}
+
+/** Learn — "тихие" (isDip, payload.z < 0) anomaly_vs_forecast алерты не
+ * младше окна рецидива, ещё без исхода. Всплески (z>0) не оцениваем — им
+ * нечего "исправлять". */
+export async function findUnevaluatedAnomalyDips(olderThanOrEqualDate: string): Promise<any[]> {
+  const res = await query(
+    `SELECT id, store_id, payload, alert_date::text as alert_date
+     FROM smart_alerts
+     WHERE alert_type = 'anomaly_vs_forecast' AND alert_date <= $1::date
+       AND (payload->>'z')::float < 0
+       AND NOT (payload ? 'outcome')`,
+    [olderThanOrEqualDate]
+  );
+  return res.rows;
+}
+
+/** Learn — была ли у ТОЙ ЖЕ точки ещё одна просадка строго после
+ * fromDateExclusive и не позже toDateInclusive (окно рецидива). */
+export async function hasRecurringDip(storeId: string, fromDateExclusive: string, toDateInclusive: string): Promise<boolean> {
+  const res = await query(
+    `SELECT 1 FROM smart_alerts
+     WHERE store_id = $1 AND alert_type = 'anomaly_vs_forecast'
+       AND (payload->>'z')::float < 0
+       AND alert_date > $2::date AND alert_date <= $3::date
+     LIMIT 1`,
+    [storeId, fromDateExclusive, toDateInclusive]
+  );
+  return !!res.rows[0];
+}
+
+/** Learn — дописать outcome/had_task в payload алерта, не трогая остальное. */
+export async function mergeOutcome(alertId: number, outcome: string, hadTask: boolean): Promise<void> {
+  await query(
+    `UPDATE smart_alerts SET payload = payload || $1::jsonb WHERE id = $2`,
+    [JSON.stringify({ outcome, had_task: hadTask }), alertId]
+  );
+}
+
+/** Learn — сводка "сработала ли рекомендация": группировка по типу алерта,
+ * наличию выполненной задачи и исходу. GROUP BY прямо в SQL — строк мало
+ * (по одной на каждую реально встретившуюся комбинацию), агрегировать в
+ * JS избыточно. */
+export async function summarizeOutcomes(): Promise<
+  { alert_type: string; had_task: boolean; outcome: string; cnt: number }[]
+> {
+  const res = await query(
+    `SELECT alert_type,
+            (payload->>'had_task')::boolean as had_task,
+            payload->>'outcome' as outcome,
+            COUNT(*)::int as cnt
+     FROM smart_alerts
+     WHERE payload ? 'outcome'
+     GROUP BY alert_type, had_task, outcome`
+  );
+  return res.rows;
+}

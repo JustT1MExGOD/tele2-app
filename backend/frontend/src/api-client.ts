@@ -36,6 +36,7 @@ import type {
   AlertsListResponse,
   ChangeAlertStatusRequest,
   ChangeAlertStatusResponse,
+  EffectivenessSummaryResponse,
   TasksListResponse,
   TaskDetailResponse,
   ChangeTaskStatusRequest,
@@ -255,6 +256,12 @@ export async function changeAlertStatus(
   body: ChangeAlertStatusRequest
 ): Promise<ChangeAlertStatusResponse> {
   return request(`/alerts/${id}/status`, headers, { method: 'POST', body });
+}
+
+export async function getAlertsEffectiveness(
+  headers: Record<string, string>
+): Promise<EffectivenessSummaryResponse> {
+  return request('/alerts/effectiveness', headers);
 }
 
 export async function getTasks(
@@ -757,6 +764,7 @@ declare global {
       sendNetworkDigest: typeof sendNetworkDigest;
       getAlerts: typeof getAlerts;
       changeAlertStatus: typeof changeAlertStatus;
+      getAlertsEffectiveness: typeof getAlertsEffectiveness;
       getTasks: typeof getTasks;
       getTask: typeof getTask;
       changeTaskStatus: typeof changeTaskStatus;
@@ -853,6 +861,7 @@ window.apiClient = {
   sendNetworkDigest,
   getAlerts,
   changeAlertStatus,
+  getAlertsEffectiveness,
   getTasks,
   getTask,
   changeTaskStatus,

@@ -8,6 +8,7 @@ import { todayMoscow } from '../../utils/date.js';
 import { notifyAdmin, notifyChat } from '../../integrations/telegram/bot.js';
 import { checkAnomalyVsForecast } from '../analytics/anomaly.js';
 import { getStoreHourWeights, projectEndOfDay } from '../analytics/insights.js';
+import { evaluateOutcomes } from '../analytics/learn.js';
 import * as alertsRepo from '../../data/repositories/alerts.js';
 import * as storesRepo from '../../data/repositories/stores.js';
 import * as salesRepo from '../../data/repositories/sales.js';
@@ -37,6 +38,10 @@ export async function runSmartAlertsTick() {
   // внутри checkAnomalyVsForecast — не завязана на общий stores.rows ниже.
   if (hour === 11) {
     await checkAnomalyVsForecast().catch((e) => console.error('checkAnomalyVsForecast:', e?.message || e));
+    // Learn (21.x) — после Explain выше, тот же дневной тик: считаем исход
+    // ВЧЕРАШНИХ plan_miss_projected (день только что закрылся) и подбираем
+    // просевшие anomaly_vs_forecast, для которых окно рецидива уже прошло.
+    await evaluateOutcomes().catch((e) => console.error('evaluateOutcomes:', e?.message || e));
   }
 
   const stores = await storesRepo.listAllActive();

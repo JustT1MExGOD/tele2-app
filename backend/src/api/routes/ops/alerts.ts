@@ -7,8 +7,9 @@ import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { requireManager, resolveViewOrgId, assertStoreInOrg } from '../../../auth/guards.js';
 import { runSmartAlertsTick } from '../../../core/alerts/service.js';
+import { getEffectivenessSummary } from '../../../core/analytics/learn.js';
 import * as alertsRepo from '../../../data/repositories/alerts.js';
-import type { AlertsListResponse, ChangeAlertStatusResponse } from '../../../shared/api-types.js';
+import type { AlertsListResponse, ChangeAlertStatusResponse, EffectivenessSummaryResponse } from '../../../shared/api-types.js';
 
 const AlertOrgBody = Type.Object({
   org_id: Type.Optional(Type.String())
@@ -81,5 +82,15 @@ export async function registerAlertsRoutes(app: FastifyInstance) {
   app.post('/alerts/run', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     return runSmartAlertsTick();
+  });
+
+  // Learn (21.x) — сработала ли рекомендация: сводка по всей сети разом
+  // (across org'ов), как /orgs — admin-only, не scoped по сети.
+  app.get('/alerts/effectiveness', async (request, reply): Promise<EffectivenessSummaryResponse | FastifyReply | undefined> => {
+    if (!requireManager(request, reply)) return;
+    if (request.user?.role !== 'admin') {
+      return reply.code(403).send({ error: 'admin only' });
+    }
+    return getEffectivenessSummary();
   });
 }
