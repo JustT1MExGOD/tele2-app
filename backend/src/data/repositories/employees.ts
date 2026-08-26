@@ -85,6 +85,17 @@ export async function setPasswordHash(employeeId: number, passwordHash: string):
   await query(`UPDATE employees SET password_hash = $1 WHERE id = $2`, [passwordHash, employeeId]);
 }
 
+/** Самопривязка телефона (20.36) — уже авторизованный через Telegram
+ * сотрудник добавляет второй способ входа к СВОЕЙ карточке. */
+export async function getPhone(employeeId: number): Promise<string | null> {
+  const res = await query(`SELECT phone FROM employees WHERE id = $1`, [employeeId]);
+  return res.rows[0]?.phone ?? null;
+}
+
+export async function setPhoneAndPassword(employeeId: number, phone: string, passwordHash: string): Promise<void> {
+  await query(`UPDATE employees SET phone = $1, password_hash = $2 WHERE id = $3`, [phone, passwordHash, employeeId]);
+}
+
 /** Тот же чек, что storesRepo.belongsToOrg — используется requireEmployeeInOrg. */
 export async function belongsToOrg(orgId: string, employeeId: number): Promise<boolean> {
   const res = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM employees WHERE id = $1`, [employeeId]);

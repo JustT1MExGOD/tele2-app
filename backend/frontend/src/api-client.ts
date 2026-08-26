@@ -51,6 +51,8 @@ import type {
   MeResponse,
   BindMeRequest,
   BindMeResponse,
+  LinkPhoneRequest,
+  LinkPhoneResponse,
   MeDayResponse,
   SchedulesListResponse,
   ScheduleMonthResponse,
@@ -330,6 +332,10 @@ export async function getMe(headers: Record<string, string>): Promise<MeResponse
 
 export async function bindMe(headers: Record<string, string>, body: BindMeRequest): Promise<BindMeResponse> {
   return request('/me/bind', headers, { method: 'POST', body });
+}
+
+export async function linkPhone(headers: Record<string, string>, body: LinkPhoneRequest): Promise<LinkPhoneResponse> {
+  return request('/me/link-phone', headers, { method: 'POST', body });
 }
 
 export async function getMyDay(headers: Record<string, string>): Promise<MeDayResponse> {
@@ -783,6 +789,7 @@ declare global {
       createTask: typeof createTask;
       getMe: typeof getMe;
       bindMe: typeof bindMe;
+      linkPhone: typeof linkPhone;
       getMyDay: typeof getMyDay;
       getSchedules: typeof getSchedules;
       getScheduleMonth: typeof getScheduleMonth;
@@ -881,6 +888,7 @@ window.apiClient = {
   createTask,
   getMe,
   bindMe,
+  linkPhone,
   getMyDay,
   getSchedules,
   getScheduleMonth,

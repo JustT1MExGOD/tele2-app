@@ -13,13 +13,18 @@ function setupGlobals(overrides: { tgId?: number | null } = {}) {
       <div id="lkProfile"></div><div id="lkShift"></div><div id="lkInsight"></div>
       <div id="lkToday"></div><div id="lkMonth"></div><div id="lkWeek"></div>
       <div id="lkBfq"></div><div id="lkGamification"></div><div id="lkActions"></div>
+      <div id="lkPhoneAuth"></div>
     </div>
     <div id="userAvatar"></div>
     <select id="bindEmployee"></select>
+    <div id="overlay"></div>
+    <div id="modalTitle"></div>
+    <div id="modalBody"></div>
   `;
   vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('toast', vi.fn());
+  vi.stubGlobal('closeModal', vi.fn());
   vi.stubGlobal('me', null);
   vi.stubGlobal('tgUser', () => (overrides.tgId === null ? null : { id: overrides.tgId ?? 555, first_name: 'Иван', photo_url: '' }));
   vi.stubGlobal('todayMoscow', () => '2026-08-25');
@@ -42,8 +47,9 @@ function setupGlobals(overrides: { tgId?: number | null } = {}) {
   const getPlansEmployeesMonth = vi.fn().mockResolvedValue({ rows: [] });
   const bindMeApi = vi.fn().mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee' });
   const uploadAvatar = vi.fn().mockResolvedValue({ ok: true });
-  (window as any).apiClient = { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMe: bindMeApi, uploadAvatar };
-  return { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMeApi, uploadAvatar };
+  const linkPhone = vi.fn().mockResolvedValue({ ok: true });
+  (window as any).apiClient = { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMe: bindMeApi, uploadAvatar, linkPhone };
+  return { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMeApi, uploadAvatar, linkPhone };
 }
 
 describe('Мой план (миграция frontend/js/05-my-plan.js → src/pages/my-plan)', () => {
@@ -137,11 +143,94 @@ describe('Мой план (миграция frontend/js/05-my-plan.js → src/pa
     expect(input2).toBe(input1);
   });
 
-  it('window.* мост — все 3 функции', async () => {
+  it('window.* мост — все 5 функций', async () => {
     setupGlobals();
     await import('../src/pages/my-plan/index.js');
-    for (const name of ['loadMyPlan', 'bindMe', 'pickAvatarFile']) {
+    for (const name of ['loadMyPlan', 'bindMe', 'pickAvatarFile', 'openLinkPhone', 'saveLinkPhone']) {
       expect(typeof (window as any)[name]).toBe('function');
     }
+  });
+
+  it('loadMyPlan: телефон ещё не привязан — рендерит кнопку привязки', async () => {
+    const { getMe } = setupGlobals();
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee', phone: null });
+    const { loadMyPlan } = await import('../src/pages/my-plan/index.js');
+    await loadMyPlan();
+    const html = document.getElementById('lkPhoneAuth')!.innerHTML;
+    expect(html).toContain('openLinkPhone()');
+    expect(html).toContain('Привязать телефон и пароль');
+  });
+
+  it('loadMyPlan: телефон уже привязан — показывает "Подключено", без кнопки', async () => {
+    const { getMe } = setupGlobals();
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee', phone: '+79001234567' });
+    const { loadMyPlan } = await import('../src/pages/my-plan/index.js');
+    await loadMyPlan();
+    const html = document.getElementById('lkPhoneAuth')!.innerHTML;
+    expect(html).toContain('Подключено');
+    expect(html).toContain('+79001234567');
+    expect(html).not.toContain('openLinkPhone()');
+  });
+
+  it('openLinkPhone: открывает модалку с тремя полями', async () => {
+    setupGlobals();
+    const { openLinkPhone } = await import('../src/pages/my-plan/index.js');
+    openLinkPhone();
+    expect(document.getElementById('overlay')!.classList.contains('show')).toBe(true);
+    expect(document.getElementById('modalTitle')!.textContent).toBe('Вход с компьютера');
+    expect(document.getElementById('linkPhoneInput')).not.toBeNull();
+    expect(document.getElementById('linkPasswordInput')).not.toBeNull();
+    expect(document.getElementById('linkPasswordConfirmInput')).not.toBeNull();
+  });
+
+  it('saveLinkPhone: короткий пароль — toast err, API не вызывается', async () => {
+    const { linkPhone } = setupGlobals();
+    const { openLinkPhone, saveLinkPhone } = await import('../src/pages/my-plan/index.js');
+    openLinkPhone();
+    (document.getElementById('linkPhoneInput') as HTMLInputElement).value = '+79001234567';
+    (document.getElementById('linkPasswordInput') as HTMLInputElement).value = 'short';
+    (document.getElementById('linkPasswordConfirmInput') as HTMLInputElement).value = 'short';
+    await saveLinkPhone(null);
+    expect(linkPhone).not.toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Пароль должен быть от 8 символов', 'err');
+  });
+
+  it('saveLinkPhone: пароли не совпадают — toast err, API не вызывается', async () => {
+    const { linkPhone } = setupGlobals();
+    const { openLinkPhone, saveLinkPhone } = await import('../src/pages/my-plan/index.js');
+    openLinkPhone();
+    (document.getElementById('linkPhoneInput') as HTMLInputElement).value = '+79001234567';
+    (document.getElementById('linkPasswordInput') as HTMLInputElement).value = 'password123';
+    (document.getElementById('linkPasswordConfirmInput') as HTMLInputElement).value = 'password124';
+    await saveLinkPhone(null);
+    expect(linkPhone).not.toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Пароли не совпадают', 'err');
+  });
+
+  it('saveLinkPhone: успех — вызывает API, тостит, закрывает модалку, перезагружает', async () => {
+    const { linkPhone, getMe } = setupGlobals();
+    const { openLinkPhone, saveLinkPhone } = await import('../src/pages/my-plan/index.js');
+    openLinkPhone();
+    (document.getElementById('linkPhoneInput') as HTMLInputElement).value = '+79001234567';
+    (document.getElementById('linkPasswordInput') as HTMLInputElement).value = 'password123';
+    (document.getElementById('linkPasswordConfirmInput') as HTMLInputElement).value = 'password123';
+    await saveLinkPhone(null);
+    expect(linkPhone).toHaveBeenCalledWith(expect.anything(), { phone: '+79001234567', password: 'password123' });
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Телефон привязан', 'ok');
+    expect((globalThis as any).closeModal).toHaveBeenCalled();
+    expect(getMe).toHaveBeenCalled(); // loadMyPlan() re-fetch
+  });
+
+  it('saveLinkPhone: ошибка API — toast err с сообщением сервера, модалка не закрывается', async () => {
+    const { linkPhone } = setupGlobals();
+    linkPhone.mockRejectedValue(new Error('Этот номер уже привязан к другому аккаунту'));
+    const { openLinkPhone, saveLinkPhone } = await import('../src/pages/my-plan/index.js');
+    openLinkPhone();
+    (document.getElementById('linkPhoneInput') as HTMLInputElement).value = '+79001234567';
+    (document.getElementById('linkPasswordInput') as HTMLInputElement).value = 'password123';
+    (document.getElementById('linkPasswordConfirmInput') as HTMLInputElement).value = 'password123';
+    await saveLinkPhone(null);
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Этот номер уже привязан к другому аккаунту', 'err');
+    expect((globalThis as any).closeModal).not.toHaveBeenCalled();
   });
 });

@@ -34,7 +34,7 @@ export async function loadMyPlan(): Promise<void> {
   const root = document.getElementById('lkRoot');
   if (root) {
     root.style.display = 'block';
-    ['lkProfile', 'lkShift', 'lkInsight', 'lkToday', 'lkMonth', 'lkWeek', 'lkBfq', 'lkGamification', 'lkActions'].forEach((id) => {
+    ['lkProfile', 'lkShift', 'lkInsight', 'lkToday', 'lkMonth', 'lkWeek', 'lkBfq', 'lkGamification', 'lkActions', 'lkPhoneAuth'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = '<div class="skeleton" style="margin-bottom:10px"></div>';
     });
@@ -330,8 +330,90 @@ export async function loadMyPlan(): Promise<void> {
         </div>`;
   }
 
+  // --- Не-Telegram вход (20.36): привязка телефона+пароля к своей же
+  // карточке — второй способ входа для тех, у кого сегодня Telegram
+  // недоступен (VPN, нет аккаунта у коллеги и т.п.). ---
+  const lkPhoneAuth = document.getElementById('lkPhoneAuth');
+  if (lkPhoneAuth) {
+    lkPhoneAuth.innerHTML = me?.phone
+      ? `
+        <div class="section">
+          <div class="section-title">Вход с компьютера</div>
+          <div class="row" style="cursor:default">
+            <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg></div>
+            <div class="row-body">
+              <div class="row-title">Подключено</div>
+              <div class="row-sub">${esc(me.phone)}</div>
+            </div>
+          </div>
+        </div>`
+      : `
+        <div class="section">
+          <div class="section-title">Вход с компьютера</div>
+          <button class="row" onclick="openLinkPhone()">
+            <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg></div>
+            <div class="row-body">
+              <div class="row-title">Привязать телефон и пароль</div>
+              <div class="row-sub">Понадобится, если Telegram недоступен</div>
+            </div>
+            <div class="row-chevron">›</div>
+          </button>
+        </div>`;
+  }
+
   // v13: сессия смены + инсайт + геймификация
   loadShiftAndInsight(empId);
+}
+
+export function openLinkPhone(): void {
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+  if (title) title.textContent = 'Вход с компьютера';
+  if (body) {
+    body.innerHTML = `
+      <div class="empty" style="text-align:left;padding:0 0 10px">
+        Придумай телефон и пароль — так можно будет войти в T2 Sales с
+        компьютера или телефона без Telegram.
+      </div>
+      <div class="field"><label>Телефон</label><input id="linkPhoneInput" type="tel" placeholder="+79001234567" autocomplete="tel"></div>
+      <div class="field"><label>Пароль</label><input id="linkPasswordInput" type="password" placeholder="Минимум 8 символов" autocomplete="new-password"></div>
+      <div class="field"><label>Повторите пароль</label><input id="linkPasswordConfirmInput" type="password" autocomplete="new-password"></div>
+      <button class="btn-main" style="margin-top:8px" onclick="saveLinkPhone(this)">Привязать</button>
+    `;
+  }
+  document.getElementById('overlay')?.classList.add('show');
+}
+
+export async function saveLinkPhone(btnEl: HTMLButtonElement | null): Promise<void> {
+  if (btnEl?.disabled) return;
+  const phone = (document.getElementById('linkPhoneInput') as HTMLInputElement | null)?.value.trim() || '';
+  const password = (document.getElementById('linkPasswordInput') as HTMLInputElement | null)?.value || '';
+  const confirm = (document.getElementById('linkPasswordConfirmInput') as HTMLInputElement | null)?.value || '';
+
+  if (!phone) {
+    toast('Введите телефон', 'err');
+    return;
+  }
+  if (password.length < 8) {
+    toast('Пароль должен быть от 8 символов', 'err');
+    return;
+  }
+  if (password !== confirm) {
+    toast('Пароли не совпадают', 'err');
+    return;
+  }
+
+  if (btnEl) btnEl.disabled = true;
+  try {
+    await window.apiClient.linkPhone(authHeaders(true), { phone, password });
+    toast('Телефон привязан', 'ok');
+    closeModal();
+    loadMyPlan();
+  } catch (e: any) {
+    toast(e?.message || 'Не удалось привязать телефон', 'err');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
+  }
 }
 
 export async function bindMe(): Promise<void> {
@@ -408,8 +490,12 @@ declare global {
     loadMyPlan: typeof loadMyPlan;
     bindMe: typeof bindMe;
     pickAvatarFile: typeof pickAvatarFile;
+    openLinkPhone: typeof openLinkPhone;
+    saveLinkPhone: typeof saveLinkPhone;
   }
 }
 window.loadMyPlan = loadMyPlan;
 window.bindMe = bindMe;
 window.pickAvatarFile = pickAvatarFile;
+window.openLinkPhone = openLinkPhone;
+window.saveLinkPhone = saveLinkPhone;

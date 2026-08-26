@@ -348,6 +348,9 @@ export interface MeResponse {
   telegram_id?: number | string | string[] | null;
   is_manager?: boolean;
   org_id?: string;
+  /** Не-Telegram вход (20.36) — второй способ входа уже привязан к
+   * карточке, или null, если ещё нет. */
+  phone?: string | null;
 }
 
 export interface BindMeRequest {
@@ -356,6 +359,16 @@ export interface BindMeRequest {
 }
 
 export type BindMeResponse = MeResponse & { bound: true };
+
+// ---------- POST /me/link-phone (не-Telegram вход, самопривязка, 20.36) ----------
+export interface LinkPhoneRequest {
+  phone: string;
+  password: string;
+}
+
+export interface LinkPhoneResponse {
+  ok: true;
+}
 
 export interface MeDayResponse {
   bound: boolean;

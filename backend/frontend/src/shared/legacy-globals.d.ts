@@ -71,6 +71,8 @@ declare global {
     bound?: boolean;
     id?: number;
     telegram_id?: number | string | string[] | null;
+    /** Не-Telegram вход (20.36) — второй способ входа уже привязан. */
+    phone?: string | null;
   } | null;
 
   /** Set by src/pages/team's switchAdminOrg() — null unless admin switched

@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.35.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.36.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-362%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-366%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.35.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.36.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -462,6 +462,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.33.0** | Domain Integrity — org-scoping инвариант (Employee/Store/Announcement/Channel → Organization, Channel → Store) закреплён в PostgreSQL пятью новыми FK (`0016_org_scoping_fk.sql`), не только в TypeScript |
 | **20.34.0** | Product Analytics — сколько рекомендаций открывают/игнорируют, какие алерты похожи на ложную тревогу, где задача реально меняет исход (`/alerts/effectiveness` расширен, `smart_alerts.first_opened_at`) |
 | **20.35.0** | Не-Telegram вход (телефон + пароль), backend-механизм — второй identity provider поверх шва ADR-005 (`auth/providers/phone.ts`), `guards.ts` не изменился ни в одной сигнатуре. Регистрация открытая, тот же flow "заявка → админ одобряет"; сброс пароля — через админа. Ещё не достижим из UI (фронтенд — следующей версией) |
+| **20.36.0** | Привязка телефона+пароля из своего профиля — для тех, кто УЖЕ работает через Telegram (`POST /me/link-phone`, тот же принцип identity-из-request.user, что `/me/bind`). Новая секция "Вход с компьютера" в личном кабинете, без новой CSS — переиспользует существующий `.section`/`.row` паттерн |
 
 ---
 
@@ -885,6 +886,15 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   Живой smoke на реальном процессе — оба provider'а параллельно на одном
   инстансе. 11 новых тестов. Ещё не достижим из UI — фронтенд следующей
   версией (см. §21, 20.35.0)
+- **20.36 Самопривязка телефона** ✅ — другой сценарий, чем 20.35: не "у
+  меня нет аккаунта", а "я уже работаю через Telegram, хочу ещё и
+  телефон+пароль на всякий случай". `POST /me/link-phone` — без approve
+  через `access_requests`, identity уже подтверждена тем же запросом (тот
+  же принцип, что `POST /me/bind`, 19.11.0 — целевой `employee_id` всегда
+  из `request.user`, никогда из тела). Личный кабинет получил секцию
+  "Вход с компьютера" — переиспользует существующий `.section`/`.row`
+  паттерн (тот же, что у "Отчёт по точке" на экране отчётов), новой CSS
+  не потребовалось. 4 бэкенд-теста + 7 фронтенд (см. §21, 20.36.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -932,6 +942,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.35.0 · август 2026*
+*README · актуально на v20.36.0 · август 2026*
 
 </div>

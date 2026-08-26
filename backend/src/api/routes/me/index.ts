@@ -5,18 +5,30 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { isManager } from '../../../auth/guards.js';
+import { hashPassword } from '../../../auth/password.js';
 import { todayMoscow } from '../../../utils/date.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
 import * as plansRepo from '../../../data/repositories/plans.js';
 import * as tasksRepo from '../../../data/repositories/tasks.js';
-import type { MeResponse, BindMeResponse, MeDayResponse } from '../../../shared/api-types.js';
+import type { MeResponse, BindMeResponse, MeDayResponse, LinkPhoneResponse } from '../../../shared/api-types.js';
 
 const MeBindBody = Type.Object({
   employee_id: Type.Number()
 });
 type MeBindBody = Static<typeof MeBindBody>;
+
+// Тот же regex, что auth/routes/session.ts — намеренно не общий импорт,
+// та же дисциплина маленьких дублируемых хелперов, что esc() в access.ts/
+// session.ts.
+const PHONE_RE = /^\+?[1-9]\d{6,14}$/;
+
+const LinkPhoneBody = Type.Object({
+  phone: Type.String({ minLength: 7, maxLength: 16 }),
+  password: Type.String({ minLength: 8, maxLength: 200 })
+});
+type LinkPhoneBody = Static<typeof LinkPhoneBody>;
 
 export async function registerMeRoutes(app: FastifyInstance) {
   // ========== ME / ROLE ==========
@@ -31,6 +43,11 @@ export async function registerMeRoutes(app: FastifyInstance) {
         telegram_id: request.headers['x-telegram-id'] || null
       };
     }
+    // Не-Telegram вход (20.36) — нужно фронту, чтобы решить, показывать
+    // ли «Привязать телефон» или «Уже подключено: +7…». Отдельный запрос,
+    // не поле Principal — эта информация нужна только здесь, раздувать
+    // AuthUser (используется в ~30 файлах) ради одного экрана не стоит.
+    const phone = await employeesRepo.getPhone(request.user.employee_id).catch(() => null);
     return {
       bound: true,
       employee_id: request.user.employee_id,
@@ -39,9 +56,41 @@ export async function registerMeRoutes(app: FastifyInstance) {
       role: request.user.role,
       telegram_id: request.user.telegram_id,
       is_manager: isManager(request.user),
-      org_id: request.user.org_id
+      org_id: request.user.org_id,
+      phone
     };
   });
+
+  // Не-Telegram вход (20.36) — уже авторизованный через Telegram сотрудник
+  // добавляет телефон+пароль к СВОЕЙ карточке как второй способ входа.
+  // В отличие от POST /auth/register (открытая самостоятельная регистрация
+  // для тех, у кого ещё нет аккаунта) — здесь identity уже подтверждена
+  // (request.user), approve через access_requests не нужен, пишем сразу.
+  app.post(
+    '/me/link-phone',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: LinkPhoneBody } },
+    async (request, reply): Promise<LinkPhoneResponse | FastifyReply> => {
+      if (!request.user?.employee_id) {
+        return reply.code(401).send({ error: 'unauthorized', message: 'Войдите через Telegram' });
+      }
+      const b = request.body as LinkPhoneBody;
+      const phone = String(b.phone || '').trim();
+      if (!PHONE_RE.test(phone)) {
+        return reply.code(400).send({ error: 'invalid_phone', message: 'Некорректный номер телефона' });
+      }
+
+      const passwordHash = await hashPassword(b.password);
+      try {
+        await employeesRepo.setPhoneAndPassword(request.user.employee_id, phone, passwordHash);
+      } catch (e: any) {
+        if (e?.code === '23505') {
+          return reply.code(409).send({ error: 'phone_taken', message: 'Этот номер уже привязан к другому аккаунту' });
+        }
+        throw e;
+      }
+      return { ok: true };
+    }
+  );
 
   app.post(
     '/me/bind',
