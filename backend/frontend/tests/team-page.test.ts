@@ -9,6 +9,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 function setupGlobals(overrides: { role?: string } = {}) {
   document.body.innerHTML = `
     <div id="teamList"></div>
+    <div id="teamTableWrap">
+      <table id="teamTable">
+        <thead>
+          <tr>
+            <th data-sort-key="name" aria-sort="none"><button onclick="sortTeamTable('name')">ФИО</button></th>
+            <th data-sort-key="role" aria-sort="none"><button onclick="sortTeamTable('role')">Роль</button></th>
+            <th data-sort-key="sim" aria-sort="none"><button onclick="sortTeamTable('sim')">SIM</button></th>
+            <th data-sort-key="combo" aria-sort="none"><button onclick="sortTeamTable('combo')">Комбо</button></th>
+            <th data-sort-key="phones" aria-sort="none"><button onclick="sortTeamTable('phones')">Тел</button></th>
+            <th>Статус</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody id="teamTableBody"></tbody>
+      </table>
+    </div>
     <div id="managerTools"></div>
     <button id="btnSupportTickets"></button>
     <button id="btnNetworks"></button>
@@ -38,6 +54,8 @@ function setupGlobals(overrides: { role?: string } = {}) {
   vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
   vi.stubGlobal('closeModal', vi.fn());
   (window as any).__stores = null;
+  const openEmployeeProfile = vi.fn();
+  (window as any).openEmployeeProfile = openEmployeeProfile;
 
   const getEmployees = vi.fn().mockResolvedValue([]);
   const getSales = vi.fn().mockResolvedValue([]);
@@ -59,7 +77,7 @@ function setupGlobals(overrides: { role?: string } = {}) {
     createEmployee,
     createStore
   };
-  return { getEmployees, getSales, getSchedules, getOrgsAdmin, zeroSaleMetric, setEmployeeRole, deactivateEmployee, createEmployee, createStore };
+  return { getEmployees, getSales, getSchedules, getOrgsAdmin, zeroSaleMetric, setEmployeeRole, deactivateEmployee, createEmployee, createStore, openEmployeeProfile };
 }
 
 describe('Команда (миграция frontend/js/06-team-bfq.js → src/pages/team)', () => {
@@ -215,7 +233,7 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     expect((window as any).__stores).toBeNull();
   });
 
-  it('window.* мост — все 14 функций', async () => {
+  it('window.* мост — все 16 функций', async () => {
     setupGlobals();
     await import('../src/pages/team/index.js');
     for (const name of [
@@ -232,9 +250,123 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
       'saveNewEmployee',
       'openAddStore',
       'toggle24hStore',
-      'saveNewStore'
+      'saveNewStore',
+      'sortTeamTable',
+      'openTeamRow'
     ]) {
       expect(typeof (window as any)[name]).toBe('function');
     }
+  });
+
+  // ===== Desktop .data-table (20.42) =====
+
+  it('loadTeam: desktop-таблица рендерит тот же состав, что #teamList', async () => {
+    const { getEmployees, getSales } = setupGlobals({ role: 'manager' });
+    getEmployees.mockResolvedValue([
+      { id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' },
+      { id: 2, full_name: 'Анна', short_name: null, is_active: true, role: 'senior' }
+    ]);
+    getSales.mockResolvedValue([{ id: 1, employee_id: 1, store_id: 's1', sale_date: '2026-08-25', full_name: 'Иван', store_name: 'A', sim: 3, phones: 1, combo: 0 }]);
+    const { loadTeam } = await import('../src/pages/team/index.js');
+    await loadTeam();
+    const tbody = document.getElementById('teamTableBody')!.innerHTML;
+    expect(tbody).toContain('Иван');
+    expect(tbody).toContain('Анна');
+    expect(tbody).toContain('openTeamRow(event, 1)');
+    expect(tbody).toContain('removeEmployee(1)');
+  });
+
+  it('loadTeam: пустой список — таблица показывает то же сообщение', async () => {
+    setupGlobals();
+    const { loadTeam } = await import('../src/pages/team/index.js');
+    await loadTeam();
+    expect(document.getElementById('teamTableBody')!.innerHTML).toContain('В команде пока никого нет');
+  });
+
+  it('sortTeamTable: числовая сортировка по SIM, направление разворачивается повторным кликом', async () => {
+    const { getEmployees, getSales } = setupGlobals({ role: 'manager' });
+    getEmployees.mockResolvedValue([
+      { id: 1, full_name: 'Аня', short_name: null, is_active: true, role: 'employee' },
+      { id: 2, full_name: 'Боря', short_name: null, is_active: true, role: 'employee' }
+    ]);
+    getSales.mockResolvedValue([
+      { id: 1, employee_id: 1, store_id: 's1', sale_date: '2026-08-25', full_name: 'Аня', store_name: 'A', sim: 2 },
+      { id: 2, employee_id: 2, store_id: 's1', sale_date: '2026-08-25', full_name: 'Боря', store_name: 'A', sim: 9 }
+    ]);
+    const { loadTeam, sortTeamTable } = await import('../src/pages/team/index.js');
+    await loadTeam();
+
+    sortTeamTable('sim');
+    let rows = [...document.querySelectorAll('#teamTableBody tr')].map((tr) => tr.textContent || '');
+    expect(rows[0]).toContain('Аня');
+    expect(rows[1]).toContain('Боря');
+    expect((document.querySelector('#teamTable th[data-sort-key="sim"]') as HTMLElement).getAttribute('aria-sort')).toBe('ascending');
+
+    sortTeamTable('sim');
+    rows = [...document.querySelectorAll('#teamTableBody tr')].map((tr) => tr.textContent || '');
+    expect(rows[0]).toContain('Боря');
+    expect(rows[1]).toContain('Аня');
+    expect((document.querySelector('#teamTable th[data-sort-key="sim"]') as HTMLElement).getAttribute('aria-sort')).toBe('descending');
+  });
+
+  it('sortTeamTable: имя сортируется по ru-алфавиту (дефолт — по ФИО, по возрастанию)', async () => {
+    const { getEmployees } = setupGlobals({ role: 'manager' });
+    getEmployees.mockResolvedValue([
+      { id: 1, full_name: 'Яна', short_name: null, is_active: true, role: 'employee' },
+      { id: 2, full_name: 'Борис', short_name: null, is_active: true, role: 'employee' }
+    ]);
+    const { loadTeam } = await import('../src/pages/team/index.js');
+    await loadTeam();
+    const rows = [...document.querySelectorAll('#teamTableBody tr')].map((tr) => tr.textContent || '');
+    expect(rows[0]).toContain('Борис');
+    expect(rows[1]).toContain('Яна');
+  });
+
+  it('openTeamRow: canViewAnalytics — уводит на профиль, а не в модалку', async () => {
+    const { openEmployeeProfile } = setupGlobals({ role: 'manager' });
+    (globalThis as any).canViewAnalytics = () => true;
+    const { openTeamRow } = await import('../src/pages/team/index.js');
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    row.appendChild(cell);
+    openTeamRow({ target: cell } as unknown as MouseEvent, 7);
+    expect(openEmployeeProfile).toHaveBeenCalledWith(7);
+  });
+
+  it('openTeamRow: без canViewAnalytics — открывает прежнюю модалку openEmployeeCard', async () => {
+    const { getEmployees, openEmployeeProfile } = setupGlobals({ role: 'employee' });
+    getEmployees.mockResolvedValue([{ id: 7, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
+    (globalThis as any).canViewAnalytics = () => false;
+    const { openTeamRow } = await import('../src/pages/team/index.js');
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    row.appendChild(cell);
+    openTeamRow({ target: cell } as unknown as MouseEvent, 7);
+    expect(openEmployeeProfile).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.getElementById('modalTitle')!.textContent).toBe('Иван');
+  });
+
+  it('openTeamRow: клик внутри td.actions не переходит по строке', async () => {
+    const { openEmployeeProfile } = setupGlobals({ role: 'manager' });
+    (globalThis as any).canViewAnalytics = () => true;
+    const { openTeamRow } = await import('../src/pages/team/index.js');
+    const row = document.createElement('tr');
+    const actionsCell = document.createElement('td');
+    actionsCell.className = 'actions';
+    const btn = document.createElement('button');
+    actionsCell.appendChild(btn);
+    row.appendChild(actionsCell);
+    openTeamRow({ target: btn } as unknown as MouseEvent, 7);
+    expect(openEmployeeProfile).not.toHaveBeenCalled();
+  });
+
+  it('loadTeam: действия скрыты в таблице, когда !canManage()', async () => {
+    const { getEmployees } = setupGlobals({ role: 'employee' });
+    getEmployees.mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
+    const { loadTeam } = await import('../src/pages/team/index.js');
+    await loadTeam();
+    const tbody = document.getElementById('teamTableBody')!.innerHTML;
+    expect(tbody).not.toContain('removeEmployee');
   });
 });

@@ -589,6 +589,22 @@
       <div class="section">
         <div class="section-title">Сотрудники</div>
         <div id="teamList"><div class="skeleton"></div></div>
+        <div id="teamTableWrap" class="data-table-wrap">
+          <table class="data-table" id="teamTable">
+            <thead>
+              <tr>
+                <th scope="col" data-sort-key="name" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('name')">ФИО</button></th>
+                <th scope="col" data-sort-key="role" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('role')">Роль</button></th>
+                <th scope="col" data-sort-key="sim" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('sim')">SIM</button></th>
+                <th scope="col" data-sort-key="combo" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('combo')">Комбо</button></th>
+                <th scope="col" data-sort-key="phones" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('phones')">Тел</button></th>
+                <th scope="col">Статус</th>
+                <th scope="col">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="teamTableBody"></tbody>
+          </table>
+        </div>
       </div>
       <div class="section" id="managerTools" style="display:none;">
         <div class="section-title">Управление</div>

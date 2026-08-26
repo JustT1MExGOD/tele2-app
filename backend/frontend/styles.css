@@ -2136,6 +2136,14 @@
   display: none;
 }
 
+/* Команда (20.42) — .data-table-wrap скрыт до shell-порога 860px тем же
+   base-rule-outside-media приёмом, что .desktop-dashboard/.sidebar выше;
+   в отличие от Home здесь нет конфликта со swipe-каруселью, поэтому порог
+   — обычный shell 860px, не отдельный 1200px. */
+.data-table-wrap {
+  display: none;
+}
+
 /* Topbar breadcrumb (20.40) — тот же приём: скрыт на мобильном, текст
    выводит switchPage() (nav.ts) из подписи активного .nav-item. */
 .topbar-breadcrumb {
@@ -2388,6 +2396,79 @@
     padding-top: var(--sp-2);
     padding-bottom: var(--sp-2);
   }
+
+  /* .data-table (20.42) — примитив, заведённый ещё в 20.40 без потребителя
+     ("нет ни одной страницы, которой он нужен прямо сейчас"), первый
+     реальный потребитель — Команда. .row-список остаётся нетронутым для
+     мобильного, только скрывается здесь. */
+  #teamList {
+    display: none;
+  }
+  .data-table-wrap {
+    display: block;
+    overflow-x: auto;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: var(--fs-sm);
+  }
+  .data-table th,
+  .data-table td {
+    padding: var(--sp-3) var(--sp-4);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .data-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
+    color: var(--hint);
+    font-weight: var(--fw-semi);
+    z-index: 1;
+  }
+  .data-table .dt-sort {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+  }
+  .data-table th[data-sort-key] .dt-sort::after {
+    content: '⇅';
+    opacity: 0.5;
+    font-size: var(--fs-xs);
+  }
+  .data-table th[aria-sort='ascending'] .dt-sort::after {
+    content: '↑';
+    opacity: 1;
+    color: var(--primary);
+  }
+  .data-table th[aria-sort='descending'] .dt-sort::after {
+    content: '↓';
+    opacity: 1;
+    color: var(--primary);
+  }
+  .data-table .dt-name {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    white-space: nowrap;
+  }
+  .data-table td.actions {
+    display: flex;
+    gap: var(--sp-1);
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
 }
 
 @media (min-width: 1200px) {
@@ -2477,6 +2558,10 @@
   .row:hover,
   .nav-item:hover {
     background: var(--surface-2);
+  }
+  .data-table tbody tr:hover {
+    background: var(--surface-2);
+    cursor: pointer;
   }
   .sidebar .nav-item.active:hover {
     background: var(--primary-soft);

@@ -20,6 +20,14 @@ declare global {
 
 let switcherOrgsCache: OrgAdminItem[] = [];
 
+// 20.42, первая настоящая .data-table (docs/DESKTOP-DESIGN.md Part G) —
+// сортировка чисто клиентская поверх уже загруженных данных, без нового
+// запроса; lastTeamList/lastTeamMap хранят последний ответ loadTeam(),
+// чтобы sortTeamTable() могла перерисовать только таблицу.
+let teamSort: { key: string; dir: 1 | -1 } = { key: 'name', dir: 1 };
+let lastTeamList: EmployeeListItem[] = [];
+let lastTeamMap: Record<string, { sim: number; phones: number; combo: number; active: boolean }> = {};
+
 function switcherHierarchy(): Map<string, Map<string, OrgAdminItem[]>> {
   // dealerLabel -> sectorId -> orgs[] — группировка чисто клиентская, GET
   // /orgs уже отдаёт dealer_name/sector_id на каждой сети, отдельный
@@ -181,8 +189,88 @@ export async function loadTeam(): Promise<void> {
         })
         .join('') || '<div class="empty">🍉 В команде пока никого нет</div>';
     list.forEach((e) => applyAvatarImg('ta-' + e.id, e.id));
+    lastTeamList = list;
+    lastTeamMap = map;
+    renderTeamTable(lastTeamList, lastTeamMap);
   } catch {
     box.innerHTML = '<div class="empty">🍉 Не получилось загрузить команду, зайди чуть позже</div>';
+  }
+}
+
+// ===== Desktop data-table (20.42) — тот же list/map, что #teamList выше,
+// без своей фильтрации и без своего запроса. =====
+function renderTeamTable(list: EmployeeListItem[], map: Record<string, { sim: number; phones: number; combo: number; active: boolean }>): void {
+  const tbody = document.getElementById('teamTableBody');
+  if (!tbody) return;
+  const sorted = [...list].sort((a, b) => {
+    let cmp = 0;
+    switch (teamSort.key) {
+      case 'name':
+        cmp = (a.full_name || '').localeCompare(b.full_name || '', 'ru');
+        break;
+      case 'role':
+        cmp = roleLabel(a.role || '').localeCompare(roleLabel(b.role || ''), 'ru');
+        break;
+      case 'sim':
+        cmp = (map[a.id]?.sim || 0) - (map[b.id]?.sim || 0);
+        break;
+      case 'combo':
+        cmp = (map[a.id]?.combo || 0) - (map[b.id]?.combo || 0);
+        break;
+      case 'phones':
+        cmp = (map[a.id]?.phones || 0) - (map[b.id]?.phones || 0);
+        break;
+    }
+    return cmp * teamSort.dir;
+  });
+  const myAssignable = canManage() ? assignableRoles(me?.role || '') : [];
+  tbody.innerHTML = sorted.length
+    ? sorted
+        .map((e) => {
+          const st = map[e.id] || { sim: 0, phones: 0, combo: 0, active: false };
+          const initial = (e.full_name || '?').trim().charAt(0).toUpperCase();
+          const roleBtns = myAssignable.filter((r) => r !== e.role);
+          const actionsCell = canManage()
+            ? `<td class="actions">
+                ${roleBtns.map((r) => `<button class="mchip" onclick="event.stopPropagation();setRole(${e.id},'${r}')">${roleLabel(r)}</button>`).join('')}
+                <button class="mchip" style="color:var(--danger)" onclick="event.stopPropagation();removeEmployee(${e.id})">Удалить</button>
+              </td>`
+            : '<td class="actions"></td>';
+          return `
+            <tr onclick="openTeamRow(event, ${e.id})">
+              <td><div class="dt-name"><div class="team-avatar${st.active ? ' active' : ''}" id="tta-${e.id}">${initial}</div><span>${esc(e.full_name)}</span></div></td>
+              <td>${esc(roleLabel(e.role))}</td>
+              <td>${st.sim}</td>
+              <td>${st.combo}</td>
+              <td>${st.phones}</td>
+              <td>${st.active ? 'Активен сегодня' : '—'}</td>
+              ${actionsCell}
+            </tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="7" class="empty">🍉 В команде пока никого нет</td></tr>';
+  sorted.forEach((e) => applyAvatarImg('tta-' + e.id, e.id));
+  document.querySelectorAll('#teamTable thead th[data-sort-key]').forEach((th) => {
+    const key = (th as HTMLElement).dataset.sortKey;
+    th.setAttribute('aria-sort', key === teamSort.key ? (teamSort.dir === 1 ? 'ascending' : 'descending') : 'none');
+  });
+}
+
+export function sortTeamTable(key: string): void {
+  teamSort = teamSort.key === key ? { key, dir: teamSort.dir === 1 ? -1 : 1 } : { key, dir: 1 };
+  renderTeamTable(lastTeamList, lastTeamMap);
+}
+
+// Клик где угодно внутри ячейки действий (не только по самой .mchip) не
+// должен переходить по строке — closest('td.actions'), не точечный
+// stopPropagation на каждой кнопке.
+export function openTeamRow(event: MouseEvent, id: number): void {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('td.actions')) return;
+  if (typeof canViewAnalytics === 'function' && canViewAnalytics()) {
+    window.openEmployeeProfile(id);
+  } else {
+    openEmployeeCard(id);
   }
 }
 
@@ -424,6 +512,8 @@ declare global {
     openAddStore: typeof openAddStore;
     toggle24hStore: typeof toggle24hStore;
     saveNewStore: typeof saveNewStore;
+    sortTeamTable: typeof sortTeamTable;
+    openTeamRow: typeof openTeamRow;
   }
 }
 window.renderOrgSwitcher = renderOrgSwitcher;
@@ -440,3 +530,5 @@ window.saveNewEmployee = saveNewEmployee;
 window.openAddStore = openAddStore;
 window.toggle24hStore = toggle24hStore;
 window.saveNewStore = saveNewStore;
+window.sortTeamTable = sortTeamTable;
+window.openTeamRow = openTeamRow;
