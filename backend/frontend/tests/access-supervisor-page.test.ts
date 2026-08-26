@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function setupGlobals(overrides: { tgId?: number | null; role?: string } = {}) {
+  window.history.pushState({}, '', '/'); // сброс ?reset= между тестами
   document.body.innerHTML = `
     <div id="appSplash"></div>
     <div id="accessGate"></div><div id="gateBody"></div><div id="gateSubtitle"></div>
@@ -62,6 +63,9 @@ function setupGlobals(overrides: { tgId?: number | null; role?: string } = {}) {
   const rejectAccessRequest = vi.fn().mockResolvedValue({ ok: true });
   const getSupportAdminTickets = vi.fn().mockResolvedValue({ items: [] });
   const getSupervisorDashboard = vi.fn().mockResolvedValue({ date: '2026-08-25', network: {}, stores: [], drops: [], trend: [], top_employees: [] });
+  const registerPhone = vi.fn().mockResolvedValue({ ok: true, status: 'pending' });
+  const loginPhone = vi.fn().mockResolvedValue({ ok: true });
+  const consumePasswordReset = vi.fn().mockResolvedValue({ ok: true });
   (window as any).apiClient = {
     getMe,
     getAccessOrgs,
@@ -71,9 +75,15 @@ function setupGlobals(overrides: { tgId?: number | null; role?: string } = {}) {
     approveAccessRequest,
     rejectAccessRequest,
     getSupportAdminTickets,
-    getSupervisorDashboard
+    getSupervisorDashboard,
+    registerPhone,
+    loginPhone,
+    consumePasswordReset
   };
-  return { getMe, getAccessOrgs, getAccessDirectory, submitAccessRequest, getAccessRequests, approveAccessRequest, rejectAccessRequest, getSupportAdminTickets, getSupervisorDashboard };
+  return {
+    getMe, getAccessOrgs, getAccessDirectory, submitAccessRequest, getAccessRequests, approveAccessRequest,
+    rejectAccessRequest, getSupportAdminTickets, getSupervisorDashboard, registerPhone, loginPhone, consumePasswordReset
+  };
 }
 
 describe('Access gate/Supervisor (миграция frontend/js/08-access-supervisor.js → src/pages/access-supervisor)', () => {
@@ -135,6 +145,134 @@ describe('Access gate/Supervisor (миграция frontend/js/08-access-supervi
     expect((globalThis as any).loadHome).toHaveBeenCalled();
   });
 
+  it('bootApp (вне Telegram, нет валидной сессии) — показывает логин, не входит вслепую', async () => {
+    const { getMe } = setupGlobals({ tgId: null });
+    getMe.mockResolvedValue({ bound: false, employee_id: null, full_name: null, role: null });
+    await import('../src/pages/access-supervisor/index.js');
+    await new Promise((r) => setTimeout(r, 0));
+    expect((document.getElementById('accessGate') as HTMLElement).style.display).toBe('block');
+    expect((document.querySelector('.sheet') as HTMLElement).style.visibility).toBe('hidden');
+    expect(document.getElementById('gateSubtitle')!.textContent).toBe('Вход без Telegram');
+    expect(document.getElementById('gateBody')!.innerHTML).toContain('submitPhoneLogin()');
+    expect((globalThis as any).loadHome).not.toHaveBeenCalled();
+  });
+
+  it('bootApp (?reset=<token> в URL) — сразу экран смены пароля, минуя логин', async () => {
+    setupGlobals({ tgId: null });
+    window.history.pushState({}, '', '/?reset=abc123token');
+    await import('../src/pages/access-supervisor/index.js');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.getElementById('gateSubtitle')!.textContent).toBe('Новый пароль');
+    expect(document.getElementById('gateBody')!.innerHTML).toContain('submitPasswordReset()');
+  });
+
+  it('showLoginGate(login) → showLoginGate(register) — переключение режимов, org-пикер грузится', async () => {
+    const { getAccessOrgs } = setupGlobals({ tgId: null });
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    mod.showLoginGate('register');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.getElementById('gateBody')!.innerHTML).toContain('submitPhoneRegister()');
+    expect(getAccessOrgs).toHaveBeenCalled();
+  });
+
+  it('submitPhoneLogin: пустые поля — toast err, API не вызывается', async () => {
+    const { loginPhone } = setupGlobals({ tgId: null });
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    mod.showLoginGate('login');
+    await mod.submitPhoneLogin();
+    expect(loginPhone).not.toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Заполните телефон и пароль', 'err');
+  });
+
+  it('submitPhoneLogin: успех — логинит и перезапускает bootApp()', async () => {
+    const { loginPhone, getMe } = setupGlobals({ tgId: null });
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    mod.showLoginGate('login');
+    (document.getElementById('loginPhone') as HTMLInputElement).value = '+79001234567';
+    (document.getElementById('loginPassword') as HTMLInputElement).value = 'password123';
+    getMe.mockClear();
+    await mod.submitPhoneLogin();
+    expect(loginPhone).toHaveBeenCalledWith(expect.anything(), { phone: '+79001234567', password: 'password123' });
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Вход выполнен', 'ok');
+    expect(getMe).toHaveBeenCalled(); // bootApp() перезапущен
+  });
+
+  it('submitPhoneLogin: неверные данные — toast с сообщением сервера', async () => {
+    const { loginPhone } = setupGlobals({ tgId: null });
+    loginPhone.mockRejectedValue(new Error('Неверный телефон или пароль'));
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    mod.showLoginGate('login');
+    (document.getElementById('loginPhone') as HTMLInputElement).value = '+79001234567';
+    (document.getElementById('loginPassword') as HTMLInputElement).value = 'wrong';
+    await mod.submitPhoneLogin();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Неверный телефон или пароль', 'err');
+  });
+
+  it('submitPhoneRegister: короткий пароль — toast err, API не вызывается', async () => {
+    const { registerPhone } = setupGlobals({ tgId: null });
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    mod.showLoginGate('register');
+    (document.getElementById('loginFullName') as HTMLInputElement).value = 'Иванов Иван';
+    (document.getElementById('loginPhone') as HTMLInputElement).value = '+79001234567';
+    (document.getElementById('loginPassword') as HTMLInputElement).value = 'short';
+    (document.getElementById('loginPasswordConfirm') as HTMLInputElement).value = 'short';
+    (document.getElementById('gateOrg') as HTMLSelectElement).innerHTML = '<option value="o1" selected></option>';
+    await mod.submitPhoneRegister();
+    expect(registerPhone).not.toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Пароль должен быть от 8 символов', 'err');
+  });
+
+  it('submitPhoneRegister: успех — отправляет заявку, показывает pending-гейт', async () => {
+    const { registerPhone } = setupGlobals({ tgId: null });
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    mod.showLoginGate('register');
+    (document.getElementById('loginFullName') as HTMLInputElement).value = 'Иванов Иван';
+    (document.getElementById('loginPhone') as HTMLInputElement).value = '+79001234567';
+    (document.getElementById('loginPassword') as HTMLInputElement).value = 'password123';
+    (document.getElementById('loginPasswordConfirm') as HTMLInputElement).value = 'password123';
+    (document.getElementById('gateOrg') as HTMLSelectElement).innerHTML = '<option value="o1" selected></option>';
+    await mod.submitPhoneRegister();
+    expect(registerPhone).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ phone: '+79001234567', full_name: 'Иванов Иван', org_id: 'o1' })
+    );
+    expect(document.getElementById('gateBody')!.innerHTML).toContain('Ожидайте подтверждения');
+  });
+
+  it('submitPasswordReset: пароли не совпадают — toast err, API не вызывается', async () => {
+    const { consumePasswordReset } = setupGlobals({ tgId: null });
+    window.history.pushState({}, '', '/?reset=abc123token');
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    mod.showLoginGate('reset');
+    (document.getElementById('loginPassword') as HTMLInputElement).value = 'password123';
+    (document.getElementById('loginPasswordConfirm') as HTMLInputElement).value = 'password124';
+    await mod.submitPasswordReset();
+    expect(consumePasswordReset).not.toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Пароли не совпадают', 'err');
+  });
+
+  it('submitPasswordReset: успех — потребляет токен, тостит, перезапускает bootApp()', async () => {
+    const { consumePasswordReset, getMe } = setupGlobals({ tgId: null });
+    window.history.pushState({}, '', '/?reset=abc123token');
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    mod.showLoginGate('reset');
+    (document.getElementById('loginPassword') as HTMLInputElement).value = 'password123';
+    (document.getElementById('loginPasswordConfirm') as HTMLInputElement).value = 'password123';
+    getMe.mockClear();
+    await mod.submitPasswordReset();
+    expect(consumePasswordReset).toHaveBeenCalledWith(expect.anything(), 'abc123token', { password: 'password123' });
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Пароль обновлён', 'ok');
+    expect(getMe).toHaveBeenCalled(); // bootApp() перезапущен
+  });
+
+  it('window.* мост — 4 новые функции не-Telegram входа', async () => {
+    setupGlobals({ tgId: null });
+    await import('../src/pages/access-supervisor/index.js');
+    for (const name of ['showLoginGate', 'submitPhoneLogin', 'submitPhoneRegister', 'submitPasswordReset']) {
+      expect(typeof (window as any)[name]).toBe('function');
+    }
+  });
+
   it('showAccessGate (none) — рендерит форму регистрации и грузит сети', async () => {
     const { getAccessOrgs } = setupGlobals({ tgId: null });
     const mod = await import('../src/pages/access-supervisor/index.js');
@@ -180,6 +318,19 @@ describe('Access gate/Supervisor (миграция frontend/js/08-access-supervi
     await mod.approveAccess(9);
     expect(approveAccessRequest).toHaveBeenCalledWith(expect.anything(), 9, { role: 'manager' });
     expect((globalThis as any).toast).toHaveBeenCalledWith('Доступ открыт', 'ok');
+  });
+
+  it('loadAccessRequests: заявка provider=phone показывает "Тел. …", не "TG null"', async () => {
+    const { getAccessRequests } = setupGlobals({ tgId: null, role: 'admin' });
+    vi.stubGlobal('me', { employee_id: 1, role: 'admin' });
+    getAccessRequests.mockResolvedValue([
+      { id: 10, telegram_id: null, provider: 'phone', phone: '+79001234567', full_name: 'Без Telegram', message: '', status: 'pending', created_at: '' }
+    ]);
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    await mod.loadAccessRequests();
+    const html = document.getElementById('accessList')!.innerHTML;
+    expect(html).toContain('Тел. +79001234567');
+    expect(html).not.toContain('TG null');
   });
 
   it('rejectAccess: отклоняет заявку и перезагружает список', async () => {

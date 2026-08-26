@@ -227,6 +227,184 @@ export async function submitAccessRequest(): Promise<void> {
   showAccessGate({ status: 'pending' });
 }
 
+// ===== НЕ-TELEGRAM ВХОД (20.37) =====
+// Тот же overlay-механизм, что accessGate выше (единственный экран "ты ещё
+// не внутри приложения") — не отдельная .page: до входа бессмысленно
+// показывать header/bottom-nav, которые .page-система предполагает как
+// данность. login/register переиспользуют gateOrg/gateClaim/loadGateOrgs()
+// — тот же пикер сети/карточки, что уже есть у Telegram-регистрации, он
+// не Telegram-специфичен сам по себе.
+const LOCK_ICON =
+  '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" /> </svg>';
+
+export function showLoginGate(mode: 'login' | 'register' | 'reset' = 'login'): void {
+  hideSplash();
+  const gate = document.getElementById('accessGate') as HTMLElement | null;
+  const body = document.getElementById('gateBody');
+  const sub = document.getElementById('gateSubtitle');
+  if (!gate || !body) {
+    console.error('accessGate DOM missing');
+    return;
+  }
+  gate.style.cssText =
+    'display:block;position:fixed;inset:0;z-index:9999;background:var(--bg,#0a0a0b);overflow:auto;-webkit-overflow-scrolling:touch;visibility:visible;opacity:1;pointer-events:auto';
+  const sheet = document.querySelector('.sheet') as HTMLElement | null;
+  if (sheet) {
+    sheet.style.visibility = 'hidden';
+    sheet.style.pointerEvents = 'none';
+  }
+  const hdr = document.querySelector('.app-header') as HTMLElement | null;
+  if (hdr) hdr.style.visibility = 'hidden';
+  const nav = document.querySelector('.bottom-nav') as HTMLElement | null;
+  if (nav) nav.style.display = 'none';
+  const fab = document.querySelector('.fab') as HTMLElement | null;
+  if (fab) fab.style.display = 'none';
+
+  if (mode === 'reset') {
+    if (sub) sub.textContent = 'Новый пароль';
+    body.innerHTML = `
+          <div class="gate-card">
+            <div class="bind-glow"></div>
+            <div class="gate-icon">${LOCK_ICON}</div>
+            <div class="gate-title">Придумайте новый пароль</div>
+            <div class="field"><label>Новый пароль</label><input id="loginPassword" type="password" placeholder="Минимум 8 символов" autocomplete="new-password"></div>
+            <div class="field"><label>Повторите пароль</label><input id="loginPasswordConfirm" type="password" autocomplete="new-password"></div>
+            <button class="btn-main" style="margin-top:8px" onclick="submitPasswordReset()">Сохранить и войти</button>
+          </div>`;
+    return;
+  }
+
+  if (mode === 'register') {
+    if (sub) sub.textContent = 'Регистрация · телефон';
+    body.innerHTML = `
+          <div class="gate-card">
+            <div class="bind-glow"></div>
+            <div class="gate-icon">${LOCK_ICON}</div>
+            <div class="gate-title">Вход без Telegram</div>
+            <div class="gate-desc">
+              Укажи телефон, пароль и ФИО — manager подтвердит доступ, так же
+              как при регистрации через Telegram.
+            </div>
+            <div class="field" id="gateOrgField">
+              <label>Сеть</label>
+              <select id="gateOrg"><option value="" disabled selected>— выбери сеть —</option></select>
+              <div class="bind-foot" id="gateOrgHint" style="display:none;margin-top:6px">Сеть определится по выбранному сотруднику</div>
+            </div>
+            <div class="field"><label>ФИО</label><input id="loginFullName" placeholder="Иванов Иван Иванович"></div>
+            <div class="field"><label>Телефон</label><input id="loginPhone" type="tel" placeholder="+79001234567" autocomplete="tel"></div>
+            <div class="field"><label>Пароль</label><input id="loginPassword" type="password" placeholder="Минимум 8 символов" autocomplete="new-password"></div>
+            <div class="field"><label>Повторите пароль</label><input id="loginPasswordConfirm" type="password" autocomplete="new-password"></div>
+            <div class="field">
+              <label>Я из списка</label>
+              <select id="gateClaim" onchange="onGateClaimChange()"><option value="">— новый сотрудник —</option></select>
+            </div>
+            <button class="btn-main" style="margin-top:8px" onclick="submitPhoneRegister()">Отправить заявку</button>
+            <div class="bind-foot" style="position:relative;margin-top:14px">Уже есть телефон и пароль? <a href="javascript:void(0)" onclick="showLoginGate('login')">Войти</a></div>
+          </div>`;
+    loadGateOrgs();
+    return;
+  }
+
+  if (sub) sub.textContent = 'Вход без Telegram';
+  body.innerHTML = `
+        <div class="gate-card">
+          <div class="bind-glow"></div>
+          <div class="gate-icon">${LOCK_ICON}</div>
+          <div class="gate-title">Вход с телефоном и паролем</div>
+          <div class="gate-desc">
+            Для тех, у кого нет доступа к Telegram — пароль привязывается в
+            профиле («Мой план» → «Вход с компьютера») или через регистрацию ниже.
+          </div>
+          <div class="field"><label>Телефон</label><input id="loginPhone" type="tel" placeholder="+79001234567" autocomplete="tel"></div>
+          <div class="field"><label>Пароль</label><input id="loginPassword" type="password" autocomplete="current-password"></div>
+          <button class="btn-main" style="margin-top:8px" onclick="submitPhoneLogin()">Войти</button>
+          <div class="bind-foot" style="position:relative;margin-top:14px">Ещё нет доступа? <a href="javascript:void(0)" onclick="showLoginGate('register')">Зарегистрироваться</a></div>
+        </div>`;
+}
+
+export async function submitPhoneLogin(): Promise<void> {
+  const phone = (document.getElementById('loginPhone') as HTMLInputElement | null)?.value?.trim() || '';
+  const password = (document.getElementById('loginPassword') as HTMLInputElement | null)?.value || '';
+  if (!phone || !password) {
+    toast('Заполните телефон и пароль', 'err');
+    return;
+  }
+  try {
+    await window.apiClient.loginPhone(authHeaders(true), { phone, password });
+  } catch (e: any) {
+    toast(e?.message || 'Неверный телефон или пароль', 'err');
+    return;
+  }
+  toast('Вход выполнен', 'ok');
+  bootApp();
+}
+
+export async function submitPhoneRegister(): Promise<void> {
+  const full_name = (document.getElementById('loginFullName') as HTMLInputElement | null)?.value?.trim() || '';
+  if (!full_name || full_name.length < 3) {
+    toast('Укажите ФИО', 'err');
+    return;
+  }
+  const phone = (document.getElementById('loginPhone') as HTMLInputElement | null)?.value?.trim() || '';
+  const password = (document.getElementById('loginPassword') as HTMLInputElement | null)?.value || '';
+  const confirm = (document.getElementById('loginPasswordConfirm') as HTMLInputElement | null)?.value || '';
+  if (password.length < 8) {
+    toast('Пароль должен быть от 8 символов', 'err');
+    return;
+  }
+  if (password !== confirm) {
+    toast('Пароли не совпадают', 'err');
+    return;
+  }
+  const claimed = (document.getElementById('gateClaim') as HTMLSelectElement | null)?.value;
+  const orgVal = (document.getElementById('gateOrg') as HTMLSelectElement | null)?.value;
+  if (!claimed && !orgVal) {
+    toast('Выберите сеть', 'err');
+    return;
+  }
+  try {
+    await window.apiClient.registerPhone(authHeaders(true), {
+      phone,
+      password,
+      full_name,
+      claimed_employee_id: claimed ? Number(claimed) : null,
+      org_id: claimed ? null : orgVal || null
+    });
+  } catch (e: any) {
+    toast(e?.message || 'Ошибка', 'err');
+    return;
+  }
+  toast('Заявка отправлена', 'ok');
+  showAccessGate({ status: 'pending' });
+}
+
+export async function submitPasswordReset(): Promise<void> {
+  const password = (document.getElementById('loginPassword') as HTMLInputElement | null)?.value || '';
+  const confirm = (document.getElementById('loginPasswordConfirm') as HTMLInputElement | null)?.value || '';
+  if (password.length < 8) {
+    toast('Пароль должен быть от 8 символов', 'err');
+    return;
+  }
+  if (password !== confirm) {
+    toast('Пароли не совпадают', 'err');
+    return;
+  }
+  const token = new URLSearchParams(location.search).get('reset') || '';
+  if (!token) {
+    toast('Ссылка недействительна', 'err');
+    return;
+  }
+  try {
+    await window.apiClient.consumePasswordReset(authHeaders(true), token, { password });
+  } catch (e: any) {
+    toast(e?.message || 'Ссылка недействительна или уже использована', 'err');
+    return;
+  }
+  toast('Пароль обновлён', 'ok');
+  history.replaceState(null, '', location.pathname);
+  bootApp();
+}
+
 export async function bootApp(): Promise<void> {
   applyTheme(localStorage.getItem('t2_theme') || 'light');
   const dateEl = document.getElementById('headerDate');
@@ -234,10 +412,38 @@ export async function bootApp(): Promise<void> {
 
   const user = tgUser();
   if (!user?.id) {
-    // вне Telegram — для отладки пускаем, но в проде лучше gate
-    hideAccessGate();
+    // Не-Telegram вход (20.37) — раньше здесь был безусловный пропуск "для
+    // отладки", последний пробел, который ADR-005/20.35-20.36 оставляли
+    // открытым: снаружи Telegram можно было зайти в пустую оболочку с
+    // me=null, но никак не ввести телефон+пароль. Теперь: сначала пробуем
+    // уже существующую cookie-сессию (после /auth/login или /me/link-phone
+    // в другой вкладке/раньше), и только если её нет — показываем логин
+    // вместо молчаливого входа вслепую.
+    //
+    // ?reset=<token> в URL — сразу экран смены пароля, минуя логин: сама
+    // ссылка уже секрет (см. POST /auth/admin/reset-password), доказывать
+    // личность паролем, который как раз меняется, не нужно.
+    const resetToken = new URLSearchParams(location.search).get('reset');
+    if (resetToken) {
+      if (typeof applyBranding === 'function') applyBranding();
+      showLoginGate('reset');
+      return;
+    }
+
+    try {
+      me = await window.apiClient.getMe(authHeaders());
+    } catch (_) {
+      me = null;
+    }
+    if (me?.bound) {
+      hideAccessGate();
+      if (typeof applyBranding === 'function') applyBranding();
+      enterHomeOrSupervisorShell();
+      return;
+    }
+
     if (typeof applyBranding === 'function') applyBranding();
-    enterHomeOrSupervisorShell();
+    showLoginGate('login');
     return;
   }
 
@@ -348,7 +554,7 @@ export async function loadAccessRequests(): Promise<void> {
         (r) => `
           <div class="progress-block" style="margin:8px 12px">
             <div class="row-title">${esc(r.full_name)}</div>
-            <div class="row-sub">TG ${r.telegram_id}${r.message ? ' · ' + esc(r.message) : ''}</div>
+            <div class="row-sub">${r.provider === 'phone' ? 'Тел. ' + esc(r.phone || '') : 'TG ' + r.telegram_id}${r.message ? ' · ' + esc(r.message) : ''}</div>
             <select id="role_req_${r.id}" style="margin-top:8px;width:100%">${roleOptions}</select>
             <div style="display:flex;gap:8px;margin-top:12px">
               <button class="btn-main" style="flex:1" onclick="approveAccess(${r.id})">Подтвердить</button>
@@ -734,6 +940,10 @@ declare global {
     loadSupervisorData: typeof loadSupervisorData;
     svBarRowHTML: typeof svBarRowHTML;
     svExtraToggleHTML: typeof svExtraToggleHTML;
+    showLoginGate: typeof showLoginGate;
+    submitPhoneLogin: typeof submitPhoneLogin;
+    submitPhoneRegister: typeof submitPhoneRegister;
+    submitPasswordReset: typeof submitPasswordReset;
   }
 }
 window.bootApp = bootApp;
@@ -749,6 +959,10 @@ window.exitSupervisorShell = exitSupervisorShell;
 window.loadSupervisorData = loadSupervisorData;
 window.svBarRowHTML = svBarRowHTML;
 window.svExtraToggleHTML = svExtraToggleHTML;
+window.showLoginGate = showLoginGate;
+window.submitPhoneLogin = submitPhoneLogin;
+window.submitPhoneRegister = submitPhoneRegister;
+window.submitPasswordReset = submitPasswordReset;
 
 // init
 bootApp();

@@ -75,6 +75,13 @@ import type {
   AccessRequestsListResponse,
   ApproveAccessRequest,
   ApproveAccessResponse,
+  RegisterPhoneRequest,
+  RegisterPhoneResponse,
+  LoginRequest,
+  LoginResponse,
+  LogoutResponse,
+  ConsumeResetRequest,
+  ConsumeResetResponse,
   SupervisorDashboardResponse,
   SupervisorHealthResponse,
   SalesListResponse,
@@ -466,6 +473,27 @@ export async function getAccessRequests(headers: Record<string, string>): Promis
   return request('/access/requests', headers);
 }
 
+// ---------- Не-Telegram вход (20.37) ----------
+export async function registerPhone(headers: Record<string, string>, body: RegisterPhoneRequest): Promise<RegisterPhoneResponse> {
+  return request('/auth/register', headers, { method: 'POST', body });
+}
+
+export async function loginPhone(headers: Record<string, string>, body: LoginRequest): Promise<LoginResponse> {
+  return request('/auth/login', headers, { method: 'POST', body });
+}
+
+export async function logoutPhone(headers: Record<string, string>): Promise<LogoutResponse> {
+  return request('/auth/logout', headers, { method: 'POST', body: {} });
+}
+
+export async function consumePasswordReset(
+  headers: Record<string, string>,
+  token: string,
+  body: ConsumeResetRequest
+): Promise<ConsumeResetResponse> {
+  return request(`/auth/reset/${encodeURIComponent(token)}`, headers, { method: 'POST', body });
+}
+
 export async function approveAccessRequest(
   headers: Record<string, string>,
   id: number,
@@ -809,6 +837,10 @@ declare global {
       getAccessDirectory: typeof getAccessDirectory;
       submitAccessRequest: typeof submitAccessRequest;
       getAccessRequests: typeof getAccessRequests;
+      registerPhone: typeof registerPhone;
+      loginPhone: typeof loginPhone;
+      logoutPhone: typeof logoutPhone;
+      consumePasswordReset: typeof consumePasswordReset;
       approveAccessRequest: typeof approveAccessRequest;
       rejectAccessRequest: typeof rejectAccessRequest;
       getSupportAdminTickets: typeof getSupportAdminTickets;
@@ -908,6 +940,10 @@ window.apiClient = {
   getAccessDirectory,
   submitAccessRequest,
   getAccessRequests,
+  registerPhone,
+  loginPhone,
+  logoutPhone,
+  consumePasswordReset,
   approveAccessRequest,
   rejectAccessRequest,
   getSupportAdminTickets,

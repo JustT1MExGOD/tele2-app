@@ -335,21 +335,16 @@ export async function loadMyPlan(): Promise<void> {
   // недоступен (VPN, нет аккаунта у коллеги и т.п.). ---
   const lkPhoneAuth = document.getElementById('lkPhoneAuth');
   if (lkPhoneAuth) {
-    lkPhoneAuth.innerHTML = me?.phone
+    const linkRow = me?.phone
       ? `
-        <div class="section">
-          <div class="section-title">Вход с компьютера</div>
           <div class="row" style="cursor:default">
             <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg></div>
             <div class="row-body">
               <div class="row-title">Подключено</div>
               <div class="row-sub">${esc(me.phone)}</div>
             </div>
-          </div>
-        </div>`
+          </div>`
       : `
-        <div class="section">
-          <div class="section-title">Вход с компьютера</div>
           <button class="row" onclick="openLinkPhone()">
             <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg></div>
             <div class="row-body">
@@ -357,8 +352,17 @@ export async function loadMyPlan(): Promise<void> {
               <div class="row-sub">Понадобится, если Telegram недоступен</div>
             </div>
             <div class="row-chevron">›</div>
-          </button>
-        </div>`;
+          </button>`;
+    // Сессия по телефону (не Telegram) — единственный способ выйти отсюда,
+    // выход из Telegram-сессии самим Telegram и управляется, кнопка ему не нужна.
+    const logoutRow = !user?.id
+      ? `
+          <button class="row" onclick="logoutSelf()">
+            <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /> <polyline points="16 17 21 12 16 7" /> <line x1="21" x2="9" y1="12" y2="12" /> </svg></div>
+            <div class="row-body"><div class="row-title">Выйти</div></div>
+          </button>`
+      : '';
+    lkPhoneAuth.innerHTML = `<div class="section"><div class="section-title">Вход с компьютера</div>${linkRow}${logoutRow}</div>`;
   }
 
   // v13: сессия смены + инсайт + геймификация
@@ -382,6 +386,15 @@ export function openLinkPhone(): void {
     `;
   }
   document.getElementById('overlay')?.classList.add('show');
+}
+
+export async function logoutSelf(): Promise<void> {
+  try {
+    await window.apiClient.logoutPhone(authHeaders(true));
+  } catch (_) {
+    // Cookie могла уже протухнуть/быть удалена — не блокируем выход этим.
+  }
+  location.reload();
 }
 
 export async function saveLinkPhone(btnEl: HTMLButtonElement | null): Promise<void> {
@@ -492,6 +505,7 @@ declare global {
     pickAvatarFile: typeof pickAvatarFile;
     openLinkPhone: typeof openLinkPhone;
     saveLinkPhone: typeof saveLinkPhone;
+    logoutSelf: typeof logoutSelf;
   }
 }
 window.loadMyPlan = loadMyPlan;
@@ -499,3 +513,4 @@ window.bindMe = bindMe;
 window.pickAvatarFile = pickAvatarFile;
 window.openLinkPhone = openLinkPhone;
 window.saveLinkPhone = saveLinkPhone;
+window.logoutSelf = logoutSelf;

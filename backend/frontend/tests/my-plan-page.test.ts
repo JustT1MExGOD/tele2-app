@@ -48,8 +48,9 @@ function setupGlobals(overrides: { tgId?: number | null } = {}) {
   const bindMeApi = vi.fn().mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee' });
   const uploadAvatar = vi.fn().mockResolvedValue({ ok: true });
   const linkPhone = vi.fn().mockResolvedValue({ ok: true });
-  (window as any).apiClient = { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMe: bindMeApi, uploadAvatar, linkPhone };
-  return { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMeApi, uploadAvatar, linkPhone };
+  const logoutPhone = vi.fn().mockResolvedValue({ ok: true });
+  (window as any).apiClient = { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMe: bindMeApi, uploadAvatar, linkPhone, logoutPhone };
+  return { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMeApi, uploadAvatar, linkPhone, logoutPhone };
 }
 
 describe('Мой план (миграция frontend/js/05-my-plan.js → src/pages/my-plan)', () => {
@@ -143,12 +144,40 @@ describe('Мой план (миграция frontend/js/05-my-plan.js → src/pa
     expect(input2).toBe(input1);
   });
 
-  it('window.* мост — все 5 функций', async () => {
+  it('window.* мост — все 6 функций', async () => {
     setupGlobals();
     await import('../src/pages/my-plan/index.js');
-    for (const name of ['loadMyPlan', 'bindMe', 'pickAvatarFile', 'openLinkPhone', 'saveLinkPhone']) {
+    for (const name of ['loadMyPlan', 'bindMe', 'pickAvatarFile', 'openLinkPhone', 'saveLinkPhone', 'logoutSelf']) {
       expect(typeof (window as any)[name]).toBe('function');
     }
+  });
+
+  it('loadMyPlan: вне Telegram (phone-сессия) — показывает кнопку "Выйти"', async () => {
+    const { getMe } = setupGlobals({ tgId: null });
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee', phone: '+79001234567' });
+    const { loadMyPlan } = await import('../src/pages/my-plan/index.js');
+    await loadMyPlan();
+    const html = document.getElementById('lkPhoneAuth')!.innerHTML;
+    expect(html).toContain('logoutSelf()');
+    expect(html).toContain('Выйти');
+  });
+
+  it('loadMyPlan: внутри Telegram — кнопки "Выйти" нет (выход через сам Telegram)', async () => {
+    const { getMe } = setupGlobals({ tgId: 555 });
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee', phone: null });
+    const { loadMyPlan } = await import('../src/pages/my-plan/index.js');
+    await loadMyPlan();
+    expect(document.getElementById('lkPhoneAuth')!.innerHTML).not.toContain('logoutSelf()');
+  });
+
+  it('logoutSelf: вызывает API и перезагружает страницу', async () => {
+    const { logoutPhone } = setupGlobals();
+    const reloadSpy = vi.fn();
+    Object.defineProperty(window, 'location', { value: { ...window.location, reload: reloadSpy }, writable: true });
+    const { logoutSelf } = await import('../src/pages/my-plan/index.js');
+    await logoutSelf();
+    expect(logoutPhone).toHaveBeenCalled();
+    expect(reloadSpy).toHaveBeenCalled();
   });
 
   it('loadMyPlan: телефон ещё не привязан — рендерит кнопку привязки', async () => {
