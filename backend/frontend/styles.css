@@ -2128,6 +2128,20 @@
   display: none;
 }
 
+/* Desktop-дашборд Главной (20.40) — тот же приём, что .sidebar выше:
+   скрыт по умолчанию вне media query, показывается только на ≥1200px
+   (порог дашборда — отдельный от порога shell 860px, см.
+   docs/DESKTOP-DESIGN.md, "Home's dashboard gets its own threshold"). */
+.desktop-dashboard {
+  display: none;
+}
+
+/* Topbar breadcrumb (20.40) — тот же приём: скрыт на мобильном, текст
+   выводит switchPage() (nav.ts) из подписи активного .nav-item. */
+.topbar-breadcrumb {
+  display: none;
+}
+
 @media (min-width: 860px) {
   body {
     background: var(--surface-2);
@@ -2226,6 +2240,14 @@
     padding-right: var(--sp-8);
     border-bottom: 1px solid var(--nav-border);
   }
+  .topbar-breadcrumb {
+    display: block;
+    flex: 1;
+    margin-left: var(--sp-4);
+    font-size: var(--fs-lg, 18px);
+    font-weight: var(--fw-bold);
+    letter-spacing: var(--tracking-tight);
+  }
   .sheet {
     max-width: 800px;
     margin: 0 auto;
@@ -2290,32 +2312,6 @@
     to { opacity: 1; transform: scale(1); }
   }
 
-  /* "Мой день"/"Сеть сегодня" — swipe-карусель на мобильном (нужна,
-     когда виден только один экран за раз), на десктопе места хватает на
-     оба сразу. track.style.transform/height пишутся инлайн из JS
-     (initSwipePanels(), nav.ts) — обычный каскад это не перебьёт, отсюда
-     !important на все три свойства, которыми управляет JS (не только
-     transform — на всякий случай, вдруг текущая реализация где-то ещё
-     полагается на transition/width для 2-панельной механики). Сам
-     initSwipePanels() продолжает слушать drag/touch — см. правку в
-     nav.ts (ранний return при window.innerWidth >= 860), CSS одно не
-     гарантирует, что жест не проделает лишнюю работу под сеткой. */
-  .swipe-track {
-    transform: none !important;
-    transition: none !important;
-    width: 100% !important;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--sp-3);
-  }
-  .swipe-panel {
-    flex: none;
-    min-width: 0;
-  }
-  .swipe-dots {
-    display: none;
-  }
-
   /* Логин-экран (20.37) — .gate-shell уже max-width:420px;margin:0 auto,
      сама карточка переделки не требует. Пустое пространство вокруг на
      широком экране получает мягкий фон — те же токены (--primary), что
@@ -2330,6 +2326,48 @@
       radial-gradient(ellipse 900px 600px at 50% -10%, var(--primary-soft), transparent 60%),
       var(--surface-2) !important;
   }
+
+  /* Desktop design-система (20.40, docs/DESKTOP-DESIGN.md) — общие
+     layout-примитивы поверх уже существующих токенов, без нового файла и
+     без второй дизайн-системы. Добавляются здесь без потребителей —
+     первый реальный потребитель это Home (см. ниже в этом же коммите);
+     .data-table/.detail-panel/.desktop-toolbar сознательно не заведены —
+     нет ни одной страницы, которой они нужны прямо сейчас (тот же
+     принцип, что уже отклонял неиспользуемый 1600px-tier в 20.39). */
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding: var(--sp-4) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  /* auto-fit — тот же механизм, что уже даёт .hm-grid адаптивность без
+     единого брейкпоинта; переносим приём в общий примитив, а не изобретаем
+     новый. */
+  .workspace-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--sp-4);
+  }
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--sp-3);
+  }
+  /* Модификатор .row, не отдельный list-компонент — одна абстракция, не
+     два параллельных паттерна списка. Хавер уже покрыт существующим
+     .row:hover ниже по файлу (hover-медиа-блок) — .row--dense всегда
+     используется вместе с .row, не вместо него. */
+  .row--dense {
+    padding-top: var(--sp-2);
+    padding-bottom: var(--sp-2);
+  }
 }
 
 @media (min-width: 1200px) {
@@ -2339,7 +2377,42 @@
   .sheet {
     max-width: 1120px;
   }
+
+  /* Home dashboard (20.40) — та же граница, что рабочая колонка выше
+     (переиспользуем существующий tier, не вводим четвёртое одноразовое
+     значение брейкпоинта). #homeTodaySwipe ниже 1200 остаётся
+     мобильным swipe-каталогом без изменений (включая диапазон
+     860-1199 — там уже виден shell, но контент Главной ещё мобильный);
+     на ≥1200 он скрывается, .desktop-dashboard занимает его место. */
+  #homeTodaySwipe {
+    display: none;
+  }
+  /* Мобильный виджет "Сеть за минуту" (#commandCenterSection) дублировал
+     бы содержимое desktop-панели аналитики (.desktop-dashboard
+     #homeDesktopInsights) — loadCommandCenter() (home/index.ts) пишет
+     inline display:'' на обе секции независимо, !important здесь нужен
+     по той же причине, что уже была у .bottom-nav в 20.39.0. */
+  #commandCenterSection {
+    display: none !important;
+  }
+  .desktop-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
 }
+
+/* 1600px 3-колоночный tier из исходного плана НЕ реализован — при
+   проверке живым Playwright-скриншотом выяснилось, что грид "Топ за 7
+   дней"/"Аналитика" структурно вмещает максимум 2 панели (нет третьего
+   контент-блока вообще, ни для какой роли); принудительный
+   repeat(3,1fr) создавал пустую 3-ю колонку ВСЕГДА, когда панель
+   аналитики показана — именно то, чего пункт про 1600px должен был
+   избежать, просто для другой роли. Явный `.insights-panel`-класс
+   (home/index.ts) остаётся — он ничего не ломает и пригодится, если
+   позже здесь появится настоящий 3-й блок. На ultrawide `.workspace-grid`
+   просто шире по auto-fit из Part C (см. выше) — 2 колонки становятся
+   комфортнее, не изобретаем пустое место. */
 
 /* Hover — отдельным блоком от layout-брейкпоинта: (hover:hover) исключает
    touch-ноутбуки/планшеты в альбомной ориентации на той же ширине экрана,

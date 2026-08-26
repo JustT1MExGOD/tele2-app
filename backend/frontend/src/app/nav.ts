@@ -128,6 +128,17 @@ export function switchPage(name: string): void {
     n.classList.toggle('active', (n as HTMLElement).dataset.page === name);
   });
 
+  // Topbar breadcrumb (20.40) — текст из уже существующей подписи
+  // .sidebar .nav-item (тот же контракт data-page, что уже синхронизирует
+  // .active выше) — не новый источник данных. Скрыт на мобильном
+  // (styles.css), безобиден для страниц без записи в сайдбаре (bfq,
+  // command-center и т.п. — остаётся пустым, не пишет "undefined").
+  const breadcrumb = document.getElementById('topbarBreadcrumb');
+  if (breadcrumb) {
+    const navLabel = document.querySelector(`.sidebar .nav-item[data-page="${name}"]`);
+    breadcrumb.textContent = navLabel ? (navLabel.textContent || '').trim() : '';
+  }
+
   // FAB всегда доступен для быстрой продажи (кроме access-gate и кабинета
   // супервайзера — там нет личных продаж, чисто аналитика)
   const fab = document.querySelector('.fab') as HTMLElement | null;
@@ -252,6 +263,12 @@ export async function refreshAll(): Promise<void> {
    перезапустить от фактического текущего X в любой момент. Высота панели
    по-прежнему меняется без анимации (спорить с высотой контента реже нужно
    перехватывать). */
+// Ширина, на которой .desktop-dashboard (20.40, docs/DESKTOP-DESIGN.md)
+// занимает место #homeTodaySwipe — отдельный порог от shell (860px):
+// 860-1199 показывает shell-хром, но контент Главной остаётся мобильным
+// swipe-каталогом, только на этой ширине swipe реально заменяется.
+const SWIPE_DESKTOP_BREAKPOINT = 1200;
+
 export function initSwipePanels(containerEl: (HTMLElement & { dataset: DOMStringMap; _swipeRefreshHeight?: () => void }) | null): void {
   if (!containerEl || containerEl.dataset.swipeInit) return;
   const track = containerEl.querySelector('.swipe-track') as HTMLElement | null;
@@ -279,11 +296,30 @@ export function initSwipePanels(containerEl: (HTMLElement & { dataset: DOMString
 
   function settle(index: number, animate = true, velocity = 0): void {
     current = Math.max(0, Math.min(panels.length - 1, index));
+    if (window.innerWidth >= SWIPE_DESKTOP_BREAKPOINT) {
+      // Desktop Shell/Home dashboard (20.39→20.40, docs/DESKTOP-DESIGN.md)
+      // — на ≥1200px #homeTodaySwipe скрыт целиком (.desktop-dashboard
+      // занимает его место, отдельная разметка, не эта же панель через
+      // CSS-grid — тот приём убран). track здесь невидим — ранний return
+      // ДО единой записи в style (не только height, но и transform) —
+      // без него settle() продолжал бы писать инлайн-стили в скрытый
+      // элемент при каждом вызове (init/resize/асинхронная подгрузка
+      // данных), тот же класс бага, что уже был на 860px-пороге в
+      // 20.39.0/20.39.1, просто на новом пороге после архитектурной
+      // правки. Idempotent-проверка перед записью — не просто "пишем
+      // пустую строку каждый раз", а действительно НОЛЬ обращений к
+      // style после первого сброса (проверяется живым Playwright-тестом
+      // на отсутствие записи через несколько подряд settle()).
+      if (track!.style.height) track!.style.height = '';
+      if (track!.style.transform) track!.style.transform = '';
+      dots.forEach((d, i) => d.classList.toggle('active', i === current));
+      return;
+    }
     const target = -current * width;
     // Панели разной высоты (напр. «Мой день» на выходной короче, чем в
-    // рабочий день) — без этого высота трека всегда была под самую высокую
-    // панель (align-items: stretch по умолчанию), и в короткой панели снизу
-    // висела пустая область.
+    // рабочий день) — без этого высота трека всегда была под самую
+    // высокую панель (align-items: stretch по умолчанию), и в короткой
+    // панели снизу висела пустая область.
     track!.style.height = panels[current].scrollHeight + 'px';
     dots.forEach((d, i) => d.classList.toggle('active', i === current));
     if (activeSpring) {
@@ -312,33 +348,16 @@ export function initSwipePanels(containerEl: (HTMLElement & { dataset: DOMString
 
   window.addEventListener('resize', () => {
     width = containerEl!.clientWidth;
-    // Desktop Shell (20.39) — на ≥860px .swipe-track уже grid из двух
-    // видимых панелей (styles.css), settle() ниже выставляет inline
-    // height ТОЛЬКО текущей панели (нужно для mobile — панели разной
-    // высоты, напр. «Мой день» короче в выходной); на десктопе тот же
-    // inline height обрезал бы вторую, более высокую панель. Сбрасываем
-    // inline height/transform вместо вызова settle() — реальный
-    // сценарий: пользователь ресайзит окно через границу 860px без
-    // перезагрузки страницы.
-    if (window.innerWidth >= 860) {
-      track!.style.height = '';
-      track!.style.transform = '';
-      return;
-    }
     settle(current, false);
   });
 
   track.addEventListener(
     'touchstart',
     (e: TouchEvent) => {
-      // Desktop Shell (20.39) — на ≥860px "Мой день"/"Сеть сегодня"
-      // сеткой рядом (styles.css, .swipe-track), не свайпом; сам
-      // обработчик по-прежнему подписан (десктоп мог появиться уже после
-      // инициализации, если окно ресайзится), но не должен запускать
-      // расчёты под уже статичной сеткой на touch-экране такой ширины
-      // (тачскрин-ноутбук/монитор) — CSS !important одно этого не даёт,
-      // он только не даёт transform проявиться визуально.
-      if (window.innerWidth >= 860) return;
+      // На ≥1200px .desktop-dashboard занимает место #homeTodaySwipe
+      // (см. settle() выше) — трек скрыт и не должен запускать расчёты
+      // жеста на touch-экране такой ширины (тачскрин-ноутбук/монитор).
+      if (window.innerWidth >= SWIPE_DESKTOP_BREAKPOINT) return;
       if (activeSpring) {
         activeSpring.stop();
         activeSpring = null;

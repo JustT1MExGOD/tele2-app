@@ -22,6 +22,22 @@ function setupGlobals(overrides: { role?: string } = {}) {
     <div id="overlay"></div>
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
+    <!-- Desktop dashboard (20.40, docs/DESKTOP-DESIGN.md) — те же данные,
+         два render-таргета (setBothHTML() в home/index.ts). -->
+    <div id="homeDesktopDashboard">
+      <div id="myDayBodyDesktop"></div>
+      <div id="myDayStoreHeadDesktop"></div>
+      <div id="homeDesktopInsights"></div>
+      <div id="commandCenterBodyDesktop"></div>
+      <span id="hSimDesktop"></span><span id="hMnpDesktop"></span><span id="hPaDesktop"></span><span id="hComboDesktop"></span><span id="hPhonesDesktop"></span><span id="hAccDesktop"></span>
+      <div id="networkPulseDesktop"></div>
+      <div id="homeTopDesktop"></div>
+      <div id="homeDesktopTools"></div>
+    </div>
+    <div id="homeToolsSection">
+      <button class="row" onclick="switchPage('bfq')">BFQ</button>
+      <button class="row" id="btnMgrTutorial" style="display:none">Обучение manager</button>
+    </div>
   `;
   vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
   vi.stubGlobal('authHeaders', () => ({}));
@@ -69,15 +85,16 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     expect(commandCenterTone(10)).toBe('bad');
   });
 
-  it('loadMyDay: не привязан — подсказка привязки', async () => {
+  it('loadMyDay: не привязан — подсказка привязки (мобильный и desktop-таргет)', async () => {
     const { getMyDay } = setupGlobals();
     getMyDay.mockResolvedValue({ bound: false });
     const { loadMyDay } = await import('../src/pages/home/index.js');
     await loadMyDay();
     expect(document.getElementById('myDayBody')!.innerHTML).toContain('Аккаунт не привязан');
+    expect(document.getElementById('myDayBodyDesktop')!.innerHTML).toContain('Аккаунт не привязан');
   });
 
-  it('loadMyDay: смена есть — прогресс дня + задачи', async () => {
+  it('loadMyDay: смена есть — прогресс дня + задачи, пишет в оба render-таргета (20.40 setBothHTML)', async () => {
     const { getMyDay } = setupGlobals();
     getMyDay.mockResolvedValue({
       bound: true,
@@ -88,11 +105,14 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     });
     const { loadMyDay } = await import('../src/pages/home/index.js');
     await loadMyDay();
-    const html = document.getElementById('myDayBody')!.innerHTML;
-    expect(html).toContain('Точка А');
-    expect(html).toContain('SIM:3/5');
-    expect(html).toContain('Проверить кассу');
-    expect(html).toContain('completeMyTask(9)');
+    for (const id of ['myDayBody', 'myDayBodyDesktop']) {
+      const html = document.getElementById(id)!.innerHTML;
+      expect(html).toContain('Точка А');
+      expect(html).toContain('SIM:3/5');
+      expect(html).toContain('Проверить кассу');
+      expect(html).toContain('completeMyTask(9)');
+    }
+    expect(document.getElementById('myDayStoreHeadDesktop')!.innerHTML).toContain('A1');
   });
 
   it('completeMyTask: успех — тостит и перезагружает "Мой день"', async () => {
@@ -103,21 +123,28 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     expect(getMyDay).toHaveBeenCalled();
   });
 
-  it('loadCommandCenter: без прав аналитики — секция скрыта', async () => {
+  it('loadCommandCenter: без прав аналитики — секция скрыта на мобильном и десктопе, без .insights-panel', async () => {
     setupGlobals({ role: 'employee' });
     const { loadCommandCenter } = await import('../src/pages/home/index.js');
     await loadCommandCenter();
     expect((document.getElementById('commandCenterSection') as HTMLElement).style.display).toBe('none');
+    const desktop = document.getElementById('homeDesktopInsights') as HTMLElement;
+    expect(desktop.style.display).toBe('none');
+    expect(desktop.classList.contains('insights-panel')).toBe(false);
   });
 
-  it('loadCommandCenter: manager, без просадок — "сеть в ритме"', async () => {
+  it('loadCommandCenter: manager, без просадок — "сеть в ритме" на обоих таргетах, .insights-panel добавлен (20.40 — ключ для :has() на 1600px)', async () => {
     setupGlobals({ role: 'manager' });
     const { loadCommandCenter } = await import('../src/pages/home/index.js');
     await loadCommandCenter();
     expect(document.getElementById('commandCenterBody')!.textContent).toContain('сеть в ритме');
+    expect(document.getElementById('commandCenterBodyDesktop')!.textContent).toContain('сеть в ритме');
+    const desktop = document.getElementById('homeDesktopInsights') as HTMLElement;
+    expect(desktop.style.display).toBe('');
+    expect(desktop.classList.contains('insights-panel')).toBe(true);
   });
 
-  it('loadCommandCenter: с просадками — рендерит карточки + кнопку переноса', async () => {
+  it('loadCommandCenter: с просадками — рендерит карточки + кнопку переноса на обоих таргетах', async () => {
     const { getSupervisorHealth } = setupGlobals({ role: 'manager' });
     getSupervisorHealth.mockResolvedValue({
       health: 40, overall_pct: 30, pace_delta: -5, date: '2026-08-25',
@@ -125,9 +152,21 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     });
     const { loadCommandCenter } = await import('../src/pages/home/index.js');
     await loadCommandCenter();
-    const html = document.getElementById('commandCenterBody')!.innerHTML;
-    expect(html).toContain('Точка Б');
-    expect(html).toContain("proposeMoveForStore('s1')");
+    for (const id of ['commandCenterBody', 'commandCenterBodyDesktop']) {
+      const html = document.getElementById(id)!.innerHTML;
+      expect(html).toContain('Точка Б');
+      expect(html).toContain("proposeMoveForStore('s1')");
+    }
+  });
+
+  it('loadCommandCenter: ошибка сети — скрывает обе секции и снимает .insights-panel', async () => {
+    const { getSupervisorHealth } = setupGlobals({ role: 'manager' });
+    getSupervisorHealth.mockRejectedValue(new Error('network'));
+    const { loadCommandCenter } = await import('../src/pages/home/index.js');
+    await loadCommandCenter();
+    const desktop = document.getElementById('homeDesktopInsights') as HTMLElement;
+    expect(desktop.style.display).toBe('none');
+    expect(desktop.classList.contains('insights-panel')).toBe(false);
   });
 
   it('loadHome: рендерит приветствие с версией и стрик-бейджем', async () => {
@@ -148,14 +187,39 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     expect(document.getElementById('homeTop')!.textContent).toContain('Топ за 7 дней недоступен');
   });
 
-  it('loadHome: топ-7 из dash.top — рендерит лидеров с медалями', async () => {
+  it('loadHome: топ-7 из dash.top — рендерит лидеров с медалями на обоих таргетах', async () => {
     const { getDashboard } = setupGlobals();
     getDashboard.mockResolvedValue({ top: [{ employee_id: 3, full_name: 'Ольга', sim: 5, mnp: 2, pa: 1, combo: 0, phones: 0, accessories: 0, score: 8 }], top7: [], period: { from: null, to: '' } });
     const { loadHome } = await import('../src/pages/home/index.js');
     await loadHome();
-    const html = document.getElementById('homeTop')!.innerHTML;
-    expect(html).toContain('Ольга');
-    expect(html).toContain('openEmployeeCard(3)');
+    for (const id of ['homeTop', 'homeTopDesktop']) {
+      const html = document.getElementById(id)!.innerHTML;
+      expect(html).toContain('Ольга');
+      expect(html).toContain('openEmployeeCard(3)');
+    }
+  });
+
+  it('loadHome: сетевая статистика зеркалится в desktop-чипы (20.40)', async () => {
+    const { getStatsDaily } = setupGlobals();
+    getStatsDaily.mockResolvedValue([{ sim: 4, mnp: 1, pa: 2, combo: 0, phones: 3000, accessories: 500 }]);
+    const { loadHome } = await import('../src/pages/home/index.js');
+    await loadHome();
+    expect(document.getElementById('hSim')!.textContent).toBe('4');
+    expect(document.getElementById('hSimDesktop')!.textContent).toBe('4');
+    expect(document.getElementById('hAccDesktop')!.textContent).toBe('500');
+    expect(document.getElementById('networkPulseDesktop')!.innerHTML).toContain('pulse-row');
+  });
+
+  it('loadHome: клонирует .row-кнопки из #homeToolsSection в #homeDesktopTools ровно один раз, снимает id у клонов', async () => {
+    setupGlobals();
+    const { loadHome } = await import('../src/pages/home/index.js');
+    await loadHome();
+    const target = document.getElementById('homeDesktopTools')!;
+    expect(target.children.length).toBe(2);
+    expect(target.querySelector('#btnMgrTutorial')).toBeNull(); // id снят — иначе дубль id в DOM
+    // Повторный вызов (напр. второй switchPage('home')) не плодит дубликаты.
+    await loadHome();
+    expect(target.children.length).toBe(2);
   });
 
   it('bumpStreak: первая продажа за сегодня — стрик 1, повторный вызов в тот же день не увеличивает', async () => {

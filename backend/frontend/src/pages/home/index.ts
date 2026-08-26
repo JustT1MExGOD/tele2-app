@@ -11,36 +11,52 @@
  */
 import type { MeDayResponse, TaskItem, SupervisorHealthResponse, StatsDailyRow, DashboardResponse } from '../../../../src/shared/api-types.js';
 
+// Пишет в оба места разом — id элемента и его Desktop-версию (20.40,
+// docs/DESKTOP-DESIGN.md): данные получены один раз, два тонких
+// render-таргета их потребляют — мобильная swipe-панель и десктопный
+// dashboard (см. #homeDesktopDashboard, index.html), не два отдельных
+// источника данных.
+function setBothHTML(mobileId: string, desktopId: string, html: string): void {
+  const a = document.getElementById(mobileId);
+  if (a) a.innerHTML = html;
+  const b = document.getElementById(desktopId);
+  if (b) b.innerHTML = html;
+}
+
 export async function loadMyDay(): Promise<void> {
   const box = document.getElementById('myDayBody');
   if (!box) return;
-  const user = tgUser();
-  if (!user?.id) {
-    box.innerHTML = '<div class="empty">Открой из Telegram, чтобы видеть свой день</div>';
-    (document.getElementById('homeTodaySwipe') as any)?._swipeRefreshHeight?.();
-    return;
-  }
+  // Раньше здесь был безусловный ранний return по !tgUser()?.id — стало
+  // неверным с 20.35+ (не-Telegram вход): у GET /me/day (routes/me) и так
+  // уже есть свой graceful "нет identity" ответ ({bound:false, message:
+  // 'Привяжите аккаунт во вкладке Профиль'}, см. ветку !d.bound ниже) —
+  // тот же самый случай, каким бы способом ни резолвилась (или не
+  // резолвилась) identity. Старый гейт молча ломал «Мой день» для
+  // ЛЮБОГО desktop/phone-login пользователя — данные были доступны, но
+  // экран показывал «Открой из Telegram», хотя человек и так был внутри
+  // приложения залогинен.
   try {
     const d: MeDayResponse = await window.apiClient.getMyDay(authHeaders());
     if (!d.bound) {
-      box.innerHTML = `
-            <div class="empty" style="text-align:left;padding:8px 0">Аккаунт не привязан</div>
-            <button class="btn-main" onclick="switchPage('my')">Привязать себя</button>`;
+      setBothHTML(
+        'myDayBody',
+        'myDayBodyDesktop',
+        `<div class="empty" style="text-align:left;padding:8px 0">Аккаунт не привязан</div>
+            <button class="btn-main" onclick="switchPage('my')">Привязать себя</button>`
+      );
       (document.getElementById('homeTodaySwipe') as any)?._swipeRefreshHeight?.();
       return;
     }
     const shift = d.shift;
     const tot = d.total || ({} as { fact?: number; plan?: number; pct?: number });
     const pr = d.progress || {};
-    const headEl = document.getElementById('myDayStoreHead');
-    if (headEl) {
-      headEl.innerHTML = shift
-        ? `<div style="padding:0 16px 10px">
+    const headHtml = shift
+      ? `<div style="padding:0 16px 10px">
                 <div style="font-size:15px;font-weight:700">${esc(shift.store_code || shift.store_name || '')}</div>
                 ${shift.store_address ? `<div style="font-size:12px;color:var(--hint);margin-top:2px">${esc(shift.store_address)}</div>` : ''}
               </div>`
-        : `<div style="padding:0 16px 10px"><div style="font-size:15px;font-weight:700">Выходной</div></div>`;
-    }
+      : `<div style="padding:0 16px 10px"><div style="font-size:15px;font-weight:700">Выходной</div></div>`;
+    setBothHTML('myDayStoreHead', 'myDayStoreHeadDesktop', headHtml);
     // Тот же код/адрес — ещё и в шапке приложения, той же плашкой, что
     // «Сегодня»: видно на любой вкладке, не только на Главной, пока не
     // перейдёшь на Главную заново (обновляется вместе с «Мой день»).
@@ -56,7 +72,7 @@ export async function loadMyDay(): Promise<void> {
         headerPill.style.display = 'none';
       }
     }
-    box.innerHTML = `
+    const bodyHtml = `
           <div class="progress-block">
             ${
               shift
@@ -82,8 +98,9 @@ export async function loadMyDay(): Promise<void> {
             <button class="btn-main" style="margin-top:8px" onclick="openAddSale()">+ Продажа</button>
           </div>
           ${myTasksHTML(d.tasks)}`;
+    setBothHTML('myDayBody', 'myDayBodyDesktop', bodyHtml);
   } catch (e) {
-    box.innerHTML = '<div class="empty">Не удалось загрузить «Мой день»</div>';
+    setBothHTML('myDayBody', 'myDayBodyDesktop', '<div class="empty">Не удалось загрузить «Мой день»</div>');
   }
   (document.getElementById('homeTodaySwipe') as any)?._swipeRefreshHeight?.();
 }
@@ -133,12 +150,28 @@ export function commandCenterTone(health: number): string {
 export async function loadCommandCenter(): Promise<void> {
   const section = document.getElementById('commandCenterSection');
   const box = document.getElementById('commandCenterBody');
+  // Desktop-версия панели аналитики (20.40) — отдельная секция в
+  // #homeDesktopDashboard, не показывается вместе с мобильной. Класс
+  // .insights-panel добавляется здесь же, только когда роль реально
+  // видит панель — styles.css's :has(.insights-panel) на 1600px+ читает
+  // именно этот класс, не строку инлайн-style, чтобы не оставлять
+  // пустую 3-ю колонку у роли без доступа к аналитике.
+  const sectionDesktop = document.getElementById('homeDesktopInsights');
+  const boxDesktop = document.getElementById('commandCenterBodyDesktop');
   if (!section || !box) return;
   if (!canViewAnalytics()) {
     section.style.display = 'none';
+    if (sectionDesktop) {
+      sectionDesktop.style.display = 'none';
+      sectionDesktop.classList.remove('insights-panel');
+    }
     return;
   }
   section.style.display = '';
+  if (sectionDesktop) {
+    sectionDesktop.style.display = '';
+    sectionDesktop.classList.add('insights-panel');
+  }
   try {
     const d: SupervisorHealthResponse = await window.apiClient.getSupervisorHealth(authHeaders(), orgQueryParam());
     const health = Number(d.health) || 0;
@@ -147,7 +180,7 @@ export async function loadCommandCenter(): Promise<void> {
     const paceText = (pace >= 0 ? '+' : '') + pace + '% к темпу дня';
     const drops = Array.isArray(d.drops) ? (d.drops as any[]) : [];
 
-    box.innerHTML = `
+    const ccHtml = `
           <div class="cc-row">
             <div class="cc-health ${tone}">${health}</div>
             <div class="cc-meta">
@@ -175,8 +208,14 @@ export async function loadCommandCenter(): Promise<void> {
                   .join('')
               : '<div class="empty" style="padding:10px 0 0">Критических просадок нет — сеть в ритме</div>'
           }`;
+    box.innerHTML = ccHtml;
+    if (boxDesktop) boxDesktop.innerHTML = ccHtml;
   } catch (e) {
     section.style.display = 'none';
+    if (sectionDesktop) {
+      sectionDesktop.style.display = 'none';
+      sectionDesktop.classList.remove('insights-panel');
+    }
   }
 }
 
@@ -277,6 +316,8 @@ export async function loadHome(): Promise<void> {
     const setTxt = (id: string, v: unknown) => {
       const el = document.getElementById(id);
       if (el) el.textContent = String(v);
+      const elDesktop = document.getElementById(id + 'Desktop');
+      if (elDesktop) elDesktop.textContent = String(v);
     };
     setTxt('hSim', t.sim);
     setTxt('hMnp', t.mnp);
@@ -287,9 +328,7 @@ export async function loadHome(): Promise<void> {
 
     // Пульс сети
     const units = (t.sim || 0) + (t.mnp || 0) + (t.pa || 0) + (t.combo || 0);
-    const pulse = document.getElementById('networkPulse');
-    if (pulse) {
-      pulse.innerHTML = `
+    const pulseHtml = `
             <div class="pulse-row">
               <div class="pulse-chip">
                 <div class="pc-l">Единицы</div>
@@ -304,15 +343,17 @@ export async function loadHome(): Promise<void> {
                 <div class="pc-v">${Number(t.accessories || 0).toLocaleString('ru-RU')}</div>
               </div>
             </div>`;
-    }
+    setBothHTML('networkPulse', 'networkPulseDesktop', pulseHtml);
     (document.getElementById('homeTodaySwipe') as any)?._swipeRefreshHeight?.();
 
     const box = document.getElementById('homeTop');
+    const boxDesktop = document.getElementById('homeTopDesktop');
     if (box) {
       if (dash) {
         const leaders = (dash as any).top || (dash as any).top7 || (dash as any).leaders || (dash as any).employees || [];
         if (!leaders.length) {
           box.innerHTML = '<div class="empty">Нет данных за 7 дней</div>';
+          if (boxDesktop) boxDesktop.innerHTML = box.innerHTML;
         } else {
           box.innerHTML = leaders
             .slice(0, 7)
@@ -338,14 +379,37 @@ export async function loadHome(): Promise<void> {
                 </button>`;
             })
             .join('');
+          if (boxDesktop) boxDesktop.innerHTML = box.innerHTML;
         }
       } else {
         box.innerHTML = '<div class="empty">Топ за 7 дней недоступен</div>';
+        if (boxDesktop) boxDesktop.innerHTML = box.innerHTML;
       }
     }
+    populateDesktopTools();
   } catch (e) {
     console.error(e);
   }
+}
+
+// Секция "Инструменты" на десктопном дашборде (20.40) — клонирует уже
+// существующие мобильные .row-кнопки из #homeToolsSection один раз, а не
+// дублирует ~16 строк SVG-разметки вручную во второй раз. onclick-атрибуты
+// (switchPage(...)/openComboCalc() и т.д.) переживают cloneNode, работают
+// на клоне так же, как на оригинале. Идемпотентно — повторные вызовы
+// loadHome() не плодят дубликаты.
+function populateDesktopTools(): void {
+  const target = document.getElementById('homeDesktopTools');
+  const source = document.getElementById('homeToolsSection');
+  if (!target || !source || target.childElementCount) return;
+  source.querySelectorAll(':scope > button.row').forEach((btn) => {
+    const clone = btn.cloneNode(true) as HTMLElement;
+    // btnMgrTutorial имеет id (гейтится ролью в bootApp() до первого
+    // loadHome()) — без снятия id было бы два элемента с одинаковым id в
+    // DOM, document.getElementById() слепо вернул бы только мобильный.
+    clone.removeAttribute('id');
+    target.appendChild(clone);
+  });
 }
 
 export function bumpStreak(): number {
