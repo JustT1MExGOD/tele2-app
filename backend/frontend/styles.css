@@ -2089,3 +2089,127 @@
   }
 }
 
+/* ============================================================
+   Десктоп-раскладка (20.38) — один брейкпоинт, ниже 860px не меняется
+   ни на пиксель (реальный Telegram Mini App всегда уже этого порога).
+   Не редизайн под "десктоп-плотность" контента (переосмысление каждого
+   экрана по отдельности — другая задача) — тот же приём, что Telegram
+   Web/WhatsApp Web/Twitter: то же самое мобильное приложение как
+   единая раскладка, но центрированная колонка-панель на широком экране,
+   а не растянутая на весь монитор. CSS не бандлится Vite и не разбит
+   по страницам (index.html:8) — один блок правит всё приложение разом.
+   ============================================================ */
+@media (min-width: 860px) {
+  body {
+    background: var(--surface-2);
+  }
+  .app-header,
+  .sheet,
+  .bottom-nav {
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* .bottom-nav — position:fixed, обычный margin:auto на нём не
+     работает (left:0;right:0 растягивает на весь viewport) — центрируем
+     через left:50% + translateX. */
+  .bottom-nav {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+  /* Верх .app-header/низ .sheet теперь читаются как одна "плавающая
+     панель" на нейтральном фоне body, а не как часть страницы во всю
+     ширину. Приём "sheet чуть наезжает на header" (margin-top:-18px,
+     см. styles.css:291) не трогаем — он и даёт цельность без лишней
+     геометрии, просто округляем ОБЕ стороны шва. */
+  .app-header {
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+  .sheet {
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+  }
+  /* .fab — остаётся position:fixed (должен быть виден при скролле), но
+     "right" считается от правого края ФРЕЙМА (800px), не физического
+     края окна: 50vw - половина фрейма = расстояние от края viewport до
+     края фрейма. */
+  .fab {
+    right: calc(50vw - 400px + var(--sp-4));
+  }
+
+  /* "Мой план" — 8 кнопок действий, на десктопе хватает места под 4
+     колонки вместо жёстких 2 (см. .lk-actions-grid выше в файле). */
+  .lk-actions-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* Сводный график (.sum-sch-table выше) — таблица на месяц дат (до 31
+     колонки) объективно шире любого разумного фрейма, горизонтальный
+     скролл остаётся намеренно — но крупнее шрифт и чуть шире колонка
+     с именем читаемее на большом экране, не полагаясь на то, что палец
+     может приблизить экран. */
+  .sum-sch-table {
+    font-size: 12px;
+  }
+  .sum-sch-name {
+    min-width: 160px;
+    max-width: 160px;
+  }
+
+  /* Модалка — bottom-sheet ("выезд снизу", .overlay align-items:flex-end
+     выше в файле) чисто мобильная условность; на десктопе — обычный
+     центрированный диалог с фейдом вместо сдвига. */
+  .overlay {
+    align-items: center;
+  }
+  .sheet-modal {
+    border-radius: 24px;
+    max-height: 85vh;
+    animation: modal-in 0.22s ease;
+  }
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* Логин-экран (20.37) — .gate-shell уже max-width:420px;margin:0 auto,
+     сама карточка переделки не требует. Пустое пространство вокруг на
+     широком экране получает мягкий фон — те же токены (--primary), что
+     уже использует .gate-card .bind-glow ВНУТРИ карточки, расширение
+     уже существующего визуального языка, не новый цвет с нуля.
+     !important — showAccessGate()/showLoginGate() (access-supervisor/
+     index.ts) при каждом показе выставляют background инлайн через
+     gate.style.cssText, обычная CSS-специфичность класса/id это не
+     перебьёт. */
+  #accessGate {
+    background:
+      radial-gradient(ellipse 900px 600px at 50% -10%, var(--primary-soft), transparent 60%),
+      var(--surface-2) !important;
+  }
+}
+
+/* Hover — отдельным блоком от layout-брейкпоинта: (hover:hover) исключает
+   touch-ноутбуки/планшеты в альбомной ориентации на той же ширине экрана,
+   которым "залипающий" hover только мешает. До сих пор во всём файле не
+   было ни одного :hover — только :active (тактильная обратная связь для
+   тача); без наведения мышью приложение на десктопе читается как
+   недоделанное. */
+@media (min-width: 860px) and (hover: hover) {
+  .row:hover,
+  .nav-item:hover {
+    background: var(--surface-2);
+  }
+  .lk-action {
+    cursor: pointer;
+    transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease);
+  }
+  .lk-action:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .fab:hover {
+    transform: scale(1.05);
+  }
+}
+
