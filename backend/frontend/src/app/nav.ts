@@ -312,6 +312,19 @@ export function initSwipePanels(containerEl: (HTMLElement & { dataset: DOMString
 
   window.addEventListener('resize', () => {
     width = containerEl!.clientWidth;
+    // Desktop Shell (20.39) — на ≥860px .swipe-track уже grid из двух
+    // видимых панелей (styles.css), settle() ниже выставляет inline
+    // height ТОЛЬКО текущей панели (нужно для mobile — панели разной
+    // высоты, напр. «Мой день» короче в выходной); на десктопе тот же
+    // inline height обрезал бы вторую, более высокую панель. Сбрасываем
+    // inline height/transform вместо вызова settle() — реальный
+    // сценарий: пользователь ресайзит окно через границу 860px без
+    // перезагрузки страницы.
+    if (window.innerWidth >= 860) {
+      track!.style.height = '';
+      track!.style.transform = '';
+      return;
+    }
     settle(current, false);
   });
 

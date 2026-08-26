@@ -2188,6 +2188,7 @@
      список — переопределяется только внутри .sidebar, сама .nav-item
      вне сайдбара не трогается. */
   .sidebar .nav-item {
+    position: relative;
     flex: none;
     flex-direction: row;
     justify-content: flex-start;
@@ -2199,6 +2200,19 @@
   }
   .sidebar .nav-item .ico {
     font-size: 18px;
+  }
+  /* Заливки .primary-soft одной было мало — polish поверх shell: тонкая
+     полоска слева, тот же приём, что уже узнаваем по табам/вкладкам в
+     других десктоп-приложениях, читается быстрее одной только заливки. */
+  .sidebar .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--primary);
   }
   .sidebar .nav-item.active {
     background: var(--primary-soft);
@@ -2215,11 +2229,24 @@
   .sheet {
     max-width: 800px;
     margin: 0 auto;
+    /* На мобильном под FAB уже был зазор — body получал padding-bottom:92px
+       под bottom-nav (см. выше), FAB сидел над ним на bottom:100px.
+       На десктопе body.padding-bottom сброшен в 0 (bottom-nav скрыт), но
+       сам .fab остался fixed-элементом над контентом — без своего зазора
+       последняя строка длинной страницы уезжала бы под круглую кнопку. */
+    padding-bottom: 96px;
   }
   .fab {
     right: 32px;
     bottom: 32px;
   }
+
+  /* Эти три правила (.lk-actions-grid/.sum-sch-table/.sum-sch-name) — не
+     новая Page Adaptation этой версии, а буквально перенесённое без
+     изменений поведение уже задеплоенного 20.38 (просто попало в новый
+     блок при замене structure). Оставлены намеренно: удалить — не
+     "перенести в 20.40", а откатить уже живую в проде функциональность.
+     Системная адаптация ОСТАЛЬНОГО контента страниц — предмет 20.40. */
 
   /* "Мой план" — 8 кнопок действий, на десктопе хватает места под 4
      колонки вместо жёстких 2 (см. .lk-actions-grid выше в файле). */
@@ -2323,9 +2350,6 @@
 @media (min-width: 860px) and (hover: hover) {
   .row:hover,
   .nav-item:hover {
-    background: var(--surface-2);
-  }
-  .sidebar .nav-item:hover {
     background: var(--surface-2);
   }
   .sidebar .nav-item.active:hover {
