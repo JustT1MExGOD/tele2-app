@@ -172,6 +172,34 @@ export async function mergeOutcome(alertId: number, outcome: string, hadTask: bo
   );
 }
 
+/** Product Analytics (20.34) — первый просмотр алерта менеджером. Один раз
+ * на алерт (не на сотрудника) — вопрос "открыли ли вообще", не "кто именно". */
+export async function markOpened(alertId: number): Promise<void> {
+  await query(
+    `UPDATE smart_alerts SET first_opened_at = COALESCE(first_opened_at, now()) WHERE id = $1`,
+    [alertId]
+  );
+}
+
+/** Product Analytics (20.34) — вовлечённость по типу алерта: всего/открыто/
+ * отклонено (status='dismissed'). Только для типов, у которых вообще есть
+ * Learn-исход (без него open_rate/dismissed_rate бессмысленно сравнивать
+ * с recovery_rate — разные знаменатели). */
+export async function summarizeEngagement(): Promise<
+  { alert_type: string; total: number; opened: number; dismissed: number }[]
+> {
+  const res = await query(
+    `SELECT alert_type,
+            COUNT(*)::int as total,
+            COUNT(*) FILTER (WHERE first_opened_at IS NOT NULL)::int as opened,
+            COUNT(*) FILTER (WHERE status = 'dismissed')::int as dismissed
+     FROM smart_alerts
+     WHERE alert_type IN ('plan_miss_projected', 'anomaly_vs_forecast')
+     GROUP BY alert_type`
+  );
+  return res.rows;
+}
+
 /** Learn — сводка "сработала ли рекомендация": группировка по типу алерта,
  * наличию выполненной задачи и исходу. GROUP BY прямо в SQL — строк мало
  * (по одной на каждую реально встретившуюся комбинацию), агрегировать в

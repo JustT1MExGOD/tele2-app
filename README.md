@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.33.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.34.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-353%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-351%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.33.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.34.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -460,6 +460,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.30.0** | Frontend rewrite закрыт полностью — `01-core.js`/`02-nav-utils.js` → `app/core.ts`/`app/nav.ts`; `frontend/js/` как директория больше не существует |
 | **20.32.0** | Production Observability — `/healthz`+`/readyz` с настоящей readiness-семантикой, Prometheus-совместимый `/metrics` (HTTP/DB/jobs/AI) |
 | **20.33.0** | Domain Integrity — org-scoping инвариант (Employee/Store/Announcement/Channel → Organization, Channel → Store) закреплён в PostgreSQL пятью новыми FK (`0016_org_scoping_fk.sql`), не только в TypeScript |
+| **20.34.0** | Product Analytics — сколько рекомендаций открывают/игнорируют, какие алерты похожи на ложную тревогу, где задача реально меняет исход (`/alerts/effectiveness` расширен, `smart_alerts.first_opened_at`) |
 
 ---
 
@@ -851,6 +852,20 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   Сектор были закрыты FK ещё в 20.15/baseline, граф плоский — циклов
   структурно не бывает, "Sector hierarchy" из спеки уже была выполнена без
   единой строчки миграции. 6 новых тестов (см. §21, 20.33.0)
+- **20.34 Product Analytics** ✅ — Explain/Predict/Recommend/Learn уже
+  отвечали "сработала ли рекомендация"; следующий вопрос владельца
+  продукта — насколько это вообще помогает людям. Аудит показал: "action
+  rate" (рекомендация → задача) был полностью закрыт ещё в 20.23.0 через
+  `tasks.alert_id`, "opened rate" не существовал вообще, а
+  "false-positive rate"/"AI outcome attribution" были физически
+  вычислимы из уже накапливаемых данных, просто не посчитаны. Один новый
+  `timestamptz` (`smart_alerts.first_opened_at`, `0017_alert_engagement.sql`)
+  вместо join-таблицы — нужна только агрегатная доля "хоть кто-то
+  открыл", не список "кто именно". `GET /alerts/effectiveness` расширен
+  пятью полями (`open_rate`/`dismissed_rate`/`false_positive_rate`/
+  `recovery_rate_with_task`/`recovery_rate_without_task`); экран
+  "Эффективность рекомендаций" получил явную дельту "Задача меняет исход:
+  +N п.п.". 4 новых бэкенд-теста + 1 фронтенд (см. §21, 20.34.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -898,6 +913,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.33.0 · август 2026*
+*README · актуально на v20.34.0 · август 2026*
 
 </div>

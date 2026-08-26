@@ -19,8 +19,26 @@ function setupGlobals(overrides: { canManage?: boolean; role?: string; effective
   const sendNetworkDigest = vi.fn().mockResolvedValue({ ok: true, kind: 'weekly' });
   const getAlertsEffectiveness = vi.fn().mockResolvedValue(
     overrides.effectiveness ?? {
-      plan_miss_projected: { with_task: { recovered: 3 }, without_task: { still_missed: 2 } },
-      anomaly_vs_forecast: { with_task: {}, without_task: { recurred: 1, recovered: 4 } }
+      plan_miss_projected: {
+        with_task: { recovered: 3 },
+        without_task: { still_missed: 2 },
+        total: 10,
+        open_rate: 0.6,
+        dismissed_rate: 0.1,
+        false_positive_rate: 0,
+        recovery_rate_with_task: 1,
+        recovery_rate_without_task: 0
+      },
+      anomaly_vs_forecast: {
+        with_task: {},
+        without_task: { recurred: 1, recovered: 4 },
+        total: 8,
+        open_rate: null,
+        dismissed_rate: null,
+        false_positive_rate: 0.8,
+        recovery_rate_with_task: null,
+        recovery_rate_without_task: 0.8
+      }
     }
   );
   (window as any).apiClient = { sendNetworkDigest, getAlertsEffectiveness };
@@ -99,6 +117,13 @@ describe('reports page (pilot: app/router.ts + app/state.ts + features/send-netw
     expect(box.textContent).toContain('С выполненной задачей');
     expect(box.textContent).toContain('исправилось 3');
     expect(box.textContent).toContain('не исправилось 2');
+    // Product Analytics (20.34) — новые поля поверх Learn-сводки.
+    expect(box.textContent).toContain('Открыли: 60%');
+    expect(box.textContent).toContain('Отклонили: 10%');
+    expect(box.textContent).toContain('Задача меняет исход: +100 п.п.');
+    // anomaly_vs_forecast: open_rate/dismissed_rate=null (ни разу не
+    // отслеживались) — рендерится «—», не «NaN%»/«undefined».
+    expect(box.textContent).toContain('Похоже на ложную тревогу: 80%');
   });
 
   it('manager (не admin): секции "Эффективность рекомендаций" нет вообще', async () => {

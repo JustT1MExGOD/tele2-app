@@ -158,16 +158,32 @@ export interface ChangeAlertStatusRequest {
 
 export type ChangeAlertStatusResponse = AlertItem;
 
-// ---------- /alerts/effectiveness (Learn, 21.x) ----------
+// ---------- /alerts/effectiveness (Learn, 21.x; расширено Product Analytics, 20.34) ----------
 export interface OutcomeBucket {
   recovered: number;
   still_missed?: number;
   recurred?: number;
 }
 
+export interface AlertTypeEffectiveness {
+  with_task: OutcomeBucket;
+  without_task: OutcomeBucket;
+  total: number;
+  open_rate: number | null;
+  dismissed_rate: number | null;
+  false_positive_rate: number | null;
+  recovery_rate_with_task: number | null;
+  recovery_rate_without_task: number | null;
+}
+
 export interface EffectivenessSummaryResponse {
-  plan_miss_projected: { with_task: OutcomeBucket; without_task: OutcomeBucket };
-  anomaly_vs_forecast: { with_task: OutcomeBucket; without_task: OutcomeBucket };
+  plan_miss_projected: AlertTypeEffectiveness;
+  anomaly_vs_forecast: AlertTypeEffectiveness;
+}
+
+// ---------- POST /alerts/:id/read (20.34) ----------
+export interface MarkAlertReadResponse {
+  ok: true;
 }
 
 export interface TaskItem {

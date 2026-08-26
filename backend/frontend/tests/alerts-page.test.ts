@@ -21,8 +21,9 @@ function setupGlobals(overrides: { page?: string } = {}) {
 
   const getAlerts = vi.fn().mockResolvedValue([]);
   const changeAlertStatus = vi.fn().mockResolvedValue({ ok: true });
-  (window as any).apiClient = { getAlerts, changeAlertStatus };
-  return { getAlerts, changeAlertStatus };
+  const markAlertRead = vi.fn().mockResolvedValue({ ok: true });
+  (window as any).apiClient = { getAlerts, changeAlertStatus, markAlertRead };
+  return { getAlerts, changeAlertStatus, markAlertRead };
 }
 
 const ALERT_A = {
@@ -99,7 +100,7 @@ describe('Алерты (миграция frontend/js/17-alerts.js → src/pages/
   });
 
   it('openAlertDetail: открывает модалку и рендерит детали алерта', async () => {
-    const { getAlerts } = setupGlobals();
+    const { getAlerts, markAlertRead } = setupGlobals();
     getAlerts.mockResolvedValue([ALERT_A]);
     const { openAlertDetail } = await import('../src/pages/alerts/index.js');
 
@@ -107,6 +108,18 @@ describe('Алерты (миграция frontend/js/17-alerts.js → src/pages/
 
     expect(document.getElementById('overlay')!.classList.contains('show')).toBe(true);
     expect(document.getElementById('modalTitle')!.textContent).toBe('Алерт');
+    expect(document.getElementById('modalBody')!.innerHTML).toContain('необычно тихий день');
+    expect(markAlertRead).toHaveBeenCalledWith(expect.anything(), 42);
+  });
+
+  it('openAlertDetail: ошибка markAlertRead (20.34) не мешает отрендерить деталь — fire-and-forget', async () => {
+    const { getAlerts, markAlertRead } = setupGlobals();
+    getAlerts.mockResolvedValue([ALERT_A]);
+    markAlertRead.mockRejectedValue(new Error('network'));
+    const { openAlertDetail } = await import('../src/pages/alerts/index.js');
+
+    await (openAlertDetail as any)(42);
+
     expect(document.getElementById('modalBody')!.innerHTML).toContain('необычно тихий день');
   });
 

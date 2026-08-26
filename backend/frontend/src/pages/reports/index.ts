@@ -11,7 +11,7 @@
  */
 import { registerPage, renderPage } from '../../app/router.js';
 import { bindSendDigestButtons } from '../../features/send-network-digest/index.js';
-import type { OutcomeBucket } from '../../../../src/shared/api-types.js';
+import type { OutcomeBucket, AlertTypeEffectiveness } from '../../../../src/shared/api-types.js';
 
 function reportImageRowHTML(): string {
   return `
@@ -61,12 +61,37 @@ function bucketRateHTML(label: string, bucket: OutcomeBucket): string {
   return `<div class="row-sub">${label} (${total}): ${parts.join(' · ')}</div>`;
 }
 
-function typeEffectivenessHTML(title: string, data: { with_task: OutcomeBucket; without_task: OutcomeBucket }): string {
+// Product Analytics (20.34) — три новых вопроса от владельца продукта поверх
+// уже готового with_task/without_task: открывают ли вообще (open_rate),
+// сколько похоже на ложную тревогу (false_positive_rate — recovered БЕЗ
+// задачи, ближайший доступный proxy), и меняет ли задача исход на самом деле
+// (дельта recovery_rate С задачей минус БЕЗ — если отрицательная или около
+// нуля, задача, скорее всего, ни при чём, просело само по себе).
+function pct(v: number | null): string {
+  return v === null ? '—' : `${Math.round(v * 100)}%`;
+}
+
+function engagementHTML(data: AlertTypeEffectiveness): string {
+  const withRate = data.recovery_rate_with_task;
+  const withoutRate = data.recovery_rate_without_task;
+  let deltaHTML = '';
+  if (withRate !== null && withoutRate !== null) {
+    const deltaPct = Math.round((withRate - withoutRate) * 100);
+    const sign = deltaPct > 0 ? '+' : '';
+    deltaHTML = `<div class="row-sub">Задача меняет исход: ${sign}${deltaPct} п.п.</div>`;
+  }
+  return `
+    <div class="row-sub">Открыли: ${pct(data.open_rate)} · Отклонили: ${pct(data.dismissed_rate)} · Похоже на ложную тревогу: ${pct(data.false_positive_rate)}</div>
+    ${deltaHTML}`;
+}
+
+function typeEffectivenessHTML(title: string, data: AlertTypeEffectiveness): string {
   return `
     <div style="margin-top:10px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${title}</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${title} (${data.total})</div>
       ${bucketRateHTML('С выполненной задачей', data.with_task)}
       ${bucketRateHTML('Без задачи', data.without_task)}
+      ${engagementHTML(data)}
     </div>`;
 }
 

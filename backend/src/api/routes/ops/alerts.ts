@@ -79,6 +79,17 @@ export async function registerAlertsRoutes(app: FastifyInstance) {
     }
   );
 
+  // Product Analytics (20.34) — первый просмотр алерта менеджером. Простое
+  // "открыли/нет" (announcements/:id/read задаёт тот же уровень строгости —
+  // requireAuth без org-проверки владения, здесь чуть строже requireManager,
+  // потому что сама страница алертов уже под этим гейтом), без body.
+  app.post('/alerts/:id/read', async (request, reply) => {
+    if (!requireManager(request, reply)) return;
+    const { id } = request.params as { id: string };
+    await alertsRepo.markOpened(Number(id));
+    return { ok: true };
+  });
+
   app.post('/alerts/run', async (request, reply) => {
     if (!requireManager(request, reply)) return;
     return runSmartAlertsTick();

@@ -95,22 +95,70 @@ export interface OutcomeBucket {
   recurred?: number;
 }
 
+export interface AlertTypeEffectiveness {
+  with_task: OutcomeBucket;
+  without_task: OutcomeBucket;
+  /** Всего алертов этого типа (включая ещё не оценённые Learn'ом) */
+  total: number;
+  /** Открыл ли хоть кто-то — null, если total=0 */
+  open_rate: number | null;
+  /** Явно отклонён (status='dismissed') — null, если total=0 */
+  dismissed_rate: number | null;
+  /** recovered БЕЗ задачи ÷ всего оценённых — доля "само прошло, вмешательство
+   * не требовалось", ближайший доступный proxy к "ложное срабатывание". null,
+   * если ещё ни один алерт этого типа не оценён. */
+  false_positive_rate: number | null;
+  /** recovered С задачей ÷ всего оценённых с задачей. null, если задач с
+   * оценённым исходом ещё не было. */
+  recovery_rate_with_task: number | null;
+  /** То же без задачи — базовая линия "и так бы прошло". */
+  recovery_rate_without_task: number | null;
+}
+
 export interface EffectivenessSummary {
-  plan_miss_projected: { with_task: OutcomeBucket; without_task: OutcomeBucket };
-  anomaly_vs_forecast: { with_task: OutcomeBucket; without_task: OutcomeBucket };
+  plan_miss_projected: AlertTypeEffectiveness;
+  anomaly_vs_forecast: AlertTypeEffectiveness;
+}
+
+function bucketTotal(bucket: OutcomeBucket): number {
+  return (bucket.recovered || 0) + (bucket.still_missed || 0) + (bucket.recurred || 0);
+}
+
+function rate(numerator: number, denominator: number): number | null {
+  return denominator > 0 ? numerator / denominator : null;
 }
 
 export async function getEffectivenessSummary(): Promise<EffectivenessSummary> {
-  const rows = await alertsRepo.summarizeOutcomes();
+  const [outcomeRows, engagementRows] = await Promise.all([
+    alertsRepo.summarizeOutcomes(),
+    alertsRepo.summarizeEngagement()
+  ]);
+
   const summary: EffectivenessSummary = {
     plan_miss_projected: { with_task: {}, without_task: {} } as any,
     anomaly_vs_forecast: { with_task: {}, without_task: {} } as any
   };
-  for (const r of rows) {
+  for (const r of outcomeRows) {
     const bucket = (summary as any)[r.alert_type];
     if (!bucket) continue;
     const key = r.had_task ? 'with_task' : 'without_task';
     bucket[key][r.outcome] = (bucket[key][r.outcome] || 0) + r.cnt;
   }
+
+  for (const type of ['plan_miss_projected', 'anomaly_vs_forecast'] as const) {
+    const entry = summary[type] as AlertTypeEffectiveness;
+    const engagement = engagementRows.find((e) => e.alert_type === type);
+    const withTotal = bucketTotal(entry.with_task);
+    const withoutTotal = bucketTotal(entry.without_task);
+    const evaluatedTotal = withTotal + withoutTotal;
+
+    entry.total = engagement?.total || 0;
+    entry.open_rate = engagement ? rate(engagement.opened, engagement.total) : null;
+    entry.dismissed_rate = engagement ? rate(engagement.dismissed, engagement.total) : null;
+    entry.false_positive_rate = rate(entry.without_task.recovered || 0, evaluatedTotal);
+    entry.recovery_rate_with_task = rate(entry.with_task.recovered || 0, withTotal);
+    entry.recovery_rate_without_task = rate(entry.without_task.recovered || 0, withoutTotal);
+  }
+
   return summary;
 }

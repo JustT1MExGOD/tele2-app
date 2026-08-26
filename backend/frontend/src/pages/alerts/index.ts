@@ -85,6 +85,10 @@ export async function openAlertDetail(id: number): Promise<void> {
   if (title) title.textContent = 'Алерт';
   if (body) body.innerHTML = '<div class="skeleton"></div>';
   document.getElementById('overlay')?.classList.add('show');
+  // Product Analytics (20.34) — открыли ли алерт вообще, не блокирует рендер
+  // деталей и не роняет его при сетевой ошибке (та же дисциплина, что
+  // announcements/:id/read на фронте).
+  window.apiClient.markAlertRead(authHeaders(true), id).catch(() => {});
   await renderAlertDetail(id);
 }
 
