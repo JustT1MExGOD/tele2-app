@@ -45,6 +45,7 @@ function setupGlobals(overrides: { role?: string } = {}) {
   const getBfqEmployee = vi.fn().mockResolvedValue({ fact: {}, forecast: {}, shifts: { worked: 0, remaining: 0 } });
   const saveBfqManual = vi.fn().mockResolvedValue({ ok: true });
   const getPlansEmployeesMonth = vi.fn().mockResolvedValue({ rows: [], remaining_days: 5 });
+  const getPlansStoresMonth = vi.fn().mockResolvedValue({ rows: [], remaining_days: 5 });
   const getEmployeeMonthPlan = vi.fn().mockResolvedValue({});
   const saveEmployeeMonthPlan = vi.fn().mockResolvedValue({});
   const getStoreDailyPlans = vi.fn().mockResolvedValue({ stores: [] });
@@ -55,13 +56,14 @@ function setupGlobals(overrides: { role?: string } = {}) {
     getBfqEmployee,
     saveBfqManual,
     getPlansEmployeesMonth,
+    getPlansStoresMonth,
     getEmployeeMonthPlan,
     saveEmployeeMonthPlan,
     getStoreDailyPlans,
     getStoreMonthPlan,
     saveStoreMonthPlan
   };
-  return { getBfqList, getBfqEmployee, saveBfqManual, getPlansEmployeesMonth, getEmployeeMonthPlan, saveEmployeeMonthPlan, getStoreDailyPlans, getStoreMonthPlan, saveStoreMonthPlan };
+  return { getBfqList, getBfqEmployee, saveBfqManual, getPlansEmployeesMonth, getPlansStoresMonth, getEmployeeMonthPlan, saveEmployeeMonthPlan, getStoreDailyPlans, getStoreMonthPlan, saveStoreMonthPlan };
 }
 
 describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/pages/plans-bfq)', () => {
@@ -141,18 +143,46 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
     expect(getPlansEmployeesMonth).toHaveBeenCalledWith(expect.anything(), '2026-09', '');
   });
 
-  it('loadNetMonth: рендерит барные строки сети и по сотрудникам', async () => {
-    const { getPlansEmployeesMonth } = setupGlobals();
+  it('loadNetMonth: рендерит барные строки сети, по сотрудникам И по точкам (20.41 — "Динамика выполнения" без "...по сотрудникам")', async () => {
+    const { getPlansEmployeesMonth, getPlansStoresMonth } = setupGlobals();
     getPlansEmployeesMonth.mockResolvedValue({
       rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: { sim: 10 }, fact: { sim: 5 }, pct: { sim: 50 } }],
       remaining_days: 5,
       totals: { fact: { sim: 5 }, plan: { sim: 10 } }
     });
+    getPlansStoresMonth.mockResolvedValue({
+      rows: [{ store_id: 's1', name: 'Точка А', code: 'A1', plan: { sim: 20 }, fact: { sim: 8 }, pct: { sim: 40 } }],
+      remaining_days: 5,
+      totals: { fact: { sim: 8 }, plan: { sim: 20 } }
+    });
+    const { loadNetMonth } = await import('../src/pages/plans-bfq/index.js');
+    await loadNetMonth();
+    expect(getPlansStoresMonth).toHaveBeenCalledWith(expect.anything(), '2026-08', '');
+    const html = document.getElementById('netMonthBody')!.innerHTML;
+    expect(html).toContain('По сотрудникам');
+    expect(html).toContain('Иван');
+    expect(html).toContain('По точкам');
+    expect(html).toContain('Точка А');
+    // По сотрудникам и по точкам — независимые id-префиксы у toggle
+    // (nme-/nms-), иначе svExtraToggleHTML() перепутал бы разделы при
+    // одинаковом индексе строки.
+    expect(html).toContain('id="nme-0"');
+    expect(html).toContain('id="nms-0"');
+  });
+
+  it('loadNetMonth: пустой список точек — секция "По точкам" не рендерится вообще (не пустой заголовок)', async () => {
+    const { getPlansEmployeesMonth, getPlansStoresMonth } = setupGlobals();
+    getPlansEmployeesMonth.mockResolvedValue({
+      rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: { sim: 10 }, fact: { sim: 5 }, pct: { sim: 50 } }],
+      remaining_days: 5,
+      totals: { fact: { sim: 5 }, plan: { sim: 10 } }
+    });
+    getPlansStoresMonth.mockResolvedValue({ rows: [], remaining_days: 5 });
     const { loadNetMonth } = await import('../src/pages/plans-bfq/index.js');
     await loadNetMonth();
     const html = document.getElementById('netMonthBody')!.innerHTML;
     expect(html).toContain('По сотрудникам');
-    expect(html).toContain('Иван');
+    expect(html).not.toContain('По точкам');
   });
 
   it('toggleMonthExtra: переключает класс open и текст кнопки', async () => {

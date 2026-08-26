@@ -309,6 +309,68 @@ export async function getMonthSummaryTable(month: string, orgId?: string) {
   };
 }
 
+/** Та же сводная таблица, что getMonthSummaryTable(), но разбивка по точкам,
+ * не по сотрудникам — getStoreMonthFacts()/getStoreMonthPlan() уже
+ * существовали (карточка точки, редактирование плана точки), не хватало
+ * только агрегата по всей сети сразу. totals здесь — сумма ПЛАНОВ ТОЧЕК,
+ * не планов сотрудников (это разные, независимо задаваемые цели — числа
+ * планов могут не совпадать с totals из getMonthSummaryTable, это ожидаемо,
+ * не баг сверки). */
+export async function getStoreMonthSummaryTable(month: string, orgId?: string) {
+  const start = monthStart(month);
+  const stores = await storesRepo.listActiveBasic(orgId || 'default');
+
+  const rows = [];
+  const totalsFact: Record<string, number> = {};
+  const totalsPlan: Record<string, number> = {};
+  for (const m of METRICS) {
+    totalsFact[m] = 0;
+    totalsPlan[m] = 0;
+  }
+
+  for (const s of stores) {
+    const fact = await getStoreMonthFacts(s.id, month);
+    const planRow = await getStoreMonthPlan(s.id, month);
+
+    const plan: Record<string, number> = {};
+    const pct: Record<string, number> = {};
+    for (const m of METRICS) {
+      plan[m] = num(planRow?.[m]);
+      const f = num(fact[m]);
+      pct[m] = plan[m] > 0 ? Math.round((f / plan[m]) * 100) : f > 0 ? 100 : 0;
+      totalsFact[m] += f;
+      totalsPlan[m] += plan[m];
+    }
+
+    rows.push({
+      store_id: s.id,
+      name: s.name,
+      code: s.code,
+      fact,
+      plan,
+      pct
+    });
+  }
+
+  const totalsPct: Record<string, number> = {};
+  for (const m of METRICS) {
+    totalsPct[m] =
+      totalsPlan[m] > 0
+        ? Math.round((totalsFact[m] / totalsPlan[m]) * 100)
+        : totalsFact[m] > 0
+          ? 100
+          : 0;
+  }
+
+  return {
+    month: start.slice(0, 7),
+    metrics: [...METRICS],
+    rows,
+    totals: { fact: totalsFact, plan: totalsPlan, pct: totalsPct },
+    remaining_days: remainingDaysInMonth(month)
+  };
+}
+
 export async function getEmployeeDailyPlan(employeeId: number, date: string) {
   const month = date.slice(0, 7);
   const planRow = await getEmployeeMonthPlan(employeeId, month);

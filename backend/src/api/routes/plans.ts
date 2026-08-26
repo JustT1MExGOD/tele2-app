@@ -25,6 +25,7 @@ const MonthPlanBody = Type.Object(
 type MonthPlanBody = Static<typeof MonthPlanBody>;
 import {
   getMonthSummaryTable,
+  getStoreMonthSummaryTable,
   upsertEmployeeMonthPlan,
   getEmployeeMonthPlan,
   getEmployeeDailyPlan,
@@ -38,6 +39,7 @@ import {
 import { currentMonthMoscow, todayMoscow } from '../../utils/date.js';
 import type {
   MonthSummaryTableResponse,
+  StoreMonthSummaryTableResponse,
   EmployeeMonthPlanResponse,
   StoreDailyPlansResponse,
   StoreMonthPlanResponse
@@ -64,6 +66,17 @@ export async function registerPlansRoutes(app: FastifyInstance) {
     const m = month || currentMonthMoscow();
     const orgId = resolveViewOrgId(request.user!, org_id);
     return getMonthSummaryTable(m, orgId);
+  });
+
+  // Та же сводная таблица, но по точкам сети, не по сотрудникам — «Динамика
+  // выполнения», вторая половина под разбивкой по сотрудникам (см. frontend
+  // pages/plans-bfq). Тот же гейт (requireActive, «видно всей команде»).
+  app.get('/plans/stores/month', async (request, reply): Promise<StoreMonthSummaryTableResponse | undefined> => {
+    if (!requireActive(request, reply)) return;
+    const { month, org_id } = request.query as { month?: string; org_id?: string };
+    const m = month || currentMonthMoscow();
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    return getStoreMonthSummaryTable(m, orgId);
   });
 
   // План одного сотрудника на месяц. Раньше вообще без авторизации — план

@@ -456,6 +456,23 @@ export interface MonthSummaryTableResponse {
   totals?: { fact?: MetricValues; plan?: MetricValues; pct?: MetricValues };
 }
 
+/** GET /plans/stores/month — та же сводная таблица, что MonthSummaryRow,
+ * но разбивка по точкам сети, не по сотрудникам. */
+export interface StoreMonthSummaryRow {
+  store_id: string;
+  name: string;
+  code?: string | null;
+  plan: MetricValues;
+  fact: MetricValues;
+  pct: MetricValues;
+}
+
+export interface StoreMonthSummaryTableResponse {
+  rows: StoreMonthSummaryRow[];
+  remaining_days?: number;
+  totals?: { fact?: MetricValues; plan?: MetricValues; pct?: MetricValues };
+}
+
 export type EmployeeMonthPlanResponse = MetricValues & {
   employee_id?: number;
   month?: string;

@@ -4,7 +4,7 @@ import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import { todayMoscow } from '../../src/utils/date.js';
 
-describe('Изоляция планов (/plans/employees/month, /plans/stores/daily, /plans/stores/:id/month)', () => {
+describe('Изоляция планов (/plans/employees/month, /plans/stores/month, /plans/stores/daily, /plans/stores/:id/month)', () => {
   const fx = new TestFixtures();
   let orgA: string, orgB: string;
   let storeA: string, storeB: string;
@@ -37,6 +37,31 @@ describe('Изоляция планов (/plans/employees/month, /plans/stores/d
     const res = await app.inject({ method: 'GET', url: '/plans/employees/month', headers: authAs(managerA.telegramId) });
     const body = res.json();
     expect(body.rows.find((r: any) => Number(r.employee_id) === employeeA.id)).toBeDefined();
+  });
+
+  it('GET /plans/stores/month — своя сеть не видит точки другой сети (20.41, «Динамика выполнения» по точкам)', async () => {
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: '/plans/stores/month', headers: authAs(managerB.telegramId) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.rows.find((r: any) => r.store_id === storeA)).toBeUndefined();
+  });
+
+  it('GET /plans/stores/month — своя сеть видна целиком, totals агрегированы', async () => {
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: '/plans/stores/month', headers: authAs(managerA.telegramId) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.rows.find((r: any) => r.store_id === storeA)).toBeDefined();
+    expect(body.totals).toBeDefined();
+    expect(body.totals.fact).toBeDefined();
+    expect(body.totals.plan).toBeDefined();
+  });
+
+  it('GET /plans/stores/month — без токена вообще — 401', async () => {
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: '/plans/stores/month' });
+    expect(res.statusCode).toBe(401);
   });
 
   it('GET /plans/stores/daily — только точки своей сети', async () => {

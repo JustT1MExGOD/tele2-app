@@ -60,6 +60,7 @@ import type {
   SaveScheduleBulkResponse,
   PlansTemplateResponse,
   MonthSummaryTableResponse,
+  StoreMonthSummaryTableResponse,
   EmployeeMonthPlanResponse,
   SaveMonthPlanRequest,
   StoreDailyPlansResponse,
@@ -382,6 +383,14 @@ export async function getPlansEmployeesMonth(
   orgQuery: string
 ): Promise<MonthSummaryTableResponse> {
   return request(`/plans/employees/month?month=${month}${orgQuery}`, headers);
+}
+
+export async function getPlansStoresMonth(
+  headers: Record<string, string>,
+  month: string,
+  orgQuery: string
+): Promise<StoreMonthSummaryTableResponse> {
+  return request(`/plans/stores/month?month=${month}${orgQuery}`, headers);
 }
 
 export async function getEmployeeMonthPlan(
@@ -824,6 +833,7 @@ declare global {
       saveSchedulesBulk: typeof saveSchedulesBulk;
       getPlansTemplate: typeof getPlansTemplate;
       getPlansEmployeesMonth: typeof getPlansEmployeesMonth;
+      getPlansStoresMonth: typeof getPlansStoresMonth;
       getEmployeeMonthPlan: typeof getEmployeeMonthPlan;
       saveEmployeeMonthPlan: typeof saveEmployeeMonthPlan;
       getStoreDailyPlans: typeof getStoreDailyPlans;
@@ -927,6 +937,7 @@ window.apiClient = {
   saveSchedulesBulk,
   getPlansTemplate,
   getPlansEmployeesMonth,
+  getPlansStoresMonth,
   getEmployeeMonthPlan,
   saveEmployeeMonthPlan,
   getStoreDailyPlans,

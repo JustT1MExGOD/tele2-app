@@ -9,6 +9,7 @@
  */
 import type {
   MonthSummaryTableResponse,
+  StoreMonthSummaryTableResponse,
   EmployeeMonthPlanResponse,
   StoreDailyPlansResponse,
   StoreMonthPlanResponse,
@@ -226,48 +227,84 @@ export async function loadNetMonth(): Promise<void> {
   if (label) label.textContent = planMonth;
   box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
   try {
-    const data: MonthSummaryTableResponse = await window.apiClient.getPlansEmployeesMonth(authHeaders(), planMonth, orgQueryParam());
-    const totals = data.totals || {};
+    // «Динамика выполнения» (переименовано из «...по сотрудникам» — теперь
+    // две равноправные разбивки одного и того же месяца, не одна) — по
+    // сотрудникам и по точкам получены параллельно, один общий рендер
+    // ниже (renderNetMonthSection) на обе.
+    const [empData, storeData]: [MonthSummaryTableResponse, StoreMonthSummaryTableResponse] = await Promise.all([
+      window.apiClient.getPlansEmployeesMonth(authHeaders(), planMonth, orgQueryParam()),
+      window.apiClient.getPlansStoresMonth(authHeaders(), planMonth, orgQueryParam())
+    ]);
+    const totals = empData.totals || {};
     const fact = totals.fact || {};
     const plan = totals.plan || {};
     const netRows = METRICS.map((m) => svBarRowHTML(m.label, Number(fact[m.id]) || 0, Number(plan[m.id]) || 0)).join('');
     let html =
       `<div class="sv-store" style="--sc:#2AABEE"><div class="sv-bars">${netRows}</div></div>` +
-      `<div class="empty" style="text-align:left;padding:8px 16px">Сотрудников: ${data.rows ? data.rows.length : 0} · ост. дней: ${data.remaining_days ?? '—'}</div>`;
+      `<div class="empty" style="text-align:left;padding:8px 16px">Сотрудников: ${empData.rows ? empData.rows.length : 0} · ост. дней: ${empData.remaining_days ?? '—'}</div>`;
 
-    // По каждому сотруднику сети — тот же барный стиль, что у сети целиком,
-    // вместо .mt-cell сетки на «Планы и факт за месяц». MAIN(6)/EXTRA(9) —
-    // тот же сплит, что и там, просто другой визуал.
-    const empRows = data.rows || [];
-    if (empRows.length) {
-      html += `<div class="sv-section">По сотрудникам</div>`;
-      const mainIds = METRICS.slice(0, 6);
-      const extraIds = METRICS.slice(6);
-      html += empRows
-        .map((r, idx) => {
-          const ef = r.fact || {};
-          const ep = r.plan || {};
-          const mainRows = mainIds.map((m) => svBarRowHTML(m.label, Number(ef[m.id]) || 0, Number(ep[m.id]) || 0)).join('');
-          const extraRows = extraIds.map((m) => svBarRowHTML(m.label, Number(ef[m.id]) || 0, Number(ep[m.id]) || 0)).join('');
-          return `<div class="sv-store" style="--sc:#2AABEE">
-              <div class="sv-store-head">
-                <div>
-                  <div class="sv-store-name">${esc(r.full_name || '')}</div>
-                  <div class="sv-store-code">${roleLabel(r.role || '')} · смен ${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</div>
-                </div>
-              </div>
-              <div class="sv-bars">${mainRows}</div>
-              ${svExtraToggleHTML('nme-' + idx, extraRows)}
-            </div>`;
-        })
-        .join('');
-    }
+    html += renderNetMonthSection(
+      'По сотрудникам',
+      'nme-',
+      empData.rows || [],
+      (r: any) => esc(r.full_name || ''),
+      (r: any) => `${roleLabel(r.role || '')} · смен ${r.shifts || 0} · ост. ${r.remaining_shifts || 0}`,
+      (r: any) => r.fact || {},
+      (r: any) => r.plan || {}
+    );
+    html += renderNetMonthSection(
+      'По точкам',
+      'nms-',
+      storeData.rows || [],
+      (r: any) => esc(r.name || ''),
+      (r: any) => esc(r.code || ''),
+      (r: any) => r.fact || {},
+      (r: any) => r.plan || {}
+    );
 
     box.innerHTML = html;
   } catch (e) {
     console.error(e);
     box.innerHTML = '<div class="empty">Не удалось загрузить</div>';
   }
+}
+
+// Общий рендер для «По сотрудникам»/«По точкам» (loadNetMonth) — тот же
+// барный стиль, что у сети целиком, MAIN(6)/EXTRA(9) сплит, что и на
+// «Планы и факт за месяц», просто другой визуал. idPrefix — чтобы
+// svExtraToggleHTML() (глобальный toggle по id) не путал сотрудников и
+// точки при одинаковом индексе.
+function renderNetMonthSection<T>(
+  title: string,
+  idPrefix: string,
+  rows: T[],
+  nameOf: (r: T) => string,
+  subOf: (r: T) => string,
+  factOf: (r: T) => Record<string, unknown>,
+  planOf: (r: T) => Record<string, unknown>
+): string {
+  if (!rows.length) return '';
+  const mainIds = METRICS.slice(0, 6);
+  const extraIds = METRICS.slice(6);
+  const cards = rows
+    .map((r, idx) => {
+      const ef = factOf(r);
+      const ep = planOf(r);
+      const mainRows = mainIds.map((m) => svBarRowHTML(m.label, Number(ef[m.id]) || 0, Number(ep[m.id]) || 0)).join('');
+      const extraRows = extraIds.map((m) => svBarRowHTML(m.label, Number(ef[m.id]) || 0, Number(ep[m.id]) || 0)).join('');
+      return `<div class="sv-store" style="--sc:#2AABEE">
+          <div class="sv-store-head">
+            <div>
+              <div class="sv-store-name">${nameOf(r)}</div>
+              <div class="sv-store-code">${subOf(r)}</div>
+            </div>
+          </div>
+          <div class="sv-bars">${mainRows}</div>
+          ${svExtraToggleHTML(idPrefix + idx, extraRows)}
+        </div>`;
+    })
+    .join('');
+  return `<div class="sv-section">${title}</div>${cards}`;
 }
 
 export function toggleMonthExtra(id: string, btn?: HTMLElement | null, openLabel?: string, closedLabel?: string): void {
