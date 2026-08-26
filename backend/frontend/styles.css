@@ -2090,52 +2090,135 @@
 }
 
 /* ============================================================
-   Десктоп-раскладка (20.38) — один брейкпоинт, ниже 860px не меняется
-   ни на пиксель (реальный Telegram Mini App всегда уже этого порога).
-   Не редизайн под "десктоп-плотность" контента (переосмысление каждого
-   экрана по отдельности — другая задача) — тот же приём, что Telegram
-   Web/WhatsApp Web/Twitter: то же самое мобильное приложение как
-   единая раскладка, но центрированная колонка-панель на широком экране,
-   а не растянутая на весь монитор. CSS не бандлится Vite и не разбит
-   по страницам (index.html:8) — один блок правит всё приложение разом.
+   Desktop Shell (20.39) — заменяет собой центрированную "плавающую
+   панель" 20.38 (не наслаивается поверх неё): с сайдбаром приложение
+   визуально стало настоящей рабочей областью (sidebar+topbar+content),
+   не "мобильным телефоном посреди веб-страницы" — тень/скруглённая
+   панель у .sheet/.app-header из 20.38 больше не нужны, сайдбар и топбар
+   сами по себе дают ощущение приложения.
+
+   3 уровня вместо одного из 20.38:
+     < 860px   — мобильный интерфейс, не меняется НИ НА ПИКСЕЛЬ
+     ≥ 860px   — Desktop Shell: сайдбар вместо bottom-nav, топбар, grid
+     ≥ 1200px  — шире рабочая колонка контента
+
+   4-й уровень (1600px+, "wide workspace") из обсуждения — не заведён:
+   раскладывать шире пока нечего, содержимое страниц остаётся
+   card-based до 20.40 (Page Adaptation). Вводить брейкпоинт под то,
+   чего ещё нет — умозрительная работа.
+
+   .desktop-shell/.shell-main на мобильном — обычный block-flow без
+   единого стиля (см. index.html) — вся текущая мобильная раскладка,
+   включая ".sheet наезжает на .app-header" (margin-top:-18px), сохранена
+   буквально. .nav-item/data-page у сайдбара — тот же контракт, что
+   #bottomNavMain/#bottomNavSupervisor уже используют — switchPage()
+   (nav.ts, document.querySelectorAll('.nav-item'), НЕ scoped ни на один
+   контейнер) синхронизирует активное состояние по всем трём nav сразу,
+   без единой правки JS.
    ============================================================ */
+:root {
+  --sidebar-width: 248px;
+}
+
+/* Базовое правило ВНЕ media query — .desktop-shell на мобильном обычный
+   block-flow (см. комментарий выше), без явного display:none .sidebar
+   отрендерился бы обычным блоком НАД .shell-main (первый child в
+   разметке), а не остался бы скрытым до 860px. */
+.sidebar {
+  display: none;
+}
+
 @media (min-width: 860px) {
   body {
     background: var(--surface-2);
+    padding-bottom: 0; /* bottom-nav скрыт на десктопе, зазор под него не нужен */
   }
-  .app-header,
-  .sheet,
   .bottom-nav {
-    max-width: 800px;
-    margin-left: auto;
-    margin-right: auto;
+    /* !important — enterSupervisorShell()/exitSupervisorShell() ставят
+       инлайн display:flex/none на #bottomNavMain/#bottomNavSupervisor
+       независимо от ширины экрана (role==='supervisor' или admin входит
+       в «кабинет супервайзера»); инлайн-стиль иначе перебивает это
+       правило, тот же приём, что уже применён к .swipe-track ниже. */
+    display: none !important;
   }
-  /* .bottom-nav — position:fixed, обычный margin:auto на нём не
-     работает (left:0;right:0 растягивает на весь viewport) — центрируем
-     через left:50% + translateX. */
-  .bottom-nav {
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
+
+  .desktop-shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    min-height: 100dvh;
   }
-  /* Верх .app-header/низ .sheet теперь читаются как одна "плавающая
-     панель" на нейтральном фоне body, а не как часть страницы во всю
-     ширину. Приём "sheet чуть наезжает на header" (margin-top:-18px,
-     см. styles.css:291) не трогаем — он и даёт цельность без лишней
-     геометрии, просто округляем ОБЕ стороны шва. */
+
+  /* position:sticky в обычном document flow — .shell-main НЕ отдельный
+     scroll-контейнер, страница скроллится целиком, сайдбар просто
+     остаётся на месте (не уезжает вместе с длинным контентом, см.
+     "Инструменты" на Главной). */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: var(--sp-4) var(--sp-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
+  .sidebar-brand {
+    font-size: var(--fs-lg, 18px);
+    font-weight: var(--fw-black);
+    letter-spacing: var(--tracking-tight);
+    padding: var(--sp-2) var(--sp-2) 0;
+  }
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .sidebar-title {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-bold);
+    color: var(--hint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: var(--sp-2) var(--sp-2) 4px;
+  }
+  /* .nav-item в bottom-nav — flex:1 (горизонтальная растяжка на всю
+     ширину бара, styles.css:700); в сайдбаре нужен обычный вертикальный
+     список — переопределяется только внутри .sidebar, сама .nav-item
+     вне сайдбара не трогается. */
+  .sidebar .nav-item {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: 10px var(--sp-2);
+    font-size: var(--fs-sm);
+    border-radius: var(--radius-sm);
+  }
+  .sidebar .nav-item .ico {
+    font-size: 18px;
+  }
+  .sidebar .nav-item.active {
+    background: var(--primary-soft);
+  }
+
+  .shell-main {
+    min-width: 0; /* иначе grid-колонка не сжимается под widescroll-таблицы внутри */
+  }
   .app-header {
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding-left: var(--sp-8);
+    padding-right: var(--sp-8);
+    border-bottom: 1px solid var(--nav-border);
   }
   .sheet {
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
+    max-width: 800px;
+    margin: 0 auto;
   }
-  /* .fab — остаётся position:fixed (должен быть виден при скролле), но
-     "right" считается от правого края ФРЕЙМА (800px), не физического
-     края окна: 50vw - половина фрейма = расстояние от края viewport до
-     края фрейма. */
   .fab {
-    right: calc(50vw - 400px + var(--sp-4));
+    right: 32px;
+    bottom: 32px;
   }
 
   /* "Мой план" — 8 кнопок действий, на десктопе хватает места под 4
@@ -2159,18 +2242,51 @@
 
   /* Модалка — bottom-sheet ("выезд снизу", .overlay align-items:flex-end
      выше в файле) чисто мобильная условность; на десктопе — обычный
-     центрированный диалог с фейдом вместо сдвига. */
+     центрированный диалог с фейдом вместо сдвига. Ширина — через
+     переменную (--modal-max-width, дефолт 520px как раньше), size-tier
+     классы просто переопределяют её, не дублируют весь блок. */
   .overlay {
     align-items: center;
   }
   .sheet-modal {
+    width: min(calc(100vw - 32px), var(--modal-max-width, 520px));
+    max-width: none;
     border-radius: 24px;
     max-height: 85vh;
     animation: modal-in 0.22s ease;
   }
+  .modal-sm { --modal-max-width: 420px; }
+  .modal-md { --modal-max-width: 620px; }
+  .modal-lg { --modal-max-width: 900px; }
   @keyframes modal-in {
     from { opacity: 0; transform: scale(0.96); }
     to { opacity: 1; transform: scale(1); }
+  }
+
+  /* "Мой день"/"Сеть сегодня" — swipe-карусель на мобильном (нужна,
+     когда виден только один экран за раз), на десктопе места хватает на
+     оба сразу. track.style.transform/height пишутся инлайн из JS
+     (initSwipePanels(), nav.ts) — обычный каскад это не перебьёт, отсюда
+     !important на все три свойства, которыми управляет JS (не только
+     transform — на всякий случай, вдруг текущая реализация где-то ещё
+     полагается на transition/width для 2-панельной механики). Сам
+     initSwipePanels() продолжает слушать drag/touch — см. правку в
+     nav.ts (ранний return при window.innerWidth >= 860), CSS одно не
+     гарантирует, что жест не проделает лишнюю работу под сеткой. */
+  .swipe-track {
+    transform: none !important;
+    transition: none !important;
+    width: 100% !important;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-3);
+  }
+  .swipe-panel {
+    flex: none;
+    min-width: 0;
+  }
+  .swipe-dots {
+    display: none;
   }
 
   /* Логин-экран (20.37) — .gate-shell уже max-width:420px;margin:0 auto,
@@ -2189,6 +2305,15 @@
   }
 }
 
+@media (min-width: 1200px) {
+  :root {
+    --sidebar-width: 264px;
+  }
+  .sheet {
+    max-width: 1120px;
+  }
+}
+
 /* Hover — отдельным блоком от layout-брейкпоинта: (hover:hover) исключает
    touch-ноутбуки/планшеты в альбомной ориентации на той же ширине экрана,
    которым "залипающий" hover только мешает. До сих пор во всём файле не
@@ -2199,6 +2324,12 @@
   .row:hover,
   .nav-item:hover {
     background: var(--surface-2);
+  }
+  .sidebar .nav-item:hover {
+    background: var(--surface-2);
+  }
+  .sidebar .nav-item.active:hover {
+    background: var(--primary-soft);
   }
   .lk-action {
     cursor: pointer;

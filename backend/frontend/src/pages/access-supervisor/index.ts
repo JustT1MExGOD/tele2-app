@@ -33,6 +33,16 @@ function hideSplash(): void {
   if (s) (s as HTMLElement).style.display = 'none';
 }
 
+// Desktop Shell (20.39) — та же логика, что btnAccessRequests/btnSupervisor/
+// btnMgrTutorial ниже (el.style.display = canX() ? '' : 'none'), но на
+// секции сайдбара целиком (заголовок+пункты одним блоком), не на
+// отдельный пункт — иначе на десктопе видна пустая заголовок-строка без
+// единого пункта под ней, если роль не проходит.
+function gateSidebarSection(id: string, allowed: boolean): void {
+  const el = document.getElementById(id);
+  if (el) (el as HTMLElement).style.display = allowed ? '' : 'none';
+}
+
 export function showAccessGate(st: { status?: string; user?: any }): void {
   hideSplash();
   const gate = document.getElementById('accessGate') as HTMLElement | null;
@@ -491,6 +501,14 @@ export async function bootApp(): Promise<void> {
     if (btnSv) btnSv.style.display = canAdmin() ? '' : 'none';
     const btnMgrTut = document.getElementById('btnMgrTutorial') as HTMLElement | null;
     if (btnMgrTut) btnMgrTut.style.display = canManage() ? '' : 'none';
+
+    // Desktop Shell (20.39) — секции сайдбара гейтятся целиком (не по
+    // отдельному пункту внутри), тем же приёмом, что кнопки выше — иначе
+    // остаётся пустой заголовок секции без единого пункта под ним.
+    gateSidebarSection('sidebarSectionAnalytics', canViewAnalytics());
+    gateSidebarSection('sidebarSectionManage', canManage());
+    gateSidebarSection('sidebarSectionSupervisor', isSupervisor() || canAdmin());
+    gateSidebarSection('sidebarSectionAdmin', canAdmin());
 
     enterHomeOrSupervisorShell();
     maybeOfferTutorial();

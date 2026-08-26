@@ -36,6 +36,7 @@ function setupGlobals(overrides: { tgId?: number | null; role?: string } = {}) {
   vi.stubGlobal('canManage', () => overrides.role === 'manager' || overrides.role === 'admin');
   vi.stubGlobal('canApprove', () => overrides.role === 'manager' || overrides.role === 'admin' || overrides.role === 'supervisor');
   vi.stubGlobal('isSupervisor', () => overrides.role === 'supervisor');
+  vi.stubGlobal('canViewAnalytics', () => overrides.role === 'manager' || overrides.role === 'admin' || overrides.role === 'supervisor');
   vi.stubGlobal('assignableRoles', (r: string) => (r === 'admin' ? ['employee', 'manager'] : []));
   vi.stubGlobal('roleLabel', (r: string) => r);
   vi.stubGlobal('todayMoscow', () => '2026-08-25');

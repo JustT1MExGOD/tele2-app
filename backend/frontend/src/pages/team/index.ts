@@ -355,6 +355,7 @@ export function openAddStore(): void {
         <button class="btn-main" onclick="saveNewStore()">Создать</button>
       `;
   }
+  document.querySelector('.sheet-modal')?.classList.add('modal-md');
   document.getElementById('overlay')?.classList.add('show');
 }
 

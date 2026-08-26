@@ -318,6 +318,14 @@ export function initSwipePanels(containerEl: (HTMLElement & { dataset: DOMString
   track.addEventListener(
     'touchstart',
     (e: TouchEvent) => {
+      // Desktop Shell (20.39) — на ≥860px "Мой день"/"Сеть сегодня"
+      // сеткой рядом (styles.css, .swipe-track), не свайпом; сам
+      // обработчик по-прежнему подписан (десктоп мог появиться уже после
+      // инициализации, если окно ресайзится), но не должен запускать
+      // расчёты под уже статичной сеткой на touch-экране такой ширины
+      // (тачскрин-ноутбук/монитор) — CSS !important одно этого не даёт,
+      // он только не даёт transform проявиться визуально.
+      if (window.innerWidth >= 860) return;
       if (activeSpring) {
         activeSpring.stop();
         activeSpring = null;

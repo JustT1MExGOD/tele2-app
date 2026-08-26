@@ -87,29 +87,103 @@
     </div>
   </div>
 
-  <!-- Header -->
-  <div class="app-header">
-    <div class="app-header-top">
-      <div class="avatar" id="userAvatar">T2</div>
-      <div class="header-actions">
-        <button class="icon-btn" onclick="toggleTheme()" title="Тема">◐</button>
-        <button class="icon-btn" onclick="refreshAll()" title="Обновить"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /> </svg></button>
-      </div>
-    </div>
-    <div class="header-pills">
-      <div class="store-pill">
-        <div class="label">Сегодня</div>
-        <div class="value" id="headerDate">—</div>
-      </div>
-      <div class="store-pill" id="headerStorePill" style="display:none">
-        <div class="label">Точка</div>
-        <div class="value" id="headerStoreCode">—</div>
-        <div class="store-pill-addr" id="headerStoreAddr"></div>
-      </div>
-    </div>
-  </div>
+  <!-- Desktop Shell (20.39) — сайдбар виден только ≥860px (styles.css);
+       на мобильном .desktop-shell/.shell-main обычный block-flow без
+       единого нового стиля, вся текущая раскладка не меняется.
+       .nav-item/data-page — тот же контракт, что #bottomNavMain/
+       #bottomNavSupervisor, switchPage() синхронизирует активное
+       состояние по ВСЕМ .nav-item в документе без единой правки JS
+       (document.querySelectorAll('.nav-item'), nav.ts). Секции целиком
+       (не отдельные пункты) гейтятся по ролям в bootApp()
+       (access-supervisor/index.ts) — id на каждой секции ниже. -->
+  <div class="desktop-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">🍉 T2 Sales</div>
 
-  <div class="sheet">
+      <div class="sidebar-section" id="sidebarSectionMain">
+        <div class="sidebar-title">Обзор</div>
+        <button class="nav-item" data-page="home" onclick="switchPage('home')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> </svg></span>Главная
+        </button>
+        <button class="nav-item" data-page="my" onclick="switchPage('my')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /> <circle cx="12" cy="7" r="4" /> </svg></span>Мой план
+        </button>
+        <button class="nav-item" data-page="tasks" onclick="switchPage('tasks')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></span>Задачи
+        </button>
+        <button class="nav-item" data-page="schedule" onclick="switchPage('schedule')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg></span>График
+        </button>
+      </div>
+
+      <div class="sidebar-section" id="sidebarSectionAnalytics" style="display:none">
+        <div class="sidebar-title">Аналитика</div>
+        <button class="nav-item" data-page="command-center" onclick="switchPage('command-center')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" /> </svg></span>Command Center
+        </button>
+      </div>
+
+      <div class="sidebar-section" id="sidebarSectionManage" style="display:none">
+        <div class="sidebar-title">Управление</div>
+        <button class="nav-item" data-page="team" onclick="switchPage('team')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /> </svg></span>Команда
+        </button>
+        <button class="nav-item" data-page="cash" onclick="switchPage('cash')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /> <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /> </svg></span>Касса
+        </button>
+      </div>
+
+      <div class="sidebar-section" id="sidebarSectionSupervisor" style="display:none">
+        <div class="sidebar-title">Супервайзер</div>
+        <button class="nav-item" data-page="sv-overview" onclick="switchPage('sv-overview')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9" /> <path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5" /> <circle cx="12" cy="9" r="2" /> <path d="M16.2 4.8c2 2 2.26 5.11.8 7.47" /> <path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1" /> <path d="M9.5 18h5" /> <path d="m8 22 4-11 4 11" /> </svg></span>Обзор
+        </button>
+        <button class="nav-item" data-page="sv-stores" onclick="switchPage('sv-stores')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5" /> <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244" /> <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05" /> </svg></span>Точки
+        </button>
+        <button class="nav-item" data-page="sv-people" onclick="switchPage('sv-people')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" /> <path d="M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" /> <path d="M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" /> <path d="M4 22h16" /> <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" /> <path d="M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" /> </svg></span>Люди
+        </button>
+        <button class="nav-item" data-page="sv-trend" onclick="switchPage('sv-trend')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 7h6v6" /> <path d="m22 7-8.5 8.5-5-5L2 17" /> </svg></span>Тренд
+        </button>
+      </div>
+
+      <div class="sidebar-section" id="sidebarSectionAdmin" style="display:none">
+        <div class="sidebar-title">Администрирование</div>
+        <button class="nav-item" data-page="orgs" onclick="switchPage('orgs')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" /> </svg></span>Сети
+        </button>
+        <button class="nav-item" data-page="audit" onclick="switchPage('audit')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /> </svg></span>История действий
+        </button>
+      </div>
+    </aside>
+
+    <div class="shell-main">
+      <!-- Header -->
+      <div class="app-header">
+        <div class="app-header-top">
+          <div class="avatar" id="userAvatar">T2</div>
+          <div class="header-actions">
+            <button class="icon-btn" onclick="toggleTheme()" title="Тема">◐</button>
+            <button class="icon-btn" onclick="refreshAll()" title="Обновить"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /> </svg></button>
+          </div>
+        </div>
+        <div class="header-pills">
+          <div class="store-pill">
+            <div class="label">Сегодня</div>
+            <div class="value" id="headerDate">—</div>
+          </div>
+          <div class="store-pill" id="headerStorePill" style="display:none">
+            <div class="label">Точка</div>
+            <div class="value" id="headerStoreCode">—</div>
+            <div class="store-pill-addr" id="headerStoreAddr"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet">
     <!-- ===== MAIN / CONTROL CENTER ===== -->
     <div id="page-home" class="page active">
       <div class="section" id="homeGreeting" style="padding-bottom:4px">
@@ -733,6 +807,8 @@
 
     <div id="page-reports" class="page">
       <div id="reportsPageBody"><div class="skeleton"></div></div>
+    </div>
+  </div>
     </div>
   </div>
 

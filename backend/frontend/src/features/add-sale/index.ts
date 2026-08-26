@@ -193,6 +193,7 @@ export function closeModal(): void {
   if (sheet) {
     sheet.style.transform = '';
     sheet.style.transition = '';
+    sheet.classList.remove('modal-sm', 'modal-md', 'modal-lg');
   }
 }
 
