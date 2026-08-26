@@ -279,6 +279,21 @@
               <div class="section-title">Сеть за минуту</div>
               <div id="commandCenterBodyDesktop"><div class="skeleton"></div></div>
             </div>
+            <!-- Статичные 3 кнопки, без данных — продублированы напрямую
+                 (не JS-клон, как #homeDesktopTools: там 16 строк SVG,
+                 здесь 3 кнопки, дублировать вручную дешевле, чем городить
+                 клонирование). Мобильная секция #homeCalcSection скрыта
+                 на ≥1200px (styles.css) — один видимый экземпляр. -->
+            <div class="section">
+              <div class="section-title">Калькуляторы</div>
+              <div style="display:flex;gap:8px;padding:0 16px 8px">
+                <button class="mchip" style="flex:1" onclick="openComboCalc()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Комбо</button>
+                <button class="mchip" style="flex:1" onclick="openSchoolCalc()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /> <path d="M8 10h8" /> <path d="M8 18h8" /> <path d="M8 22v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" /> <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /> </svg> Школа</button>
+              </div>
+              <div style="padding:0 16px 16px">
+                <button class="mchip" style="width:100%" onclick="openPromos()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M13 5v2" /> <path d="M13 17v2" /> <path d="M13 11v2" /> </svg> Промокоды РТК</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -292,7 +307,7 @@
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="homeCalcSection">
         <div class="section-title">Калькуляторы</div>
         <div style="display:flex;gap:8px;padding:0 16px 8px">
           <button class="mchip" style="flex:1" onclick="openComboCalc()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Комбо</button>
@@ -330,7 +345,7 @@
         </button>
       </div>
 
-      <div class="section">
+      <div class="section" id="homeTopSection">
         <div class="section-title">Топ за 7 дней</div>
         <div id="homeTop"><div class="skeleton"></div></div>
       </div>
