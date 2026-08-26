@@ -297,13 +297,13 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     await loadTeam();
 
     sortTeamTable('sim');
-    let rows = [...document.querySelectorAll('#teamTableBody tr')].map((tr) => tr.textContent || '');
+    let rows = Array.from(document.querySelectorAll('#teamTableBody tr')).map((tr) => tr.textContent || '');
     expect(rows[0]).toContain('Аня');
     expect(rows[1]).toContain('Боря');
     expect((document.querySelector('#teamTable th[data-sort-key="sim"]') as HTMLElement).getAttribute('aria-sort')).toBe('ascending');
 
     sortTeamTable('sim');
-    rows = [...document.querySelectorAll('#teamTableBody tr')].map((tr) => tr.textContent || '');
+    rows = Array.from(document.querySelectorAll('#teamTableBody tr')).map((tr) => tr.textContent || '');
     expect(rows[0]).toContain('Боря');
     expect(rows[1]).toContain('Аня');
     expect((document.querySelector('#teamTable th[data-sort-key="sim"]') as HTMLElement).getAttribute('aria-sort')).toBe('descending');
@@ -317,7 +317,7 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     ]);
     const { loadTeam } = await import('../src/pages/team/index.js');
     await loadTeam();
-    const rows = [...document.querySelectorAll('#teamTableBody tr')].map((tr) => tr.textContent || '');
+    const rows = Array.from(document.querySelectorAll('#teamTableBody tr')).map((tr) => tr.textContent || '');
     expect(rows[0]).toContain('Борис');
     expect(rows[1]).toContain('Яна');
   });
