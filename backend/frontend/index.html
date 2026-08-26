@@ -294,6 +294,36 @@
                 <button class="mchip" style="width:100%" onclick="openPromos()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M13 5v2" /> <path d="M13 17v2" /> <path d="M13 11v2" /> </svg> Промокоды РТК</button>
               </div>
             </div>
+            <!-- Тот же приём, что "Калькуляторы" выше: статично
+                 продублировано (не JS-клон), мобильная #homeQuickSection
+                 скрыта на ≥1200px. Поднята под "Калькуляторы" по прямому
+                 запросу — единственное место, где живёт на десктопе. -->
+            <div class="section">
+              <div class="section-title">Быстрые действия</div>
+              <button class="row" onclick="switchPage('cash')">
+                <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /> <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /> </svg></div>
+                <div class="row-body">
+                  <div class="row-title">Касса</div>
+                  <div class="row-sub">Факт / 1С / плюс-минус по точкам</div>
+                </div>
+                <div class="row-chevron">›</div>
+              </button>
+              <button class="row" onclick="switchPage('monthplan')">
+                <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" /> </svg></div>
+                <div class="row-body"><div class="row-title">Планы и факт за месяц</div><div class="row-sub">видно всей команде</div></div>
+                <div class="row-chevron">›</div>
+              </button>
+              <button class="row" onclick="switchPage('netmonth')">
+                <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 7h6v6" /> <path d="m22 7-8.5 8.5-5-5L2 17" /> </svg></div>
+                <div class="row-body"><div class="row-title">Динамика выполнения по сотрудникам</div><div class="row-sub">все метрики · вся команда</div></div>
+                <div class="row-chevron">›</div>
+              </button>
+              <button class="row" onclick="switchPage('support')">
+                <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /> </svg></div>
+                <div class="row-body"><div class="row-title">Поддержка</div></div>
+                <div class="row-chevron">›</div>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -318,7 +348,7 @@
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="homeQuickSection">
         <div class="section-title">Быстрые действия</div>
         <button class="row" onclick="switchPage('cash')">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /> <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /> </svg></div>
