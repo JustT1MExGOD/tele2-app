@@ -20,6 +20,11 @@ function setupGlobals(overrides: { tgId?: number | null; role?: string } = {}) {
     <button id="btnAccessRequests" style="display:none"></button>
     <button id="btnSupervisor" style="display:none"></button>
     <button id="btnMgrTutorial" style="display:none"></button>
+    <div class="sidebar-section" id="sidebarSectionMain"></div>
+    <div class="sidebar-section" id="sidebarSectionAnalytics" style="display:none"></div>
+    <div class="sidebar-section" id="sidebarSectionManage" style="display:none"></div>
+    <div class="sidebar-section" id="sidebarSectionSupervisor" style="display:none"></div>
+    <div class="sidebar-section" id="sidebarSectionAdmin" style="display:none"></div>
     <div id="accessList"></div>
     <div id="supportSlaBox"></div>
     <div id="bottomNavMain"></div><div id="bottomNavSupervisor"></div><div id="svExitBtn"></div>
@@ -100,6 +105,31 @@ describe('Access gate/Supervisor (миграция frontend/js/08-access-supervi
     expect((document.getElementById('accessGate') as HTMLElement).style.display).toBe('none');
     expect((globalThis as any).applyBranding).toHaveBeenCalled();
     expect((globalThis as any).loadHome).toHaveBeenCalled();
+  });
+
+  it('bootApp (вне Telegram, admin) — гейтит секции сайдбара по роли, не только "Обзор" (20.40.2 регресс)', async () => {
+    // Реальный баг с прод: gateSidebarSection()-вызовы жили только в
+    // Telegram-ветке bootApp() — не-Telegram bound-ветка (desktop/phone-
+    // login) делала early return через enterHomeOrSupervisorShell() до
+    // этого кода, секции сайдбара навсегда оставались display:none из
+    // HTML независимо от роли. admin на десктопе видел только "Обзор".
+    const { getMe } = setupGlobals({ tgId: null, role: 'admin' });
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Админ', role: 'admin' });
+    await import('../src/pages/access-supervisor/index.js');
+    await new Promise((r) => setTimeout(r, 0));
+    for (const id of ['sidebarSectionAnalytics', 'sidebarSectionManage', 'sidebarSectionSupervisor', 'sidebarSectionAdmin']) {
+      expect((document.getElementById(id) as HTMLElement).style.display).toBe('');
+    }
+  });
+
+  it('bootApp (вне Telegram, employee) — секции сайдбара сверх "Обзор" остаются скрыты', async () => {
+    const { getMe } = setupGlobals({ tgId: null, role: 'employee' });
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Сотрудник', role: 'employee' });
+    await import('../src/pages/access-supervisor/index.js');
+    await new Promise((r) => setTimeout(r, 0));
+    for (const id of ['sidebarSectionAnalytics', 'sidebarSectionManage', 'sidebarSectionSupervisor', 'sidebarSectionAdmin']) {
+      expect((document.getElementById(id) as HTMLElement).style.display).toBe('none');
+    }
   });
 
   it('bootApp (в Telegram, active) — открывает главную, показывает кнопки по правам admin', async () => {

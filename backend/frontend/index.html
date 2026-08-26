@@ -249,26 +249,36 @@
           <div class="stat-chip"><div class="n" id="hAccDesktop">0</div><div class="l">Аксы</div></div>
         </div>
 
+        <!-- Две НЕЗАВИСИМЫЕ колонки (workspace-col), не 2 отдельных
+             workspace-grid-строки — 20.40.2, живой prod-скриншот
+             показал: при парном row-выравнивании align-items:start
+             (20.40.1) убирал белую растянутую подложку, но сама
+             grid-строка всё равно оставалась высотой САМОЙ высокой
+             панели — под короткой карточкой оставалась пустая область
+             фона. С реальными данными "Мой день" (до 10 метрик) намного
+             выше "Сеть сегодня" — колонки складывают свои панели
+             независимо, без общей высоты строки вообще. -->
         <div class="workspace-grid">
-          <div class="section">
-            <div class="section-title">Мой день</div>
-            <div id="myDayStoreHeadDesktop"></div>
-            <div id="myDayBodyDesktop"><div class="skeleton"></div></div>
+          <div class="workspace-col">
+            <div class="section">
+              <div class="section-title">Мой день</div>
+              <div id="myDayStoreHeadDesktop"></div>
+              <div id="myDayBodyDesktop"><div class="skeleton"></div></div>
+            </div>
+            <div class="section">
+              <div class="section-title">Топ за 7 дней</div>
+              <div id="homeTopDesktop"><div class="skeleton"></div></div>
+            </div>
           </div>
-          <div class="section">
-            <div class="section-title">Сеть сегодня</div>
-            <div id="networkPulseDesktop"></div>
-          </div>
-        </div>
-
-        <div class="workspace-grid">
-          <div class="section">
-            <div class="section-title">Топ за 7 дней</div>
-            <div id="homeTopDesktop"><div class="skeleton"></div></div>
-          </div>
-          <div class="section" id="homeDesktopInsights" style="display:none">
-            <div class="section-title">Сеть за минуту</div>
-            <div id="commandCenterBodyDesktop"><div class="skeleton"></div></div>
+          <div class="workspace-col">
+            <div class="section">
+              <div class="section-title">Сеть сегодня</div>
+              <div id="networkPulseDesktop"></div>
+            </div>
+            <div class="section" id="homeDesktopInsights" style="display:none">
+              <div class="section-title">Сеть за минуту</div>
+              <div id="commandCenterBodyDesktop"><div class="skeleton"></div></div>
+            </div>
           </div>
         </div>
 

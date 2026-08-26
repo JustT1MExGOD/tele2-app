@@ -43,6 +43,28 @@ function gateSidebarSection(id: string, allowed: boolean): void {
   if (el) (el as HTMLElement).style.display = allowed ? '' : 'none';
 }
 
+// 20.40.2 — вынесено в общую функцию: раньше жило инлайн только в
+// Telegram-ветке bootApp() (ниже), не-Telegram ветка (20.37, не-Telegram
+// вход) делала early return через enterHomeOrSupervisorShell() до этого
+// кода — те же секции сайдбара/кнопки навсегда оставались на дефолтном
+// display:none из HTML для ЛЮБОГО desktop/phone-login пользователя,
+// независимо от реальной роли (админ на десктопе видел только "Обзор").
+// Тот же класс бага, что уже чинили в loadMyDay() (tgUser()-only гейт,
+// протухший с 20.35+ multi-provider auth) — просто на другом экране.
+function applyRoleGatedNav(): void {
+  const btnAcc = document.getElementById('btnAccessRequests') as HTMLElement | null;
+  const btnSv = document.getElementById('btnSupervisor') as HTMLElement | null;
+  if (btnAcc) btnAcc.style.display = canApprove() ? '' : 'none';
+  if (btnSv) btnSv.style.display = canAdmin() ? '' : 'none';
+  const btnMgrTut = document.getElementById('btnMgrTutorial') as HTMLElement | null;
+  if (btnMgrTut) btnMgrTut.style.display = canManage() ? '' : 'none';
+
+  gateSidebarSection('sidebarSectionAnalytics', canViewAnalytics());
+  gateSidebarSection('sidebarSectionManage', canManage());
+  gateSidebarSection('sidebarSectionSupervisor', isSupervisor() || canAdmin());
+  gateSidebarSection('sidebarSectionAdmin', canAdmin());
+}
+
 export function showAccessGate(st: { status?: string; user?: any }): void {
   hideSplash();
   const gate = document.getElementById('accessGate') as HTMLElement | null;
@@ -448,6 +470,7 @@ export async function bootApp(): Promise<void> {
     if (me?.bound) {
       hideAccessGate();
       if (typeof applyBranding === 'function') applyBranding();
+      applyRoleGatedNav();
       enterHomeOrSupervisorShell();
       return;
     }
@@ -467,6 +490,7 @@ export async function bootApp(): Promise<void> {
         me = await window.apiClient.getMe(authHeaders());
       } catch (_) {}
       hideAccessGate();
+      applyRoleGatedNav();
       enterHomeOrSupervisorShell();
       maybeOfferTutorial();
       return;
@@ -490,25 +514,14 @@ export async function bootApp(): Promise<void> {
     } catch (_) {}
 
     hideAccessGate();
-
-    const btnAcc = document.getElementById('btnAccessRequests') as HTMLElement | null;
-    const btnSv = document.getElementById('btnSupervisor') as HTMLElement | null;
-    if (btnAcc) btnAcc.style.display = canApprove() ? '' : 'none';
-    // «Кабинет супервайзера» — теперь только явная кнопка для admin
-    // (canAdmin(), не canViewAnalytics()); manager/senior её больше не видят
-    // вообще — кабинет изолирован от них, у admin это осознанный
-    // «заглянуть», а не дефолтный вид.
-    if (btnSv) btnSv.style.display = canAdmin() ? '' : 'none';
-    const btnMgrTut = document.getElementById('btnMgrTutorial') as HTMLElement | null;
-    if (btnMgrTut) btnMgrTut.style.display = canManage() ? '' : 'none';
-
-    // Desktop Shell (20.39) — секции сайдбара гейтятся целиком (не по
-    // отдельному пункту внутри), тем же приёмом, что кнопки выше — иначе
-    // остаётся пустой заголовок секции без единого пункта под ним.
-    gateSidebarSection('sidebarSectionAnalytics', canViewAnalytics());
-    gateSidebarSection('sidebarSectionManage', canManage());
-    gateSidebarSection('sidebarSectionSupervisor', isSupervisor() || canAdmin());
-    gateSidebarSection('sidebarSectionAdmin', canAdmin());
+    // «Кабинет супервайзера» (btnSupervisor) — теперь только явная кнопка
+    // для admin (canAdmin(), не canViewAnalytics()); manager/senior её
+    // больше не видят вообще — кабинет изолирован от них, у admin это
+    // осознанный «заглянуть», а не дефолтный вид. Гейтинг самой кнопки и
+    // секций сайдбара — общая функция applyRoleGatedNav() (см. выше);
+    // 20.40.2 — раньше жила только здесь инлайн, не-Telegram/404/catch
+    // ветки ниже её не вызывали вообще.
+    applyRoleGatedNav();
 
     enterHomeOrSupervisorShell();
     maybeOfferTutorial();
@@ -519,6 +532,7 @@ export async function bootApp(): Promise<void> {
       me = await window.apiClient.getMe(authHeaders());
     } catch (_) {}
     hideAccessGate();
+    applyRoleGatedNav();
     enterHomeOrSupervisorShell();
   }
 }
