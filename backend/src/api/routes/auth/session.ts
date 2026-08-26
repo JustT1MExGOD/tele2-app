@@ -1,0 +1,220 @@
+/**
+ * Не-Telegram вход (телефон + пароль, 20.35, план) — второй identity
+ * provider поверх шва 20.9.0 (docs/ADR/005-authentication-boundary.md).
+ * Telegram-путь (org/access.ts, providers/telegram.ts) не тронут — этот
+ * файл только добавляет параллельный вход, не заменяет существующий.
+ *
+ * Регистрация — открытая, самостоятельная (телефон+пароль+имя), тот же
+ * flow "заявка → админ одобряет", что уже есть для Telegram: пишет в тот
+ * же access_requests (provider='phone'), approve — в org/access.ts.
+ * Сброс пароля — через админа (POST /auth/admin/reset-password/:id), нет
+ * SMS-провайдера для self-service — решение владельца продукта.
+ */
+import { FastifyInstance, FastifyReply } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
+import {
+  requireManager,
+  requireEmployeeInOrg,
+  resolveViewOrgId
+} from '../../../auth/guards.js';
+import { hashPassword, verifyPassword } from '../../../auth/password.js';
+import { COOKIE_NAME } from '../../../auth/providers/phone.js';
+import { bot } from '../../../integrations/telegram/bot.js';
+import * as employeesRepo from '../../../data/repositories/employees.js';
+import * as accessRequestsRepo from '../../../data/repositories/access-requests.js';
+import * as sessionsRepo from '../../../data/repositories/sessions.js';
+import type {
+  RegisterPhoneRequest,
+  RegisterPhoneResponse,
+  LoginRequest,
+  LoginResponse,
+  LogoutResponse,
+  AdminResetPasswordResponse,
+  ConsumeResetRequest,
+  ConsumeResetResponse
+} from '../../../shared/api-types.js';
+
+const PHONE_RE = /^\+?[1-9]\d{6,14}$/;
+
+const RegisterBody = Type.Object({
+  phone: Type.String({ minLength: 7, maxLength: 16 }),
+  password: Type.String({ minLength: 8, maxLength: 200 }),
+  full_name: Type.String({ minLength: 1 }),
+  claimed_employee_id: Type.Optional(Type.Union([Type.Null(), Type.Number()])),
+  org_id: Type.Optional(Type.String()),
+  message: Type.Optional(Type.String())
+});
+type RegisterBody = Static<typeof RegisterBody>;
+
+const LoginBody = Type.Object({
+  phone: Type.String({ minLength: 7, maxLength: 16 }),
+  password: Type.String({ minLength: 1, maxLength: 200 })
+});
+type LoginBody = Static<typeof LoginBody>;
+
+const ResetBody = Type.Object({
+  password: Type.String({ minLength: 8, maxLength: 200 })
+});
+type ResetBody = Static<typeof ResetBody>;
+
+function esc(s: any) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+const isProd = () => process.env.RAILWAY_ENVIRONMENT === 'production';
+
+function setSessionCookie(reply: FastifyReply, token: string) {
+  reply.setCookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: isProd(),
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60
+  });
+}
+
+export async function registerSessionRoutes(app: FastifyInstance) {
+  // Регистрация — публично, жёсткий rate-limit (единственная открытая
+  // точка входа для не-Telegram провайдера, ту же дисциплину, что
+  // /access/request, но строже — там уже есть подтверждённая Telegram identity).
+  app.post(
+    '/auth/register',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: RegisterBody } },
+    async (request, reply): Promise<RegisterPhoneResponse | FastifyReply | undefined> => {
+      const b = request.body as RegisterBody;
+      const phone = String(b.phone || '').trim();
+      const full_name = String(b.full_name || '').trim();
+      if (!PHONE_RE.test(phone)) {
+        return reply.code(400).send({ error: 'invalid_phone', message: 'Некорректный номер телефона' });
+      }
+      if (!full_name || full_name.length < 3) {
+        return reply.code(400).send({ error: 'full_name required' });
+      }
+
+      const existingEmployee = await employeesRepo.findByPhone(phone);
+      if (existingEmployee) {
+        return reply.code(409).send({ error: 'phone_taken', message: 'Этот номер уже зарегистрирован' });
+      }
+
+      const pending = await accessRequestsRepo.findPendingByPhone(phone);
+      if (pending) {
+        return { ok: true, status: 'pending', id: pending.id };
+      }
+
+      const claimedId = b.claimed_employee_id ? Number(b.claimed_employee_id) : null;
+      let effectiveOrgId = String(b.org_id || 'default');
+      if (claimedId) {
+        const claimedOrgId = await employeesRepo.getOrgId(claimedId);
+        effectiveOrgId = claimedOrgId || 'default';
+      }
+      const storedOrgId = claimedId ? null : (b.org_id ? String(b.org_id) : null);
+
+      const passwordHash = await hashPassword(b.password);
+      const created = await accessRequestsRepo.createPhone({
+        phone,
+        passwordHash,
+        fullName: full_name,
+        claimedEmployeeId: claimedId,
+        message: b.message || '',
+        orgId: storedOrgId
+      });
+
+      try {
+        const managers = await employeesRepo.findManagersToNotify(effectiveOrgId);
+        const text =
+          `🔐 <b>Заявка на доступ (веб)</b>\n` +
+          `👤 ${esc(full_name)}\n` +
+          `Телефон: <code>${esc(phone)}</code>\n` +
+          (b.message ? `💬 ${esc(b.message)}\n` : '') +
+          `\nПодтверди в Mini App → Команда → Заявки`;
+        for (const m of managers) {
+          if (bot && m.telegram_id) {
+            await bot.api.sendMessage(m.telegram_id, text, { parse_mode: 'HTML' }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.error('notify managers (phone)', e);
+      }
+
+      // password_hash никогда не должен уйти клиенту, даже хешированный —
+      // createPhone() возвращает RETURNING * (нужен server-side, для уведомления
+      // выше не нужен), здесь явно вырезаем перед ответом.
+      const { password_hash: _hash, ...safeRequest } = created;
+      return { ok: true, status: 'pending', request: safeRequest };
+    }
+  );
+
+  app.post(
+    '/auth/login',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { body: LoginBody } },
+    async (request, reply): Promise<LoginResponse | FastifyReply> => {
+      const b = request.body as LoginBody;
+      const phone = String(b.phone || '').trim();
+
+      const e = await employeesRepo.findByPhone(phone);
+      // Одинаковый 401 для "нет такого телефона" и "неверный пароль" —
+      // иначе ответ сам подтверждает/опровергает, что номер зарегистрирован.
+      if (!e || !e.password_hash || !(await verifyPassword(b.password, e.password_hash))) {
+        return reply.code(401).send({ error: 'invalid_credentials', message: 'Неверный телефон или пароль' });
+      }
+      if (e.is_active === false || e.access_status !== 'active') {
+        return reply.code(403).send({ error: 'not_active', message: 'Доступ ещё не подтверждён' });
+      }
+
+      const token = await sessionsRepo.createSession(e.id);
+      setSessionCookie(reply, token);
+      return { ok: true };
+    }
+  );
+
+  app.post('/auth/logout', async (request, reply): Promise<LogoutResponse> => {
+    const token = request.cookies?.[COOKIE_NAME];
+    if (token) await sessionsRepo.deleteSession(token);
+    reply.clearCookie(COOKIE_NAME, { path: '/' });
+    return { ok: true };
+  });
+
+  // Сброс — сам токен в URL уже секрет (32 случайных байта), доступ без
+  // авторизации намеренный: пользователь ещё не залогинен, это и есть цель.
+  app.post(
+    '/auth/reset/:token',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { body: ResetBody } },
+    async (request, reply): Promise<ConsumeResetResponse | FastifyReply> => {
+      const { token } = request.params as { token: string };
+      const b = request.body as ResetBody;
+
+      const reset = await sessionsRepo.resolvePasswordReset(token);
+      if (!reset) {
+        return reply.code(400).send({ error: 'invalid_token', message: 'Ссылка недействительна или уже использована' });
+      }
+
+      const passwordHash = await hashPassword(b.password);
+      await employeesRepo.setPasswordHash(reset.employee_id, passwordHash);
+      await sessionsRepo.consumePasswordReset(reset.id);
+
+      const sessionToken = await sessionsRepo.createSession(reset.employee_id);
+      setSessionCookie(reply, sessionToken);
+      return { ok: true };
+    }
+  );
+
+  // Admin-сброс — org-scope проверен тем же декоратором, что PATCH/DELETE
+  // /employees/:id (requireEmployeeInOrg), только manager+.
+  app.post(
+    '/auth/admin/reset-password/:employeeId',
+    { preHandler: [requireEmployeeInOrg('params', 'employeeId', { allowOrgOverride: true })] },
+    async (request, reply): Promise<AdminResetPasswordResponse | FastifyReply | undefined> => {
+      if (!requireManager(request, reply)) return;
+      const { employeeId } = request.params as { employeeId: string };
+      const { org_id } = (request.query || {}) as { org_id?: string };
+      resolveViewOrgId(request.user!, org_id);
+
+      const token = await sessionsRepo.createPasswordReset(Number(employeeId), request.user!.employee_id);
+      const resetUrl = `/?reset=${token}`;
+      return { ok: true, reset_url: resetUrl };
+    }
+  );
+}

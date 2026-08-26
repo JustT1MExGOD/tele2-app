@@ -62,13 +62,34 @@ function emptyUser(identity: Identity): AuthUser {
   };
 }
 
+function principalFromRow(e: Awaited<ReturnType<typeof employeesRepo.findByTelegramId>>, fallbackTelegramId: number): AuthUser {
+  const active = e!.is_active !== false;
+  return {
+    telegram_id: Number(e!.telegram_id) || fallbackTelegramId,
+    employee_id: active ? Number(e!.employee_id) : null,
+    full_name: e!.full_name,
+    role: (e!.role || 'employee') as Role,
+    access_status: (e!.access_status || (active ? 'active' : 'none')) as AccessStatus,
+    org_id: e!.org_id || 'default'
+  };
+}
+
 /**
- * Identity -> Principal. Единственный provider сегодня — Telegram, поэтому
- * единственный реальный lookup — по telegram_id; при появлении второго
- * provider'а здесь появится switch по identity.provider, а не отдельная
- * копия authPlugin/requireAuth/etc. в каждом adapter'е.
+ * Identity -> Principal. Два provider'а сегодня: Telegram (lookup по
+ * telegram_id) и phone (20.35, план — не-Telegram вход; сессия уже
+ * резолвила конкретный employee_id, providerId — он самим, не внешний id).
+ * При появлении третьего provider'а здесь просто добавится ещё одна ветка,
+ * а не отдельная копия authPlugin/requireAuth/etc. в каждом adapter'е.
  */
 export async function loadUser(identity: Identity): Promise<AuthUser> {
+  if (identity.provider === 'phone') {
+    const employeeId = Number(identity.providerId);
+    if (!employeeId) return emptyUser(identity);
+    const e = await employeesRepo.findById(employeeId);
+    if (!e) return emptyUser(identity);
+    return principalFromRow(e, 0);
+  }
+
   if (identity.provider !== 'telegram') return emptyUser(identity);
 
   const telegramId = Number(identity.providerId);
@@ -77,13 +98,5 @@ export async function loadUser(identity: Identity): Promise<AuthUser> {
   const e = await employeesRepo.findByTelegramId(telegramId);
   if (!e) return emptyUser(identity);
 
-  const active = e.is_active !== false;
-  return {
-    telegram_id: Number(e.telegram_id) || telegramId,
-    employee_id: active ? Number(e.employee_id) : null,
-    full_name: e.full_name,
-    role: (e.role || 'employee') as Role,
-    access_status: (e.access_status || (active ? 'active' : 'none')) as AccessStatus,
-    org_id: e.org_id || 'default'
-  };
+  return principalFromRow(e, telegramId);
 }

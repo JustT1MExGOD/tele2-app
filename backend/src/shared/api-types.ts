@@ -543,11 +543,14 @@ export interface SubmitAccessRequestResponse {
 
 export interface AccessRequestItem {
   id: number;
-  telegram_id: number | string;
+  telegram_id: number | string | null;
   full_name: string;
   message: string | null;
   status: string;
   created_at: string;
+  /** Не-Telegram вход (20.35) — 'telegram' (по умолчанию) или 'phone'. */
+  provider: string;
+  phone: string | null;
 }
 
 export type AccessRequestsListResponse = AccessRequestItem[];
@@ -569,6 +572,46 @@ export interface ApproveAccessResponse {
 export interface RejectAccessRequest {
   org_id?: string;
 }
+
+// ---------- /auth/* (не-Telegram вход, телефон+пароль, 20.35) ----------
+export interface RegisterPhoneRequest {
+  phone: string;
+  password: string;
+  full_name: string;
+  claimed_employee_id?: number | null;
+  org_id?: string | null;
+  message?: string;
+}
+
+/** Тот же формат ответа, что SubmitAccessRequestResponse — тот же UX
+ * "заявка отправлена, ждите одобрения", что уже есть для Telegram. */
+export type RegisterPhoneResponse = SubmitAccessRequestResponse;
+
+export interface LoginRequest {
+  phone: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  ok: true;
+}
+
+export interface LogoutResponse {
+  ok: true;
+}
+
+export interface AdminResetPasswordResponse {
+  ok: true;
+  /** Одноразовая ссылка сброса — показывается admin'у один раз, никогда не
+   * логируется/не хранится в открытом виде (в БД лежит только её хеш). */
+  reset_url: string;
+}
+
+export interface ConsumeResetRequest {
+  password: string;
+}
+
+export type ConsumeResetResponse = LoginResponse;
 
 // ---------- /supervisor/health, /supervisor/dashboard ----------
 export interface SupervisorHealthResponse {

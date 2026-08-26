@@ -51,6 +51,40 @@ export async function findByTelegramId(telegramId: number): Promise<EmployeeAuth
   return res.rows[0] || null;
 }
 
+/** Не-Telegram вход (20.35, план) — используется authPlugin/loadUser для
+ * phone-provider'а: сессия уже резолвила employee_id, здесь просто читаем
+ * ту же форму строки, что findByTelegramId. */
+export async function findById(employeeId: number): Promise<EmployeeAuthRow | null> {
+  const res = await query(
+    `SELECT id as employee_id, full_name, role, telegram_id, access_status, is_active, org_id
+     FROM employees
+     WHERE id = $1
+     LIMIT 1`,
+    [employeeId]
+  );
+  return res.rows[0] || null;
+}
+
+/** Не-Telegram вход (20.35, план) — резолв по телефону для /auth/login. */
+export async function findByPhone(phone: string): Promise<
+  { id: number; full_name: string; role: string; password_hash: string | null; is_active: boolean; access_status: string | null } | null
+> {
+  const res = await query(
+    `SELECT id, full_name, role, password_hash, is_active, access_status
+     FROM employees
+     WHERE phone = $1
+     LIMIT 1`,
+    [phone]
+  );
+  return res.rows[0] || null;
+}
+
+/** Не-Telegram вход (20.35, план) — используется /auth/reset/:token (сброс
+ * пароля) после успешного consumePasswordReset. */
+export async function setPasswordHash(employeeId: number, passwordHash: string): Promise<void> {
+  await query(`UPDATE employees SET password_hash = $1 WHERE id = $2`, [passwordHash, employeeId]);
+}
+
 /** Тот же чек, что storesRepo.belongsToOrg — используется requireEmployeeInOrg. */
 export async function belongsToOrg(orgId: string, employeeId: number): Promise<boolean> {
   const res = await query(`SELECT COALESCE(org_id, 'default') as org_id FROM employees WHERE id = $1`, [employeeId]);
@@ -268,6 +302,41 @@ export async function createFromApproval(
      VALUES ($1,$2,$3,'active',true,$4,now(),$5)
      RETURNING id`,
     [fullName, telegramId, role, verifiedBy, orgId]
+  );
+  return res.rows[0]?.id;
+}
+
+/** Не-Telegram вход (20.35, план) — approveExisting/createFromApproval для
+ * заявок с provider='phone', отдельные функции, не ветвление внутри
+ * существующих: сигнатуры принципиально разные (телефон+пароль вместо
+ * telegram_id), Telegram-путь не трогаем даже branch'ем внутри. */
+export async function approveExistingPhone(
+  employeeId: number, phone: string, passwordHash: string, role: string | null, verifiedBy: number | null, fullNameFallback: string,
+  q: typeof query = query
+): Promise<void> {
+  await q(
+    `UPDATE employees SET
+       phone = $1,
+       password_hash = $2,
+       access_status = 'active',
+       role = COALESCE($3, role),
+       verified_by = $4,
+       verified_at = now(),
+       full_name = COALESCE(full_name, $5)
+     WHERE id = $6`,
+    [phone, passwordHash, role, verifiedBy, fullNameFallback, employeeId]
+  );
+}
+
+export async function createFromApprovalPhone(
+  fullName: string, phone: string, passwordHash: string, role: string, verifiedBy: number | null, orgId: string,
+  q: typeof query = query
+): Promise<number> {
+  const res = await q(
+    `INSERT INTO employees (full_name, phone, password_hash, role, access_status, is_active, verified_by, verified_at, org_id)
+     VALUES ($1,$2,$3,$4,'active',true,$5,now(),$6)
+     RETURNING id`,
+    [fullName, phone, passwordHash, role, verifiedBy, orgId]
   );
   return res.rows[0]?.id;
 }

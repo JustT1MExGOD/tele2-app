@@ -9,6 +9,7 @@ import { registerPlansRoutes } from './plans.js';
 import { registerEmployeesRoutes } from './org/employees.js';
 import { registerStoresRoutes } from './org/stores.js';
 import { registerAccessRoutes } from './org/access.js';
+import { registerSessionRoutes } from './auth/session.js';
 import { registerBrandingRoutes } from './org/branding.js';
 import { registerSalesRoutes } from './sales.js';
 import { registerSchedulesRoutes } from './schedules.js';
@@ -42,6 +43,7 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Employees', registerEmployeesRoutes],
   ['Stores', registerStoresRoutes],
   ['Access requests/sectors', registerAccessRoutes],
+  ['Auth (не-Telegram вход)', registerSessionRoutes],
   ['Branding/orgs', registerBrandingRoutes],
   ['Sales', registerSalesRoutes],
   ['Schedules', registerSchedulesRoutes],

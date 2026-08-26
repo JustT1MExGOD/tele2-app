@@ -5,7 +5,7 @@ import { query } from '../db/index.js';
 
 export interface AccessRequestRow {
   id: number;
-  telegram_id: string | number;
+  telegram_id: string | number | null;
   telegram_username: string | null;
   full_name: string;
   claimed_employee_id: number | null;
@@ -15,6 +15,10 @@ export interface AccessRequestRow {
   reviewed_by: number | null;
   reviewed_at: string | null;
   created_at: string;
+  /** Не-Telegram вход (20.35, план) — 'telegram' (по умолчанию) или 'phone'. */
+  provider: string;
+  phone: string | null;
+  password_hash: string | null;
 }
 
 export interface AccessRequestWithEffectiveOrg extends AccessRequestRow {
@@ -51,11 +55,40 @@ export async function create(data: {
   return res.rows[0];
 }
 
-/** GET /access/requests — очередь заявок сети (эффективная сеть: прямой org_id
- * на заявке -> сеть заклеймленного сотрудника -> 'default'). */
-export async function listPendingForOrg(orgId: string): Promise<AccessRequestRow[]> {
+/** Не-Telegram вход (20.35, план) — та же заявка, но по телефону; та же
+ * pending-дедупликация, что findPendingByTelegramId. */
+export async function findPendingByPhone(phone: string): Promise<{ id: number } | null> {
   const res = await query(
-    `SELECT ar.* FROM access_requests ar
+    `SELECT id FROM access_requests WHERE provider = 'phone' AND phone = $1 AND status = 'pending'`,
+    [phone]
+  );
+  return res.rows[0] || null;
+}
+
+export async function createPhone(data: {
+  phone: string; passwordHash: string; fullName: string;
+  claimedEmployeeId: number | null; message: string; orgId: string | null;
+}): Promise<AccessRequestRow> {
+  const res = await query(
+    `INSERT INTO access_requests
+       (provider, phone, password_hash, full_name, claimed_employee_id, message, status, org_id)
+     VALUES ('phone',$1,$2,$3,$4,$5,'pending',$6)
+     RETURNING *`,
+    [data.phone, data.passwordHash, data.fullName, data.claimedEmployeeId, data.message, data.orgId]
+  );
+  return res.rows[0];
+}
+
+/** GET /access/requests — очередь заявок сети (эффективная сеть: прямой org_id
+ * на заявке -> сеть заклеймленного сотрудника -> 'default'). Явный список
+ * колонок, НЕ SELECT * — password_hash (заявки provider='phone') не должен
+ * уйти в этот ответ, он отдаётся клиенту напрямую как список. */
+export async function listPendingForOrg(orgId: string): Promise<Omit<AccessRequestRow, 'password_hash'>[]> {
+  const res = await query(
+    `SELECT ar.id, ar.telegram_id, ar.telegram_username, ar.full_name, ar.claimed_employee_id,
+            ar.message, ar.status, ar.org_id, ar.reviewed_by, ar.reviewed_at, ar.created_at,
+            ar.provider, ar.phone
+     FROM access_requests ar
      LEFT JOIN employees e ON e.id = ar.claimed_employee_id
      WHERE ar.status = 'pending'
        AND COALESCE(ar.org_id, COALESCE(e.org_id,'default'), 'default') = $1

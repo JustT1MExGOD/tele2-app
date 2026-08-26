@@ -12,6 +12,7 @@ import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import cookie from '@fastify/cookie';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -75,6 +76,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   // браузерный механизм).
   await app.register(cors, { origin: false });
   await app.register(multipart);
+  // Не-Telegram вход (20.35, план) — cookie-сессия для phone-provider'а
+  // (providers/phone.ts). Секрет не нужен: значение cookie — непрозрачный
+  // случайный токен, в БД хранится только его sha256, не подпись.
+  await app.register(cookie);
 
   // Заголовки безопасности. CSP собрана под реальную структуру фронтенда
   // (без CSP-соответствующей автоматической проверки один раз в начале):

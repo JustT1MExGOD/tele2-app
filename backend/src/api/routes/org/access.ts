@@ -241,15 +241,28 @@ export async function registerAccessRoutes(app: FastifyInstance) {
     // упадёт — транзакция откатится целиком, включая сам markApproved,
     // так что заявка вернётся в pending и останется ретраябельной, а не
     // застрянет в approved без реально созданного/обновлённого сотрудника.
+    // Не-Telegram вход (20.35, план) — заявка с provider='phone' несёт
+    // phone+password_hash вместо telegram_id; approveExistingPhone/
+    // createFromApprovalPhone — отдельные функции (не branch внутри
+    // существующих approveExisting/createFromApproval), чтобы Telegram-путь
+    // не трогать даже условием.
+    const isPhone = req.provider === 'phone';
+
     const employeeId = await withTransaction(async (q) => {
       const claimed = await accessRequestsRepo.markApproved(Number(id), request.user!.employee_id, q);
       if (!claimed) return null;
 
       if (req.claimed_employee_id) {
         const existingId = Number(req.claimed_employee_id);
-        await employeesRepo.approveExisting(
-          existingId, req.telegram_id, role === 'employee' ? null : role, request.user!.employee_id, req.full_name, q
-        );
+        if (isPhone) {
+          await employeesRepo.approveExistingPhone(
+            existingId, req.phone!, req.password_hash!, role === 'employee' ? null : role, request.user!.employee_id, req.full_name, q
+          );
+        } else {
+          await employeesRepo.approveExisting(
+            existingId, req.telegram_id!, role === 'employee' ? null : role, request.user!.employee_id, req.full_name, q
+          );
+        }
         return existingId;
       }
       // Создать нового — попадает в сеть заявки (гость выбрал в пикере при
@@ -260,7 +273,10 @@ export async function registerAccessRoutes(app: FastifyInstance) {
       // вообще нет org_id (не должно происходить после миграции, кроме
       // как для уже неактуальных пред-миграционных строк).
       const orgId = req.org_id || request.user!.org_id;
-      return employeesRepo.createFromApproval(req.full_name, req.telegram_id, role, request.user!.employee_id, orgId, q);
+      if (isPhone) {
+        return employeesRepo.createFromApprovalPhone(req.full_name, req.phone!, req.password_hash!, role, request.user!.employee_id, orgId, q);
+      }
+      return employeesRepo.createFromApproval(req.full_name, req.telegram_id!, role, request.user!.employee_id, orgId, q);
     });
 
     if (employeeId === null) {
@@ -276,6 +292,8 @@ export async function registerAccessRoutes(app: FastifyInstance) {
         )
         .catch(() => {});
     }
+    // phone-провайдер: уведомить некому тем же каналом (нет Telegram) —
+    // сотрудник видит новый статус на экране логина при следующем /me.
 
     return { ok: true, employee_id: employeeId, role };
     }

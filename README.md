@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.34.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.35.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-351%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-362%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.34.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.35.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -461,6 +461,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.32.0** | Production Observability — `/healthz`+`/readyz` с настоящей readiness-семантикой, Prometheus-совместимый `/metrics` (HTTP/DB/jobs/AI) |
 | **20.33.0** | Domain Integrity — org-scoping инвариант (Employee/Store/Announcement/Channel → Organization, Channel → Store) закреплён в PostgreSQL пятью новыми FK (`0016_org_scoping_fk.sql`), не только в TypeScript |
 | **20.34.0** | Product Analytics — сколько рекомендаций открывают/игнорируют, какие алерты похожи на ложную тревогу, где задача реально меняет исход (`/alerts/effectiveness` расширен, `smart_alerts.first_opened_at`) |
+| **20.35.0** | Не-Telegram вход (телефон + пароль), backend-механизм — второй identity provider поверх шва ADR-005 (`auth/providers/phone.ts`), `guards.ts` не изменился ни в одной сигнатуре. Регистрация открытая, тот же flow "заявка → админ одобряет"; сброс пароля — через админа. Ещё не достижим из UI (фронтенд — следующей версией) |
 
 ---
 
@@ -866,6 +867,24 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   `recovery_rate_with_task`/`recovery_rate_without_task`); экран
   "Эффективность рекомендаций" получил явную дельту "Задача меняет исход:
   +N п.п.". 4 новых бэкенд-теста + 1 фронтенд (см. §21, 20.34.0)
+- **20.35 Не-Telegram вход (backend)** ✅ — три сигнала подряд: новый
+  дилер просит подключить целый сектор, стажёр вообще не пользуется
+  Telegram, а в стране бизнеса Telegram работает только через VPN — риск
+  доступности продукта для любого сотрудника, не "неудобно с ноутбука" из
+  старой формулировки Web/Desktop. ADR-005 (20.9.0) специально оставил
+  `Identity{provider, providerId} → Principal` как шов для будущего
+  второго provider'а — этот момент настал. `auth/providers/phone.ts` —
+  identity из cookie-сессии, не подписанного initData; `guards.ts` не
+  изменился ни в одной сигнатуре гварда. Уточнено с владельцем: телефон+
+  пароль (не email — нет провайдера почты), регистрация открытая
+  (тот же flow "заявка → админ одобряет", что для Telegram), сброс
+  пароля — через админа (нет SMS-провайдера, решение осознанное). Схема —
+  `phone`/`password_hash` на `employees`, не отдельная `identities`-
+  таблица; сессия — непрозрачный токен в БД (`crypto.randomBytes`,
+  `sha256` в БД), не JWT, нового подписывающего секрета не потребовалось.
+  Живой smoke на реальном процессе — оба provider'а параллельно на одном
+  инстансе. 11 новых тестов. Ещё не достижим из UI — фронтенд следующей
+  версией (см. §21, 20.35.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -913,6 +932,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.34.0 · август 2026*
+*README · актуально на v20.35.0 · август 2026*
 
 </div>

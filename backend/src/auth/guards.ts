@@ -14,6 +14,7 @@ import * as storesRepo from '../data/repositories/stores.js';
 import * as employeesRepo from '../data/repositories/employees.js';
 import * as supervisorSectorsRepo from '../data/repositories/supervisor-sectors.js';
 import { resolveTelegramIdentity } from './providers/telegram.js';
+import { resolvePhoneIdentity } from './providers/phone.js';
 import { loadUser } from './principal.js';
 import type { AuthUser } from './principal.js';
 
@@ -34,7 +35,11 @@ declare module 'fastify' {
 }
 
 export async function resolveUser(request: FastifyRequest): Promise<AuthUser | null> {
-  const identity = resolveTelegramIdentity(request);
+  // Telegram — приоритет (существующее поведение не меняется); не-Telegram
+  // вход (20.35, план) — фолбэк на cookie-сессию, только когда Telegram
+  // identity отсутствует (гость внутри Telegram без initData не должен
+  // случайно подхватить чужую браузерную сессию с того же устройства).
+  const identity = resolveTelegramIdentity(request) || (await resolvePhoneIdentity(request));
   if (!identity) return null;
   return loadUser(identity);
 }

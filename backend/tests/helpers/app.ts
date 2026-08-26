@@ -18,3 +18,9 @@ export function getApp(): Promise<FastifyInstance> {
 export function authAs(telegramId: number | string) {
   return { 'x-telegram-id': String(telegramId) };
 }
+
+/** Не-Telegram вход (20.35, план) — cookie-сессия для phone-provider'а
+ * (см. auth/providers/phone.ts, COOKIE_NAME='t2_session'). */
+export function authAsSession(sessionToken: string) {
+  return { cookie: `t2_session=${sessionToken}` };
+}
