@@ -237,7 +237,7 @@ function renderTeamTable(list: EmployeeListItem[], map: Record<string, { sim: nu
               </td>`
             : '<td class="actions"></td>';
           return `
-            <tr onclick="openTeamRow(event, ${e.id})">
+            <tr data-clickable onclick="openTeamRow(event, ${e.id})">
               <td><div class="dt-name"><div class="team-avatar${st.active ? ' active' : ''}" id="tta-${e.id}">${initial}</div><span>${esc(e.full_name)}</span></div></td>
               <td>${esc(roleLabel(e.role))}</td>
               <td>${st.sim}</td>

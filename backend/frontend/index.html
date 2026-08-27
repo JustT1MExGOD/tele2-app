@@ -722,6 +722,15 @@
         </div>
         <div id="monthPlanMeta" class="empty" style="padding:8px 16px;text-align:left"></div>
         <div id="monthPlanList" style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="skeleton"></div></div>
+        <div id="monthPlanTableWrap" class="data-table-wrap">
+          <div class="data-table-toolbar">
+            <button type="button" class="btn-ghost" onclick="toggleMonthPlanExtraColumns()" id="monthPlanExtraToggle">Показать все метрики</button>
+          </div>
+          <table class="data-table" id="monthPlanTable">
+            <thead id="monthPlanTableHead"></thead>
+            <tbody id="monthPlanTableBody"></tbody>
+          </table>
+        </div>
       </div>
       <div class="section" id="storeDailyPlanSection">
         <div class="section-title">Дневные планы точек сегодня</div>

@@ -2296,6 +2296,14 @@
     min-width: 160px;
     max-width: 160px;
   }
+  /* 20.44 — визуальный рестайл под токен .data-table-wrap (20.42), без
+     сортировки/структурных изменений: это матрица «сотрудник × день»,
+     колонки — календарные дни, не атрибуты для сортировки. Цветовая
+     подсветка точки в ячейке — реальная информация, не декор, не
+     трогается. */
+  .sum-sch-scroll {
+    border-radius: var(--radius-lg);
+  }
 
   /* Модалка — bottom-sheet ("выезд снизу", .overlay align-items:flex-end
      выше в файле) чисто мобильная условность; на десктопе — обычный
@@ -2404,6 +2412,11 @@
   #teamList {
     display: none;
   }
+  /* 20.44 — monthplan-карточки .mt-card прячутся тем же приёмом на
+     десктопе, таблица #monthPlanTableWrap занимает их место. */
+  #monthPlanList {
+    display: none;
+  }
   .data-table-wrap {
     display: block;
     overflow-x: auto;
@@ -2468,6 +2481,35 @@
     gap: var(--sp-1);
     flex-wrap: wrap;
     border-bottom: 1px solid var(--border);
+  }
+  /* 20.44 — monthplan: те же цвета, что .mt-cell.good/.warn/.bad .v на
+     мобильных карточках, просто без вложенного .v — в ячейке таблицы
+     число идёт прямым текстом. */
+  .data-table td.good {
+    color: var(--success);
+  }
+  .data-table td.warn {
+    color: var(--warning);
+  }
+  .data-table td.bad {
+    color: var(--danger);
+  }
+  .data-table-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--sp-2) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+  }
+  /* .btn-ghost по умолчанию width:100% (мобильные CTA-кнопки) — здесь
+     нужна компактная кнопка-тумблер по контенту, не во всю ширину. */
+  .data-table-toolbar .btn-ghost {
+    width: auto;
+    margin-top: 0;
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--fs-sm);
+  }
+  .data-table tbody tr[data-clickable] {
+    cursor: pointer;
   }
 }
 
@@ -2561,7 +2603,6 @@
   }
   .data-table tbody tr:hover {
     background: var(--surface-2);
-    cursor: pointer;
   }
   .sidebar .nav-item.active:hover {
     background: var(--primary-soft);

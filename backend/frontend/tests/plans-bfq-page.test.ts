@@ -11,6 +11,11 @@ function setupGlobals(overrides: { role?: string } = {}) {
     <div id="monthPlanList"></div>
     <div id="monthPlanMeta"></div>
     <div id="planMonthLabel"></div>
+    <button id="monthPlanExtraToggle"></button>
+    <table id="monthPlanTable">
+      <thead id="monthPlanTableHead"></thead>
+      <tbody id="monthPlanTableBody"></tbody>
+    </table>
     <div id="netMonthBody"></div>
     <div id="netMonthLabel"></div>
     <div id="storeDailyPlans"></div>
@@ -135,6 +140,116 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
     expect(html).toContain('Итого сеть');
   });
 
+  // ===== Desktop .data-table (20.44, Schedule/Plans — следующий шаг после Team в 20.42.0) =====
+
+  it('loadMonthPlans: desktop-таблица рендерит тот же состав, что #monthPlanList, плюс "Итого сеть"', async () => {
+    const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
+    getPlansEmployeesMonth.mockResolvedValue({
+      rows: [
+        { employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: { sim: 10 }, fact: { sim: 5 }, pct: { sim: 50 } },
+        { employee_id: 2, full_name: 'Анна', role: 'senior', shifts: 8, remaining_shifts: 1, plan: { sim: 10 }, fact: { sim: 9 }, pct: { sim: 90 } }
+      ],
+      remaining_days: 5,
+      totals: { fact: { sim: 14 }, pct: { sim: 70 } }
+    });
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
+    await loadMonthPlans();
+    const body = document.getElementById('monthPlanTableBody')!.innerHTML;
+    expect(body).toContain('Иван');
+    expect(body).toContain('Анна');
+    expect(body).toContain('Итого сеть');
+    expect(body).toContain('editEmployeeMonthPlan(1');
+  });
+
+  it('loadMonthPlans: пустой список — таблица показывает то же сообщение с месяцем', async () => {
+    setupGlobals({ role: 'manager' });
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
+    await loadMonthPlans();
+    expect(document.getElementById('monthPlanTableBody')!.innerHTML).toContain('Нет данных за 2026-08');
+  });
+
+  it('sortMonthPlanTable: числовая сортировка по метрике, направление разворачивается повторным кликом', async () => {
+    const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
+    getPlansEmployeesMonth.mockResolvedValue({
+      rows: [
+        { employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: { sim: 10 }, fact: { sim: 2 }, pct: { sim: 20 } },
+        { employee_id: 2, full_name: 'Анна', role: 'senior', shifts: 8, remaining_shifts: 1, plan: { sim: 10 }, fact: { sim: 9 }, pct: { sim: 90 } }
+      ],
+      remaining_days: 5
+    });
+    const { loadMonthPlans, sortMonthPlanTable } = await import('../src/pages/plans-bfq/index.js');
+    await loadMonthPlans();
+
+    sortMonthPlanTable('metric:sim');
+    let rows = Array.from(document.querySelectorAll('#monthPlanTableBody tr:not(.dt-totals)')).map((tr) => tr.textContent || '');
+    expect(rows[0]).toContain('Иван');
+    expect(rows[1]).toContain('Анна');
+    expect((document.querySelector('#monthPlanTable th[data-sort-key="metric:sim"]') as HTMLElement).getAttribute('aria-sort')).toBe('ascending');
+
+    sortMonthPlanTable('metric:sim');
+    rows = Array.from(document.querySelectorAll('#monthPlanTableBody tr:not(.dt-totals)')).map((tr) => tr.textContent || '');
+    expect(rows[0]).toContain('Анна');
+    expect(rows[1]).toContain('Иван');
+    expect((document.querySelector('#monthPlanTable th[data-sort-key="metric:sim"]') as HTMLElement).getAttribute('aria-sort')).toBe('descending');
+  });
+
+  it('toggleMonthPlanExtraColumns: добавляет/убирает EXTRA-колонки для всей таблицы разом', async () => {
+    const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
+    // setupGlobals() уже застабила METRICS двумя пунктами — переопределяем
+    // ПОСЛЕ неё, иначе внутренний вызов vi.stubGlobal('METRICS', ...) внутри
+    // setupGlobals() перезатрёт наш стаб, если задать его до неё.
+    vi.stubGlobal('METRICS', [
+      { id: 'sim', label: 'SIM', short_label: 'SIM', unit: 'count' },
+      { id: 'mnp', label: 'MNP', short_label: 'MNP', unit: 'count' },
+      { id: 'pa', label: 'ПА', short_label: 'ПА', unit: 'count' },
+      { id: 'combo', label: 'Комбо', short_label: 'Комбо', unit: 'count' },
+      { id: 'phones', label: 'Телефоны', short_label: 'Тел', unit: 'money' },
+      { id: 'accessories', label: 'Аксессуары', short_label: 'Аксы', unit: 'money' },
+      { id: 'wink', label: 'Wink', short_label: 'Wink', unit: 'money' }
+    ]);
+    getPlansEmployeesMonth.mockResolvedValue({
+      rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: {}, fact: { wink: 3 }, pct: {} }],
+      remaining_days: 5
+    });
+    const { loadMonthPlans, toggleMonthPlanExtraColumns } = await import('../src/pages/plans-bfq/index.js');
+    await loadMonthPlans();
+    expect(document.querySelector('#monthPlanTable th[data-sort-key="metric:wink"]')).toBeNull();
+
+    toggleMonthPlanExtraColumns();
+    expect(document.querySelector('#monthPlanTable th[data-sort-key="metric:wink"]')).not.toBeNull();
+    expect(document.getElementById('monthPlanExtraToggle')!.textContent).toContain('Скрыть');
+
+    toggleMonthPlanExtraColumns();
+    expect(document.querySelector('#monthPlanTable th[data-sort-key="metric:wink"]')).toBeNull();
+  });
+
+  it('monthplan-таблица: строка кликабельна и открывает редактирование плана только при canManage()', async () => {
+    const { getPlansEmployeesMonth } = setupGlobals({ role: 'employee' });
+    getPlansEmployeesMonth.mockResolvedValue({
+      rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: {}, fact: { sim: 1 }, pct: {} }],
+      remaining_days: 5
+    });
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
+    await loadMonthPlans();
+    const row = document.querySelector('#monthPlanTableBody tr');
+    expect(row?.hasAttribute('data-clickable')).toBe(false);
+    expect(row?.getAttribute('onclick')).toBeNull();
+  });
+
+  it('monthplan-таблица: строка "Итого сеть" не кликабельна', async () => {
+    const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
+    getPlansEmployeesMonth.mockResolvedValue({
+      rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: {}, fact: { sim: 1 }, pct: {} }],
+      remaining_days: 5,
+      totals: { fact: { sim: 1 }, pct: { sim: 100 } }
+    });
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
+    await loadMonthPlans();
+    const totalsRow = document.querySelector('#monthPlanTableBody tr.dt-totals');
+    expect(totalsRow?.hasAttribute('data-clickable')).toBe(false);
+    expect(totalsRow?.getAttribute('onclick')).toBeNull();
+  });
+
   it('shiftPlanMonth: сдвигает planMonth и перезагружает', async () => {
     const { getPlansEmployeesMonth } = setupGlobals();
     const { shiftPlanMonth } = await import('../src/pages/plans-bfq/index.js');
@@ -243,7 +358,7 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
     expect(getStoreDailyPlans).toHaveBeenCalled();
   });
 
-  it('window.* мост — все 13 функций', async () => {
+  it('window.* мост — все 15 функций', async () => {
     setupGlobals();
     await import('../src/pages/plans-bfq/index.js');
     for (const name of [
@@ -259,7 +374,9 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
       'saveEmployeeMonthPlan',
       'loadStoreDailyPlans',
       'editStoreMonthPlan',
-      'saveStoreMonthPlan'
+      'saveStoreMonthPlan',
+      'sortMonthPlanTable',
+      'toggleMonthPlanExtraColumns'
     ]) {
       expect(typeof (window as any)[name]).toBe('function');
     }

@@ -17,6 +17,18 @@ import type {
   BfqEmployeeResponse,
   SaveMonthPlanRequest
 } from '../../../../src/shared/api-types.js';
+import type { MonthSummaryRow } from '../../../../src/shared/api-types.js';
+
+// 20.44 (Desktop Page Adaptation — Schedule/Plans, следующий шаг после
+// Team в 20.42.0) — monthplan-таблица на десктопе. MAIN/EXTRA подняты на
+// уровень модуля (раньше жили только внутри loadMonthPlans()) — нужны и
+// renderMonthPlanTable() тоже, без повторного вычисления из METRICS.
+let MAIN: { id: string; label: string }[] = [];
+let EXTRA: { id: string; label: string }[] = [];
+let monthPlanSort: { key: string; dir: 1 | -1 } = { key: 'name', dir: 1 };
+let monthPlanShowExtra = false;
+let lastMonthPlanRows: MonthSummaryRow[] = [];
+let lastMonthPlanTotals: { fact?: Record<string, number>; pct?: Record<string, number> } | undefined;
 
 // ===== BFQ =====
 export async function loadBFQ(): Promise<void> {
@@ -133,8 +145,8 @@ export async function loadMonthPlans(): Promise<void> {
       meta.innerHTML = `Сотрудников: <b>${rows.length}</b> · ост. дней: <b>${data.remaining_days ?? '—'}</b>`;
     }
 
-    const MAIN = METRICS.slice(0, 6).map((x) => ({ id: x.id, label: x.label }));
-    const EXTRA = METRICS.slice(6).map((x) => ({ id: x.id, label: x.label }));
+    MAIN = METRICS.slice(0, 6).map((x) => ({ id: x.id, label: x.label }));
+    EXTRA = METRICS.slice(6).map((x) => ({ id: x.id, label: x.label }));
 
     function cell(m: { id: string; label: string }, fact: Record<string, number>, pct: Record<string, number>): string {
       const f = Number(fact[m.id]) || 0;
@@ -145,6 +157,9 @@ export async function loadMonthPlans(): Promise<void> {
 
     if (!rows.length) {
       if (box) box.innerHTML = '<div class="empty">Нет данных за ' + planMonth + '</div>';
+      lastMonthPlanRows = [];
+      lastMonthPlanTotals = undefined;
+      renderMonthPlanTable();
       if (typeof loadStoreDailyPlans === 'function') loadStoreDailyPlans();
       return;
     }
@@ -193,11 +208,94 @@ export async function loadMonthPlans(): Promise<void> {
           </div>`;
     }
     if (box) box.innerHTML = html;
+    lastMonthPlanRows = rows;
+    lastMonthPlanTotals = data.totals;
+    renderMonthPlanTable();
     if (typeof loadStoreDailyPlans === 'function') loadStoreDailyPlans();
   } catch (e) {
     console.error(e);
     if (box) box.innerHTML = '<div class="empty">Планы месяца недоступны</div>';
   }
+}
+
+// ===== Desktop data-table (20.44) — тот же lastMonthPlanRows, что мобильные
+// карточки выше, без своего запроса и без своей фильтрации. =====
+function monthPlanCellTone(fact: Record<string, number>, pct: Record<string, number>, metricId: string): string {
+  const f = Number(fact[metricId]) || 0;
+  const pc = Number(pct[metricId]) || 0;
+  return pc >= 100 ? 'good' : pc >= 50 ? 'warn' : f > 0 ? '' : 'bad';
+}
+
+function renderMonthPlanTable(): void {
+  const head = document.getElementById('monthPlanTableHead');
+  const body = document.getElementById('monthPlanTableBody');
+  const toggleBtn = document.getElementById('monthPlanExtraToggle');
+  if (!head || !body) return;
+  if (toggleBtn) toggleBtn.textContent = monthPlanShowExtra ? 'Скрыть лишние метрики' : 'Показать все метрики';
+
+  const metricCols = monthPlanShowExtra ? [...MAIN, ...EXTRA] : MAIN;
+  const staticHead = '<th scope="col" data-sort-key="name" aria-sort="none"><button type="button" class="dt-sort" onclick="sortMonthPlanTable(\'name\')">ФИО</button></th>' +
+    '<th scope="col" data-sort-key="role" aria-sort="none"><button type="button" class="dt-sort" onclick="sortMonthPlanTable(\'role\')">Роль</button></th>' +
+    '<th scope="col" data-sort-key="shifts" aria-sort="none"><button type="button" class="dt-sort" onclick="sortMonthPlanTable(\'shifts\')">Смены</button></th>';
+  const metricHead = metricCols
+    .map((m) => `<th scope="col" data-sort-key="metric:${m.id}" aria-sort="none"><button type="button" class="dt-sort" onclick="sortMonthPlanTable('metric:${m.id}')">${esc(m.label)}</button></th>`)
+    .join('');
+  head.innerHTML = `<tr>${staticHead}${metricHead}</tr>`;
+
+  const sorted = [...lastMonthPlanRows].sort((a, b) => {
+    let cmp = 0;
+    if (monthPlanSort.key === 'name') cmp = (a.full_name || '').localeCompare(b.full_name || '', 'ru');
+    else if (monthPlanSort.key === 'role') cmp = roleLabel(a.role || '').localeCompare(roleLabel(b.role || ''), 'ru');
+    else if (monthPlanSort.key === 'shifts') cmp = (Number(a.shifts) || 0) - (Number(b.shifts) || 0);
+    else if (monthPlanSort.key.startsWith('metric:')) {
+      const id = monthPlanSort.key.slice('metric:'.length);
+      cmp = (Number(a.fact?.[id]) || 0) - (Number(b.fact?.[id]) || 0);
+    }
+    return cmp * monthPlanSort.dir;
+  });
+
+  const rowsHtml = sorted
+    .map((r) => {
+      const fact = r.fact || {};
+      const pct = r.pct || {};
+      const metricCells = metricCols
+        .map((m) => `<td class="${monthPlanCellTone(fact, pct, m.id)}">${Number(fact[m.id]) || 0}</td>`)
+        .join('');
+      const clickable = canManage();
+      const nameSafe = String(r.full_name || '').replace(/'/g, "\\'");
+      return `<tr${clickable ? ` data-clickable onclick="editEmployeeMonthPlan(${r.employee_id}, '${nameSafe}')"` : ''}>
+        <td>${esc(r.full_name || '')}</td>
+        <td>${esc(roleLabel(r.role || ''))}</td>
+        <td>${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</td>
+        ${metricCells}
+      </tr>`;
+    })
+    .join('');
+
+  const tf = lastMonthPlanTotals?.fact;
+  const tp = lastMonthPlanTotals?.pct || {};
+  const totalsRow = tf
+    ? `<tr class="dt-totals"><td>Итого сеть</td><td>—</td><td>—</td>${metricCols
+        .map((m) => `<td class="${monthPlanCellTone(tf, tp, m.id)}">${Number(tf[m.id]) || 0}</td>`)
+        .join('')}</tr>`
+    : '';
+
+  body.innerHTML = rowsHtml + totalsRow || `<tr><td colspan="${3 + metricCols.length}" class="empty">Нет данных за ${esc(planMonth)}</td></tr>`;
+
+  document.querySelectorAll('#monthPlanTable thead th[data-sort-key]').forEach((th) => {
+    const key = (th as HTMLElement).dataset.sortKey;
+    th.setAttribute('aria-sort', key === monthPlanSort.key ? (monthPlanSort.dir === 1 ? 'ascending' : 'descending') : 'none');
+  });
+}
+
+export function sortMonthPlanTable(key: string): void {
+  monthPlanSort = monthPlanSort.key === key ? { key, dir: monthPlanSort.dir === 1 ? -1 : 1 } : { key, dir: 1 };
+  renderMonthPlanTable();
+}
+
+export function toggleMonthPlanExtraColumns(): void {
+  monthPlanShowExtra = !monthPlanShowExtra;
+  renderMonthPlanTable();
 }
 
 export function shiftPlanMonth(delta: number): void {
@@ -468,6 +566,8 @@ declare global {
     loadStoreDailyPlans: typeof loadStoreDailyPlans;
     editStoreMonthPlan: typeof editStoreMonthPlan;
     saveStoreMonthPlan: typeof saveStoreMonthPlan;
+    sortMonthPlanTable: typeof sortMonthPlanTable;
+    toggleMonthPlanExtraColumns: typeof toggleMonthPlanExtraColumns;
   }
 }
 window.loadBFQ = loadBFQ;
@@ -483,3 +583,5 @@ window.saveEmployeeMonthPlan = saveEmployeeMonthPlan;
 window.loadStoreDailyPlans = loadStoreDailyPlans;
 window.editStoreMonthPlan = editStoreMonthPlan;
 window.saveStoreMonthPlan = saveStoreMonthPlan;
+window.sortMonthPlanTable = sortMonthPlanTable;
+window.toggleMonthPlanExtraColumns = toggleMonthPlanExtraColumns;
