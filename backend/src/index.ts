@@ -6,6 +6,7 @@ import { bot, startBot, notifyAdmin } from './integrations/telegram/bot.js';
 import { startReportCron } from './cron/reports.js';
 import { startDigestCron } from './cron/digest.js';
 import { startAlertCron } from './cron/alerts.js';
+import { startMessageCleanupCron } from './cron/message-cleanup.js';
 import { todayMoscow } from './utils/date.js';
 import { runSmartAlertsTick } from './core/alerts/service.js';
 import { announceReleaseIfNeeded } from './platform/notifications/release-announce.js';
@@ -80,6 +81,7 @@ try {
   // нигде не вызывался: «Контроль 14:00» (сотрудники без продаж на смене)
   // и «Отставание точек 16:00» никогда не срабатывали в проде.
   const alertCronTask = startAlertCron();
+  const messageCleanupTask = startMessageCleanupCron();
   announceReleaseIfNeeded().catch((e) => console.error('release announce:', e?.message || e));
 
   // умные алерты каждые 30 мин (внутри — только 11–21 МСК)
@@ -124,6 +126,7 @@ try {
     clearInterval(reportCronHandle);
     digestCronTask.stop();
     alertCronTask.stop();
+    messageCleanupTask.stop();
     clearInterval(smartAlertsHandle);
 
     try {

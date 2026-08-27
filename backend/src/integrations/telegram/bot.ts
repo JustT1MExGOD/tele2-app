@@ -5,6 +5,7 @@ import {
   finalReport,
   shiftReminder
 } from './messages.js';
+import * as cronRepo from '../../data/repositories/cron.js';
 
 const token = process.env.BOT_TOKEN || '';
 export const bot = token ? new Bot(token) : (null as any);
@@ -12,6 +13,23 @@ export const bot = token ? new Bot(token) : (null as any);
 const CHAT_ID = process.env.CHAT_ID || process.env.REPORT_CHAT_ID || '';
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID || '';
 const MINI_APP_URL = process.env.MINI_APP_URL || '';
+
+/** Журнал для автоудаления через 2+ дня (cron/message-cleanup.ts) — все
+ * отправки через notifyChat*, КРОМЕ релиз-канала (анонсы версий остаются
+ * архивом истории навсегда, явное решение владельца продукта). Читает
+ * RELEASE_CHANNEL_ID на каждый вызов, не кэширует в модульную константу —
+ * так тестируемо без перезагрузки модуля (иначе повторный import
+ * пересоздал бы весь граф зависимостей, включая пул Postgres). Сбой
+ * записи в журнал не должен ронять уже успешно отправленное сообщение. */
+export async function trackGroupMessage(chatId: string, messageId: number): Promise<void> {
+  const releaseChannelId = process.env.RELEASE_CHANNEL_ID || '';
+  if (!chatId || chatId === releaseChannelId) return;
+  try {
+    await cronRepo.recordSentGroupMessage(chatId, messageId);
+  } catch (e: any) {
+    console.error('trackGroupMessage failed:', e?.message || e);
+  }
+}
 
 export async function notifyChat(text: string, chatId?: string, threadId?: string) {
   const id = chatId || CHAT_ID;
@@ -24,11 +42,12 @@ export async function notifyChat(text: string, chatId?: string, threadId?: strin
     return;
   }
   try {
-    await bot.api.sendMessage(id, text, {
+    const msg = await bot.api.sendMessage(id, text, {
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       ...(threadId ? { message_thread_id: Number(threadId) } : {})
     } as any);
+    await trackGroupMessage(id, msg.message_id);
   } catch (e: any) {
     console.error('notifyChat failed:', e?.message || e, 'chat=', id);
   }
@@ -60,10 +79,11 @@ export async function notifyChatPhoto(
 
   try {
     if (Buffer.isBuffer(pngOrSvg) && !opts.asDocument) {
-      await bot.api.sendPhoto(id, new InputFile(pngOrSvg, opts.filename || 'report.png'), {
+      const msg = await bot.api.sendPhoto(id, new InputFile(pngOrSvg, opts.filename || 'report.png'), {
         caption,
         ...threadOpt
       } as any);
+      await trackGroupMessage(id, msg.message_id);
       return { ok: true, type: 'photo' };
     }
     // SVG / document fallback
@@ -71,7 +91,8 @@ export async function notifyChatPhoto(
       ? pngOrSvg
       : Buffer.from(String(pngOrSvg), 'utf8');
     const name = opts.filename || (Buffer.isBuffer(pngOrSvg) ? 'report.png' : 'report.svg');
-    await bot.api.sendDocument(id, new InputFile(buf, name), { caption, ...threadOpt } as any);
+    const msg = await bot.api.sendDocument(id, new InputFile(buf, name), { caption, ...threadOpt } as any);
+    await trackGroupMessage(id, msg.message_id);
     return { ok: true, type: 'document' };
   } catch (e: any) {
     console.error('notifyChatPhoto failed:', e?.message || e);
@@ -100,7 +121,8 @@ export async function notifyChatMediaGroup(
       media: new InputFile(it.buffer, it.filename),
       caption: it.caption?.slice(0, 1024)
     }));
-    await bot.api.sendMediaGroup(id, media, opts.threadId ? { message_thread_id: Number(opts.threadId) } as any : undefined);
+    const msgs = await bot.api.sendMediaGroup(id, media, opts.threadId ? { message_thread_id: Number(opts.threadId) } as any : undefined);
+    await Promise.all(msgs.map((m) => trackGroupMessage(id, m.message_id)));
     return { ok: true, type: 'media_group' };
   } catch (e: any) {
     console.error('notifyChatMediaGroup failed:', e?.message || e);

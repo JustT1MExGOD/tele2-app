@@ -107,3 +107,25 @@ export async function sumKeyMetricsForStoreDate(storeId: string, date: string): 
   );
   return res.rows[0];
 }
+
+/** cron/message-cleanup.ts, integrations/telegram/bot.ts::trackGroupMessage
+ * — журнал отправленных в группы/каналы сообщений для автоудаления через
+ * 2+ дня (0019_bot_sent_messages.sql). */
+export async function recordSentGroupMessage(chatId: string, messageId: number): Promise<void> {
+  await query(
+    `INSERT INTO bot_sent_messages (chat_id, message_id) VALUES ($1, $2)`,
+    [chatId, messageId]
+  );
+}
+
+export async function listSentGroupMessagesOlderThan(cutoffIso: string): Promise<{ id: number; chat_id: string; message_id: number }[]> {
+  const res = await query(
+    `SELECT id, chat_id, message_id FROM bot_sent_messages WHERE sent_at < $1::timestamptz ORDER BY sent_at ASC`,
+    [cutoffIso]
+  );
+  return res.rows;
+}
+
+export async function deleteSentGroupMessageLogRow(id: number): Promise<void> {
+  await query(`DELETE FROM bot_sent_messages WHERE id = $1`, [id]);
+}
