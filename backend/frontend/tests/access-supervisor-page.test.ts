@@ -407,6 +407,31 @@ describe('Access gate/Supervisor (миграция frontend/js/08-access-supervi
     expect(document.getElementById('svStoresBody')!.innerHTML).toContain('Точка А');
     expect(document.getElementById('svPeopleBody')!.innerHTML).toContain('Ольга');
     expect(document.getElementById('svTrendBody')!.innerHTML).toContain('svg');
+    // 20.45 (Command Center + Supervisor, staged roadmap из 20.40) —
+    // «Просадки и риски» (Обзор) и «Прогноз по точкам» (Тренд) лежат в
+    // .workspace-grid для десктоп-раскладки; .sv-hero/.sv-chart — нет.
+    expect(document.getElementById('svOverviewBody')!.innerHTML).toMatch(/<div class="workspace-grid">\s*<div class="sv-drop/);
+    expect(document.getElementById('svTrendBody')!.innerHTML).toMatch(/<div class="workspace-grid">\s*<div class="sv-store" style="--sc:/);
+  });
+
+  it('loadSupervisorData: пустые "Просадки" — без обёртки .workspace-grid, только .empty', async () => {
+    const { getSupervisorDashboard } = setupGlobals({ tgId: null });
+    getSupervisorDashboard.mockResolvedValue({
+      date: '2026-08-25',
+      network: { health: 80, overall_pct: 70, pace_delta: 5, stores_count: 0, staff_on_shift: 0, month: { metrics: {}, forecast: {} } },
+      stores: [],
+      drops: [],
+      trend: [],
+      top_employees: []
+    });
+    const mod = await import('../src/pages/access-supervisor/index.js');
+    await mod.loadSupervisorData(true);
+    const overviewHtml = document.getElementById('svOverviewBody')!.innerHTML;
+    expect(overviewHtml).toContain('Критических просадок нет');
+    expect(overviewHtml).not.toContain('workspace-grid');
+    const trendHtml = document.getElementById('svTrendBody')!.innerHTML;
+    expect(trendHtml).toContain('Нет точек');
+    expect(trendHtml).not.toContain('workspace-grid');
   });
 
   it('loadSupervisorData: кэширует и не перезапрашивает без forceRefresh', async () => {

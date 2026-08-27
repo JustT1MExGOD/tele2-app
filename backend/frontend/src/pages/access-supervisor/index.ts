@@ -769,9 +769,11 @@ function renderSvOverview(d: any): void {
 
   html += `<div class="sv-section">Просадки и риски <span>· live</span></div>`;
   if ((d.drops || []).length) {
-    html += d.drops
-      .map(
-        (x: any) => `
+    html +=
+      '<div class="workspace-grid">' +
+      d.drops
+        .map(
+          (x: any) => `
           <div class="sv-drop ${x.severity === 'critical' ? '' : 'warn'}">
             <div class="ico">${x.severity === 'critical' ? '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 18v-6a5 5 0 1 1 10 0v6" /> <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z" /> <path d="M21 12h1" /> <path d="M18.5 4.5 18 5" /> <path d="M2 12h1" /> <path d="M12 2v1" /> <path d="m4.929 4.929.707.707" /> <path d="M12 12v6" /> </svg>' : '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /> </svg>'}</div>
             <div style="flex:1">
@@ -781,8 +783,9 @@ function renderSvOverview(d: any): void {
               ${x.store_id ? `<button class="mchip" style="margin-top:6px" onclick="event.stopPropagation();proposeMoveForStore('${x.store_id}')">Предложить перенос</button>` : ''}
             </div>
           </div>`
-      )
-      .join('');
+        )
+        .join('') +
+      '</div>';
   } else {
     html += `<div class="empty" style="padding:12px 16px">Критических просадок нет — сектор в ритме</div>`;
   }
@@ -916,12 +919,11 @@ function renderSvTrend(d: any): void {
   html += `<div class="sv-store" style="--sc:#8B5CF6">${svMonthPlanBlock('svfc-net', netMonth.forecast || {}, 'total')}</div>`;
 
   html += `<div class="sv-section">Прогноз по точкам <span>· план на месяц каждой точки</span></div>`;
-  html +=
-    (d.stores || [])
-      .map((s: any, idx: number) => {
-        const fc = (s.month && s.month.forecast) || {};
-        const overallFc = pctOfMetricForecast(fc);
-        return `<div class="sv-store" style="--sc:${s.color || '#8B5CF6'}">
+  const forecastStoresHtml = (d.stores || [])
+    .map((s: any, idx: number) => {
+      const fc = (s.month && s.month.forecast) || {};
+      const overallFc = pctOfMetricForecast(fc);
+      return `<div class="sv-store" style="--sc:${s.color || '#8B5CF6'}">
           <div class="sv-store-head">
             <div>
               <div class="sv-store-name">${esc(s.name)}</div>
@@ -931,8 +933,9 @@ function renderSvTrend(d: any): void {
           </div>
           ${svMonthPlanBlock('svfcs-' + idx, fc, 'total')}
         </div>`;
-      })
-      .join('') || '<div class="empty">Нет точек</div>';
+    })
+    .join('');
+  html += forecastStoresHtml ? `<div class="workspace-grid">${forecastStoresHtml}</div>` : '<div class="empty">Нет точек</div>';
 
   box.innerHTML = html;
 }

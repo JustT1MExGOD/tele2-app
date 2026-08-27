@@ -64,6 +64,10 @@ describe('Command Center (миграция frontend/js/14-command-center.js → 
     expect(html).toContain('Обычно растёт после 16');
     expect(html).toContain('ccAckAlert(9)');
     expect(html).toContain('openCreateTaskModal(');
+    // 20.45 (Command Center + Supervisor, staged roadmap из 20.40) —
+    // списки точек/проблем лежат в .workspace-grid для десктоп-раскладки.
+    expect(html).toContain('class="workspace-grid" style="padding:10px 16px 0"');
+    expect(html).toContain('class="workspace-grid" style="padding:0 16px 16px"');
   });
 
   it('loadCommandCenterPage: без проблем — "сеть в ритме"', async () => {

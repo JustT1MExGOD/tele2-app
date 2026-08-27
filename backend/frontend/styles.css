@@ -2396,6 +2396,28 @@
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: var(--sp-3);
   }
+  /* 20.45 (Command Center + Supervisor, staged roadmap из 20.40) —
+     #svStoresBody/#svPeopleBody отдаются под .workspace-grid-раскладку
+     напрямую по id: их содержимое на 100% состоит из повторяющихся
+     карточек (.sv-store/.sv-rank), в отличие от Command
+     Center/«Обзор»/«Тренд», где список — только часть контейнера
+     (герой/заголовок рядом) и требует своей обёртки в разметке. */
+  #svStoresBody,
+  #svPeopleBody {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--sp-4);
+    align-items: start;
+  }
+  /* Карточки несут свои отступы под блочную вёрстку (margin-bottom и
+     т.п.) — внутри грида это удвоило бы отступ поверх gap. */
+  .workspace-grid > .progress-block,
+  .workspace-grid > .sv-drop,
+  .workspace-grid > .sv-store,
+  #svStoresBody > .sv-store,
+  #svPeopleBody > .sv-rank {
+    margin: 0 !important;
+  }
   /* Модификатор .row, не отдельный list-компонент — одна абстракция, не
      два параллельных паттерна списка. Хавер уже покрыт существующим
      .row:hover ниже по файлу (hover-медиа-блок) — .row--dense всегда

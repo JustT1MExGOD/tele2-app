@@ -34,7 +34,7 @@ export async function loadCommandCenterPage(): Promise<void> {
             <div class="cc-line cc-${pace >= 0 ? 'up' : 'down'}">${paceText}</div>
           </div>
         </div>
-        <div style="padding:10px 16px 0">
+        <div class="workspace-grid" style="padding:10px 16px 0">
           ${
             stores
               .map(
@@ -56,7 +56,7 @@ export async function loadCommandCenterPage(): Promise<void> {
 
       <div class="section">
         <div class="section-title">Где проблема ${problems.length ? `(${problems.length})` : ''}</div>
-        <div style="padding:0 16px 16px">
+        <div class="workspace-grid" style="padding:0 16px 16px">
           ${
             problems.length
               ? problems
