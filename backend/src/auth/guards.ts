@@ -58,6 +58,10 @@ export async function authPlugin(request: FastifyRequest, _reply: FastifyReply) 
 
 export function requireAuth(request: FastifyRequest, reply: FastifyReply) {
   if (!request.user?.employee_id) {
+    if (request.authError === 'phone_expired') {
+      reply.code(401).send({ error: 'session_expired', message: 'Сессия истекла, войдите снова.' });
+      return false;
+    }
     if (request.authError === 'expired') {
       reply.code(401).send({
         error: 'session_expired',
@@ -77,6 +81,10 @@ export function requireAuth(request: FastifyRequest, reply: FastifyReply) {
 export function requireActive(request: FastifyRequest, reply: FastifyReply) {
   const u = request.user;
   if (!u || u.access_status === 'none' || !u.employee_id) {
+    if (request.authError === 'phone_expired') {
+      reply.code(401).send({ error: 'session_expired', message: 'Сессия истекла, войдите снова.' });
+      return false;
+    }
     if (request.authError === 'expired') {
       reply.code(401).send({
         error: 'session_expired',

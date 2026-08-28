@@ -9,11 +9,14 @@ import { getApp, authAs, authAsSession } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import { hashPassword, verifyPassword } from '../../src/auth/password.js';
+import { normalizePhone } from '../../src/utils/phone.js';
 import * as sessionsRepo from '../../src/data/repositories/sessions.js';
 
+// 20.48.0 — уже в каноническом формате normalizePhone() (+7XXXXXXXXXX),
+// чтобы raw-значение теста совпадало побайтово с тем, что реально
+// сохраняется/резолвится через identities (см. utils/phone.ts).
 function uniquePhone(): string {
-  // 7-15 цифр после необязательного '+', PHONE_RE в session.ts.
-  return '7900' + Math.floor(1000000 + Math.random() * 8999999);
+  return '+7900' + Math.floor(1000000 + Math.random() * 8999999);
 }
 
 describe('Не-Telegram вход — телефон + пароль', () => {
@@ -155,14 +158,8 @@ describe('Не-Telegram вход — телефон + пароль', () => {
   it('POST /auth/login — неверный пароль и несуществующий телефон дают одинаковый 401', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Phone Login Fail Org');
-    const phone = uniquePhone();
     const passwordHash = await hashPassword('right-password');
-    const res = await query(
-      `INSERT INTO employees (full_name, phone, password_hash, role, access_status, is_active, org_id)
-       VALUES ('Login Test', $1, $2, 'employee', 'active', true, $3) RETURNING id`,
-      [phone, passwordHash, org]
-    );
-    extraEmployeeIds.push(res.rows[0].id);
+    const { phone } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Login Test' });
 
     const wrongPassword = await app.inject({ method: 'POST', url: '/auth/login', payload: { phone, password: 'wrong' } });
     expect(wrongPassword.statusCode).toBe(401);
@@ -175,14 +172,8 @@ describe('Не-Telegram вход — телефон + пароль', () => {
   it('POST /auth/login — не-active сотрудник получает 403, не 401', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Phone Pending Org');
-    const phone = uniquePhone();
     const passwordHash = await hashPassword('some-password');
-    const res = await query(
-      `INSERT INTO employees (full_name, phone, password_hash, role, access_status, is_active, org_id)
-       VALUES ('Pending Employee', $1, $2, 'employee', 'pending', true, $3) RETURNING id`,
-      [phone, passwordHash, org]
-    );
-    extraEmployeeIds.push(res.rows[0].id);
+    const { phone } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Pending Employee', accessStatus: 'pending' });
 
     const login = await app.inject({ method: 'POST', url: '/auth/login', payload: { phone, password: 'some-password' } });
     expect(login.statusCode).toBe(403);
@@ -192,15 +183,8 @@ describe('Не-Telegram вход — телефон + пароль', () => {
     const app = await getApp();
     const org = await fx.createOrg('Phone Guards Org');
     const manager = await fx.createEmployee(org, { role: 'manager' }); // Telegram
-    const phone = uniquePhone();
     const passwordHash = await hashPassword('guard-test-pass');
-    const res = await query(
-      `INSERT INTO employees (full_name, phone, password_hash, role, access_status, is_active, org_id)
-       VALUES ('Phone Manager', $1, $2, 'manager', 'active', true, $3) RETURNING id`,
-      [phone, passwordHash, org]
-    );
-    const phoneManagerId = res.rows[0].id;
-    extraEmployeeIds.push(phoneManagerId);
+    const { id: phoneManagerId } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Phone Manager', role: 'manager' });
     const token = await sessionsRepo.createSession(phoneManagerId);
 
     // requireManager-гейтед роут (GET /access/requests) — phone-сессия проходит гвард без единой правки в guards.ts.
@@ -220,15 +204,9 @@ describe('Не-Telegram вход — телефон + пароль', () => {
   it('POST /auth/logout — удаляет сессию, повторный запрос с тем же токеном больше не авторизован', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Phone Logout Org');
-    const phone = uniquePhone();
     const passwordHash = await hashPassword('logout-pass');
-    const res = await query(
-      `INSERT INTO employees (full_name, phone, password_hash, role, access_status, is_active, org_id)
-       VALUES ('Logout Test', $1, $2, 'manager', 'active', true, $3) RETURNING id`,
-      [phone, passwordHash, org]
-    );
-    extraEmployeeIds.push(res.rows[0].id);
-    const token = await sessionsRepo.createSession(res.rows[0].id);
+    const { id: employeeId } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Logout Test', role: 'manager' });
+    const token = await sessionsRepo.createSession(employeeId);
 
     const before = await app.inject({ method: 'GET', url: '/access/requests', headers: authAsSession(token) });
     expect(before.statusCode).toBe(200);
@@ -244,15 +222,8 @@ describe('Не-Telegram вход — телефон + пароль', () => {
     const app = await getApp();
     const org = await fx.createOrg('Phone Reset Org');
     const admin = await fx.createEmployee(org, { role: 'admin' });
-    const phone = uniquePhone();
     const passwordHash = await hashPassword('old-password');
-    const res = await query(
-      `INSERT INTO employees (full_name, phone, password_hash, role, access_status, is_active, org_id)
-       VALUES ('Reset Test', $1, $2, 'employee', 'active', true, $3) RETURNING id`,
-      [phone, passwordHash, org]
-    );
-    const employeeId = res.rows[0].id;
-    extraEmployeeIds.push(employeeId);
+    const { id: employeeId, phone } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Reset Test' });
 
     const genLink = await app.inject({
       method: 'POST',

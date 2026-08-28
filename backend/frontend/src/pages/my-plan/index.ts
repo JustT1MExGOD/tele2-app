@@ -365,8 +365,66 @@ export async function loadMyPlan(): Promise<void> {
     lkPhoneAuth.innerHTML = `<div class="section"><div class="section-title">Вход с компьютера</div>${linkRow}${logoutRow}</div>`;
   }
 
+  // 20.48.0 (Web Security & Trust Layer) — активные сессии: работает для
+  // любого provider'а (Telegram-пользователь тоже видит и может отозвать
+  // свою браузерную сессию), не только для phone-входа выше.
+  loadSessionsSection();
+
   // v13: сессия смены + инсайт + геймификация
   loadShiftAndInsight(empId);
+}
+
+async function loadSessionsSection(): Promise<void> {
+  const el = document.getElementById('lkSessions');
+  if (!el) return;
+  let data;
+  try {
+    data = await window.apiClient.listSessions(authHeaders(true));
+  } catch (_) {
+    el.innerHTML = '';
+    return;
+  }
+  if (!data.sessions.length) {
+    el.innerHTML = '';
+    return;
+  }
+  const rows = data.sessions
+    .map(
+      (s) => `
+          <div class="row" style="cursor:default">
+            <div class="row-body">
+              <div class="row-title">${s.current ? 'Эта сессия' : 'Активна с ' + formatDateRu(s.created_at)}</div>
+              <div class="row-sub">Последняя активность: ${formatDateRu(s.last_seen_at)}</div>
+            </div>
+            ${s.current ? '' : `<button class="btn-ghost" style="padding:6px 12px" onclick="revokeSessionRow(${s.id})">Завершить</button>`}
+          </div>`
+    )
+    .join('');
+  const revokeOthers =
+    data.sessions.length > 1
+      ? `<button class="row" onclick="revokeOtherSessionsRow()"><div class="row-body"><div class="row-title">Завершить остальные</div></div></button>`
+      : '';
+  el.innerHTML = `<div class="section"><div class="section-title">Активные сессии</div>${rows}${revokeOthers}</div>`;
+}
+
+export async function revokeSessionRow(id: number): Promise<void> {
+  try {
+    await window.apiClient.revokeSession(authHeaders(true), id);
+    toast('Сессия завершена', 'ok');
+    loadSessionsSection();
+  } catch (e: any) {
+    toast(e?.message || 'Не удалось завершить сессию', 'err');
+  }
+}
+
+export async function revokeOtherSessionsRow(): Promise<void> {
+  try {
+    await window.apiClient.revokeOtherSessions(authHeaders(true));
+    toast('Остальные сессии завершены', 'ok');
+    loadSessionsSection();
+  } catch (e: any) {
+    toast(e?.message || 'Не удалось завершить сессии', 'err');
+  }
 }
 
 export function openLinkPhone(): void {
@@ -506,6 +564,8 @@ declare global {
     openLinkPhone: typeof openLinkPhone;
     saveLinkPhone: typeof saveLinkPhone;
     logoutSelf: typeof logoutSelf;
+    revokeSessionRow: typeof revokeSessionRow;
+    revokeOtherSessionsRow: typeof revokeOtherSessionsRow;
   }
 }
 window.loadMyPlan = loadMyPlan;
@@ -514,3 +574,5 @@ window.pickAvatarFile = pickAvatarFile;
 window.openLinkPhone = openLinkPhone;
 window.saveLinkPhone = saveLinkPhone;
 window.logoutSelf = logoutSelf;
+window.revokeSessionRow = revokeSessionRow;
+window.revokeOtherSessionsRow = revokeOtherSessionsRow;

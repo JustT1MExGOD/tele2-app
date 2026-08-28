@@ -131,5 +131,48 @@ describe('Изоляция привязки Telegram (POST /me/bind)', () => {
       [raceTelegramId]
     );
     expect(owners.rows.length).toBe(1);
+
+    // 20.48.0 (Web Security & Trust Layer) — employees.telegram_id и
+    // identities(provider='telegram') не могут разойтись: ровно одна
+    // строка identities, указывающая на ТОГО ЖЕ сотрудника, что победил
+    // в employees.
+    const identityRows = await query(
+      `SELECT employee_id FROM identities WHERE provider='telegram' AND provider_key=$1`,
+      [String(raceTelegramId)]
+    );
+    expect(identityRows.rows.length).toBe(1);
+    expect(Number(identityRows.rows[0].employee_id)).toBe(Number(owners.rows[0].id));
+  });
+
+  // 20.48.0 — transfer-сценарий: сотрудник A уже привязан к Telegram X,
+  // тот же физический Telegram X self-bind'ит на НЕзанятую карточку B —
+  // claimTelegramId() обязан снять X с A и поставить на B атомарно, в
+  // обеих таблицах (employees.telegram_id и identities) одновременно.
+  it('transfer: self-bind тем же telegram_id на другую карточку снимает его с прежней и переносит в identities', async () => {
+    const app = await getApp();
+    const transferTelegramId = Math.floor(9_000_000_000 + Math.random() * 900_000_000);
+    const cardA = await fx.createEmployee(orgA, { role: 'employee', fullName: 'Card A', telegramId: transferTelegramId });
+    const cardB = await fx.createEmployee(orgA, { role: 'employee', fullName: 'Card B', telegramId: null });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/me/bind',
+      headers: { 'x-telegram-id': String(transferTelegramId), 'content-type': 'application/json' },
+      payload: { employee_id: cardB.id }
+    });
+    expect(res.statusCode).toBe(200);
+
+    const rows = await query(`SELECT id, telegram_id FROM employees WHERE id = ANY($1)`, [[cardA.id, cardB.id]]);
+    const a = rows.rows.find((r: any) => Number(r.id) === cardA.id);
+    const b = rows.rows.find((r: any) => Number(r.id) === cardB.id);
+    expect(a.telegram_id).toBeNull();
+    expect(Number(b.telegram_id)).toBe(transferTelegramId);
+
+    const identityRows = await query(
+      `SELECT employee_id FROM identities WHERE provider='telegram' AND provider_key=$1`,
+      [String(transferTelegramId)]
+    );
+    expect(identityRows.rows.length).toBe(1);
+    expect(Number(identityRows.rows[0].employee_id)).toBe(cardB.id);
   });
 });

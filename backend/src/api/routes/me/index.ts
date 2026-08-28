@@ -7,6 +7,8 @@ import { Type, Static } from '@sinclair/typebox';
 import { isManager } from '../../../auth/guards.js';
 import { hashPassword } from '../../../auth/password.js';
 import { todayMoscow } from '../../../utils/date.js';
+import { normalizePhone } from '../../../utils/phone.js';
+import { withTransaction } from '../../../data/db/index.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
@@ -18,11 +20,6 @@ const MeBindBody = Type.Object({
   employee_id: Type.Number()
 });
 type MeBindBody = Static<typeof MeBindBody>;
-
-// Тот же regex, что auth/routes/session.ts — намеренно не общий импорт,
-// та же дисциплина маленьких дублируемых хелперов, что esc() в access.ts/
-// session.ts.
-const PHONE_RE = /^\+?[1-9]\d{6,14}$/;
 
 const LinkPhoneBody = Type.Object({
   phone: Type.String({ minLength: 7, maxLength: 16 }),
@@ -74,14 +71,14 @@ export async function registerMeRoutes(app: FastifyInstance) {
         return reply.code(401).send({ error: 'unauthorized', message: 'Войдите через Telegram' });
       }
       const b = request.body as LinkPhoneBody;
-      const phone = String(b.phone || '').trim();
-      if (!PHONE_RE.test(phone)) {
+      const phone = normalizePhone(String(b.phone || ''));
+      if (!phone) {
         return reply.code(400).send({ error: 'invalid_phone', message: 'Некорректный номер телефона' });
       }
 
       const passwordHash = await hashPassword(b.password);
       try {
-        await employeesRepo.setPhoneAndPassword(request.user.employee_id, phone, passwordHash);
+        await withTransaction((q) => employeesRepo.setPhoneAndPassword(request.user!.employee_id!, phone, passwordHash, q));
       } catch (e: any) {
         if (e?.code === '23505') {
           return reply.code(409).send({ error: 'phone_taken', message: 'Этот номер уже привязан к другому аккаунту' });
@@ -149,7 +146,7 @@ export async function registerMeRoutes(app: FastifyInstance) {
     // здесь и отдаём тот же понятный 409, а не голую ошибку SQL.
     let bound: any;
     try {
-      bound = await employeesRepo.claimTelegramId(telegram_id, employee_id);
+      bound = await withTransaction((q) => employeesRepo.claimTelegramId(telegram_id, employee_id, q));
     } catch (e: any) {
       if (e?.code === '23505') {
         return reply.code(409).send({ error: 'already_bound', message: 'Карточка уже привязана к другому Telegram' });

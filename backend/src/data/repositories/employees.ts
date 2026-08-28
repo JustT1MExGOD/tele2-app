@@ -10,6 +10,7 @@
  * переноса — этот файл только переносит существующий SQL, ничего не чинит.
  */
 import { query } from '../db/index.js';
+import * as identitiesRepo from './identities.js';
 
 export interface EmployeeRow {
   id: number;
@@ -39,21 +40,9 @@ export type EmployeePatch = Partial<{
 
 const PATCHABLE_FIELDS = ['full_name', 'short_name', 'is_active'] as const;
 
-/** Используется authPlugin/loadUser — резолв юзера по подтверждённому Telegram id. */
-export async function findByTelegramId(telegramId: number): Promise<EmployeeAuthRow | null> {
-  const res = await query(
-    `SELECT id as employee_id, full_name, role, telegram_id, access_status, is_active, org_id
-     FROM employees
-     WHERE telegram_id = $1::bigint
-     LIMIT 1`,
-    [telegramId]
-  );
-  return res.rows[0] || null;
-}
-
-/** Не-Telegram вход (20.35, план) — используется authPlugin/loadUser для
- * phone-provider'а: сессия уже резолвила employee_id, здесь просто читаем
- * ту же форму строки, что findByTelegramId. */
+/** Используется authPlugin/loadUser для обоих provider'ов — 20.48.0:
+ * Telegram резолвит employee_id через identities СНАЧАЛА (identitiesRepo.
+ * findEmployeeId), затем читает карточку здесь же, тем же путём, что phone. */
 export async function findById(employeeId: number): Promise<EmployeeAuthRow | null> {
   const res = await query(
     `SELECT id as employee_id, full_name, role, telegram_id, access_status, is_active, org_id
@@ -65,16 +54,19 @@ export async function findById(employeeId: number): Promise<EmployeeAuthRow | nu
   return res.rows[0] || null;
 }
 
-/** Не-Telegram вход (20.35, план) — резолв по телефону для /auth/login. */
-export async function findByPhone(phone: string): Promise<
+/** 20.48.0 — /auth/login резолвит employee_id через identities, дальше
+ * читает password_hash здесь (не в общей findById/EmployeeAuthRow — та
+ * идёт по горячему пути каждого запроса через principal.ts, незачем
+ * тянуть password_hash туда, где он не нужен). */
+export async function findByIdWithPassword(employeeId: number): Promise<
   { id: number; full_name: string; role: string; password_hash: string | null; is_active: boolean; access_status: string | null } | null
 > {
   const res = await query(
     `SELECT id, full_name, role, password_hash, is_active, access_status
      FROM employees
-     WHERE phone = $1
+     WHERE id = $1
      LIMIT 1`,
-    [phone]
+    [employeeId]
   );
   return res.rows[0] || null;
 }
@@ -92,8 +84,12 @@ export async function getPhone(employeeId: number): Promise<string | null> {
   return res.rows[0]?.phone ?? null;
 }
 
-export async function setPhoneAndPassword(employeeId: number, phone: string, passwordHash: string): Promise<void> {
-  await query(`UPDATE employees SET phone = $1, password_hash = $2 WHERE id = $3`, [phone, passwordHash, employeeId]);
+/** 20.48.0 — self re-link (POST /me/link-phone): та же bindIdentityStrict-
+ * семантика, что approveExistingPhone (reject-конфликт, не transfer). */
+export async function setPhoneAndPassword(employeeId: number, phone: string, passwordHash: string, q: typeof query = query): Promise<void> {
+  await q(`UPDATE employees SET phone = $1, password_hash = $2 WHERE id = $3`, [phone, passwordHash, employeeId]);
+  await identitiesRepo.bindIdentityStrict(employeeId, 'phone', phone, q);
+  await q(`DELETE FROM employee_sessions WHERE employee_id = $1`, [employeeId]);
 }
 
 /** Тот же чек, что storesRepo.belongsToOrg — используется requireEmployeeInOrg. */
@@ -161,20 +157,44 @@ export async function findBindTarget(employeeId: number): Promise<{ telegram_id:
  * шагами, и UNIQUE-конфликт остаётся единственным источником "кто
  * победил", как и было задумано изначально.
  */
-export async function claimTelegramId(telegramId: number, employeeId: number): Promise<any | null> {
-  const res = await query(
+/**
+ * 20.48.0 — единственная точка изменения Telegram identity: employees.
+ * telegram_id и identities(provider='telegram') обновляются здесь, в
+ * одной транзакции (вызывающий оборачивает в withTransaction и передаёт
+ * q), никогда по отдельности из разных мест кода (инвариант, см. план
+ * Web Security & Trust Layer). identitiesRepo.transferIdentity — тот же
+ * "снять отовсюду + поставить сюда"-принцип, что уже был в CTE ниже.
+ *
+ * Найденный этим же проходом баг (предшествует 20.48.0, не внесён этой
+ * правкой): `cleared` CTE и главный UPDATE не связаны данными, поэтому
+ * Postgres не гарантирует порядок их выполнения — main UPDATE мог
+ * проверить UNIQUE(telegram_id) РАНЬШЕ, чем cleared освобождал строку
+ * прежнего владельца, и словить 23505 там, где ожидался успешный transfer.
+ * Race-тест на 5 конкурентных bind'ов НЕ ловил это, потому что все 5
+ * карточек стартовали НЕЗАНЯТЫМИ (cleared всегда матчил 0 строк вне
+ * зависимости от порядка) — сценарий "снять с уже занятой карточки"
+ * никогда не проверялся до нового transfer-теста (me-bind.test.ts).
+ * Фикс — принудительная data-зависимость через `(SELECT count(*) FROM
+ * cleared) >= 0` в WHERE главного UPDATE: гарантирует, что Postgres
+ * выполнит cleared ДО вычисления WHERE и, следовательно, до вставки/
+ * проверки constraint на целевой строке.
+ */
+export async function claimTelegramId(telegramId: number, employeeId: number, q: typeof query = query): Promise<any | null> {
+  const res = await q(
     `WITH cleared AS (
-       UPDATE employees SET telegram_id = NULL WHERE telegram_id = $1
+       UPDATE employees SET telegram_id = NULL WHERE telegram_id = $1 RETURNING id
      )
      UPDATE employees
      SET telegram_id = $1,
          access_status = COALESCE(NULLIF(access_status, ''), 'active'),
          is_active = true
-     WHERE id = $2
+     WHERE id = $2 AND (SELECT count(*) FROM cleared) >= 0
      RETURNING id as employee_id, id, full_name, short_name, role, telegram_id, access_status`,
     [telegramId, employeeId]
   );
-  return res.rows[0] || null;
+  const row = res.rows[0] || null;
+  if (row) await identitiesRepo.transferIdentity(employeeId, 'telegram', String(telegramId), q);
+  return row;
 }
 
 /** GET /me/day — своя карточка, активна ли (та же identity, что и request.user, лишний раз сверяем). */
@@ -236,7 +256,16 @@ export async function updateFields(
   return res.rows[0] || null;
 }
 
-/** DELETE /employees/:id — soft delete, отвязывает telegram, не трогает историю. */
+/**
+ * DELETE /employees/:id — soft delete, отвязывает telegram, не трогает
+ * историю. 20.48.0 — зеркалит отвязку в identities(provider='telegram')
+ * (phone НЕ трогаем — переживает деактивацию, как и раньше employees.phone)
+ * + отзывает ВСЕ активные browser-сессии немедленно (инвариант Web
+ * Security & Trust Layer: деактивация обязана инвалидировать сессии, не
+ * полагаться на то, что requireActive поймает это на следующем запросе
+ * позже). После реактивации Telegram привязывается заново через /me/bind
+ * — уже сегодняшнее поведение (telegram_id и так обнулялся), не новое.
+ */
 export async function softDeactivate(
   employeeId: number, q: typeof query = query
 ): Promise<{ id: number; full_name: string; is_active: boolean } | null> {
@@ -245,7 +274,12 @@ export async function softDeactivate(
      RETURNING id, full_name, is_active`,
     [employeeId]
   );
-  return res.rows[0] || null;
+  const row = res.rows[0] || null;
+  if (row) {
+    await identitiesRepo.removeIdentity(employeeId, 'telegram', q);
+    await q(`DELETE FROM employee_sessions WHERE employee_id = $1`, [employeeId]);
+  }
+  return row;
 }
 
 export async function updateRole(
@@ -301,6 +335,9 @@ export async function approveExisting(
      WHERE id = $5`,
     [telegramId, role, verifiedBy, fullNameFallback, employeeId]
   );
+  // 20.48.0 — admin подтверждает Telegram-заявку тем же transfer-принципом,
+  // что self-bind (claimTelegramId): steal у прежнего владельца разрешён.
+  await identitiesRepo.transferIdentity(employeeId, 'telegram', String(telegramId), q);
 }
 
 /** Approve заявки без claim — заводит нового сотрудника в сети заявки. */
@@ -314,7 +351,9 @@ export async function createFromApproval(
      RETURNING id`,
     [fullName, telegramId, role, verifiedBy, orgId]
   );
-  return res.rows[0]?.id;
+  const employeeId = res.rows[0]?.id;
+  if (employeeId) await identitiesRepo.transferIdentity(employeeId, 'telegram', String(telegramId), q);
+  return employeeId;
 }
 
 /** Не-Telegram вход (20.35, план) — approveExisting/createFromApproval для
@@ -337,6 +376,11 @@ export async function approveExistingPhone(
      WHERE id = $6`,
     [phone, passwordHash, role, verifiedBy, fullNameFallback, employeeId]
   );
+  // 20.48.0 — phone: reject-конфликт, не transfer (телефон — credential
+  // boundary, не recovery-механизм, как Telegram self-bind). Если этот
+  // номер уже занят другим сотрудником — сырой 23505, вызывающий роут
+  // (org/access.ts) уже размечен под withTransaction и откатит approve целиком.
+  await identitiesRepo.bindIdentityStrict(employeeId, 'phone', phone, q);
 }
 
 export async function createFromApprovalPhone(
@@ -349,7 +393,9 @@ export async function createFromApprovalPhone(
      RETURNING id`,
     [fullName, phone, passwordHash, role, verifiedBy, orgId]
   );
-  return res.rows[0]?.id;
+  const employeeId = res.rows[0]?.id;
+  if (employeeId) await identitiesRepo.bindIdentityStrict(employeeId, 'phone', phone, q);
+  return employeeId;
 }
 
 /** Для уведомлений в бота (задачи/подтверждение и т.п.) — только telegram_id + имя. */

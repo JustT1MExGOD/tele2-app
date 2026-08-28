@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.47.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.48.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-366%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.47.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.48.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -474,6 +474,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.45.0** | Command Center + Supervisor — `.workspace-grid` на списки-секции (staged roadmap из 20.40, Part G, следующий шаг после Schedule/Plans). Никакого нового JS-функционала — только раскладка уже карточно-списочных секций (`.sv-store`/`.sv-drop`/`.sv-rank`/`.progress-block`) в адаптивную сетку вместо одной колонки на десктопе. `#svStoresBody`/`#svPeopleBody` (100% содержимого — карточки) получили grid-правила напрямую по id в CSS; Command Center/«Обзор»/«Тренд» (список — часть контейнера рядом с героем/графиком) — карточки обёрнуты в новый `<div class="workspace-grid">` точечной правкой шаблона. `.sv-hero`/`.sv-chart`/внутренняя разметка карточек не тронуты. 3 новых/расширенных фронтенд-теста, backend не тронут |
 | **20.46.0** | Admin — «максимально функциональный»: закрыт последний пункт staged roadmap из 20.40 плюс три реальных пробела, найденных аудитом и подтверждённых с владельцем. Баг: повышение до `supervisor` никогда не передавало `sector_id` (роут уже поддерживал, фронтенд не вызывал) — `setRole()` теперь открывает общий модал-пикер сектора, "Пропустить" оставляет прежнее поведение без потери молча. Новый экран «Дилеры/Секторы» — `GET /admin/dealers` строит дерево дилер→сектор→сети/супервайзеры + хвосты непривязанного, `PATCH /admin/dealers\|sectors/:id` — первое в жизни переименование. Аудит — панель фильтров (action/target_type/дата) + пагинация "Показать ещё" + `.data-table` с diff-модалом по клику; заодно починен `?org_id=`, который роут раньше игнорировал. Сети → `.data-table`. `dealers.id`/`employees.id` — bigint, отдаются node-postgres строкой — `id::int` в новых репозиторных функциях (тот же класс проблемы, что уже ловили на `message_id`, 20.43.0). 12 новых backend + 22 новых/расширенных фронтенд-тестов |
 | **20.47.0** | iPhone Web App/Safari — safe-area слой поверх Telegram Mini App, без нового дизайна и без переписывания мобильного интерфейса. Единые переменные `--app-safe-top/bottom/left/right` = `max(--tg-content-safe-top, env(safe-area-inset-*))` поверх уже существующего Telegram-механизма (не сумма — гарантирует отсутствие двойных отступов внутри Telegram, второй параллельный детект iPhone не заводился). `--bottom-nav-safe-offset` (92px база + safe-bottom) — единая переменная вместо разрозненных `calc()` у body/FAB/bottom-nav/sheet-modal/tutorial/gate-shell; на устройствах без notch резолвится в прежние значения побайтово. Landscape iPhone (до ~926px) reach-ит десктоп-shell `@860px` — туда тоже добавлены left/right/bottom safe-area (чистый пробел, не регрессия). `apple-mobile-web-app-*`/`theme-color` meta-теги (без manifest/Service Worker — вне объёма); `theme-color` синхронизируется с той же темой, что уже уходит в `tg.setBackgroundColor()`. Проверено и оставлено как есть: input/select уже 16px, dvh-фолбэк уже на месте, `overscroll-behavior`/tap-highlight уже были — повторно не чинились |
+| **20.48.0** | Web Security & Trust Layer, часть 1 — Authentication & Session Security: после появления standalone PWA у приложения три канала входа, не один Telegram. Новая `identities`-таблица (schema-level, порог, дважды отложенный ADR-005) — единственный источник правды auth-резолва; `employees.telegram_id`/`phone` остаются для не-auth потребителей. Разная семантика конфликта: Telegram — ownership transfer атомарным `INSERT...ON CONFLICT`, Phone — строгий `409`, не transfer. Найден и исправлен пред-существующий race-баг в `claimTelegramId()`'s CTE (перенос на занятую карточку мог словить ложный 409). Session lifecycle — деактивация/password reset немедленно отзывают все browser-сессии; новые `GET/DELETE /auth/sessions`, `revoke-others`. CSRF (double-submit cookie + Sec-Fetch-Site/Origin), rate-limit `/auth/login` по хэшированному нормализованному телефону не IP, `trustProxy:1`. 10 новых тестов, 383→416 backend |
 
 ---
 
@@ -1220,6 +1221,47 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   светлая/тёмная тема статус-бара и клавиатура при фокусе инпута
   требуют ручной проверки на настоящем iPhone. Backend не тронут ни
   строкой (см. §21, 20.47.0)
+- **20.48 Web Security & Trust Layer, часть 1 — Auth & Session
+  Security** ✅ — со standalone PWA-слоем (20.47.0) у приложения де-факто
+  три канала входа вместо одного доверенного Telegram-канала, на котором
+  строилась исходная модель угроз. Владелец продукта предложил эпоху из
+  6 частей и сам расставил приоритет — сначала Auth/Session Security;
+  план прошёл три раунда детального архитектурного ревью перед стартом
+  реализации. Аудит кода показал: многое уже построено (Identity/
+  Principal-граница ADR-005, реальная cookie-сессия для phone-входа,
+  rate-limit, уже throttled `last_seen_at`, уже свежий токен на каждый
+  логин — session fixation структурно невозможна). Работа — закрыть
+  подтверждённые пробелы и осознанно перейти порог, дважды отложенный
+  ADR-005: schema-level `identities`-таблица (`employee_id, provider,
+  provider_key`, `UNIQUE(provider,provider_key)`+`UNIQUE(employee_id,
+  provider)`) — единственный источник правды auth-резолва; `employees.
+  telegram_id`/`phone` остаются для не-auth потребителей (бот-
+  уведомления, Команда). Разная семантика конфликта по provider,
+  зафиксированная как инвариант: **Telegram** — ownership transfer
+  (steal) разрешён, атомарный `INSERT...ON CONFLICT DO UPDATE` (не
+  `DELETE`+`INSERT` — race-safe), `claimTelegramId()` единственная точка
+  изменения; **Phone** — transfer НЕ разрешён, конфликт — явный `409`
+  (телефон — credential boundary, не recovery-механизм). При разборе
+  найден и исправлен реальный, предшествующий этой версии баг:
+  `claimTelegramId()`'s CTE не имел data-зависимости между «снять с
+  прежнего» и «поставить на нового» — Postgres не гарантировал порядок,
+  перенос на уже занятую карточку мог словить ложный `409` вместо
+  успешного transfer (единственный существующий тест проверял только
+  гонку за НЕзанятую карточку) — пойман новым transfer-тестом ДО пуша.
+  Session lifecycle — деактивация и password reset немедленно отзывают
+  все активные browser-сессии сотрудника, не полагаясь на `requireActive`
+  на следующем запросе; новые `GET/DELETE /auth/sessions`, `POST /auth/
+  sessions/revoke-others` — самообслуживание, ownership-scoped, работает
+  для любого provider'а. CSRF — double-submit cookie (`t2_csrf`) +
+  `Sec-Fetch-Site`/`Origin`-слой, срабатывает от наличия `t2_session`
+  cookie, `/auth/login|register|reset` явно исключены (честный вход не
+  должен падать в CSRF-отказ из-за старой cookie в браузере). Rate-limit
+  `/auth/login` — ключ `sha256(normalizePhone(phone))`, не IP; `trustProxy:
+  1`, не `true`. `normalizePhone()`/`validatePhone()` (RU-профиль)
+  заменили нестрогий regex; миграция 0020 нормализует существующие
+  `employees.phone` с preflight-проверкой на дубли перед backfill. ADR-005
+  и `SECURITY.md` §2 обновлены. 10 новых backend-тестов, 383→416 (см.
+  §21, 20.48.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -1267,6 +1309,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.47.0 · август 2026*
+*README · актуально на v20.48.0 · август 2026*
 
 </div>

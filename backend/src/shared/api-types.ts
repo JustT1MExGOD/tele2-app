@@ -643,6 +643,28 @@ export interface ConsumeResetRequest {
 
 export type ConsumeResetResponse = LoginResponse;
 
+// ---------- /auth/sessions (20.48.0, Web Security & Trust Layer) ----------
+export interface SessionListItem {
+  id: number;
+  created_at: string;
+  last_seen_at: string;
+  /** Всегда false для Telegram-контекста запроса (нет t2_session cookie
+   * для сравнения) — это ожидаемо, не баг. */
+  current: boolean;
+}
+
+export interface ListSessionsResponse {
+  sessions: SessionListItem[];
+}
+
+export interface RevokeSessionResponse {
+  ok: true;
+}
+
+export interface RevokeOtherSessionsResponse {
+  ok: true;
+}
+
 // ---------- /supervisor/health, /supervisor/dashboard ----------
 export interface SupervisorHealthResponse {
   health: number;

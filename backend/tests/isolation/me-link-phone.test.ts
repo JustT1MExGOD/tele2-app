@@ -9,9 +9,14 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
+import { normalizePhone } from '../../src/utils/phone.js';
 
+// 20.48.0 — уже в каноническом формате normalizePhone() (+7XXXXXXXXXX),
+// чтобы raw-значение теста и то, что реально сохранится/резолвится через
+// identities, совпадали побайтово — без этого сравнение теста с БД ловит
+// не баг, а собственную нестрогость своего же генератора номеров.
 function uniquePhone(): string {
-  return '7901' + Math.floor(1000000 + Math.random() * 8999999);
+  return '+7901' + Math.floor(1000000 + Math.random() * 8999999);
 }
 
 describe('POST /me/link-phone — самопривязка телефона к уже авторизованному аккаунту', () => {
@@ -80,13 +85,20 @@ describe('POST /me/link-phone — самопривязка телефона к �
   it('телефон уже занят другим сотрудником — 409, свой номер не трогается', async () => {
     const app = await getApp();
     const org = await fx.createOrg('LinkPhone Taken Org');
-    const takenPhone = uniquePhone();
+    const takenPhone = normalizePhone(uniquePhone())!;
     const occupant = await query(
       `INSERT INTO employees (full_name, phone, password_hash, role, access_status, is_active, org_id)
        VALUES ('Occupant', $1, 'scrypt$aa$bb', 'employee', 'active', true, $2) RETURNING id`,
       [takenPhone, org]
     );
     extraEmployeeIds.push(occupant.rows[0].id);
+    // 20.48.0 — identitiesRepo.bindIdentityStrict резолвит конфликт через
+    // identities, не employees.phone напрямую — фикстура должна держать оба
+    // в синхроне, как и production-путь (approveExistingPhone и т.п.).
+    await query(
+      `INSERT INTO identities (employee_id, provider, provider_key) VALUES ($1, 'phone', $2)`,
+      [occupant.rows[0].id, takenPhone]
+    );
     const employee = await fx.createEmployee(org, { role: 'employee' });
 
     const res = await app.inject({

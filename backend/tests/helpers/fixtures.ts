@@ -5,6 +5,7 @@
  * запоминает созданную запись в this — cleanup() подчищает именно её.
  */
 import { query } from '../../src/data/db/index.js';
+import { normalizePhone } from '../../src/utils/phone.js';
 
 let counter = 0;
 /** Уникальный префикс на тестовый прогон — safety net на случай, если
@@ -58,7 +59,45 @@ export class TestFixtures {
     );
     const id = Number(res.rows[0].id);
     this.employeeIds.push(id);
+    // 20.48.0 (Web Security & Trust Layer) — principal.ts::loadUser()
+    // резолвит Telegram через identities, не employees.telegram_id
+    // напрямую; эта фикстура пишет telegram_id сырым SQL, в обход
+    // employees.ts-репозитория (который и синхронизирует identities для
+    // production-путей) — держим фикстуру в синхроне вручную, иначе
+    // authAs(telegramId) во всех изоляционных тестах перестаёт резолвиться.
+    if (telegramId) {
+      await query(
+        `INSERT INTO identities (employee_id, provider, provider_key) VALUES ($1, 'telegram', $2)`,
+        [id, String(telegramId)]
+      );
+    }
     return { id, telegramId: telegramId as number };
+  }
+
+  /**
+   * 20.48.0 (Web Security & Trust Layer) — phone-сотрудник для тестов
+   * /auth/login и т.п.: пишет employees.phone/password_hash И
+   * identities(provider='phone') вместе, тем же нормализованным номером,
+   * которым реально резолвит /auth/login (identitiesRepo.findEmployeeId) —
+   * иначе raw INSERT в employees в обход репозитория не резолвится.
+   */
+  async createPhoneEmployee(
+    orgId: string,
+    phone: string,
+    passwordHash: string | null,
+    opts: { role?: Role; fullName?: string; accessStatus?: string } = {}
+  ): Promise<{ id: number; phone: string }> {
+    const normalized = normalizePhone(phone);
+    if (!normalized) throw new Error(`createPhoneEmployee: "${phone}" не проходит normalizePhone()`);
+    const res = await query(
+      `INSERT INTO employees (full_name, phone, password_hash, role, access_status, is_active, org_id)
+       VALUES ($1, $2, $3, $4, $5, true, $6) RETURNING id`,
+      [opts.fullName || 'Test Phone Employee', normalized, passwordHash, opts.role || 'employee', opts.accessStatus || 'active', orgId]
+    );
+    const id = Number(res.rows[0].id);
+    this.employeeIds.push(id);
+    await query(`INSERT INTO identities (employee_id, provider, provider_key) VALUES ($1, 'phone', $2)`, [id, normalized]);
+    return { id, phone: normalized };
   }
 
   /** FK-safe порядок: сначала записи, ссылающиеся на store/employee, потом
@@ -73,6 +112,11 @@ export class TestFixtures {
     if (this.employeeIds.length) {
       await query(`DELETE FROM sales WHERE employee_id = ANY($1)`, [this.employeeIds]);
       await query(`DELETE FROM schedules WHERE employee_id = ANY($1)`, [this.employeeIds]);
+      // employee_password_resets.created_by — не ON DELETE CASCADE (0018),
+      // блокирует удаление employees, если один из tracked-сотрудников
+      // (например admin из session-lifecycle.test.ts) выпускал ссылку
+      // сброса пароля для другого; employee_id-строки сами уже каскадятся.
+      await query(`DELETE FROM employee_password_resets WHERE created_by = ANY($1)`, [this.employeeIds]);
       await query(`DELETE FROM employees WHERE id = ANY($1)`, [this.employeeIds]);
     }
     if (this.storeIds.length) {

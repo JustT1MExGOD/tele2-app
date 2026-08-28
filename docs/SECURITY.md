@@ -135,6 +135,29 @@ Defense-in-depth: ни один отдельный уровень не един�
   | `GET /avatars/:employeeId` | 30/мин | Единственный публичный (без сессии) GET-эндпоинт — см. [известные компромиссы](#известные-компромиссы) |
   | `POST /shifts/open`, `POST /sync/batch` | 30/мин | Массовые операции — офлайн-очередь может прислать пачку разом |
   | `POST /sales`, `/sales/quick`, `POST /schedules` (bulk) | 60/мин | Основной write-путь, частый, но не безлимитный |
+  | `POST /auth/login` | 10/мин, ключ — `sha256(normalizePhone(phone))` | 20.48.0: не по IP — закрывает distributed brute-force по одному номеру через много IP; работает ВМЕСТЕ с общим 300/мин-по-IP лимитом, не вместо него |
+
+  **`trustProxy: 1`** (20.48.0, `app.ts`) — Railway кладёт приложение за
+  ровно одним reverse-proxy хопом; доверяем ровно ему, не `true` (который
+  принял бы любую цепочку `X-Forwarded-For`) — иначе `request.ip` не
+  соответствует реальному клиенту, что подрывает точность IP-based
+  rate-limit выше.
+
+  **CSRF (double-submit cookie + Sec-Fetch-Site/Origin, 20.48.0)** —
+  мутирующий запрос с cookie-сессией (`t2_session`) обязан нести
+  `X-CSRF-Token`, совпадающий с не-`httpOnly` cookie `t2_csrf`
+  (`auth/csrf.ts::requireCsrf`, глобальный `preHandler` сразу после
+  `authPlugin`). Первый слой — `Sec-Fetch-Site: cross-site` отклоняется
+  ещё до сверки токена; без этого заголовка (старые браузеры) — `Origin`
+  сверяется с уже существующим `MINI_APP_URL`, не реконструируется из
+  `Host`/`X-Forwarded-Host`. Срабатывает от НАЛИЧИЯ `t2_session` cookie,
+  не от списка роутов — Telegram-запросы (initData/заголовок, без этой
+  cookie) не затронуты вообще. `/auth/login`/`/auth/register`/
+  `/auth/reset/:token` — явно исключены: не полагаются на ambient cookie
+  authority для авторизации действия (явные credentials в теле), а в
+  браузере уже может лежать старая/подставная `t2_session` (session
+  fixation) — без исключения честный вход падал бы в CSRF-отказ раньше,
+  чем доходил до своей логики.
 
 ### 2. Аутентификация
 
@@ -185,6 +208,54 @@ SMS-провайдера для self-service, решение владельца 
 (19.11.0): целевой `employee_id` для UPDATE берётся из `request.user`
 (подтверждённый Telegram identity), никогда из тела запроса — иначе один
 сотрудник мог бы привязать телефон к чужой карточке, зная/угадав её id.
+
+**Identities — schema-level identity abstraction (20.48.0)** — порог,
+который ADR-005 дважды сознательно откладывал («один provider не
+оправдывает схему»), пройден: три реальных канала использования
+(Telegram Mini App, телефон-браузер, standalone PWA) сделали нормализацию
+внешний-id→employee lookup оправданной. Новая таблица `identities`
+(`employee_id, provider, provider_key`, `UNIQUE(provider,provider_key)` +
+`UNIQUE(employee_id,provider)`) — единственный источник правды для
+auth-резолва (`auth/principal.ts::loadUser()`); `employees.telegram_id`/
+`phone`/`password_hash` остаются нетронутыми для не-auth потребителей
+(бот-уведомления, отображение в Команде). Разная семантика конфликта по
+provider, зафиксированная как инвариант:
+- **Telegram** — ownership transfer (steal) разрешён:
+  `identitiesRepo.transferIdentity()`, атомарный
+  `INSERT...ON CONFLICT DO UPDATE` (не `DELETE`+`INSERT` — race-safe при
+  параллельных claim одного `provider_key`, Postgres сериализует через
+  row-lock). Это уже протестированный self-bind recovery-flow
+  (`POST /me/bind`, `claimTelegramId()` — единственная точка изменения
+  Telegram identity, employees-колонка и identities-строка синим цветом
+  внутри одной транзакции, никогда по отдельности).
+- **Phone** — transfer НЕ разрешён:
+  `identitiesRepo.bindIdentityStrict()`, конфликт с чужим номером —
+  сырой `23505` → `409`. Телефон — credential boundary (защищает вход по
+  паролю), не recovery-механизм, как Telegram self-bind.
+
+При разборе найден и исправлен реальный, предшествующий 20.48.0 баг:
+`claimTelegramId()`'s `WITH cleared AS (...)` CTE не имел data-зависимости
+с главным `UPDATE`, поэтому Postgres не гарантировал порядок их
+выполнения — при переносе Telegram с уже занятой карточки на другую
+(в отличие от гонки за НЕзанятую, которую единственный существующий тест
+проверял) constraint мог проверяться раньше, чем прежний владелец
+освобождался, давая ложный `409` там, где ожидался успешный transfer.
+Фикс — принудительная зависимость `WHERE id=$2 AND (SELECT count(*) FROM
+cleared) >= 0`.
+
+**Session lifecycle (20.48.0)** — credential-sensitive изменения
+инвалидируют активные browser-сессии немедленно, не полагаясь на то, что
+`requireActive` поймает это на следующем запросе позже:
+деактивация (`DELETE /employees/:id`) отзывает `employee_sessions` и
+telegram-identity (phone переживает, как и раньше `employees.phone`);
+`/auth/reset/:token` отзывает ВСЕ существующие сессии сотрудника до
+выдачи новой (устройство A украдено → пароль меняют на B → A не остаётся
+рабочим). `GET/DELETE /auth/sessions`, `POST /auth/sessions/revoke-others`
+— самообслуживание: список/отзыв активных сессий, ownership-scoped
+запросом (нельзя отозвать чужую по id), работает для любого provider'а
+(Telegram-пользователь тоже видит и может отозвать свою browser-сессию).
+Список — только `id/created_at/last_seen_at/current`, без IP/User-Agent/
+геолокации (PII/privacy surface, не запрошено).
 
 **Компрометация `BOT_TOKEN`** — секрет уровня «полный контроль над ботом»
 (отправка сообщений от его имени, чтение входящих во всех чатах, куда он
@@ -363,6 +434,7 @@ API-клиент (`api-client.ts`, 91 функция) сознательно б�
 | Supervisor Scope Cache — in-memory, не Redis | 5-минутный TTL, точечная инвалидация при смене сектора/роли | Прод — 1 реплика Railway (`grammy`-бот на long-polling не переживёт вторую реплику без перехода на webhook); Redis добавил бы сетевой failure mode без выигрыша в корректности при одной реплике |
 | Динамические тела запроса (кастомные метрики, `sync/batch`, `what-if moves`) вне строгой TypeBox-схемы | `additionalProperties: true` + ручная фильтрация в обработчике (regex на ключи, `Number()`) | Схема не должна быть строже уже отлаженной ручной логики; форма тела определяется каталогом метрик динамически |
 | `GET /access/orgs` + `GET /access/employees-directory` публичны без сессии | Отдают только названия сетей и список имён/id для формы регистрации, не бизнес-данные (продажи/кассу/роли) | Нужны гостю ДО того, как у него есть identity — пикер сети и «я из списка» на регистрации; разведка оргструктуры — реальная, но малая цена (см. [THREAT-MODEL.md](./THREAT-MODEL.md)) |
+| `normalizePhone()` (20.48.0) принимает только RU-формы, международные номера отклоняются | `validatePhone()` даёт понятный 400, не тихую порчу данных | Проект целиком русскоязычный (`Europe/Moscow`); `libphonenumber` ради узкой задачи не тянули — расширить при реальной потребности в международных номерах |
 
 ## RBAC — таблица прав по ролям
 

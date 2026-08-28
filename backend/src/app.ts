@@ -18,6 +18,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { todayMoscow } from './utils/date.js';
 import { authPlugin } from './auth/guards.js';
+import { requireCsrf } from './auth/csrf.js';
 import { registerAllRoutes } from './api/routes/index.js';
 import { pool } from './data/db/index.js';
 import { markApplicationReady, isApplicationReady } from './platform/observability/readiness.js';
@@ -56,6 +57,11 @@ const PG_ERROR_MAP: Record<string, { statusCode: number; error: string; message:
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
+    // 20.48.0 — Railway кладёт приложение за ровно одним reverse-proxy
+    // хопом; доверяем ровно ему (не `true`, который принял бы любую цепочку
+    // X-Forwarded-For) — иначе request.ip не соответствует реальному
+    // клиенту, что подрывает точность IP-based rate-limit (app.ts ниже).
+    trustProxy: 1,
     logger: {
       // initData/токены никогда не должны попасть в логи — сериализаторы
       // pino по умолчанию и так не включают headers, redact здесь просто
@@ -151,6 +157,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Единая точка резолва пользователя (telegram_id проверяется по подписи
   // Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.
   app.addHook('preHandler', authPlugin);
+  // 20.48.0 — CSRF сразу после резолва identity: срабатывает только на
+  // мутирующих запросах с cookie-сессией (t2_session), Telegram-путь не
+  // затрагивает вообще (см. auth/csrf.ts).
+  app.addHook('preHandler', requireCsrf);
 
   // Сеть роутов, где ошибка не поймана вручную (throw/reject без try/catch),
   // раньше уходила клиенту через дефолтный Fastify-хендлер как есть — с

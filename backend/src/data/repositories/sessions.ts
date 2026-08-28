@@ -14,7 +14,7 @@ export function generateToken(): string {
   return randomBytes(32).toString('hex');
 }
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
@@ -47,6 +47,44 @@ export async function touchSession(token: string): Promise<void> {
 
 export async function deleteSession(token: string): Promise<void> {
   await query(`DELETE FROM employee_sessions WHERE token_hash = $1`, [hashToken(token)]);
+}
+
+/** 20.48.0 — password reset: инвалидирует ВСЕ существующие сессии
+ * сотрудника до выдачи новой (устройство A украдено → пароль меняют на
+ * B → токен на A не должен продолжать работать). */
+export async function deleteAllForEmployee(employeeId: number, q: typeof query = query): Promise<void> {
+  await q(`DELETE FROM employee_sessions WHERE employee_id = $1`, [employeeId]);
+}
+
+/** GET /auth/sessions — список своих сессий, самообслуживание (my-plan). */
+export async function listForEmployee(
+  employeeId: number
+): Promise<{ id: number; created_at: string; last_seen_at: string; token_hash: string }[]> {
+  const res = await query(
+    `SELECT id, created_at, last_seen_at, token_hash FROM employee_sessions
+     WHERE employee_id = $1 ORDER BY last_seen_at DESC`,
+    [employeeId]
+  );
+  return res.rows;
+}
+
+/** DELETE /auth/sessions/:id — ownership-scoped запросом, не отдельной
+ * проверкой (тот же принцип, что belongsToOrg). */
+export async function deleteById(id: number, employeeId: number): Promise<{ token_hash: string } | null> {
+  const res = await query(
+    `DELETE FROM employee_sessions WHERE id = $1 AND employee_id = $2 RETURNING token_hash`,
+    [id, employeeId]
+  );
+  return res.rows[0] || null;
+}
+
+/** POST /auth/sessions/revoke-others — «выйти на всех других устройствах»,
+ * не трогает текущую вкладку. */
+export async function deleteAllExcept(employeeId: number, currentTokenHash: string): Promise<void> {
+  await query(
+    `DELETE FROM employee_sessions WHERE employee_id = $1 AND token_hash <> $2`,
+    [employeeId, currentTokenHash]
+  );
 }
 
 export async function createPasswordReset(employeeId: number, createdBy: number | null): Promise<string> {

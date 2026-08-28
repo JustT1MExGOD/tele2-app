@@ -1,8 +1,8 @@
 # 005 — Authentication Boundary (Identity/Principal изолированы от Telegram)
 
 **Статус**: принято, реализовано (20.9.0). Второй provider подключён в
-20.35 (см. «Обновление» в конце документа) — предположение о будущем
-второй provider'е из раздела «Альтернативы» ниже больше не гипотетическое.
+20.35; schema-level identity abstraction (`identities`) добавлена в
+20.48.0 — см. оба «Обновление» в конце документа.
 
 ## Контекст
 
@@ -80,6 +80,43 @@ flowchart LR
 не в отдельную таблицу: одного дополнительного provider'а недостаточно,
 чтобы порог "мультипровайдерность больше не гипотетическая" был пройден
 для полной схемы, только для кодовой границы.
+
+## Обновление (20.48.0) — порог пройден
+
+Полная модель `Identity → User → Employee` с таблицей `identities`
+(строка "Альтернативы" выше) — до этой версии дважды сознательно
+отложена с обоснованием «один provider не оправдывает схему». Владелец
+продукта явно решил: providers сегодня технически два (`telegram`/
+`phone`), но КАНАЛОВ использования стало три — Telegram Mini App,
+телефон-браузер, standalone iPhone Web App/PWA (20.47.0) — и это
+реальный, не гипотетический порог.
+
+Новая таблица `identities` (`employee_id, provider, provider_key`,
+`UNIQUE(provider,provider_key)` + `UNIQUE(employee_id,provider)`) —
+единственный источник правды для `auth/principal.ts::loadUser()`.
+`employees.telegram_id`/`phone`/`password_hash` остаются нетронутыми —
+используются вне auth-boundary (бот-уведомления, отображение в Команде);
+`identities` не заменяет их, а становится resolution-слоем поверх.
+
+Принцип, сформулированный и утверждённый владельцем продукта в процессе
+ревью плана, зафиксирован дословно как проектный инвариант:
+
+> Identity ownership transfer preserves existing domain semantics.
+> Identity uniqueness prevents duplication, while atomic conflict
+> resolution performs ownership transfer within the same transaction as
+> synchronization of legacy employee identity fields.
+
+Конкретно это означает разную семантику конфликта по provider —
+**Telegram** (ownership transfer/steal разрешён, уже протестированный
+self-bind recovery-flow) vs **Phone** (transfer НЕ разрешён, конфликт —
+явный `409`; телефон — credential boundary, не recovery-механизм) — и
+что `employees`-колонка и `identities`-строка для одного provider
+обновляются только внутри ОДНОЙ транзакции, одной функцией
+(`claimTelegramId()` — единственная точка изменения Telegram identity),
+никогда по отдельности из разных мест кода. Подробности реализации,
+включая найденный и исправленный при этом переходе пред-существующий
+баг гонки в `claimTelegramId()`'s CTE — [SECURITY.md —
+аутентификация](../SECURITY.md#2-аутентификация).
 
 ## Связанные документы
 

@@ -10,6 +10,7 @@
  * Сброс пароля — через админа (POST /auth/admin/reset-password/:id), нет
  * SMS-провайдера для self-service — решение владельца продукта.
  */
+import { createHash } from 'crypto';
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import {
@@ -19,8 +20,12 @@ import {
 } from '../../../auth/guards.js';
 import { hashPassword, verifyPassword } from '../../../auth/password.js';
 import { COOKIE_NAME } from '../../../auth/providers/phone.js';
+import { CSRF_COOKIE_NAME } from '../../../auth/csrf.js';
+import { normalizePhone } from '../../../utils/phone.js';
+import { withTransaction } from '../../../data/db/index.js';
 import { bot } from '../../../integrations/telegram/bot.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
+import * as identitiesRepo from '../../../data/repositories/identities.js';
 import * as accessRequestsRepo from '../../../data/repositories/access-requests.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
 import type {
@@ -33,8 +38,6 @@ import type {
   ConsumeResetRequest,
   ConsumeResetResponse
 } from '../../../shared/api-types.js';
-
-const PHONE_RE = /^\+?[1-9]\d{6,14}$/;
 
 const RegisterBody = Type.Object({
   phone: Type.String({ minLength: 7, maxLength: 16 }),
@@ -66,9 +69,22 @@ function esc(s: any) {
 
 const isProd = () => process.env.RAILWAY_ENVIRONMENT === 'production';
 
+/**
+ * 20.48.0 — t2_csrf ставится/ротируется ВМЕСТЕ с t2_session на каждый
+ * новый логин (double-submit cookie, см. auth/csrf.ts) — та же область
+ * видимости (path/maxAge), но НЕ httpOnly (фронтенд должен прочитать
+ * значение, чтобы отправить его же заголовком).
+ */
 function setSessionCookie(reply: FastifyReply, token: string) {
   reply.setCookie(COOKIE_NAME, token, {
     httpOnly: true,
+    secure: isProd(),
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60
+  });
+  reply.setCookie(CSRF_COOKIE_NAME, sessionsRepo.generateToken(), {
+    httpOnly: false,
     secure: isProd(),
     sameSite: 'lax',
     path: '/',
@@ -85,17 +101,19 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: RegisterBody } },
     async (request, reply): Promise<RegisterPhoneResponse | FastifyReply | undefined> => {
       const b = request.body as RegisterBody;
-      const phone = String(b.phone || '').trim();
+      const phone = normalizePhone(String(b.phone || ''));
       const full_name = String(b.full_name || '').trim();
-      if (!PHONE_RE.test(phone)) {
+      if (!phone) {
         return reply.code(400).send({ error: 'invalid_phone', message: 'Некорректный номер телефона' });
       }
       if (!full_name || full_name.length < 3) {
         return reply.code(400).send({ error: 'full_name required' });
       }
 
-      const existingEmployee = await employeesRepo.findByPhone(phone);
-      if (existingEmployee) {
+      // 20.48.0 — identities, не employeesRepo.findByPhone напрямую:
+      // единый resolution layer для phone, симметрично Telegram.
+      const existingEmployeeId = await identitiesRepo.findEmployeeId('phone', phone);
+      if (existingEmployeeId) {
         return reply.code(409).send({ error: 'phone_taken', message: 'Этот номер уже зарегистрирован' });
       }
 
@@ -149,12 +167,32 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
   app.post(
     '/auth/login',
-    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { body: LoginBody } },
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          // 20.48.0 — ключуем по нормализованному+хэшированному телефону,
+          // не по IP: закрывает distributed brute-force по одному номеру
+          // через много IP (raw-номер не течёт в rate-limit internals как
+          // PII). Работает ВМЕСТЕ с уже существующим глобальным per-IP
+          // лимитом (app.ts, 300/min), не вместо него.
+          keyGenerator: (req: any) => {
+            const raw = req.body?.phone;
+            const norm = raw ? normalizePhone(String(raw)) : null;
+            return norm ? `login:${createHash('sha256').update(norm).digest('hex')}` : req.ip;
+          }
+        }
+      },
+      schema: { body: LoginBody }
+    },
     async (request, reply): Promise<LoginResponse | FastifyReply> => {
       const b = request.body as LoginBody;
-      const phone = String(b.phone || '').trim();
+      const phone = normalizePhone(String(b.phone || ''));
 
-      const e = await employeesRepo.findByPhone(phone);
+      // 20.48.0 — identities, не employeesRepo.findByPhone напрямую.
+      const employeeId = phone ? await identitiesRepo.findEmployeeId('phone', phone) : null;
+      const e = employeeId ? await employeesRepo.findByIdWithPassword(employeeId) : null;
       // Одинаковый 401 для "нет такого телефона" и "неверный пароль" —
       // иначе ответ сам подтверждает/опровергает, что номер зарегистрирован.
       if (!e || !e.password_hash || !(await verifyPassword(b.password, e.password_hash))) {
@@ -174,6 +212,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     const token = request.cookies?.[COOKIE_NAME];
     if (token) await sessionsRepo.deleteSession(token);
     reply.clearCookie(COOKIE_NAME, { path: '/' });
+    reply.clearCookie(CSRF_COOKIE_NAME, { path: '/' });
     return { ok: true };
   });
 
@@ -194,6 +233,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const passwordHash = await hashPassword(b.password);
       await employeesRepo.setPasswordHash(reset.employee_id, passwordHash);
       await sessionsRepo.consumePasswordReset(reset.id);
+      // 20.48.0 — смена пароля инвалидирует все активные browser-сессии
+      // (устройство A украдено → пароль меняют на B → A не остаётся рабочим).
+      await sessionsRepo.deleteAllForEmployee(reset.employee_id);
 
       const sessionToken = await sessionsRepo.createSession(reset.employee_id);
       setSessionCookie(reply, sessionToken);

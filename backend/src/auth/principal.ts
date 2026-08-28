@@ -10,6 +10,7 @@
  * ломает существующий код ради чистоты имени (см. README §22).
  */
 import * as employeesRepo from '../data/repositories/employees.js';
+import * as identitiesRepo from '../data/repositories/identities.js';
 import type { Identity } from './identity.js';
 
 export type Role = 'trainee' | 'employee' | 'senior' | 'manager' | 'supervisor' | 'admin' | 'guest';
@@ -62,7 +63,7 @@ function emptyUser(identity: Identity): AuthUser {
   };
 }
 
-function principalFromRow(e: Awaited<ReturnType<typeof employeesRepo.findByTelegramId>>, fallbackTelegramId: number): AuthUser {
+function principalFromRow(e: Awaited<ReturnType<typeof employeesRepo.findById>>, fallbackTelegramId: number): AuthUser {
   const active = e!.is_active !== false;
   return {
     telegram_id: Number(e!.telegram_id) || fallbackTelegramId,
@@ -75,9 +76,13 @@ function principalFromRow(e: Awaited<ReturnType<typeof employeesRepo.findByTeleg
 }
 
 /**
- * Identity -> Principal. Два provider'а сегодня: Telegram (lookup по
- * telegram_id) и phone (20.35, план — не-Telegram вход; сессия уже
- * резолвила конкретный employee_id, providerId — он самим, не внешний id).
+ * Identity -> Principal. Два provider'а сегодня: Telegram и phone (20.35).
+ * 20.48.0 (Web Security & Trust Layer) — Telegram резолвится через
+ * identities (schema-level identity abstraction, единственный источник
+ * правды для auth), не через employees.telegram_id напрямую. Phone НЕ
+ * трогается — providerId там уже employee_id из cookie-сессии (сессия —
+ * уже отдельный, решённый механизм идентификации конкретного запроса),
+ * identities нечего резолвить заново на этом шаге.
  * При появлении третьего provider'а здесь просто добавится ещё одна ветка,
  * а не отдельная копия authPlugin/requireAuth/etc. в каждом adapter'е.
  */
@@ -95,7 +100,10 @@ export async function loadUser(identity: Identity): Promise<AuthUser> {
   const telegramId = Number(identity.providerId);
   if (!telegramId) return emptyUser(identity);
 
-  const e = await employeesRepo.findByTelegramId(telegramId);
+  const employeeId = await identitiesRepo.findEmployeeId('telegram', String(telegramId));
+  if (!employeeId) return emptyUser(identity);
+
+  const e = await employeesRepo.findById(employeeId);
   if (!e) return emptyUser(identity);
 
   return principalFromRow(e, telegramId);

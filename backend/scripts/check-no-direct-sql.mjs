@@ -28,6 +28,7 @@ const ROOT = path.join(__dirname, '..');
 const CLEAN_FILES = [
   'src/api/routes/analytics/command-center.ts',
   'src/api/routes/auth/session.ts',
+  'src/api/routes/auth/sessions-admin.ts',
   'src/api/routes/analytics/forecast.ts',
   'src/api/routes/analytics/heatmap.ts',
   'src/api/routes/analytics/insights.ts',
@@ -59,6 +60,7 @@ const CLEAN_FILES = [
   'src/api/routes/schedules.ts',
   'src/api/routes/shifts.ts',
   'src/auth/guards.ts',
+  'src/auth/csrf.ts',
   'src/auth/password.ts',
   'src/auth/providers/phone.ts',
   'src/auth/providers/telegram-verify.ts',

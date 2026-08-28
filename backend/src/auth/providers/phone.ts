@@ -17,7 +17,13 @@ export async function resolvePhoneIdentity(request: FastifyRequest): Promise<Ide
   if (!token) return null;
 
   const session = await resolveSession(token);
-  if (!session) return null;
+  if (!session) {
+    // 20.48.0 — cookie есть, но сессия истекла/невалидна: отдельная причина
+    // от Telegram-'expired', чтобы requireAuth/requireActive не отвечали
+    // текстом про переоткрытие Mini App человеку в браузере.
+    request.authError = 'phone_expired';
+    return null;
+  }
 
   touchSession(token).catch(() => {});
   return { provider: 'phone', providerId: String(session.employee_id) };

@@ -19,8 +19,18 @@ export function authAs(telegramId: number | string) {
   return { 'x-telegram-id': String(telegramId) };
 }
 
-/** Не-Telegram вход (20.35, план) — cookie-сессия для phone-provider'а
- * (см. auth/providers/phone.ts, COOKIE_NAME='t2_session'). */
-export function authAsSession(sessionToken: string) {
-  return { cookie: `t2_session=${sessionToken}` };
+/**
+ * Не-Telegram вход (20.35) — cookie-сессия для phone-provider'а (см.
+ * auth/providers/phone.ts, COOKIE_NAME='t2_session'). 20.48.0 — вместе с
+ * t2_session всегда несёт САМОГО СЕБЯ же как t2_csrf + X-CSRF-Token
+ * (requireCsrf, auth/csrf.ts, проверяет только header===cookie, не что
+ * значение server-issued — тест волен придумать любую совпадающую пару),
+ * чтобы мутирующие запросы через этот хелпер проходили CSRF по умолчанию;
+ * тесты, которые специально проверяют CSRF-отказ, собирают заголовки вручную.
+ */
+export function authAsSession(sessionToken: string, csrfToken = 'test-csrf-token') {
+  return {
+    cookie: `t2_session=${sessionToken}; t2_csrf=${csrfToken}`,
+    'x-csrf-token': csrfToken
+  };
 }

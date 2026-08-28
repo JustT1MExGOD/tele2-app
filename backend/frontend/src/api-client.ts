@@ -83,6 +83,9 @@ import type {
   LogoutResponse,
   ConsumeResetRequest,
   ConsumeResetResponse,
+  ListSessionsResponse,
+  RevokeSessionResponse,
+  RevokeOtherSessionsResponse,
   SupervisorDashboardResponse,
   SupervisorHealthResponse,
   SalesListResponse,
@@ -146,13 +149,23 @@ import type { StoreRecord } from '../../src/data/repositories/stores.js';
  * показал бы код вместо текста (09-cash-metrics.js::saveMetric/
  * deleteMetric уже так делали до миграции — j.message || j.error).
  */
+/** 20.48.0 — double-submit CSRF cookie (t2_csrf, не httpOnly специально):
+ * читаем значение и отправляем тем же заголовком на мутирующих запросах.
+ * Для Telegram-контекста cookie просто не существует — no-op. */
+function readCsrfCookie(): string | null {
+  const m = document.cookie.match(/(?:^|;\s*)t2_csrf=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 async function request<T>(
   path: string,
   headers: Record<string, string>,
   init?: { method: string; body?: unknown }
 ): Promise<T> {
+  const mutating = !!init?.method && init.method !== 'GET';
+  const csrf = mutating ? readCsrfCookie() : null;
   const res = await fetch(window.location.origin + path, {
-    headers,
+    headers: csrf ? { ...headers, 'X-CSRF-Token': csrf } : headers,
     ...(init ? { method: init.method, ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}) } : {})
   });
   if (!res.ok) {
@@ -502,6 +515,19 @@ export async function consumePasswordReset(
   body: ConsumeResetRequest
 ): Promise<ConsumeResetResponse> {
   return request(`/auth/reset/${encodeURIComponent(token)}`, headers, { method: 'POST', body });
+}
+
+// ---------- Активные сессии (20.48.0, Web Security & Trust Layer) ----------
+export async function listSessions(headers: Record<string, string>): Promise<ListSessionsResponse> {
+  return request('/auth/sessions', headers);
+}
+
+export async function revokeSession(headers: Record<string, string>, id: number): Promise<RevokeSessionResponse> {
+  return request(`/auth/sessions/${id}`, headers, { method: 'DELETE' });
+}
+
+export async function revokeOtherSessions(headers: Record<string, string>): Promise<RevokeOtherSessionsResponse> {
+  return request('/auth/sessions/revoke-others', headers, { method: 'POST', body: {} });
 }
 
 export async function approveAccessRequest(
@@ -900,6 +926,9 @@ declare global {
       loginPhone: typeof loginPhone;
       logoutPhone: typeof logoutPhone;
       consumePasswordReset: typeof consumePasswordReset;
+      listSessions: typeof listSessions;
+      revokeSession: typeof revokeSession;
+      revokeOtherSessions: typeof revokeOtherSessions;
       approveAccessRequest: typeof approveAccessRequest;
       rejectAccessRequest: typeof rejectAccessRequest;
       getSupportAdminTickets: typeof getSupportAdminTickets;
@@ -1008,6 +1037,9 @@ window.apiClient = {
   loginPhone,
   logoutPhone,
   consumePasswordReset,
+  listSessions,
+  revokeSession,
+  revokeOtherSessions,
   approveAccessRequest,
   rejectAccessRequest,
   getSupportAdminTickets,
