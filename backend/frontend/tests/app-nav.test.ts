@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function setupDom() {
+  document.head.innerHTML = '<meta name="theme-color" content="#f2f2f7">';
   document.body.innerHTML = `
     <div id="toast" class="toast"></div>
     <div class="page" id="page-home"></div>
@@ -110,6 +111,17 @@ describe('app/nav (миграция frontend/js/02-nav-utils.js)', () => {
     expect(localStorage.getItem('t2_theme')).toBe('dark');
     toggleTheme();
     expect(document.body.getAttribute('data-theme')).toBe('light');
+  });
+
+  // 21.x (iPhone Web App layer) — <meta name="theme-color"> синхронизируется
+  // с той же темой, что уже идёт в tg.setBackgroundColor(); Safari/standalone
+  // Home Screen читают именно этот тег, Telegram — свой канал.
+  it('applyTheme: обновляет <meta name="theme-color"> тем же цветом, что уже уходит в tg.setBackgroundColor', async () => {
+    const { applyTheme } = await freshImport();
+    applyTheme('dark');
+    expect(document.querySelector('meta[name="theme-color"]')!.getAttribute('content')).toBe('#000000');
+    applyTheme('light');
+    expect(document.querySelector('meta[name="theme-color"]')!.getAttribute('content')).toBe('#f2f2f7');
   });
 
   it('switchPage: активирует нужную .page, подсвечивает nav-item, обновляет window.page, скрывает FAB на sv-*', async () => {

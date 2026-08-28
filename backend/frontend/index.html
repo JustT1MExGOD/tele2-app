@@ -4,6 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>T2 Sales</title>
+  <!-- iPhone Safari / Home Screen Web App layer (21.x) — минимальный набор
+       metadata, без manifest/service worker/полноценной PWA-инфраструктуры
+       (вне объёма этого патча). apple-mobile-web-app-capable включает
+       standalone-режим при запуске с Home Screen (скрывает Safari chrome);
+       mobile-web-app-capable — тот же эффект, кросс-браузерное имя того же
+       тега. status-bar-style=black-translucent — статус-бар рисуется
+       прозрачным поверх контента вместо сплошной заливки: единственный
+       вариант, который не приходится синхронизировать вручную со сменой
+       темы (светлая/тёмная), т.к. под ним просто видно то, что уже
+       нарисовано страницей — тот же .app-header, чей верхний отступ уже
+       учитывает --app-safe-top (styles.css). theme-color — статический
+       дефолт под светлую тему (стартовое значение data-theme="light" ниже);
+       applyTheme() (app/nav.ts) переключает его же значение при смене темы,
+       тот же принцип, что уже applyTheme() делает для tg.setBackgroundColor. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="T2 Sales">
+  <meta name="theme-color" content="#f2f2f7">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="/styles.css">
 </head>

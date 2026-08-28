@@ -44,6 +44,32 @@
          0 по умолчанию вне Telegram */
       --tg-content-safe-top: 0px;
 
+      /* iPhone Safari / Home Screen Web App layer (21.x) — единая модель
+         safe-area поверх уже существующей Telegram-специфичной переменной
+         выше, без второго параллельного механизма определения "это iPhone".
+         --app-safe-top берёт БОЛЬШЕЕ из двух источников (max, не сумма) —
+         внутри Telegram чаще всего реальный источник истины именно
+         --tg-content-safe-top (учитывает ещё и собственный UI Telegram
+         поверх системной чёлки), а в обычном Safari/standalone Web App
+         --tg-content-safe-top остаётся 0 и в дело идёт нативный env().
+         max() гарантирует: двойного отступа внутри Telegram не будет ни
+         при каком сочетании значений. Для left/right/bottom Telegram
+         собственного UI не рисует, играет только системный safe-area —
+         там достаточно голого env(), без Telegram-переменной. */
+      --app-safe-top: max(var(--tg-content-safe-top), env(safe-area-inset-top, 0px));
+      --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+      --app-safe-left: env(safe-area-inset-left, 0px);
+      --app-safe-right: env(safe-area-inset-right, 0px);
+
+      /* Клиренс под .bottom-nav — 92px/100px ниже были магическими числами,
+         подобранными на глаз под мобильные устройства без safe-area
+         (Android, старые iPhone без Home Indicator). Значение сохранено
+         буквально (не пересчитано "точнее"), чтобы не сдвинуть геометрию
+         там, где --app-safe-bottom равен 0 — safe-area добавляется поверх,
+         не заменяет существующий отступ. */
+      --bottom-nav-clearance: 92px;
+      --bottom-nav-safe-offset: calc(var(--bottom-nav-clearance) + var(--app-safe-bottom));
+
       /* Color — brand */
       --t2-black: #0a0a0b;
       --t2-blue: #2aabee;
@@ -180,7 +206,7 @@
     }
 
     body {
-      padding-bottom: 92px;
+      padding-bottom: var(--bottom-nav-safe-offset);
       min-height: 100vh;
       /* 100dvh точнее на Android Chrome — адресная строка схлопывается/
          разворачивается, 100vh всегда считает по максимальной высоте.
@@ -196,7 +222,11 @@
     .app-header {
       background: var(--header-bg);
       color: var(--header-text);
-      padding: calc(var(--sp-3) + var(--tg-content-safe-top)) var(--sp-4) var(--sp-8);
+      /* --app-safe-top (не голая --tg-content-safe-top) — та же логика,
+         что описана у самой переменной: внутри Telegram работает Telegram-
+         API, в standalone Safari/Web App — нативный env(safe-area-inset-top),
+         никогда не складываются. */
+      padding: calc(var(--sp-3) + var(--app-safe-top)) var(--sp-4) var(--sp-8);
       position: relative;
     }
     .app-header-top {
@@ -661,8 +691,15 @@
     /* FAB */
     .fab {
       position: fixed;
-      right: var(--sp-4);
-      bottom: 100px;
+      /* env(safe-area-inset-right) — на большинстве портретных iPhone это 0
+         (правая грань не под чёлкой), но остаётся корректным и в landscape,
+         где notch/Dynamic Island уезжает к одной из боковых граней. */
+      right: calc(var(--sp-4) + var(--app-safe-right));
+      /* Было фиксированные 100px "на глаз" под фиксированную высоту
+         .bottom-nav (92px) + 8px зазора. Теперь тот же зазор поверх уже
+         safe-area-осведомлённого --bottom-nav-safe-offset — на устройствах
+         без Home Indicator величина идентична прежней (0 добавки). */
+      bottom: calc(var(--bottom-nav-safe-offset) + 8px);
       width: 58px;
       height: 58px;
       border-radius: var(--radius-full);
@@ -678,6 +715,7 @@
       align-items: center;
       justify-content: center;
       line-height: 1;
+      -webkit-tap-highlight-color: transparent;
       transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease);
     }
     .fab:active {
@@ -694,7 +732,10 @@
       -webkit-backdrop-filter: saturate(180%) blur(16px);
       border-top: 1px solid var(--nav-border);
       display: flex;
-      padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+      /* --app-safe-bottom, не голый env() напрямую — тот же общий источник,
+         что уже питает --bottom-nav-safe-offset (body/.fab выше), одно
+         число на весь нижний safe-area слой, не россыпь одинаковых env(). */
+      padding: 8px 4px calc(8px + var(--app-safe-bottom));
       z-index: 100;
     }
     .nav-item {
@@ -760,7 +801,11 @@
     /* Toast */
     .toast {
       position: fixed;
-      top: calc(12px + env(safe-area-inset-top));
+      /* Раньше голый env() — внутри Telegram не учитывал контентный отступ
+         Telegram-чата (тот же зазор, что уже держит --app-safe-top у
+         .app-header), тост мог всплывать слишком близко к системному UI
+         Telegram поверх шапки. */
+      top: calc(12px + var(--app-safe-top));
       left: 50%;
       transform: translateX(-50%) translateY(-16px) scale(0.96);
       background: rgba(10,10,11,0.94);
@@ -802,8 +847,15 @@
       width: 100%;
       max-width: 520px;
       max-height: 90vh;
+      max-height: 90dvh;
       overflow-y: auto;
-      padding: 12px 16px 28px;
+      -webkit-overflow-scrolling: touch;
+      /* env(safe-area-inset-bottom) — на нижней bottom-sheet-модалке кнопка
+         submit (например "Создать"/"Сохранить") может оказаться прямо под
+         Home Indicator без этой добавки; тот же принцип "нижний safe-area
+         не глобально на body, а точечно на реально нижних fixed/scrolled
+         элементах". */
+      padding: 12px 16px calc(28px + var(--app-safe-bottom));
       animation: up 0.28s ease;
     }
     @keyframes up {
@@ -860,6 +912,7 @@
       font-weight: 700;
       cursor: pointer;
       text-align: center;
+      -webkit-tap-highlight-color: transparent;
     }
     .mchip.on {
       background: var(--primary);
@@ -920,7 +973,7 @@
       -webkit-backdrop-filter: blur(4px);
       align-items: flex-end;
       justify-content: center;
-      padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+      padding: 16px 16px calc(16px + var(--app-safe-bottom));
     }
     #tutorialOverlay.show { display: flex; }
     #tutorialOverlay {
@@ -1417,6 +1470,7 @@
       margin-top: var(--sp-2);
       transition: transform var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease), background var(--dur) var(--ease);
       box-shadow: var(--shadow-xs);
+      -webkit-tap-highlight-color: transparent;
     }
     .btn-main:active { transform: scale(0.98); opacity: 0.92; }
     [data-theme="dark"] .btn-main {
@@ -1438,6 +1492,7 @@
       cursor: pointer;
       margin-top: var(--sp-2);
       transition: transform var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease), background var(--dur) var(--ease);
+      -webkit-tap-highlight-color: transparent;
     }
     .btn-ghost:active { transform: scale(0.98); opacity: 0.8; }
     .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
@@ -1593,7 +1648,11 @@
     .gate-shell {
       max-width: 420px;
       margin: 0 auto;
-      padding: 28px 16px 48px;
+      /* #accessGate — position:fixed;inset:0 на весь экран (index.html) —
+         тот же полноэкранный случай, что шапка/tutorial-экраны, только тут
+         своей .app-header нет вообще: верхний/нижний safe-area добавляется
+         прямо на .gate-shell. */
+      padding: calc(28px + var(--app-safe-top)) 16px calc(48px + var(--app-safe-bottom));
       min-height: 100%;
       box-sizing: border-box;
     }
@@ -1740,7 +1799,7 @@
       pointer-events: none;
       align-items: stretch;
       justify-content: flex-start;
-      padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+      padding: 12px 12px calc(12px + var(--app-safe-bottom));
     }
     /* Арбузыч в coach-карточке — аватар + speech-bubble вместо голого текста */
     .tut-char-row {
@@ -1810,8 +1869,9 @@
       color: #fff;
       align-items: center;
       justify-content: center;
-      padding: calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+      padding: calc(20px + var(--app-safe-top)) 20px calc(20px + var(--app-safe-bottom));
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     #tutorialScreen.show { display: flex; }
     .ts-inner {
@@ -2181,7 +2241,11 @@
     overflow-y: auto;
     background: var(--surface);
     border-right: 1px solid var(--border);
-    padding: var(--sp-4) var(--sp-2);
+    /* + var(--app-safe-left) — сайдбар сидит на левой грани desktop-shell;
+       на landscape iPhone/iPad Dynamic Island/чёлка может оказаться именно
+       слева в зависимости от того, как повёрнут телефон. На реальном
+       десктопе safe-area всегда 0, правило не меняет текущую геометрию. */
+    padding: var(--sp-4) var(--sp-2) var(--sp-4) calc(var(--sp-2) + var(--app-safe-left));
     display: flex;
     flex-direction: column;
     gap: var(--sp-4);
@@ -2244,8 +2308,12 @@
     min-width: 0; /* иначе grid-колонка не сжимается под widescroll-таблицы внутри */
   }
   .app-header {
-    padding-left: var(--sp-8);
-    padding-right: var(--sp-8);
+    /* Landscape iPhone/iPad safe-area на боковых гранях — 0 на реальном
+       десктопе, правило безопасно везде. Верхний --app-safe-top остаётся
+       из базового правила .app-header выше, здесь трогаются только
+       появившиеся в desktop-раскладке боковые поля. */
+    padding-left: calc(var(--sp-8) + var(--app-safe-left));
+    padding-right: calc(var(--sp-8) + var(--app-safe-right));
     border-bottom: 1px solid var(--nav-border);
   }
   .topbar-breadcrumb {
@@ -2264,11 +2332,14 @@
        На десктопе body.padding-bottom сброшен в 0 (bottom-nav скрыт), но
        сам .fab остался fixed-элементом над контентом — без своего зазора
        последняя строка длинной страницы уезжала бы под круглую кнопку. */
-    padding-bottom: 96px;
+    padding-bottom: calc(96px + var(--app-safe-bottom));
   }
   .fab {
-    right: 32px;
-    bottom: 32px;
+    right: calc(32px + var(--app-safe-right));
+    /* + var(--app-safe-bottom) — на landscape iPhone/iPad Home Indicator
+       остаётся у физического нижнего края независимо от поворота; на
+       реальном десктопе безопасно (0). */
+    bottom: calc(32px + var(--app-safe-bottom));
   }
 
   /* Эти три правила (.lk-actions-grid/.sum-sch-table/.sum-sch-name) — не

@@ -91,6 +91,12 @@ export function applyTheme(theme: string): void {
       window.tg.setBackgroundColor(theme === 'dark' ? '#000000' : '#f2f2f7');
     } catch (_) {}
   }
+  // 21.x (iPhone Web App layer) — тот же цвет, что уже идёт в
+  // tg.setBackgroundColor выше, просто для стандартного <meta
+  // name="theme-color"> (Safari/standalone Home Screen читает его,
+  // Telegram — нет, у него свой канал через tg.setBackgroundColor).
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeColorMeta) themeColorMeta.setAttribute('content', theme === 'dark' ? '#000000' : '#f2f2f7');
 }
 
 export function toggleTheme(): void {

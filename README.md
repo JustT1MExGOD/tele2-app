@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.46.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.47.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-366%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.46.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.47.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -473,6 +473,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.44.0** | Schedule/Plans — Desktop Page Adaptation, следующий шаг после Team (staged roadmap из 20.40, Part G). Сводный график (`.sum-sch-table`) — только визуальный рестайл под токен `.data-table-wrap`, без сортировки (матрица «сотрудник × день», колонки-дни не атрибуты для сортировки, цветовая подсветка точки не тронута). Планы и факт за месяц (`monthplan`) — новая desktop-таблица `#monthPlanTableWrap`: 6 сортируемых основных метрик постоянно, общий тумблер над таблицей добавляет/убирает 9 EXTRA-колонок сразу для всех строк (не раскрытие по каждой строке, как на мобильных карточках). Клик по строке у `canManage()` — та же модалка `editEmployeeMonthPlan()`, что на карточках; "Итого сеть" не кликабельна и не сортируется. 6 новых фронтенд-тестов, backend не тронут |
 | **20.45.0** | Command Center + Supervisor — `.workspace-grid` на списки-секции (staged roadmap из 20.40, Part G, следующий шаг после Schedule/Plans). Никакого нового JS-функционала — только раскладка уже карточно-списочных секций (`.sv-store`/`.sv-drop`/`.sv-rank`/`.progress-block`) в адаптивную сетку вместо одной колонки на десктопе. `#svStoresBody`/`#svPeopleBody` (100% содержимого — карточки) получили grid-правила напрямую по id в CSS; Command Center/«Обзор»/«Тренд» (список — часть контейнера рядом с героем/графиком) — карточки обёрнуты в новый `<div class="workspace-grid">` точечной правкой шаблона. `.sv-hero`/`.sv-chart`/внутренняя разметка карточек не тронуты. 3 новых/расширенных фронтенд-теста, backend не тронут |
 | **20.46.0** | Admin — «максимально функциональный»: закрыт последний пункт staged roadmap из 20.40 плюс три реальных пробела, найденных аудитом и подтверждённых с владельцем. Баг: повышение до `supervisor` никогда не передавало `sector_id` (роут уже поддерживал, фронтенд не вызывал) — `setRole()` теперь открывает общий модал-пикер сектора, "Пропустить" оставляет прежнее поведение без потери молча. Новый экран «Дилеры/Секторы» — `GET /admin/dealers` строит дерево дилер→сектор→сети/супервайзеры + хвосты непривязанного, `PATCH /admin/dealers\|sectors/:id` — первое в жизни переименование. Аудит — панель фильтров (action/target_type/дата) + пагинация "Показать ещё" + `.data-table` с diff-модалом по клику; заодно починен `?org_id=`, который роут раньше игнорировал. Сети → `.data-table`. `dealers.id`/`employees.id` — bigint, отдаются node-postgres строкой — `id::int` в новых репозиторных функциях (тот же класс проблемы, что уже ловили на `message_id`, 20.43.0). 12 новых backend + 22 новых/расширенных фронтенд-тестов |
+| **20.47.0** | iPhone Web App/Safari — safe-area слой поверх Telegram Mini App, без нового дизайна и без переписывания мобильного интерфейса. Единые переменные `--app-safe-top/bottom/left/right` = `max(--tg-content-safe-top, env(safe-area-inset-*))` поверх уже существующего Telegram-механизма (не сумма — гарантирует отсутствие двойных отступов внутри Telegram, второй параллельный детект iPhone не заводился). `--bottom-nav-safe-offset` (92px база + safe-bottom) — единая переменная вместо разрозненных `calc()` у body/FAB/bottom-nav/sheet-modal/tutorial/gate-shell; на устройствах без notch резолвится в прежние значения побайтово. Landscape iPhone (до ~926px) reach-ит десктоп-shell `@860px` — туда тоже добавлены left/right/bottom safe-area (чистый пробел, не регрессия). `apple-mobile-web-app-*`/`theme-color` meta-теги (без manifest/Service Worker — вне объёма); `theme-color` синхронизируется с той же темой, что уже уходит в `tg.setBackgroundColor()`. Проверено и оставлено как есть: input/select уже 16px, dvh-фолбэк уже на месте, `overscroll-behavior`/tap-highlight уже были — повторно не чинились |
 
 ---
 
@@ -1176,6 +1177,49 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   функции). Механическая зачистка оставшихся tool-страниц (bfq/cash/
   heatmap/forecast) на общие примитивы — явно вне объёма этой версии,
   отдельный шаг после (см. §21, 20.46.0)
+- **20.47 iPhone Web App/Safari — safe-area слой** ✅ — мобильный
+  интерфейс изначально строился как Telegram Mini App; вне Telegram
+  (Safari, установка на Home Screen) он не учитывал notch/Dynamic
+  Island, Home Indicator и адресную строку Safari. Цель — не новый
+  дизайн и не переписанный мобильный интерфейс, а корректный iOS-слой
+  поверх существующего визуального языка. Единственный существующий
+  механизм детекции Telegram (`window.tg.safeAreaInset` →
+  `--tg-content-safe-top`, `core.ts`) расширен, а не продублирован:
+  новые `--app-safe-top/bottom/left/right` = `max(--tg-content-safe-top,
+  env(safe-area-inset-*, 0px))` — `max()`, не сумма, гарантирует
+  отсутствие двойных отступов внутри Telegram (там работает только
+  tg-канал, `env()` всегда 0) и корректный отступ в Safari/standalone
+  (там работает только `env()`, tg-канал всегда 0). `--bottom-nav-safe-
+  offset` = прежние жёсткие 92px (сохранены как safe-area-zero база) +
+  `--app-safe-bottom` — одна семантическая переменная вместо
+  разрозненных `calc()` на `body`/`.fab`/`.bottom-nav`/`.sheet-modal`/
+  `.gate-shell`/tutorial-оверлеях; FAB отталкивается от той же
+  переменной, что и bottom-nav, не от отдельного магического числа.
+  На устройствах без notch/Home Indicator (Telegram, Android, десктоп)
+  `--app-safe-*` резолвятся в `0px` — геометрия побайтово та же, что до
+  патча. Найден и учтён реальный пробел: landscape iPhone (до ~926px на
+  реальных моделях) reach-ит существующий breakpoint `@860px`
+  десктоп-shell — туда тоже добавлены left/right/bottom safe-area на
+  `.sidebar`/`.app-header`/`.fab`/`.sheet` (ранее не учитывалось вообще).
+  `-webkit-tap-highlight-color:transparent` точечно добавлен на
+  `.fab`/`.mchip`/`.btn-main`/`.btn-ghost` — агрессивные глобальные
+  `user-select:none`/`touch-action:none` не добавлялись, не требовались.
+  PWA/Home Screen metadata (`apple-mobile-web-app-capable`,
+  `apple-mobile-web-app-status-bar-style=black-translucent`,
+  `theme-color`) — manifest/Service Worker/офлайн-кэш сознательно вне
+  объёма. `nav.ts::applyTheme()` синхронизирует `<meta name="theme-
+  color">` тем же цветом, что уже уходит в `tg.setBackgroundColor()`.
+  Проверено и оставлено БЕЗ изменений как уже корректное: все
+  input/select уже 16px (autozoom не воспроизводится), `body`/`.sheet`
+  уже имели dvh-фолбэк поверх vh (JS-полифилл `window.innerHeight` не
+  понадобился), `overscroll-behavior-y:contain` и tap-highlight на
+  `.row`/`.nav-item` уже были на месте. Живой Playwright на 390/393/
+  430/768/859/860/1200px подтвердил отсутствие регрессии по брейкпоинтам
+  и геометрии — но Chromium не эмулирует реальные Safari safe-area
+  insets, поэтому Dynamic Island/Home Indicator, standalone Home Screen,
+  светлая/тёмная тема статус-бара и клавиатура при фокусе инпута
+  требуют ручной проверки на настоящем iPhone. Backend не тронут ни
+  строкой (см. §21, 20.47.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -1223,6 +1267,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.46.0 · август 2026*
+*README · актуально на v20.47.0 · август 2026*
 
 </div>
