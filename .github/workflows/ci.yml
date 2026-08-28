@@ -49,6 +49,9 @@ jobs:
       - name: Data Access Layer — no direct SQL in migrated routes
         run: npm run check:no-direct-sql
 
+      - name: Dangerous JS patterns — document.write/eval/new Function/string-timer-args
+        run: npm run check:dangerous-js
+
       - name: Apply migrations to test database
         run: npm run migrate
 

@@ -152,7 +152,7 @@ export async function loadMonthPlans(): Promise<void> {
       const f = Number(fact[m.id]) || 0;
       const pc = Number(pct[m.id]) || 0;
       const tone = pc >= 100 ? 'good' : pc >= 50 ? 'warn' : f > 0 ? '' : 'bad';
-      return `<div class="mt-cell ${tone}"><div class="v">${f}</div><div class="l">${m.label}</div></div>`;
+      return `<div class="mt-cell ${tone}"><div class="v">${f}</div><div class="l">${esc(m.label)}</div></div>`;
     }
 
     if (!rows.length) {
@@ -475,9 +475,9 @@ export async function loadStoreDailyPlans(): Promise<void> {
       .map((st) => {
         const col = storeColor(st.store_id, st as any);
         const p = st.plan || {};
-        const initial = (st.name || '?').slice(0, 2).toUpperCase();
+        const initial = esc((st.name || '?').slice(0, 2).toUpperCase());
         const chips = METRICS.slice(0, 8)
-          .map((m) => `<div class="stat-chip"><div class="n">${(p as any)[m.id] || 0}</div><div class="l">${m.label}</div></div>`)
+          .map((m) => `<div class="stat-chip"><div class="n">${(p as any)[m.id] || 0}</div><div class="l">${esc(m.label)}</div></div>`)
           .join('');
         const click = editable ? `onclick="editStoreMonthPlan('${st.store_id}')" style="cursor:pointer"` : 'style="cursor:default"';
         return `
@@ -485,8 +485,8 @@ export async function loadStoreDailyPlans(): Promise<void> {
               <div class="store-head" ${click}>
                 <div class="store-badge" style="background:${col}33;color:${col}">${initial}</div>
                 <div class="store-meta">
-                  <div class="store-name">${st.name}</div>
-                  <div class="store-code">${st.code || ''} · дневной план${st.has_plan ? '' : ' · план на месяц не задан'}</div>
+                  <div class="store-name">${esc(st.name)}</div>
+                  <div class="store-code">${esc(st.code || '')} · дневной план${st.has_plan ? '' : ' · план на месяц не задан'}</div>
                 </div>
                 ${editable ? '<div class="row-chevron">›</div>' : ''}
               </div>

@@ -55,7 +55,7 @@ export async function fillStoreSelects(): Promise<void> {
     const el = document.getElementById(id) as HTMLSelectElement | null;
     if (!el || el.tagName !== 'SELECT') return;
     const cur = el.value;
-    el.innerHTML = list.map((s: any) => `<option value="${s.id}">${s.name || s.id}</option>`).join('');
+    el.innerHTML = list.map((s: any) => `<option value="${s.id}">${esc(s.name || s.id)}</option>`).join('');
     if (cur && list.some((s: any) => s.id === cur)) el.value = cur;
   });
 }
@@ -292,7 +292,7 @@ function renderWiScenario(data: WhatIfResponse, date: string): { worstDelta: num
       const d = Number(s.delta_sim) || 0;
       const col = d > 0 ? '#34c759' : d < 0 ? '#ff3b30' : 'var(--hint)';
       return `<div class="progress-block" style="margin:8px 0;padding:12px;border-left:4px solid ${s.color || '#2AABEE'}">
-          <div style="font-weight:700">${s.name}</div>
+          <div style="font-weight:700">${esc(s.name)}</div>
           <div style="font-size:12px;color:var(--hint);margin:4px 0">Сотрудников: ${s.staff_before} → <b>${s.staff_after}</b></div>
           <div style="font-size:13px">SIM ожид. <b>${s.expected?.sim ?? 0}</b> → <b>${s.after?.sim ?? 0}</b>
             <span style="color:${col};font-weight:700"> (${d > 0 ? '+' : ''}${d})</span></div>

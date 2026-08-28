@@ -112,9 +112,9 @@ export async function openPromoCard(id: number): Promise<void> {
     if (body) {
       body.innerHTML = `
         <div class="empty" style="text-align:left;padding:0">Полный код (можно выделить):</div>
-        <div class="promo-code-big" id="promoFullCode">${data.code || ''}</div>
-        ${data.note ? `<div class="empty" style="text-align:left">${data.note}</div>` : ''}
-        <div class="promo-meta" style="text-align:center;margin-bottom:12px">${data.created_by_name || ''}</div>
+        <div class="promo-code-big" id="promoFullCode">${esc(data.code || '')}</div>
+        ${data.note ? `<div class="empty" style="text-align:left">${esc(data.note)}</div>` : ''}
+        <div class="promo-meta" style="text-align:center;margin-bottom:12px">${esc(data.created_by_name || '')}</div>
         <button class="btn-main" onclick="promoMarkUsed(${id})">Промокод использован</button>
         <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)" onclick="promoKeep(${id})">Не использован</button>
       `;

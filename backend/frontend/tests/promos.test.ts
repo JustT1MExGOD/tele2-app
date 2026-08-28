@@ -5,6 +5,7 @@
  * interactions, no browser tool available in this environment.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals(overrides: { role?: string; adminViewOrgId?: string | null; withOpenModal?: boolean } = {}) {
   document.body.innerHTML = `
@@ -12,6 +13,9 @@ function setupGlobals(overrides: { role?: string; adminViewOrgId?: string | null
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
   `;
+  // 20.49.0 — openPromoCard() теперь зовёт esc() на code/note/created_by_name
+  // (XSS-фикс); реальная реализация, не no-op.
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('me', { employee_id: 1, role: overrides.role ?? 'employee', org_id: 'default', full_name: 'Test' });
   vi.stubGlobal('adminViewOrgId', overrides.adminViewOrgId ?? null);
   vi.stubGlobal('authHeaders', (json?: boolean) => (json ? { 'Content-Type': 'application/json' } : {}));

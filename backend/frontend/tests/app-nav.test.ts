@@ -6,6 +6,7 @@
  * so a mistake here is maximally visible (every tab).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupDom() {
   document.head.innerHTML = '<meta name="theme-color" content="#f2f2f7">';
@@ -29,6 +30,9 @@ describe('app/nav (миграция frontend/js/02-nav-utils.js)', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     vi.stubGlobal('API', 'https://example.test');
+    // 20.49.0 — progressHTML() теперь зовёт esc() на label (XSS-фикс);
+    // реальная реализация, не no-op, чтобы регресс-тест ниже что-то проверял.
+    vi.stubGlobal('esc', esc);
     (window as any).page = 'home';
     for (const name of [
       'loadHome',
@@ -95,6 +99,17 @@ describe('app/nav (миграция frontend/js/02-nav-utils.js)', () => {
     expect(html).toContain('5 / 10');
     expect(html).toContain('50%');
     expect(html).toContain('bad'); // 50% < 70% mid-threshold
+  });
+
+  // 20.49.0 (Web Security & Trust Layer, часть 2) — регресс на реальную
+  // находку: label (кастомная метка метрики, задаётся любым manager'ом)
+  // рендерилась в innerHTML без esc() — самый широкий по охвату XSS
+  // (используется в home/my-plan/schedule/shift/store-profile/team).
+  it('progressHTML: экранирует label — самый широкий по охвату XSS-фикс', async () => {
+    const { progressHTML } = await freshImport();
+    const html = progressHTML('<img src=x onerror=alert(1)>', 5, 10);
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img');
   });
 
   it('tgUser: возвращает initDataUnsafe.user из window.tg, null вне Telegram', async () => {

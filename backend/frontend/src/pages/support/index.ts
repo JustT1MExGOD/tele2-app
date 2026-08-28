@@ -107,10 +107,10 @@ export async function loadSupport(): Promise<void> {
           .map(
             (f) => `
             <button class="row" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">
-              <div class="row-body"><div class="row-title">${f.question}</div></div>
+              <div class="row-body"><div class="row-title">${esc(f.question)}</div></div>
               <div class="row-chevron">›</div>
             </button>
-            <div class="empty" style="display:none;text-align:left;padding:0 16px 14px;color:var(--text-secondary)">${f.answer}</div>
+            <div class="empty" style="display:none;text-align:left;padding:0 16px 14px;color:var(--text-secondary)">${esc(f.answer)}</div>
           `
           )
           .join('');

@@ -30,7 +30,7 @@ export async function loadCash(): Promise<void> {
       stores = await fetchOrgStores();
     }
     const sel = document.getElementById('cashStore') as HTMLSelectElement | null;
-    if (sel) sel.innerHTML = stores.map((s: any) => `<option value="${s.id}">${s.name}</option>`).join('');
+    if (sel) sel.innerHTML = stores.map((s: any) => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
     const dateInp = document.getElementById('cashDate') as HTMLInputElement | null;
     if (dateInp && !dateInp.value) dateInp.value = todayMoscow();
 
@@ -57,7 +57,7 @@ export async function loadCash(): Promise<void> {
           const dClass = delta == null ? '' : delta >= 0 ? 'delta-pos' : 'delta-neg';
           const click = `onclick="fillCashForm('${s.id}','${d}',${Number(fact) || 0},${Number(c1) || 0})"`;
           return `<div class="cash-row" ${click} style="${click ? 'cursor:pointer' : ''}">
-              <div class="sn">${s.name || s.id}</div>
+              <div class="sn">${esc(s.name || s.id)}</div>
               <div>${fact != null && fact !== '' ? Number(fact).toLocaleString('ru-RU') : '—'}</div>
               <div>${c1 != null && c1 !== '' ? Number(c1).toLocaleString('ru-RU') : '—'}</div>
               <div class="${dClass}">${delta == null || (delta as any) === '' ? '—' : (delta > 0 ? '+' : '') + Number(delta).toLocaleString('ru-RU')}</div>
@@ -147,7 +147,7 @@ export async function openAddMetric(): Promise<void> {
                  (m) => `
                <div style="display:flex;justify-content:space-between;align-items:center">
                  <span style="font-size:14px">${esc(m.label)} <span style="color:var(--hint)">(${esc(m.id)})</span></span>
-                 <button class="mchip" style="color:var(--danger)" onclick="deleteMetric('${m.id}',${JSON.stringify(m.label)})">Удалить</button>
+                 <button class="mchip" style="color:var(--danger)" onclick="${esc(`deleteMetric('${m.id}',${JSON.stringify(m.label)})`)}">Удалить</button>
                </div>`
                )
                .join('')}

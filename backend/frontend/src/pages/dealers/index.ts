@@ -10,6 +10,15 @@
  */
 import type { DealersTreeResponse, SectorNode } from '../../../../src/shared/api-types.js';
 
+/**
+ * 20.49.0 (Web Security & Trust Layer, часть 2) — jsEsc() отвечает
+ * ТОЛЬКО за JS-string-literal safety (экранирует `'` внутри `'...'`).
+ * Значение затем подставляется в onclick="..." — HTML-атрибут — поэтому
+ * КАЖДЫЙ вызывающий обязан дополнительно обернуть весь onclick-value
+ * через esc() (HTML-attribute safety): без этого имя с `"` разрывает
+ * атрибут и внедряет произвольный атрибут на элемент (найдено и
+ * исправлено этим проходом — раньше jsEsc() был единственной защитой).
+ */
 function jsEsc(s: string): string {
   return String(s ?? '').replace(/'/g, "\\'");
 }
@@ -23,7 +32,7 @@ function sectorCardHTML(sector: SectorNode): string {
         <div class="sv-store-name">${esc(sector.name)}</div>
         <div class="sv-store-org">${sector.orgs.length} сет${sector.orgs.length === 1 ? 'ь' : 'и'}</div>
       </div>
-      <button class="mchip" onclick="openRenameSectorModal('${esc(sector.id)}','${jsEsc(sector.name)}')">Переименовать</button>
+      <button class="mchip" onclick="${esc(`openRenameSectorModal('${jsEsc(sector.id)}','${jsEsc(sector.name)}')`)}">Переименовать</button>
     </div>
     <div class="sv-staff">Сети: ${orgsText}</div>
     <div class="sv-staff">Супервайзеры: ${supervisorsText}</div>
@@ -46,7 +55,7 @@ export async function loadDealersAdmin(): Promise<void> {
           .map(
             (s) => `<div class="progress-block" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <strong>${esc(s.full_name)}</strong>
-              <button class="mchip" onclick="openAssignSectorForSupervisor(${s.id},'${jsEsc(s.full_name)}')">Назначить сектор</button>
+              <button class="mchip" onclick="${esc(`openAssignSectorForSupervisor(${s.id},'${jsEsc(s.full_name)}')`)}">Назначить сектор</button>
             </div>`
           )
           .join('');
@@ -60,7 +69,7 @@ export async function loadDealersAdmin(): Promise<void> {
         (d) => `<div class="section">
           <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
             <span>${esc(d.name)}</span>
-            <button class="mchip" onclick="openRenameDealerModal(${d.id},'${jsEsc(d.name)}')">Переименовать</button>
+            <button class="mchip" onclick="${esc(`openRenameDealerModal(${d.id},'${jsEsc(d.name)}')`)}">Переименовать</button>
           </div>
           ${d.sectors.length ? `<div class="workspace-grid" style="padding:0 16px 16px">${d.sectors.map(sectorCardHTML).join('')}</div>` : '<div class="empty">Секторов пока нет</div>'}
         </div>`

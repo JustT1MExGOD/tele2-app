@@ -78,7 +78,7 @@ export async function openAddSale(presetEmployeeId?: number | string): Promise<v
             <label>Точка <span style="font-weight:500;text-transform:none;color:var(--primary)">(из графика)</span></label>
             <select id="modalStore">
               ${(stores || [])
-                .map((s) => `<option value="${s.id}" ${s.id === defaultStore ? 'selected' : ''}>${s.name}</option>`)
+                .map((s) => `<option value="${s.id}" ${s.id === defaultStore ? 'selected' : ''}>${esc(s.name)}</option>`)
                 .join('')}
             </select>
           </div>

@@ -71,7 +71,7 @@ export function progressHTML(label: string, fact: unknown, plan: unknown): strin
   return `
         <div class="progress-item">
           <div class="progress-top">
-            <span class="name">${label}</span>
+            <span class="name">${esc(label)}</span>
             <span class="val">${f} / ${p}${p ? ' · ' + percent + '%' : ''}</span>
           </div>
           <div class="bar"><i class="${pctTone(percent)}" style="width:${w}%"></i></div>

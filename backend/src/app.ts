@@ -154,6 +154,19 @@ export async function buildApp(): Promise<FastifyInstance> {
     httpRequestDuration.observe({ method: request.method, route, status }, reply.elapsedTime / 1000);
   });
 
+  // 20.49.0 (Web Security & Trust Layer, часть 2) — auth/session/employee-
+  // PII-ответы раньше не несли никакого Cache-Control вообще, полагаясь на
+  // умолчания браузера; общий кэширующий прокси/CDN мог бы закэшировать
+  // чужой ответ. `!reply.getHeader('cache-control')` — единственное условие,
+  // покрывает оба существующих исключения БЕЗ явного списка путей:
+  // GET /avatars/:id уже ставит свой `private, max-age=300` до onSend
+  // (пропускается), @fastify/static (cacheControl:true по умолчанию) тоже
+  // успевает выставить свой заголовок до этого хука.
+  app.addHook('onSend', async (request, reply, payload) => {
+    if (!reply.getHeader('cache-control')) reply.header('Cache-Control', 'no-store');
+    return payload;
+  });
+
   // Единая точка резолва пользователя (telegram_id проверяется по подписи
   // Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.
   app.addHook('preHandler', authPlugin);

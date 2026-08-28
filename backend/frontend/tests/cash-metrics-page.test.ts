@@ -5,6 +5,7 @@
  * error states, and the state-changing actions (saveCash/saveMetric/deleteMetric).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals(overrides: { role?: string; storesSeed?: any[] } = {}) {
   document.body.innerHTML = `
@@ -19,7 +20,9 @@ function setupGlobals(overrides: { role?: string; storesSeed?: any[] } = {}) {
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
   `;
-  vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
+  // 20.49.0 — реальная esc() (не no-op stub), чтобы тест на attribute-
+  // breakout ниже проверял настоящее экранирование, не заглушку.
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('toast', vi.fn());
   vi.stubGlobal('me', { employee_id: 1, role: overrides.role ?? 'employee' });
@@ -127,10 +130,36 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
     setupGlobals({ role: 'manager' });
     const { openAddMetric } = await import('../src/pages/cash-metrics/index.js');
     await openAddMetric();
-    const html = document.getElementById('modalBody')!.innerHTML;
-    expect(html).toContain('eSIM');
-    expect(html).not.toContain("deleteMetric('sim'"); // базовая метрика, без кнопки удаления
-    expect(html).toContain("deleteMetric('esim_custom'");
+    const modalBody = document.getElementById('modalBody')!;
+    expect(modalBody.innerHTML).toContain('eSIM');
+    // Ровно одна кнопка удаления — базовая метрика ('sim') её не получает.
+    const deleteButtons = modalBody.querySelectorAll('button.mchip');
+    expect(deleteButtons.length).toBe(1);
+    // getAttribute() отдаёт значение ПОСЛЕ HTML-decode — реальный вызов,
+    // который увидит браузер, независимо от деталей esc()-экранирования
+    // в сыром innerHTML (20.49.0 — деталь именно этого экранирования
+    // проверяется отдельным attribute-breakout тестом ниже).
+    expect(deleteButtons[0].getAttribute('onclick')).toBe(`deleteMetric('esim_custom',"eSIM")`);
+  });
+
+  // 20.49.0 (Web Security & Trust Layer, часть 2) — регресс на реальную
+  // находку: JSON.stringify(m.label) даёт JS-safe строку, но не
+  // HTML-attribute-safe — метка кастомной метрики с " разрывала
+  // onclick="..." и внедряла произвольный обработчик на элемент.
+  it('custom-метрика с " в названии не разрывает onclick="..." — атрибут-breakout невозможен', async () => {
+    setupGlobals({ role: 'manager' });
+    const payload = `x" onmouseover="window.__pwned=1`;
+    vi.stubGlobal('METRICS', [
+      { id: 'sim', label: 'SIM', short_label: 'SIM', unit: 'count', unit_type: 'count' },
+      { id: 'esim_custom', label: payload, short_label: 'eSIM', unit: 'count', unit_type: 'count' }
+    ]);
+    const { openAddMetric } = await import('../src/pages/cash-metrics/index.js');
+    await openAddMetric();
+    const buttons = Array.from(document.getElementById('modalBody')!.querySelectorAll('button'));
+    for (const b of buttons) {
+      expect(b.hasAttribute('onmouseover')).toBe(false);
+    }
+    expect((window as any).__pwned).toBeUndefined();
   });
 
   it('deleteMetric: без подтверждения (confirm=false) — API не вызывается', async () => {

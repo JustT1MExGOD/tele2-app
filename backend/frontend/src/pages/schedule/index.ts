@@ -94,9 +94,9 @@ export async function loadPlanDay(): Promise<void> {
         return `
             <div class="store-card" id="sc-${store.id}">
               <div class="store-head" onclick="toggleStore('${store.id}')">
-                <div class="store-badge">${(store.short_name || store.name || '?').slice(0, 2)}</div>
+                <div class="store-badge">${esc((store.short_name || store.name || '?').slice(0, 2))}</div>
                 <div class="store-meta">
-                  <div class="store-name">${store.name}</div>
+                  <div class="store-name">${esc(store.name)}</div>
                   <div class="store-code">${store.code || ''} · ${store.work_time || ''}</div>
                 </div>
                 <div class="store-pct ${pctTone(overall)}">${overall}%</div>
@@ -171,8 +171,8 @@ export async function loadTodaySchedule(): Promise<void> {
           if (!list.length) return '';
           return `
             <div class="section today-store">
-              <div class="section-title">${store.name}
-                <div class="section-sub">${store.code || ''}</div>
+              <div class="section-title">${esc(store.name)}
+                <div class="section-sub">${esc(store.code || '')}</div>
               </div>
               ${list
                 .map(

@@ -467,7 +467,7 @@ export async function loadLiveMap(): Promise<void> {
             <div class="progress-block" style="margin-bottom:10px;border-left:4px solid ${st.color || statusColor};cursor:pointer"
               onclick="openStoreProfile('${st.store_id}')">
               <div style="display:flex;justify-content:space-between;align-items:center">
-                <strong>${st.name}</strong>
+                <strong>${esc(st.name)}</strong>
                 <span style="color:${statusColor};font-weight:700">${st.plan_pct || 0}%</span>
               </div>
               <div style="font-size:12px;color:var(--hint);margin-top:4px">

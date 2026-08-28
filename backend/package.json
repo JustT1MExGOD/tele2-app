@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "20.48.1",
+  "version": "20.49.0",
   "type": "module",
   "engines": {
     "node": "22.x"
@@ -12,6 +12,7 @@
     "dev": "tsx src/index.ts",
     "smoke:frontend": "node scripts/smoke-frontend.mjs",
     "check:no-direct-sql": "node scripts/check-no-direct-sql.mjs",
+    "check:dangerous-js": "node scripts/check-dangerous-js-patterns.mjs",
     "test": "vitest run",
     "test:frontend": "vitest run --config frontend/vitest.config.ts",
     "migrate": "tsx src/migrate-cli.ts"

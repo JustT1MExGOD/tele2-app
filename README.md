@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.48.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.49.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-366%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя → сервер на Fastify проверяет её и права → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.48.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.49.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -475,6 +475,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.46.0** | Admin — «максимально функциональный»: закрыт последний пункт staged roadmap из 20.40 плюс три реальных пробела, найденных аудитом и подтверждённых с владельцем. Баг: повышение до `supervisor` никогда не передавало `sector_id` (роут уже поддерживал, фронтенд не вызывал) — `setRole()` теперь открывает общий модал-пикер сектора, "Пропустить" оставляет прежнее поведение без потери молча. Новый экран «Дилеры/Секторы» — `GET /admin/dealers` строит дерево дилер→сектор→сети/супервайзеры + хвосты непривязанного, `PATCH /admin/dealers\|sectors/:id` — первое в жизни переименование. Аудит — панель фильтров (action/target_type/дата) + пагинация "Показать ещё" + `.data-table` с diff-модалом по клику; заодно починен `?org_id=`, который роут раньше игнорировал. Сети → `.data-table`. `dealers.id`/`employees.id` — bigint, отдаются node-postgres строкой — `id::int` в новых репозиторных функциях (тот же класс проблемы, что уже ловили на `message_id`, 20.43.0). 12 новых backend + 22 новых/расширенных фронтенд-тестов |
 | **20.47.0** | iPhone Web App/Safari — safe-area слой поверх Telegram Mini App, без нового дизайна и без переписывания мобильного интерфейса. Единые переменные `--app-safe-top/bottom/left/right` = `max(--tg-content-safe-top, env(safe-area-inset-*))` поверх уже существующего Telegram-механизма (не сумма — гарантирует отсутствие двойных отступов внутри Telegram, второй параллельный детект iPhone не заводился). `--bottom-nav-safe-offset` (92px база + safe-bottom) — единая переменная вместо разрозненных `calc()` у body/FAB/bottom-nav/sheet-modal/tutorial/gate-shell; на устройствах без notch резолвится в прежние значения побайтово. Landscape iPhone (до ~926px) reach-ит десктоп-shell `@860px` — туда тоже добавлены left/right/bottom safe-area (чистый пробел, не регрессия). `apple-mobile-web-app-*`/`theme-color` meta-теги (без manifest/Service Worker — вне объёма); `theme-color` синхронизируется с той же темой, что уже уходит в `tg.setBackgroundColor()`. Проверено и оставлено как есть: input/select уже 16px, dvh-фолбэк уже на месте, `overscroll-behavior`/tap-highlight уже были — повторно не чинились |
 | **20.48.0** | Web Security & Trust Layer, часть 1 — Authentication & Session Security: после появления standalone PWA у приложения три канала входа, не один Telegram. Новая `identities`-таблица (schema-level, порог, дважды отложенный ADR-005) — единственный источник правды auth-резолва; `employees.telegram_id`/`phone` остаются для не-auth потребителей. Разная семантика конфликта: Telegram — ownership transfer атомарным `INSERT...ON CONFLICT`, Phone — строгий `409`, не transfer. Найден и исправлен пред-существующий race-баг в `claimTelegramId()`'s CTE (перенос на занятую карточку мог словить ложный 409). Session lifecycle — деактивация/password reset немедленно отзывают все browser-сессии; новые `GET/DELETE /auth/sessions`, `revoke-others`. CSRF (double-submit cookie + Sec-Fetch-Site/Origin), rate-limit `/auth/login` по хэшированному нормализованному телефону не IP, `trustProxy:1`. 10 новых тестов, 383→416 backend |
+| **20.49.0** | Web Security & Trust Layer, часть 2 — Browser Security: реальные XSS-фиксы (`esc()`), не гипотетические — `progressHTML()` (nav.ts, самый широкий охват), store name в 7+ файлах, `jsEsc()`/`JSON.stringify()`-в-атрибуте (`dealers`/`cash-metrics`, attribute-breakout — имя с `"` разрывало `onclick="..."`, второго порядка XSS против admin), `promos` note (пишет любой сотрудник, самый низкий барьер входа). Новый `check-dangerous-js-patterns.mjs` (CI-gate, модель — `check-no-direct-sql.mjs`). `Cache-Control: no-store` глобальным хуком на ответы без своего заголовка (avatar/статика не перезаписаны — проверено живым curl). Подтверждено чистым: postMessage, clickjacking, localStorage, open-redirect. Явно отложено — закрытие `unsafe-inline` для `script-src-attr`/`style-src-attr` (265+ мест, отдельная эпоха, сопоставимая с Frontend rewrite). 6 новых тестов, 416→421 backend, 404→411 frontend |
 
 ---
 
@@ -1262,6 +1263,59 @@ Intelligence-слой (эпоха 21) и, при необходимости, о�
   `employees.phone` с preflight-проверкой на дубли перед backfill. ADR-005
   и `SECURITY.md` §2 обновлены. 10 новых backend-тестов, 383→416 (см.
   §21, 20.48.0)
+- **20.49 Web Security & Trust Layer, часть 2 — Browser Security** ✅ —
+  владелец продукта сказал «делай всё сразу» на выбор между аудитом+CI-
+  gate и полным CSP-рефакторингом одним куском. Исследование (3
+  параллельных research-агента, результаты перепроверены вручную на
+  реальном коде, не приняты на веру) показало, что «всё сразу» нужно
+  разделить на два факта: найдены реальные, эксплуатируемые XSS-дыры (не
+  гипотетические), и закрытие `unsafe-inline` для `script-src-attr`/
+  `style-src-attr` — 265+ мест в 21 TS-файле + `index.html`, отдельная по
+  объёму эпоха (сопоставимо с Frontend rewrite, 20.3.0-20.30.0, ~27
+  версий), не один дифф. Решение: в этот проход — всё, что можно
+  сделать безопасно и полно прямо сейчас; отдельно, явно
+  зафиксировано, не забыто — крупный CSP-рефакторинг.
+  Реальные XSS-фиксы (`esc()`, уже существующий, используется как bare
+  global в 19+ файлах): `progressHTML()` (`nav.ts`) — самый широкий
+  охват, метка кастомной метрики без экранирования рендерится в
+  `home`/`my-plan`/`schedule`/`shift`/`store-profile`/`team`; store name
+  без `esc()` в 7+ файлах; **attribute-breakout класс** — `jsEsc()`
+  (`dealers/index.ts`) экранировал только JS-string-контекст (`'`), не
+  HTML-атрибут — имя сектора/дилера/сотрудника с `"` разрывало
+  `onclick="..."` и внедряло произвольный обработчик на элемент (второго
+  порядка XSS против admin-аккаунта); та же природа бага в
+  `cash-metrics/index.ts` (`JSON.stringify()` в атрибуте без HTML-
+  экранирования обёртки). `promos/index.ts` note — пишет ЛЮБОЙ активный
+  сотрудник (не manager), читает вся сеть — самый низкий барьер входа из
+  всех находок. `support/index.ts` FAQ — без активного write-роута,
+  defense-in-depth.
+  Новый `check-dangerous-js-patterns.mjs` (модель — `check-no-direct-
+  sql.mjs`, allowlist+regex, без ESLint/AST) — `document.write`/`eval`/
+  `new Function`/строковый `setTimeout`/`setInterval`, 0 совпадений
+  сегодня, фиксирует уже достигнутую чистоту как регресс-барьер, не
+  чинит новую проблему. `Cache-Control: no-store` глобальным `onSend`-
+  хуком (`app.ts`) на ответы без своего явного заголовка — auth/session/
+  employee-PII роуты раньше не несли Cache-Control вообще;
+  `GET /avatars/:id` (`private, max-age=300`) и статические ассеты
+  (`public, max-age=0`) не перезаписаны — проверено живым curl на
+  локальном dev-сервере, не только предположением о порядке hook'ов.
+  `X-Content-Type-Options`/`Referrer-Policy` уже корректны на helmet-
+  дефолтах (проверено чтением исходников `helmet` в `node_modules`) —
+  правка не потребовалась, добавлен только regression-тест. Подтверждено
+  чистым без изменений: `postMessage` (не используется этим кодом),
+  clickjacking (`X-Frame-Options` уже осознанно `false`), localStorage/
+  sessionStorage (5 не-auth ключей), open-redirect/`javascript:`-URI (0
+  мест). `styleSrc: 'unsafe-inline'` (block-level) — проверено вручную
+  перед удалением, не мёртвый код, как показалось research-агенту:
+  `shift/index.ts` создаёт реальный `<style>`-блок через
+  `document.createElement` для keyframe-анимации конфетти при закрытии
+  смены — оставлено как есть, находка задокументирована, не молча
+  пропущена. Заодно найдено и исправлено: 2 существующих frontend-теста
+  не стабили `esc()` вообще — с новым вызовом внутри падали в
+  ReferenceError, тихо давая пустой рендер вместо явной ошибки. 6 новых
+  тестов (attribute-breakout проверен реальной `esc()`, не no-op стабом,
+  через настоящий XSS-payload — jsdom реально парсит HTML), 416→421
+  backend, 404→411 frontend (см. §21, 20.49.0)
 
 Версии внутри 20.8-20.22 не религия — пункты могут объединяться,
 переставляться местами или уходить в backlog по решению владельца
@@ -1309,6 +1363,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.48.0 · август 2026*
+*README · актуально на v20.49.0 · август 2026*
 
 </div>

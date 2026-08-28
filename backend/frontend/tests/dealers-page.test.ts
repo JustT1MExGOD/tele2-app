@@ -7,6 +7,7 @@
  * импортируется напрямую в тестах другой страницы).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals() {
   document.body.innerHTML = `
@@ -18,7 +19,11 @@ function setupGlobals() {
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
   `;
-  vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
+  // 20.49.0 — реальная esc() (не no-op stub): этот файл тестирует, что
+  // jsEsc()+esc() вместе действительно нейтрализуют attribute-breakout в
+  // onclick="..." (см. security-тест ниже) — с фейковым stub'ом тест
+  // ничего не доказывал бы про реальное экранирование.
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('toast', vi.fn());
   vi.stubGlobal('closeModal', vi.fn());
@@ -132,6 +137,39 @@ describe('Дилеры/Секторы (src/pages/dealers)', () => {
     await submitRenameDealer(1);
     expect(renameDealer).not.toHaveBeenCalled();
     expect((globalThis as any).toast).toHaveBeenCalledWith('Укажите название', 'err');
+  });
+
+  // 20.49.0 (Web Security & Trust Layer, часть 2) — регресс на реальную
+  // находку: jsEsc() экранировал только JS-string-контекст ('), не
+  // HTML-атрибут-контекст (onclick="...") — имя сектора/дилера/сотрудника
+  // с " разрывало атрибут и внедряло произвольный обработчик на элемент.
+  it('sector/dealer/supervisor имя с " не разрывает onclick="..." — атрибут-breakout невозможен', async () => {
+    const { getDealersTree } = setupGlobals();
+    const payload = `x" onmouseover="window.__pwned=1`;
+    getDealersTree.mockResolvedValue({
+      dealers: [
+        {
+          id: 1,
+          name: payload,
+          sectors: [{ id: 'sector-1', name: payload, orgs: [], supervisors: [] }]
+        }
+      ],
+      unassigned_sectors: [],
+      unassigned_supervisors: [{ id: 7, full_name: payload }]
+    });
+    const { loadDealersAdmin } = await import('../src/pages/dealers/index.js');
+    await loadDealersAdmin();
+
+    // jsdom реально парсит HTML — если бы " разорвал атрибут, здесь
+    // появился бы настоящий onmouseover на элементе.
+    const buttons = Array.from(document.querySelectorAll('button'));
+    for (const b of buttons) {
+      expect(b.hasAttribute('onmouseover')).toBe(false);
+    }
+    expect((window as any).__pwned).toBeUndefined();
+    // Имя всё ещё видно на экране (в HTML-экранированном виде), не молча
+    // отброшено — esc() экранирует, не вырезает.
+    expect(document.getElementById('dealersTree')!.textContent).toContain(payload);
   });
 
   it('window.* мост — все 6 функций', async () => {
