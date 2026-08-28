@@ -9,6 +9,8 @@ import { hashPassword } from '../../../auth/password.js';
 import { todayMoscow } from '../../../utils/date.js';
 import { normalizePhone } from '../../../utils/phone.js';
 import { withTransaction } from '../../../data/db/index.js';
+import { COOKIE_NAME as PHONE_SESSION_COOKIE_NAME } from '../../../auth/providers/phone.js';
+import { CSRF_COOKIE_NAME, setCsrfCookie } from '../../../auth/csrf.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
@@ -30,6 +32,15 @@ type LinkPhoneBody = Static<typeof LinkPhoneBody>;
 export async function registerMeRoutes(app: FastifyInstance) {
   // ========== ME / ROLE ==========
   app.get('/me', async (request, reply): Promise<MeResponse> => {
+    // 20.48.1 — backfill t2_csrf для сотрудников, залогиненных ДО 20.48.0:
+    // у них есть валидная t2_session, но t2_csrf не существует (ставится
+    // только в момент логина/сброса пароля) — без этого «Выйти»/«Завершить
+    // сессию» падают в csrf_mismatch до следующего релогина. /me вызывается
+    // на каждом старте приложения (в т.ч. для phone-сессий), самоисцеляется
+    // на первой же загрузке после деплоя хотфикса.
+    if (request.cookies?.[PHONE_SESSION_COOKIE_NAME] && !request.cookies?.[CSRF_COOKIE_NAME]) {
+      setCsrfCookie(reply);
+    }
     // не 404 — фронту удобнее: bound:false → показать «Привязать»
     if (!request.user?.employee_id) {
       return {

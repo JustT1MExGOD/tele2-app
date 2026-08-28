@@ -20,7 +20,7 @@ import {
 } from '../../../auth/guards.js';
 import { hashPassword, verifyPassword } from '../../../auth/password.js';
 import { COOKIE_NAME } from '../../../auth/providers/phone.js';
-import { CSRF_COOKIE_NAME } from '../../../auth/csrf.js';
+import { CSRF_COOKIE_NAME, setCsrfCookie } from '../../../auth/csrf.js';
 import { normalizePhone } from '../../../utils/phone.js';
 import { withTransaction } from '../../../data/db/index.js';
 import { bot } from '../../../integrations/telegram/bot.js';
@@ -71,9 +71,7 @@ const isProd = () => process.env.RAILWAY_ENVIRONMENT === 'production';
 
 /**
  * 20.48.0 — t2_csrf ставится/ротируется ВМЕСТЕ с t2_session на каждый
- * новый логин (double-submit cookie, см. auth/csrf.ts) — та же область
- * видимости (path/maxAge), но НЕ httpOnly (фронтенд должен прочитать
- * значение, чтобы отправить его же заголовком).
+ * новый логин (double-submit cookie, см. auth/csrf.ts::setCsrfCookie).
  */
 function setSessionCookie(reply: FastifyReply, token: string) {
   reply.setCookie(COOKIE_NAME, token, {
@@ -83,13 +81,7 @@ function setSessionCookie(reply: FastifyReply, token: string) {
     path: '/',
     maxAge: 30 * 24 * 60 * 60
   });
-  reply.setCookie(CSRF_COOKIE_NAME, sessionsRepo.generateToken(), {
-    httpOnly: false,
-    secure: isProd(),
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 30 * 24 * 60 * 60
-  });
+  setCsrfCookie(reply);
 }
 
 export async function registerSessionRoutes(app: FastifyInstance) {

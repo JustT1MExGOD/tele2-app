@@ -99,4 +99,39 @@ describe('CSRF — requireCsrf', () => {
     const res = await app.inject({ method: 'GET', url: '/auth/sessions', headers: { cookie: `t2_session=${token}` } });
     expect(res.statusCode).toBe(200);
   });
+
+  // 20.48.1 — хотфикс: сотрудник, залогиненный ДО 20.48.0, несёт валидную
+  // t2_session, но никогда не получал t2_csrf (ставится только при логине)
+  // — без backfill'а на GET /me «Выйти» бесконечно падает в csrf_mismatch
+  // до принудительного релогина.
+  it('GET /me с t2_session без t2_csrf — backfill выставляет t2_csrf, дальше logout проходит без релогина', async () => {
+    const app = await getApp();
+    const token = await makePhoneSession();
+
+    const me = await app.inject({ method: 'GET', url: '/me', headers: { cookie: `t2_session=${token}` } });
+    expect(me.statusCode).toBe(200);
+    const csrfCookie = me.cookies.find((c: any) => c.name === 't2_csrf');
+    expect(csrfCookie).toBeDefined();
+    expect(csrfCookie!.value.length).toBeGreaterThan(10);
+
+    const logout = await app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: { cookie: `t2_session=${token}; t2_csrf=${csrfCookie!.value}`, 'x-csrf-token': csrfCookie!.value },
+      payload: {}
+    });
+    expect(logout.statusCode).toBe(200);
+  });
+
+  it('GET /me с t2_session И уже существующим t2_csrf — не перевыставляет cookie', async () => {
+    const app = await getApp();
+    const token = await makePhoneSession();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me',
+      headers: { cookie: `t2_session=${token}; t2_csrf=already-here` }
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.cookies.find((c: any) => c.name === 't2_csrf')).toBeUndefined();
+  });
 });

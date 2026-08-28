@@ -374,6 +374,17 @@ export async function loadMyPlan(): Promise<void> {
   loadShiftAndInsight(empId);
 }
 
+// 20.48.1 — formatDateRu() рассчитан на "YYYY-MM-DD" (split('-'), 3 части);
+// created_at/last_seen_at — полный ISO-datetime ("2026-08-28T13:24:26.937Z"),
+// split('-') даёт 3 "неправильные" части → "28T13:24:26.937Z.08.2026" на
+// экране. Остальные вызывающие formatDateRu() передают чистую дату —
+// не трогаем её, заводим отдельный форматтер только для этого экрана.
+function formatSessionDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 async function loadSessionsSection(): Promise<void> {
   const el = document.getElementById('lkSessions');
   if (!el) return;
@@ -393,10 +404,10 @@ async function loadSessionsSection(): Promise<void> {
       (s) => `
           <div class="row" style="cursor:default">
             <div class="row-body">
-              <div class="row-title">${s.current ? 'Эта сессия' : 'Активна с ' + formatDateRu(s.created_at)}</div>
-              <div class="row-sub">Последняя активность: ${formatDateRu(s.last_seen_at)}</div>
+              <div class="row-title">${s.current ? 'Эта сессия' : 'Активна с ' + formatSessionDateTime(s.created_at)}</div>
+              <div class="row-sub">Последняя активность: ${formatSessionDateTime(s.last_seen_at)}</div>
             </div>
-            ${s.current ? '' : `<button class="btn-ghost" style="padding:6px 12px" onclick="revokeSessionRow(${s.id})">Завершить</button>`}
+            ${s.current ? '' : `<button class="mchip" onclick="revokeSessionRow(${s.id})">Завершить</button>`}
           </div>`
     )
     .join('');
@@ -409,7 +420,10 @@ async function loadSessionsSection(): Promise<void> {
 
 export async function revokeSessionRow(id: number): Promise<void> {
   try {
-    await window.apiClient.revokeSession(authHeaders(true), id);
+    // 20.48.1 — DELETE без тела; authHeaders(true) ставит Content-Type:
+    // application/json без тела, Fastify's body-parser отвечает "Body
+    // cannot be empty" на пустое тело с этим заголовком.
+    await window.apiClient.revokeSession(authHeaders(), id);
     toast('Сессия завершена', 'ok');
     loadSessionsSection();
   } catch (e: any) {

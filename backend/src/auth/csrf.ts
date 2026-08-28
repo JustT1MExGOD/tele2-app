@@ -20,8 +20,27 @@
  */
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { COOKIE_NAME } from './providers/phone.js';
+import { generateToken } from '../data/repositories/sessions.js';
 
 export const CSRF_COOKIE_NAME = 't2_csrf';
+const isProd = () => process.env.RAILWAY_ENVIRONMENT === 'production';
+
+/**
+ * 20.48.1 — вынесено из session.ts::setSessionCookie(), чтобы использовать
+ * ещё и для backfill'а (me/index.ts::GET /me): сотрудники, залогиненные
+ * ДО 20.48.0, несут валидную t2_session, но никогда не получали t2_csrf
+ * (она ставится только в момент логина) — без backfill'а «Выйти»/
+ * «Завершить сессию» у них падает в csrf_mismatch до следующего релогина.
+ */
+export function setCsrfCookie(reply: FastifyReply): void {
+  reply.setCookie(CSRF_COOKIE_NAME, generateToken(), {
+    httpOnly: false,
+    secure: isProd(),
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60
+  });
+}
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // Логин/регистрация/сброс не полагаются на ambient cookie authority для
 // авторизации самого действия (берут явные credentials в теле) — в

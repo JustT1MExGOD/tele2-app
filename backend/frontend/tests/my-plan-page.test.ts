@@ -13,7 +13,7 @@ function setupGlobals(overrides: { tgId?: number | null } = {}) {
       <div id="lkProfile"></div><div id="lkShift"></div><div id="lkInsight"></div>
       <div id="lkToday"></div><div id="lkMonth"></div><div id="lkWeek"></div>
       <div id="lkBfq"></div><div id="lkGamification"></div><div id="lkActions"></div>
-      <div id="lkPhoneAuth"></div>
+      <div id="lkPhoneAuth"></div><div id="lkSessions"></div>
     </div>
     <div id="userAvatar"></div>
     <select id="bindEmployee"></select>
@@ -22,7 +22,7 @@ function setupGlobals(overrides: { tgId?: number | null } = {}) {
     <div id="modalBody"></div>
   `;
   vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
-  vi.stubGlobal('authHeaders', () => ({}));
+  vi.stubGlobal('authHeaders', vi.fn((json?: boolean) => (json ? { 'Content-Type': 'application/json' } : {})));
   vi.stubGlobal('toast', vi.fn());
   vi.stubGlobal('closeModal', vi.fn());
   vi.stubGlobal('me', null);
@@ -49,8 +49,11 @@ function setupGlobals(overrides: { tgId?: number | null } = {}) {
   const uploadAvatar = vi.fn().mockResolvedValue({ ok: true });
   const linkPhone = vi.fn().mockResolvedValue({ ok: true });
   const logoutPhone = vi.fn().mockResolvedValue({ ok: true });
-  (window as any).apiClient = { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMe: bindMeApi, uploadAvatar, linkPhone, logoutPhone };
-  return { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMeApi, uploadAvatar, linkPhone, logoutPhone };
+  const listSessions = vi.fn().mockResolvedValue({ sessions: [] });
+  const revokeSession = vi.fn().mockResolvedValue({ ok: true });
+  const revokeOtherSessions = vi.fn().mockResolvedValue({ ok: true });
+  (window as any).apiClient = { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMe: bindMeApi, uploadAvatar, linkPhone, logoutPhone, listSessions, revokeSession, revokeOtherSessions };
+  return { getMe, getEmployees, getMyDay, getEmployeeProgress, getScheduleMonth, getBfqList, getPlansEmployeesMonth, bindMeApi, uploadAvatar, linkPhone, logoutPhone, listSessions, revokeSession, revokeOtherSessions };
 }
 
 describe('Мой план (миграция frontend/js/05-my-plan.js → src/pages/my-plan)', () => {
@@ -261,5 +264,56 @@ describe('Мой план (миграция frontend/js/05-my-plan.js → src/pa
     await saveLinkPhone(null);
     expect((globalThis as any).toast).toHaveBeenCalledWith('Этот номер уже привязан к другому аккаунту', 'err');
     expect((globalThis as any).closeModal).not.toHaveBeenCalled();
+  });
+
+  // 20.48.1 — хотфикс на найденные владельцем продукта живые баги экрана.
+  it('loadMyPlan: рендерит активные сессии с читаемой датой (не "28T13:24:26.937Z.08.2026")', async () => {
+    const { getMe, listSessions } = setupGlobals();
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee' });
+    listSessions.mockResolvedValue({
+      sessions: [
+        { id: 1, created_at: '2026-08-28T13:24:26.937Z', last_seen_at: '2026-08-28T13:24:26.937Z', current: true },
+        { id: 2, created_at: '2026-08-20T09:00:00.000Z', last_seen_at: '2026-08-27T18:30:00.000Z', current: false }
+      ]
+    });
+    const { loadMyPlan } = await import('../src/pages/my-plan/index.js');
+    await loadMyPlan();
+    const html = document.getElementById('lkSessions')!.innerHTML;
+    expect(html).not.toContain('T13:24:26.937Z');
+    expect(html).toMatch(/28\.08\.2026/);
+    expect(html).toMatch(/20\.08\.2026/);
+  });
+
+  it('loadMyPlan: кнопка "Завершить" — не .btn-ghost (full-width, наезжает на текст)', async () => {
+    const { getMe, listSessions } = setupGlobals();
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee' });
+    listSessions.mockResolvedValue({
+      sessions: [
+        { id: 1, created_at: '2026-08-28T13:00:00.000Z', last_seen_at: '2026-08-28T13:00:00.000Z', current: true },
+        { id: 2, created_at: '2026-08-20T09:00:00.000Z', last_seen_at: '2026-08-27T18:30:00.000Z', current: false }
+      ]
+    });
+    const { loadMyPlan } = await import('../src/pages/my-plan/index.js');
+    await loadMyPlan();
+    const html = document.getElementById('lkSessions')!.innerHTML;
+    expect(html).toContain('class="mchip"');
+    expect(html).not.toContain('class="btn-ghost"');
+  });
+
+  it('revokeSessionRow: DELETE без тела — authHeaders() БЕЗ json:true (Content-Type не ставится)', async () => {
+    const { revokeSession } = setupGlobals();
+    const { revokeSessionRow } = await import('../src/pages/my-plan/index.js');
+    await revokeSessionRow(5);
+    expect(revokeSession).toHaveBeenCalledWith({}, 5); // authHeaders() без true -> {}
+    expect((globalThis as any).authHeaders).toHaveBeenCalledWith(); // не authHeaders(true)
+  });
+
+  it('revokeOtherSessionsRow: вызывает API, тостит, перезагружает список', async () => {
+    const { revokeOtherSessions, listSessions } = setupGlobals();
+    const { revokeOtherSessionsRow } = await import('../src/pages/my-plan/index.js');
+    await revokeOtherSessionsRow();
+    expect(revokeOtherSessions).toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Остальные сессии завершены', 'ok');
+    expect(listSessions).toHaveBeenCalled();
   });
 });
