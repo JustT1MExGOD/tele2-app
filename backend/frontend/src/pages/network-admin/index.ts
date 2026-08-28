@@ -565,6 +565,7 @@ export async function loadReportSvg(): Promise<void> {
 // ===== СЕТИ (admin) — создание/редактирование organizations без SQL =====
 let orgsAdminCache: OrgAdminItem[] = []; // последний ответ GET /orgs — открываем
 // форму редактирования без второго запроса, все поля уже тут
+let orgsSort: { key: string; dir: 1 | -1 } = { key: 'name', dir: 1 };
 
 export async function loadOrgsAdmin(): Promise<void> {
   const box = document.getElementById('orgsList');
@@ -590,6 +591,55 @@ export async function loadOrgsAdmin(): Promise<void> {
   } catch {
     box.innerHTML = '<div class="empty">🍉 Не получилось загрузить сети</div>';
   }
+  renderOrgsTable();
+}
+
+// 21.x, .data-table (тот же паттерн, что Team, 20.42.0) — тот же
+// orgsAdminCache, что и мобильный список выше, без повторного запроса.
+function renderOrgsTable(): void {
+  const head = document.getElementById('orgsTableHead');
+  const body = document.getElementById('orgsTableBody');
+  if (!head || !body) return;
+  head.innerHTML = `<tr>
+    <th scope="col" data-sort-key="name" aria-sort="none"><button type="button" class="dt-sort" onclick="sortOrgsTable('name')">Название</button></th>
+    <th scope="col">ID</th>
+    <th scope="col" data-sort-key="dealer" aria-sort="none"><button type="button" class="dt-sort" onclick="sortOrgsTable('dealer')">Дилер</button></th>
+    <th scope="col" data-sort-key="sector" aria-sort="none"><button type="button" class="dt-sort" onclick="sortOrgsTable('sector')">Сектор</button></th>
+    <th scope="col" data-sort-key="status" aria-sort="none"><button type="button" class="dt-sort" onclick="sortOrgsTable('status')">Статус</button></th>
+  </tr>`;
+
+  const sorted = [...orgsAdminCache].sort((a, b) => {
+    let cmp = 0;
+    if (orgsSort.key === 'name') cmp = (a.name || '').localeCompare(b.name || '', 'ru');
+    else if (orgsSort.key === 'dealer') cmp = (a.dealer_name || '').localeCompare(b.dealer_name || '', 'ru');
+    else if (orgsSort.key === 'sector') cmp = (a.sector_id || '').localeCompare(b.sector_id || '', 'ru');
+    else if (orgsSort.key === 'status') cmp = Number(a.is_active !== false) - Number(b.is_active !== false);
+    return cmp * orgsSort.dir;
+  });
+
+  body.innerHTML = sorted.length
+    ? sorted
+        .map(
+          (o) => `<tr data-clickable onclick="openEditOrg('${o.id}')">
+            <td>${esc(o.name)}</td>
+            <td>${esc(o.id)}</td>
+            <td>${esc(o.dealer_name || '—')}</td>
+            <td>${esc(o.sector_id || 'default')}</td>
+            <td>${o.is_active === false ? 'выключена' : 'активна'}</td>
+          </tr>`
+        )
+        .join('')
+    : '<tr><td colspan="5" class="empty">🍉 Сетей пока нет</td></tr>';
+
+  document.querySelectorAll('#orgsTable thead th[data-sort-key]').forEach((th) => {
+    const key = (th as HTMLElement).dataset.sortKey;
+    th.setAttribute('aria-sort', key === orgsSort.key ? (orgsSort.dir === 1 ? 'ascending' : 'descending') : 'none');
+  });
+}
+
+export function sortOrgsTable(key: string): void {
+  orgsSort = orgsSort.key === key ? { key, dir: orgsSort.dir === 1 ? -1 : 1 } : { key, dir: 1 };
+  renderOrgsTable();
 }
 
 const AUDIT_ACTION_LABEL: Record<string, string> = {
@@ -600,6 +650,16 @@ const AUDIT_ACTION_LABEL: Record<string, string> = {
   'export.csv': 'Экспорт CSV'
 };
 
+// Реальные target_type из recordAudit() по всему backend (grep по вызовам) —
+// статичный список, не выдуманный: employee/employee_plan/store_plan/sale/export.
+const AUDIT_TARGET_TYPE_LABEL: Record<string, string> = {
+  employee: 'Сотрудник',
+  employee_plan: 'План сотрудника',
+  store_plan: 'План точки',
+  sale: 'Продажа',
+  export: 'Экспорт'
+};
+
 function auditDiffHTML(item: AuditLogItem): string {
   const before = item.before ? JSON.stringify(item.before) : null;
   const after = item.after ? JSON.stringify(item.after) : null;
@@ -608,30 +668,172 @@ function auditDiffHTML(item: AuditLogItem): string {
   return '';
 }
 
+// 21.x — GET /audit уже полностью поддерживал action/target_type/from/to/
+// limit/offset на бэкенде, фронтенд их никогда не вызывал (никаких
+// элементов фильтра на странице не было вообще). auditItems копится через
+// "Показать ещё" (offset += limit) — total-count бэкенд не отдаёт,
+// пагинация по факту "вернулось меньше limit — дальше нечего грузить".
+const AUDIT_LIMIT = 50;
+let auditItems: AuditLogItem[] = [];
+let auditOffset = 0;
+let auditSort: { key: string; dir: 1 | -1 } = { key: 'created_at', dir: -1 };
+let auditFilterOptionsReady = false;
+
+function populateAuditFilterOptions(): void {
+  if (auditFilterOptionsReady) return;
+  const actionSel = document.getElementById('auditFilterAction') as HTMLSelectElement | null;
+  const typeSel = document.getElementById('auditFilterTargetType') as HTMLSelectElement | null;
+  if (actionSel) {
+    actionSel.innerHTML =
+      '<option value="">Все действия</option>' +
+      Object.entries(AUDIT_ACTION_LABEL)
+        .map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`)
+        .join('');
+  }
+  if (typeSel) {
+    typeSel.innerHTML =
+      '<option value="">Все объекты</option>' +
+      Object.entries(AUDIT_TARGET_TYPE_LABEL)
+        .map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`)
+        .join('');
+  }
+  auditFilterOptionsReady = true;
+}
+
+function currentAuditFilters(): { action?: string; targetType?: string; from?: string; to?: string } {
+  const action = (document.getElementById('auditFilterAction') as HTMLSelectElement | null)?.value || undefined;
+  const targetType = (document.getElementById('auditFilterTargetType') as HTMLSelectElement | null)?.value || undefined;
+  const from = (document.getElementById('auditFilterFrom') as HTMLInputElement | null)?.value || undefined;
+  const to = (document.getElementById('auditFilterTo') as HTMLInputElement | null)?.value || undefined;
+  return { action, targetType, from, to };
+}
+
 export async function loadAuditLog(): Promise<void> {
+  populateAuditFilterOptions();
+  auditOffset = 0;
+  auditItems = [];
+  const box = document.getElementById('auditList');
+  if (box) box.innerHTML = '<div class="skeleton"></div>';
+  await fetchAuditPage(false);
+}
+
+export async function applyAuditFilters(): Promise<void> {
+  auditOffset = 0;
+  auditItems = [];
+  await fetchAuditPage(false);
+}
+
+export async function loadMoreAuditLog(): Promise<void> {
+  auditOffset += AUDIT_LIMIT;
+  await fetchAuditPage(true);
+}
+
+async function fetchAuditPage(append: boolean): Promise<void> {
+  const box = document.getElementById('auditList');
+  const loadMoreBtn = document.getElementById('auditLoadMore');
+  try {
+    const data: AuditListResponse = await window.apiClient.getAuditLog(authHeaders(), orgQueryParam(), {
+      ...currentAuditFilters(),
+      limit: AUDIT_LIMIT,
+      offset: auditOffset
+    });
+    const items = Array.isArray(data.items) ? data.items : [];
+    auditItems = append ? [...auditItems, ...items] : items;
+    if (loadMoreBtn) (loadMoreBtn as HTMLElement).style.display = items.length === AUDIT_LIMIT ? '' : 'none';
+    renderAuditList();
+    renderAuditTable();
+  } catch {
+    if (box && !append) box.innerHTML = '<div class="empty">🍉 Не получилось загрузить историю</div>';
+    toast('Не получилось загрузить историю', 'err');
+  }
+}
+
+function renderAuditList(): void {
   const box = document.getElementById('auditList');
   if (!box) return;
-  box.innerHTML = '<div class="skeleton"></div>';
-  try {
-    const data: AuditListResponse = await window.apiClient.getAuditLog(authHeaders(), orgQueryParam());
-    const items = Array.isArray(data.items) ? data.items : [];
-    box.innerHTML =
-      items
-        .map(
-          (item) => `
+  box.innerHTML =
+    auditItems
+      .map(
+        (item) => `
           <div class="row" style="cursor:default">
             <div class="row-body">
               <div class="row-title">${esc(AUDIT_ACTION_LABEL[item.action] || item.action)}</div>
-              <div class="row-sub">${esc(item.actor_name || 'Система')} · ${esc(item.target_type)}${item.target_id ? ' #' + esc(item.target_id) : ''}</div>
+              <div class="row-sub">${esc(item.actor_name || 'Система')} · ${esc(AUDIT_TARGET_TYPE_LABEL[item.target_type] || item.target_type)}${item.target_id ? ' #' + esc(item.target_id) : ''}</div>
               <div class="row-sub" style="font-family:ui-monospace,monospace;font-size:11px">${auditDiffHTML(item)}</div>
             </div>
             <div class="row-sub">${new Date(item.created_at).toLocaleString('ru')}</div>
           </div>`
+      )
+      .join('') || '<div class="empty">🍉 Действий пока нет</div>';
+}
+
+// 21.x, .data-table — сортировка клиентская, только по уже загруженной
+// (через "Показать ещё") части выборки, не переспрашивает сервер.
+function renderAuditTable(): void {
+  const head = document.getElementById('auditTableHead');
+  const body = document.getElementById('auditTableBody');
+  if (!head || !body) return;
+  head.innerHTML = `<tr>
+    <th scope="col" data-sort-key="created_at" aria-sort="none"><button type="button" class="dt-sort" onclick="sortAuditTable('created_at')">Дата</button></th>
+    <th scope="col" data-sort-key="action" aria-sort="none"><button type="button" class="dt-sort" onclick="sortAuditTable('action')">Действие</button></th>
+    <th scope="col" data-sort-key="actor" aria-sort="none"><button type="button" class="dt-sort" onclick="sortAuditTable('actor')">Актор</button></th>
+    <th scope="col" data-sort-key="target" aria-sort="none"><button type="button" class="dt-sort" onclick="sortAuditTable('target')">Объект</button></th>
+  </tr>`;
+
+  const indexed = auditItems.map((item, idx) => ({ item, idx }));
+  indexed.sort((a, b) => {
+    let cmp = 0;
+    if (auditSort.key === 'created_at') cmp = new Date(a.item.created_at).getTime() - new Date(b.item.created_at).getTime();
+    else if (auditSort.key === 'action') cmp = (AUDIT_ACTION_LABEL[a.item.action] || a.item.action).localeCompare(AUDIT_ACTION_LABEL[b.item.action] || b.item.action, 'ru');
+    else if (auditSort.key === 'actor') cmp = (a.item.actor_name || '').localeCompare(b.item.actor_name || '', 'ru');
+    else if (auditSort.key === 'target') cmp = (a.item.target_type || '').localeCompare(b.item.target_type || '', 'ru');
+    return cmp * auditSort.dir;
+  });
+
+  body.innerHTML = indexed.length
+    ? indexed
+        .map(
+          ({ item, idx }) => `<tr data-clickable onclick="openAuditDiffModal(${idx})">
+            <td>${new Date(item.created_at).toLocaleString('ru')}</td>
+            <td>${esc(AUDIT_ACTION_LABEL[item.action] || item.action)}</td>
+            <td>${esc(item.actor_name || 'Система')}</td>
+            <td>${esc(AUDIT_TARGET_TYPE_LABEL[item.target_type] || item.target_type)}${item.target_id ? ' #' + esc(item.target_id) : ''}</td>
+          </tr>`
         )
-        .join('') || '<div class="empty">🍉 Действий пока нет</div>';
-  } catch {
-    box.innerHTML = '<div class="empty">🍉 Не получилось загрузить историю</div>';
+        .join('')
+    : '<tr><td colspan="4" class="empty">🍉 Действий пока нет</td></tr>';
+
+  document.querySelectorAll('#auditTable thead th[data-sort-key]').forEach((th) => {
+    const key = (th as HTMLElement).dataset.sortKey;
+    th.setAttribute('aria-sort', key === auditSort.key ? (auditSort.dir === 1 ? 'ascending' : 'descending') : 'none');
+  });
+}
+
+export function sortAuditTable(key: string): void {
+  auditSort = auditSort.key === key ? { key, dir: auditSort.dir === 1 ? -1 : 1 } : { key, dir: 1 };
+  renderAuditTable();
+}
+
+// 21.x — раньше before/after было инлайн JSON.stringify в одну строку
+// (auditDiffHTML выше, для мобильного списка) — на десктопе клик по
+// строке открывает полный diff читаемо, не только то, что влезло в
+// одну строку карточки.
+export function openAuditDiffModal(idx: number): void {
+  const item = auditItems[idx];
+  if (!item) return;
+  const modalTitle = document.getElementById('modalTitle');
+  if (modalTitle) modalTitle.textContent = AUDIT_ACTION_LABEL[item.action] || item.action;
+  const modalBody = document.getElementById('modalBody');
+  if (modalBody) {
+    modalBody.innerHTML = `
+      <div class="empty" style="text-align:left;padding:0 0 12px">
+        ${esc(item.actor_name || 'Система')} · ${esc(AUDIT_TARGET_TYPE_LABEL[item.target_type] || item.target_type)}${item.target_id ? ' #' + esc(item.target_id) : ''} · ${new Date(item.created_at).toLocaleString('ru')}
+      </div>
+      <div class="field"><label>До</label><pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;background:var(--surface-2);border-radius:8px;padding:10px">${esc(item.before ? JSON.stringify(item.before, null, 2) : '—')}</pre></div>
+      <div class="field"><label>После</label><pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;background:var(--surface-2);border-radius:8px;padding:10px">${esc(item.after ? JSON.stringify(item.after, null, 2) : '—')}</pre></div>
+    `;
   }
+  document.getElementById('overlay')?.classList.add('show');
 }
 
 function orgFormHTML(o?: Partial<OrgAdminItem>): string {
@@ -741,6 +943,11 @@ declare global {
     openAddOrg: typeof openAddOrg;
     openEditOrg: typeof openEditOrg;
     saveOrg: typeof saveOrg;
+    sortOrgsTable: typeof sortOrgsTable;
+    applyAuditFilters: typeof applyAuditFilters;
+    loadMoreAuditLog: typeof loadMoreAuditLog;
+    sortAuditTable: typeof sortAuditTable;
+    openAuditDiffModal: typeof openAuditDiffModal;
   }
 }
 window.applyBranding = applyBranding;
@@ -767,3 +974,8 @@ window.loadAuditLog = loadAuditLog;
 window.openAddOrg = openAddOrg;
 window.openEditOrg = openEditOrg;
 window.saveOrg = saveOrg;
+window.sortOrgsTable = sortOrgsTable;
+window.applyAuditFilters = applyAuditFilters;
+window.loadMoreAuditLog = loadMoreAuditLog;
+window.sortAuditTable = sortAuditTable;
+window.openAuditDiffModal = openAuditDiffModal;

@@ -1100,6 +1100,48 @@ export interface AuditListResponse {
   items: AuditLogItem[];
 }
 
+// ---------- /admin/dealers ----------
+export interface DealerOrgRef {
+  id: string;
+  name: string;
+}
+
+export interface DealerSupervisorRef {
+  id: number;
+  full_name: string;
+}
+
+export interface SectorNode {
+  id: string;
+  name: string;
+  orgs: DealerOrgRef[];
+  supervisors: DealerSupervisorRef[];
+}
+
+export interface DealerNode {
+  id: number;
+  name: string;
+  sectors: SectorNode[];
+}
+
+export interface DealersTreeResponse {
+  dealers: DealerNode[];
+  /** Секторы без dealer_id — были заведены неявно через форму сети, но
+   * так и не привязаны ни к одному дилеру. */
+  unassigned_sectors: SectorNode[];
+  /** role='supervisor' без строки в supervisor_sectors — раньше терялись
+   * молча (см. changelog версии, где это найдено и исправлено). */
+  unassigned_supervisors: DealerSupervisorRef[];
+}
+
+export interface RenameDealerRequest {
+  name: string;
+}
+
+export interface RenameSectorRequest {
+  name: string;
+}
+
 export interface CreateStoreRequest {
   id: string;
   name: string;

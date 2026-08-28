@@ -16,7 +16,16 @@ function setupGlobals(overrides: { role?: string } = {}) {
     <div id="anList"></div><div id="anCreate"></div>
     <select id="riStore"><option value="s1" selected></option></select><input id="riDate"><div id="riPreview"></div>
     <div id="orgsList"></div>
+    <div id="orgsTableWrap"><table id="orgsTable"><thead id="orgsTableHead"></thead><tbody id="orgsTableBody"></tbody></table></div>
+    <div id="auditFilters">
+      <select id="auditFilterAction"></select>
+      <select id="auditFilterTargetType"></select>
+      <input type="date" id="auditFilterFrom">
+      <input type="date" id="auditFilterTo">
+    </div>
     <div id="auditList"></div>
+    <div id="auditTableWrap"><table id="auditTable"><thead id="auditTableHead"></thead><tbody id="auditTableBody"></tbody></table></div>
+    <button id="auditLoadMore" style="display:none"></button>
     <div id="overlay"></div><div id="modalTitle"></div><div id="modalBody"></div>
   `;
   vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
@@ -267,7 +276,86 @@ describe('Сети/аналитика-админ (миграция frontend/js/1
     expect(html).toContain('Иван');
   });
 
-  it('window.* мост — все 24 функции', async () => {
+  // ===== 21.x, «максимально функциональный» admin =====
+
+  it('loadOrgsAdmin: desktop-таблица рендерит тот же состав, что #orgsList, сортируется по названию', async () => {
+    const { getOrgsAdmin } = setupGlobals({ role: 'admin' });
+    getOrgsAdmin.mockResolvedValue([
+      { id: 'o2', name: 'Бета', sector_id: 'south', dealer_name: 'ООО Вторая' },
+      { id: 'o1', name: 'Альфа', sector_id: 'north', dealer_name: 'ООО Ромашка' }
+    ]);
+    const { loadOrgsAdmin, sortOrgsTable } = await import('../src/pages/network-admin/index.js');
+    await loadOrgsAdmin();
+    const rows = Array.from(document.querySelectorAll('#orgsTableBody tr')).map((tr) => tr.textContent || '');
+    expect(rows[0]).toContain('Альфа');
+    expect(rows[1]).toContain('Бета');
+    sortOrgsTable('name');
+    const reversed = Array.from(document.querySelectorAll('#orgsTableBody tr')).map((tr) => tr.textContent || '');
+    expect(reversed[0]).toContain('Бета');
+  });
+
+  it('orgs-таблица: строка помечена data-clickable и ведёт на openEditOrg по её id', async () => {
+    const { getOrgsAdmin } = setupGlobals({ role: 'admin' });
+    getOrgsAdmin.mockResolvedValue([{ id: 'o1', name: 'Сеть 1', sector_id: 'north', dealer_name: 'ООО Ромашка' }]);
+    const { loadOrgsAdmin, openEditOrg } = await import('../src/pages/network-admin/index.js');
+    await loadOrgsAdmin();
+    const row = document.querySelector('#orgsTableBody tr') as HTMLElement;
+    expect(row.hasAttribute('data-clickable')).toBe(true);
+    expect(row.getAttribute('onclick')).toContain("openEditOrg('o1')");
+    // jsdom не исполняет inline onclick="..." через синтетический
+    // dispatchEvent (тот же класс ограничения, что уже был у остальных
+    // .data-table страниц в этой сессии) — проверяем, что открывает
+    // ИМЕННО та функция, на которую ссылается атрибут.
+    openEditOrg('o1');
+    expect(document.getElementById('modalTitle')!.textContent).toBe('Сеть 1');
+  });
+
+  it('loadAuditLog: desktop-таблица + фильтры вызывают getAuditLog с ожидаемыми аргументами', async () => {
+    const { getAuditLog } = setupGlobals();
+    getAuditLog.mockResolvedValue({
+      items: [{ id: 1, org_id: 'o1', actor_employee_id: 1, actor_telegram_id: null, actor_name: 'Иван', actor_role: 'manager', target_org_id: 'o1', action: 'employee.role_change', target_type: 'employee', target_id: '5', before: { role: 'employee' }, after: { role: 'manager' }, request_id: null, created_at: '2026-08-25T10:00:00Z' }]
+    });
+    const { loadAuditLog, applyAuditFilters } = await import('../src/pages/network-admin/index.js');
+    await loadAuditLog();
+    expect(document.getElementById('auditTableBody')!.innerHTML).toContain('Смена роли');
+    expect((document.getElementById('auditFilterAction') as HTMLSelectElement).options.length).toBeGreaterThan(1);
+
+    (document.getElementById('auditFilterAction') as HTMLSelectElement).value = 'employee.role_change';
+    (document.getElementById('auditFilterFrom') as HTMLInputElement).value = '2026-08-01';
+    await applyAuditFilters();
+    expect(getAuditLog).toHaveBeenLastCalledWith(expect.anything(), '', expect.objectContaining({ action: 'employee.role_change', from: '2026-08-01', limit: 50, offset: 0 }));
+  });
+
+  it('loadMoreAuditLog: инкрементит offset, дописывает результаты, скрывает кнопку при неполной странице', async () => {
+    const { getAuditLog } = setupGlobals();
+    const page1 = Array.from({ length: 50 }, (_, i) => ({ id: i, org_id: 'o1', actor_employee_id: 1, actor_telegram_id: null, actor_name: 'Иван', actor_role: 'manager', target_org_id: 'o1', action: 'sales.correction', target_type: 'sale', target_id: String(i), before: null, after: null, request_id: null, created_at: '2026-08-25T10:00:00Z' }));
+    const page2 = [{ id: 100, org_id: 'o1', actor_employee_id: 1, actor_telegram_id: null, actor_name: 'Анна', actor_role: 'manager', target_org_id: 'o1', action: 'sales.correction', target_type: 'sale', target_id: '100', before: null, after: null, request_id: null, created_at: '2026-08-24T10:00:00Z' }];
+    getAuditLog.mockResolvedValueOnce({ items: page1 }).mockResolvedValueOnce({ items: page2 });
+    const { loadAuditLog, loadMoreAuditLog } = await import('../src/pages/network-admin/index.js');
+    await loadAuditLog();
+    expect((document.getElementById('auditLoadMore') as HTMLElement).style.display).toBe('');
+    await loadMoreAuditLog();
+    expect(getAuditLog).toHaveBeenLastCalledWith(expect.anything(), '', expect.objectContaining({ offset: 50 }));
+    expect(document.querySelectorAll('#auditTableBody tr').length).toBe(51);
+    expect((document.getElementById('auditLoadMore') as HTMLElement).style.display).toBe('none');
+  });
+
+  it('openAuditDiffModal: строка помечена data-clickable, открывает модал с полным before/after', async () => {
+    const { getAuditLog } = setupGlobals();
+    getAuditLog.mockResolvedValue({
+      items: [{ id: 1, org_id: 'o1', actor_employee_id: 1, actor_telegram_id: null, actor_name: 'Иван', actor_role: 'manager', target_org_id: 'o1', action: 'employee.role_change', target_type: 'employee', target_id: '5', before: { role: 'employee' }, after: { role: 'manager' }, request_id: null, created_at: '2026-08-25T10:00:00Z' }]
+    });
+    const { loadAuditLog, openAuditDiffModal } = await import('../src/pages/network-admin/index.js');
+    await loadAuditLog();
+    const row = document.querySelector('#auditTableBody tr') as HTMLElement;
+    expect(row.hasAttribute('data-clickable')).toBe(true);
+    expect(row.getAttribute('onclick')).toBe('openAuditDiffModal(0)');
+    openAuditDiffModal(0);
+    expect(document.getElementById('modalBody')!.innerHTML).toContain('"role": "employee"');
+    expect(document.getElementById('modalBody')!.innerHTML).toContain('"role": "manager"');
+  });
+
+  it('window.* мост — все 29 функций', async () => {
     setupGlobals();
     await import('../src/pages/network-admin/index.js');
     for (const name of [
@@ -294,7 +382,12 @@ describe('Сети/аналитика-админ (миграция frontend/js/1
       'loadAuditLog',
       'openAddOrg',
       'openEditOrg',
-      'saveOrg'
+      'saveOrg',
+      'sortOrgsTable',
+      'applyAuditFilters',
+      'loadMoreAuditLog',
+      'sortAuditTable',
+      'openAuditDiffModal'
     ]) {
       expect(typeof (window as any)[name]).toBe('function');
     }

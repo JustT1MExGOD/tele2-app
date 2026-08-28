@@ -37,6 +37,7 @@ import { registerStoreProfileRoutes } from './profiles/store.js';
 import { registerEmployeeProfileRoutes } from './profiles/employee.js';
 import { registerAvatarRoutes } from './me/avatar.js';
 import { registerAuditRoutes } from './audit.js';
+import { registerDealersRoutes } from './org/dealers.js';
 
 const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Plans', registerPlansRoutes],
@@ -70,7 +71,8 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Store Profile', registerStoreProfileRoutes],
   ['Employee Profile', registerEmployeeProfileRoutes],
   ['Avatar', registerAvatarRoutes],
-  ['Audit', registerAuditRoutes]
+  ['Audit', registerAuditRoutes],
+  ['Dealers/Sectors', registerDealersRoutes]
 ];
 
 export async function registerAllRoutes(app: FastifyInstance): Promise<void> {

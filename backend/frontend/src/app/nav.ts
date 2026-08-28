@@ -239,6 +239,9 @@ export function loadPage(name: string): void {
   if (name === 'audit') {
     loadAuditLog();
   }
+  if (name === 'dealers') {
+    loadDealersAdmin();
+  }
 }
 
 export async function refreshAll(): Promise<void> {

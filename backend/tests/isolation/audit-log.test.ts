@@ -73,6 +73,75 @@ describe('Audit Trail', () => {
     expect(res.statusCode).toBe(403);
   });
 
+  // 21.x — GET /audit уже полностью поддерживал action/target_type/from/to/
+  // limit/offset на бэкенде, но ни один тест их не проверял (фронтенд их
+  // тоже никогда не вызывал — см. changelog версии, где это найдено).
+  it('GET /audit — фильтр по action сужает выборку', async () => {
+    const marker = `filtertest_${Date.now()}`;
+    await query(
+      `INSERT INTO audit_log (org_id, action, target_type, target_id) VALUES ($1, 'sales.correction', 'sale', $2)`,
+      [orgA, marker]
+    );
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: `/audit?action=sales.correction`, headers: authAs(adminA.telegramId) });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items;
+    expect(items.every((i: any) => i.action === 'sales.correction')).toBe(true);
+    expect(items.some((i: any) => i.target_id === marker)).toBe(true);
+    await query(`DELETE FROM audit_log WHERE target_id = $1`, [marker]);
+  });
+
+  it('GET /audit — фильтр по target_type сужает выборку', async () => {
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: `/audit?target_type=employee`, headers: authAs(adminA.telegramId) });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items;
+    expect(items.every((i: any) => i.target_type === 'employee')).toBe(true);
+  });
+
+  it('GET /audit — фильтр по from/to (диапазон дат) исключает события вне окна', async () => {
+    const marker = `datetest_${Date.now()}`;
+    await query(
+      `INSERT INTO audit_log (org_id, action, target_type, target_id, created_at) VALUES ($1, 'test.old', 'test', $2, now() - interval '30 days')`,
+      [orgA, marker]
+    );
+    const app = await getApp();
+    const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const res = await app.inject({ method: 'GET', url: `/audit?from=${encodeURIComponent(from)}`, headers: authAs(adminA.telegramId) });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items;
+    expect(items.some((i: any) => i.target_id === marker)).toBe(false);
+    await query(`DELETE FROM audit_log WHERE target_id = $1`, [marker]);
+  });
+
+  it('GET /audit — limit/offset пагинируют', async () => {
+    const app = await getApp();
+    const page1 = await app.inject({ method: 'GET', url: `/audit?limit=1&offset=0`, headers: authAs(adminA.telegramId) });
+    expect(page1.json().items.length).toBeLessThanOrEqual(1);
+  });
+
+  // A3 — раньше resolveViewOrgId(request.user!, undefined) игнорировал
+  // ?org_id= совсем, admin не мог посмотреть аудит другой сети через
+  // тот же org-переключатель, что уже работает у остальных admin-роутов.
+  it('GET /audit — admin с ?org_id= видит выбранную сеть, не только свою', async () => {
+    const marker = `orgoverride_${Date.now()}`;
+    await query(
+      `INSERT INTO audit_log (org_id, action, target_type, target_id) VALUES ($1, 'test.orgoverride', 'test', $2)`,
+      [orgB, marker]
+    );
+    const app = await getApp();
+    // Без override — adminA сидит в orgA, чужого маркера не видит.
+    const withoutOverride = await app.inject({ method: 'GET', url: '/audit', headers: authAs(adminA.telegramId) });
+    expect(withoutOverride.json().items.some((i: any) => i.target_id === marker)).toBe(false);
+
+    const res = await app.inject({ method: 'GET', url: `/audit?org_id=${orgB}`, headers: authAs(adminA.telegramId) });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items;
+    expect(items.every((i: any) => i.org_id === orgB)).toBe(true);
+    expect(items.some((i: any) => i.target_id === marker)).toBe(true);
+    await query(`DELETE FROM audit_log WHERE target_id = $1`, [marker]);
+  });
+
   it('withTransaction — падение колбэка откатывает ВСЕ его запросы', async () => {
     const scratchId = `wtx_test_${Date.now()}`;
     await expect(

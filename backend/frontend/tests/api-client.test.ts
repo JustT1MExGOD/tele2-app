@@ -54,7 +54,11 @@ import {
   getNetworkLive,
   uploadAvatar,
   exportCsv,
-  getAuditLog
+  getAuditLog,
+  getDealersTree,
+  renameDealer,
+  renameSector,
+  assignSupervisorSector
 } from '../src/api-client.js';
 
 function fetchOk(body: unknown) {
@@ -628,6 +632,64 @@ describe('api-client', () => {
     });
   });
 
+  it('setEmployeeRole — с sectorId: PATCH с телом {role, sector_id} (21.x — раньше sector_id никогда не передавался)', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
+
+    await setEmployeeRole(headers, 3, 'supervisor', 'sector-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/employees/3/role`, {
+      headers, method: 'PATCH', body: JSON.stringify({ role: 'supervisor', sector_id: 'sector-1' })
+    });
+  });
+
+  it('getDealersTree — GET /admin/dealers', async () => {
+    const fetchMock = fetchOk({ dealers: [], unassigned_sectors: [], unassigned_supervisors: [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getDealersTree(headers);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/admin/dealers`, { headers });
+  });
+
+  it('renameDealer — PATCH /admin/dealers/:id с телом {name}', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await renameDealer(headers, 5, 'Новое имя');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/admin/dealers/5`, {
+      headers, method: 'PATCH', body: JSON.stringify({ name: 'Новое имя' })
+    });
+  });
+
+  it('renameSector — PATCH /admin/sectors/:id с телом {name}', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await renameSector(headers, 'sector-1', 'Новый сектор');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/admin/sectors/sector-1`, {
+      headers, method: 'PATCH', body: JSON.stringify({ name: 'Новый сектор' })
+    });
+  });
+
+  it('assignSupervisorSector — PUT /supervisor/:id/sector с телом {sector_id}', async () => {
+    const fetchMock = fetchOk({ ok: true, sector_id: 'sector-1' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await assignSupervisorSector(headers, 7, 'sector-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/supervisor/7/sector`, {
+      headers, method: 'PUT', body: JSON.stringify({ sector_id: 'sector-1' })
+    });
+  });
+
   it('getNetworkLive — верный URL с cache-bust и org_id-квери', async () => {
     const fetchMock = fetchOk({ stores: [] });
     vi.stubGlobal('fetch', fetchMock);
@@ -641,7 +703,7 @@ describe('api-client', () => {
     );
   });
 
-  it('getAuditLog — верный URL с org_id-квери', async () => {
+  it('getAuditLog — org_id-квери без фильтров: ведущий "&" меняется на "?" (21.x — раньше здесь была битая ссылка /audit&org_id=..., без "?" вообще)', async () => {
     const fetchMock = fetchOk({ items: [] });
     vi.stubGlobal('fetch', fetchMock);
     const headers = { 'X-Telegram-Id': '42' };
@@ -649,9 +711,38 @@ describe('api-client', () => {
     await getAuditLog(headers, '&org_id=other-org');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `${window.location.origin}/audit&org_id=other-org`,
+      `${window.location.origin}/audit?org_id=other-org`,
       { headers }
     );
+  });
+
+  it('getAuditLog — без orgQuery и без фильтров: без query string вообще', async () => {
+    const fetchMock = fetchOk({ items: [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getAuditLog(headers, '');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/audit`, { headers });
+  });
+
+  it('getAuditLog — фильтры собираются в query string, orgQuery дописывается следом', async () => {
+    const fetchMock = fetchOk({ items: [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getAuditLog(headers, '&org_id=other-org', { action: 'employee.role_change', targetType: 'employee', from: '2026-08-01', to: '2026-08-27', limit: 50, offset: 50 });
+
+    const calledUrl = (fetchMock as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0] as string;
+    expect(calledUrl.startsWith(`${window.location.origin}/audit?`)).toBe(true);
+    const qs = new URLSearchParams(calledUrl.split('?')[1]);
+    expect(qs.get('action')).toBe('employee.role_change');
+    expect(qs.get('target_type')).toBe('employee');
+    expect(qs.get('from')).toBe('2026-08-01');
+    expect(qs.get('to')).toBe('2026-08-27');
+    expect(qs.get('limit')).toBe('50');
+    expect(qs.get('offset')).toBe('50');
+    expect(qs.get('org_id')).toBe('other-org');
   });
 
   it('uploadAvatar — POST с FormData-телом без JSON.stringify и без Content-Type', async () => {

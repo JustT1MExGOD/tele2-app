@@ -66,6 +66,8 @@ function setupGlobals(overrides: { role?: string } = {}) {
   const deactivateEmployee = vi.fn().mockResolvedValue({ ok: true });
   const createEmployee = vi.fn().mockResolvedValue({ id: 2 });
   const createStore = vi.fn().mockResolvedValue({ id: 's2' });
+  const getDealersTree = vi.fn().mockResolvedValue({ dealers: [], unassigned_sectors: [], unassigned_supervisors: [] });
+  const assignSupervisorSector = vi.fn().mockResolvedValue({ ok: true, sector_id: 'sector-1' });
   (window as any).apiClient = {
     getEmployees,
     getSales,
@@ -75,9 +77,11 @@ function setupGlobals(overrides: { role?: string } = {}) {
     setEmployeeRole,
     deactivateEmployee,
     createEmployee,
-    createStore
+    createStore,
+    getDealersTree,
+    assignSupervisorSector
   };
-  return { getEmployees, getSales, getSchedules, getOrgsAdmin, zeroSaleMetric, setEmployeeRole, deactivateEmployee, createEmployee, createStore, openEmployeeProfile };
+  return { getEmployees, getSales, getSchedules, getOrgsAdmin, zeroSaleMetric, setEmployeeRole, deactivateEmployee, createEmployee, createStore, openEmployeeProfile, getDealersTree, assignSupervisorSector };
 }
 
 describe('Команда (миграция frontend/js/06-team-bfq.js → src/pages/team)', () => {
@@ -166,12 +170,63 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     expect(setEmployeeRole).not.toHaveBeenCalled();
   });
 
-  it('setRole: manager — вызывает API, тостит, перезагружает список', async () => {
+  it('setRole: manager, роль не supervisor — вызывает API напрямую без пикера, тостит, перезагружает список', async () => {
     const { setEmployeeRole, getEmployees } = setupGlobals({ role: 'manager' });
     const { setRole } = await import('../src/pages/team/index.js');
     await setRole(1, 'manager');
-    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'manager');
+    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'manager', undefined);
     expect(getEmployees).toHaveBeenCalled(); // loadTeam() re-fetch
+  });
+
+  // 21.x — раньше повышение до supervisor никогда не передавало sector_id
+  // (реальный баг, найденный аудитом кода): setEmployeeRole звалась
+  // (id, role) без сектора, бэкенд молча не писал supervisor_sectors.
+  it('setRole: role=supervisor — открывает пикер сектора вместо прямого вызова API', async () => {
+    const { setEmployeeRole, getDealersTree } = setupGlobals({ role: 'manager' });
+    (globalThis as any).employees = [{ id: 1, full_name: 'Иван', role: 'employee' }];
+    getDealersTree.mockResolvedValue({
+      dealers: [{ id: 1, name: 'ООО Ромашка', sectors: [{ id: 'sector-1', name: 'Север', orgs: [], supervisors: [] }] }],
+      unassigned_sectors: [],
+      unassigned_supervisors: []
+    });
+    const { setRole } = await import('../src/pages/team/index.js');
+    await setRole(1, 'supervisor');
+    expect(setEmployeeRole).not.toHaveBeenCalled();
+    expect(document.getElementById('modalTitle')!.textContent).toContain('Иван');
+    expect(document.getElementById('modalBody')!.innerHTML).toContain('sector-1');
+    expect(document.getElementById('modalBody')!.innerHTML).toContain('Пропустить');
+  });
+
+  it('setRole: role=supervisor, выбор сектора в пикере — вызывает setEmployeeRole(id, role, sectorId)', async () => {
+    const { setEmployeeRole, getDealersTree } = setupGlobals({ role: 'manager' });
+    (globalThis as any).employees = [{ id: 1, full_name: 'Иван', role: 'employee' }];
+    getDealersTree.mockResolvedValue({
+      dealers: [{ id: 1, name: 'ООО Ромашка', sectors: [{ id: 'sector-1', name: 'Север', orgs: [], supervisors: [] }] }],
+      unassigned_sectors: [],
+      unassigned_supervisors: []
+    });
+    const { setRole } = await import('../src/pages/team/index.js');
+    await setRole(1, 'supervisor');
+    const select = document.getElementById('sectorPickerSelect') as HTMLSelectElement;
+    select.value = 'sector-1';
+    document.getElementById('sectorPickerSubmit')!.dispatchEvent(new Event('click'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'supervisor', 'sector-1');
+  });
+
+  it('setRole: role=supervisor, "Пропустить" — вызывает setEmployeeRole(id, role) без сектора', async () => {
+    const { setEmployeeRole, getDealersTree } = setupGlobals({ role: 'manager' });
+    (globalThis as any).employees = [{ id: 1, full_name: 'Иван', role: 'employee' }];
+    getDealersTree.mockResolvedValue({
+      dealers: [{ id: 1, name: 'ООО Ромашка', sectors: [{ id: 'sector-1', name: 'Север', orgs: [], supervisors: [] }] }],
+      unassigned_sectors: [],
+      unassigned_supervisors: []
+    });
+    const { setRole } = await import('../src/pages/team/index.js');
+    await setRole(1, 'supervisor');
+    document.getElementById('sectorPickerSkip')!.dispatchEvent(new Event('click'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'supervisor', undefined);
   });
 
   it('removeEmployee: подтверждено — деактивирует и перезагружает', async () => {
@@ -233,7 +288,7 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     expect((window as any).__stores).toBeNull();
   });
 
-  it('window.* мост — все 16 функций', async () => {
+  it('window.* мост — все 17 функций', async () => {
     setupGlobals();
     await import('../src/pages/team/index.js');
     for (const name of [
@@ -252,7 +307,8 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
       'toggle24hStore',
       'saveNewStore',
       'sortTeamTable',
-      'openTeamRow'
+      'openTeamRow',
+      'openSectorPickerModal'
     ]) {
       expect(typeof (window as any)[name]).toBe('function');
     }

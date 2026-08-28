@@ -2439,6 +2439,12 @@
   #monthPlanList {
     display: none;
   }
+  /* 21.x («максимально функциональный» admin) — Сети/Аудит: тот же
+     mobile-list-прячется/.data-table-wrap-занимает-место приём. */
+  #orgsList,
+  #auditList {
+    display: none;
+  }
   .data-table-wrap {
     display: block;
     overflow-x: auto;

@@ -87,4 +87,39 @@ describe('Изоляция назначения ролей и секторов',
     });
     expect(res.statusCode).toBe(200);
   });
+
+  // 21.x — реальный баг, найденный аудитом кода перед тем, как он был
+  // исправлен на фронтенде (Team::setRole): повышение до supervisor
+  // никогда не передавало sector_id, PATCH /employees/:id/role молча не
+  // писал строку в supervisor_sectors, если sector_id отсутствовал — раньше
+  // это поведение НЕ было закрыто ни одним тестом, только виднелось из
+  // чтения кода. Теперь закрыто явно, в обе стороны.
+  it('PATCH /employees/:id/role — role=supervisor С sector_id реально пишет строку в supervisor_sectors', async () => {
+    const app = await getApp();
+    const candidate = await fx.createEmployee(orgA, { role: 'employee' });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/employees/${candidate.id}/role`,
+      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      payload: { role: 'supervisor', sector_id: sectorId }
+    });
+    expect(res.statusCode).toBe(200);
+    const row = await query(`SELECT sector_id FROM supervisor_sectors WHERE supervisor_id = $1`, [candidate.id]);
+    expect(row.rows.length).toBe(1);
+    expect(row.rows[0].sector_id).toBe(sectorId);
+  });
+
+  it('PATCH /employees/:id/role — role=supervisor БЕЗ sector_id не пишет строку и не падает (текущее осознанное поведение — "пропустить, назначу позже")', async () => {
+    const app = await getApp();
+    const candidate = await fx.createEmployee(orgA, { role: 'employee' });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/employees/${candidate.id}/role`,
+      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      payload: { role: 'supervisor' }
+    });
+    expect(res.statusCode).toBe(200);
+    const row = await query(`SELECT sector_id FROM supervisor_sectors WHERE supervisor_id = $1`, [candidate.id]);
+    expect(row.rows.length).toBe(0);
+  });
 });

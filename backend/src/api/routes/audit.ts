@@ -14,8 +14,8 @@ export async function registerAuditRoutes(app: FastifyInstance) {
     if (request.user!.role !== 'admin') {
       return reply.code(403).send({ error: 'admin only' });
     }
-    const q = request.query as { action?: string; target_type?: string; from?: string; to?: string; limit?: string; offset?: string };
-    const orgId = resolveViewOrgId(request.user!, undefined);
+    const q = request.query as { action?: string; target_type?: string; from?: string; to?: string; limit?: string; offset?: string; org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, q.org_id);
 
     const items = await auditRepo.list({
       orgId,

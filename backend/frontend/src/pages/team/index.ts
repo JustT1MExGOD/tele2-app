@@ -10,7 +10,7 @@
  * property — written here (cache-invalidation on org switch / new store),
  * read AND written by frontend/js/13-v14.js, still legacy/unmigrated.
  */
-import type { OrgAdminItem, OrgsListResponse, EmployeeListItem, SaleRow, ScheduleRow, CreateStoreRequest } from '../../../../src/shared/api-types.js';
+import type { OrgAdminItem, OrgsListResponse, EmployeeListItem, SaleRow, ScheduleRow, CreateStoreRequest, DealersTreeResponse } from '../../../../src/shared/api-types.js';
 
 declare global {
   interface Window {
@@ -27,6 +27,90 @@ let switcherOrgsCache: OrgAdminItem[] = [];
 let teamSort: { key: string; dir: 1 | -1 } = { key: 'name', dir: 1 };
 let lastTeamList: EmployeeListItem[] = [];
 let lastTeamMap: Record<string, { sim: number; phones: number; combo: number; active: boolean }> = {};
+
+// 21.x («максимально функциональный» admin) — общий пикер сектора,
+// используется и здесь (повышение до supervisor), и на новом экране
+// «Дилеры/Секторы» (переназначение существующего супервайзера). Список
+// секторов — из GET /admin/dealers (реальные имена секторов, не id-заглушки
+// switcherHierarchy() ниже, которая существует только для дилер-переключателя
+// admin и не даёт настоящих имён секторов).
+let sectorOptionsCache: { id: string; name: string; dealerName: string | null }[] | null = null;
+
+async function loadSectorOptions(): Promise<{ id: string; name: string; dealerName: string | null }[]> {
+  if (sectorOptionsCache) return sectorOptionsCache;
+  const tree: DealersTreeResponse = await window.apiClient.getDealersTree(authHeaders());
+  const flat: { id: string; name: string; dealerName: string | null }[] = [];
+  for (const d of tree.dealers) {
+    for (const s of d.sectors) flat.push({ id: s.id, name: s.name, dealerName: d.name });
+  }
+  for (const s of tree.unassigned_sectors) flat.push({ id: s.id, name: s.name, dealerName: null });
+  sectorOptionsCache = flat;
+  return flat;
+}
+
+/** Общий модал выбора сектора — вызывающий сам решает, что делать с
+ * выбором (назначить роль+сектор одним вызовом, или переназначить сектор
+ * уже существующему supervisor). allowSkip — только для сценария
+ * повышения в supervisor (можно отложить назначение, не потерять
+ * человека молча — см. дерево дилеров/секторов, unassigned_supervisors). */
+export async function openSectorPickerModal(opts: {
+  title: string;
+  currentSectorId?: string | null;
+  onPick: (sectorId: string) => Promise<void>;
+  allowSkip?: () => Promise<void>;
+}): Promise<void> {
+  const modalTitle = document.getElementById('modalTitle');
+  if (modalTitle) modalTitle.textContent = opts.title;
+  const modalBody = document.getElementById('modalBody');
+  if (modalBody) modalBody.innerHTML = '<div class="empty">Загрузка секторов…</div>';
+  document.getElementById('overlay')?.classList.add('show');
+
+  let sectors: { id: string; name: string; dealerName: string | null }[] = [];
+  try {
+    sectors = await loadSectorOptions();
+  } catch (_) {}
+
+  const body = document.getElementById('modalBody');
+  if (!body) return;
+
+  if (!sectors.length) {
+    body.innerHTML = '<div class="empty">Секторов пока нет — заведите через форму сети или экран «Дилеры/Секторы»</div>';
+    return;
+  }
+
+  const byDealer = new Map<string, typeof sectors>();
+  for (const s of sectors) {
+    const key = s.dealerName || 'Без дилера';
+    if (!byDealer.has(key)) byDealer.set(key, []);
+    byDealer.get(key)!.push(s);
+  }
+  const optionsHTML = [...byDealer.entries()]
+    .map(
+      ([dealerName, list]) =>
+        `<optgroup label="${esc(dealerName)}">${list
+          .map((s) => `<option value="${esc(s.id)}"${s.id === opts.currentSectorId ? ' selected' : ''}>${esc(s.name)}</option>`)
+          .join('')}</optgroup>`
+    )
+    .join('');
+
+  body.innerHTML = `
+    <div class="field"><label>Сектор</label><select id="sectorPickerSelect">${optionsHTML}</select></div>
+    <button class="btn-main" id="sectorPickerSubmit">Назначить</button>
+    ${opts.allowSkip ? '<button class="btn-ghost" id="sectorPickerSkip" style="margin-top:8px">Пропустить, назначу позже</button>' : ''}
+  `;
+
+  document.getElementById('sectorPickerSubmit')?.addEventListener('click', async () => {
+    const sel = document.getElementById('sectorPickerSelect') as HTMLSelectElement | null;
+    if (!sel?.value) return;
+    await opts.onPick(sel.value);
+  });
+  if (opts.allowSkip) {
+    const skipHandler = opts.allowSkip;
+    document.getElementById('sectorPickerSkip')?.addEventListener('click', async () => {
+      await skipHandler();
+    });
+  }
+}
 
 function switcherHierarchy(): Map<string, Map<string, OrgAdminItem[]>> {
   // dealerLabel -> sectorId -> orgs[] — группировка чисто клиентская, GET
@@ -138,6 +222,8 @@ export async function loadTeam(): Promise<void> {
   if (netBtn) (netBtn as HTMLElement).style.display = canAdmin() ? '' : 'none';
   const auditBtn = document.getElementById('btnAudit');
   if (auditBtn) (auditBtn as HTMLElement).style.display = canAdmin() ? '' : 'none';
+  const dealersBtn = document.getElementById('btnDealers');
+  if (dealersBtn) (dealersBtn as HTMLElement).style.display = canAdmin() ? '' : 'none';
   renderOrgSwitcher();
   try {
     const orgParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
@@ -358,15 +444,37 @@ export async function zeroSaleMetric(saleId: number, metric: string, employeeId:
   }
 }
 
+// 21.x — раньше повышение до supervisor никогда не передавало sector_id
+// (setEmployeeRole звалась с (id, role) без сектора), бэкенд молча не
+// писал строку в supervisor_sectors, если sector_id отсутствовал —
+// человек оставался без сектора без единого сообщения об ошибке. Теперь
+// повышение до supervisor сначала спрашивает сектор через
+// openSectorPickerModal (тот же общий пикер, что и на экране «Дилеры/
+// Секторы»); остальные роли — без изменений, прямой вызов.
 export async function setRole(id: number, role: string): Promise<void> {
   if (!canManage()) return;
+  if (role === 'supervisor') {
+    const list = Array.isArray(employees) ? employees : [];
+    const name = list.find((e) => e.id === id)?.full_name || '';
+    await openSectorPickerModal({
+      title: `Сектор для ${name || 'супервайзера'}`,
+      onPick: (sectorId) => applyRoleChange(id, role, sectorId),
+      allowSkip: () => applyRoleChange(id, role)
+    });
+    return;
+  }
+  await applyRoleChange(id, role);
+}
+
+async function applyRoleChange(id: number, role: string, sectorId?: string): Promise<void> {
   try {
-    await window.apiClient.setEmployeeRole(authHeaders(true), id, role);
+    await window.apiClient.setEmployeeRole(authHeaders(true), id, role, sectorId);
   } catch (e: any) {
     toast(e?.message || 'Ошибка', 'err');
     return;
   }
   toast('Роль: ' + roleLabel(role), 'ok');
+  closeModal();
   loadTeam();
 }
 
@@ -514,6 +622,7 @@ declare global {
     saveNewStore: typeof saveNewStore;
     sortTeamTable: typeof sortTeamTable;
     openTeamRow: typeof openTeamRow;
+    openSectorPickerModal: typeof openSectorPickerModal;
   }
 }
 window.renderOrgSwitcher = renderOrgSwitcher;
@@ -532,3 +641,4 @@ window.toggle24hStore = toggle24hStore;
 window.saveNewStore = saveNewStore;
 window.sortTeamTable = sortTeamTable;
 window.openTeamRow = openTeamRow;
+window.openSectorPickerModal = openSectorPickerModal;

@@ -246,6 +246,8 @@ declare global {
   function loadOrgsAdmin(): Promise<void>;
   /** src/pages/network-admin — loads the audit log. */
   function loadAuditLog(): Promise<void>;
+  /** src/pages/dealers — loads the Дилеры/Секторы admin tree. */
+  function loadDealersAdmin(): Promise<void>;
   /** src/pages/network-admin — (re)fetches the org-scoped store picker options into the various *Store selects, falling back to a hardcoded 3-store list if the network cache is empty. */
   function fillStoreSelects(): Promise<void>;
   /** frontend/offline-queue.js — separate standalone script, IndexedDB-backed sales retry queue. */

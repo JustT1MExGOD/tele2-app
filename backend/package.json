@@ -1,13 +1,13 @@
 {
   "name": "backend",
-  "version": "20.45.0",
+  "version": "20.46.0",
   "type": "module",
   "engines": {
     "node": "22.x"
   },
   "scripts": {
     "build": "tsc && npm run build:frontend",
-    "build:frontend": "vite build --config frontend/vite.config.ts && vite build --config frontend/vite.core.config.ts && vite build --config frontend/vite.nav.config.ts && vite build --config frontend/vite.pages.config.ts && vite build --config frontend/vite.promos.config.ts && vite build --config frontend/vite.alerts.config.ts && vite build --config frontend/vite.employee-profile.config.ts && vite build --config frontend/vite.store-profile.config.ts && vite build --config frontend/vite.tasks.config.ts && vite build --config frontend/vite.cash-metrics.config.ts && vite build --config frontend/vite.command-center.config.ts && vite build --config frontend/vite.support.config.ts && vite build --config frontend/vite.add-sale.config.ts && vite build --config frontend/vite.team.config.ts && vite build --config frontend/vite.home.config.ts && vite build --config frontend/vite.plans-bfq.config.ts && vite build --config frontend/vite.schedule.config.ts && vite build --config frontend/vite.my-plan.config.ts && vite build --config frontend/vite.shift.config.ts && vite build --config frontend/vite.network-admin.config.ts && vite build --config frontend/vite.tutorial.config.ts && vite build --config frontend/vite.access-supervisor.config.ts",
+    "build:frontend": "vite build --config frontend/vite.config.ts && vite build --config frontend/vite.core.config.ts && vite build --config frontend/vite.nav.config.ts && vite build --config frontend/vite.pages.config.ts && vite build --config frontend/vite.promos.config.ts && vite build --config frontend/vite.alerts.config.ts && vite build --config frontend/vite.employee-profile.config.ts && vite build --config frontend/vite.store-profile.config.ts && vite build --config frontend/vite.tasks.config.ts && vite build --config frontend/vite.cash-metrics.config.ts && vite build --config frontend/vite.command-center.config.ts && vite build --config frontend/vite.support.config.ts && vite build --config frontend/vite.add-sale.config.ts && vite build --config frontend/vite.team.config.ts && vite build --config frontend/vite.home.config.ts && vite build --config frontend/vite.plans-bfq.config.ts && vite build --config frontend/vite.schedule.config.ts && vite build --config frontend/vite.my-plan.config.ts && vite build --config frontend/vite.shift.config.ts && vite build --config frontend/vite.network-admin.config.ts && vite build --config frontend/vite.tutorial.config.ts && vite build --config frontend/vite.access-supervisor.config.ts && vite build --config frontend/vite.dealers.config.ts",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "smoke:frontend": "node scripts/smoke-frontend.mjs",

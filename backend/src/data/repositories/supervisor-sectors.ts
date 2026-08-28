@@ -30,6 +30,27 @@ export async function listStoreIdsForSupervisor(supervisorId: number): Promise<s
   return res.rows.map((r: any) => r.store_id);
 }
 
+/** core/orgs/dealers.ts::getDealersTree() — все супервайзеры сети с их
+ * текущим сектором (или null, если строки в supervisor_sectors ещё нет —
+ * ровно то, что раньше нигде не было видно, только молчаливо ломалось). */
+// e.id::int — employees.id тоже bigint (0001_baseline.sql) — тот же
+// класс проблемы, что уже ловили на dealers.id/bot_sent_messages.message_id:
+// node-postgres иначе отдаёт bigint строкой. Держим DealerSupervisorRef.id
+// честно number для этого нового ответа, не наследуем существующую
+// where-inconsistency остального employees-домена (вне объёма этой правки).
+export async function listAllWithSupervisorNames(): Promise<
+  { supervisor_id: number; full_name: string; sector_id: string | null }[]
+> {
+  const res = await query(
+    `SELECT e.id::int as supervisor_id, e.full_name, ss.sector_id
+     FROM employees e
+     LEFT JOIN supervisor_sectors ss ON ss.supervisor_id = e.id
+     WHERE e.role = 'supervisor' AND e.is_active = true
+     ORDER BY e.full_name`
+  );
+  return res.rows;
+}
+
 /** GET /supervisor/stores, ветка supervisor — та же выборка, но с полной проекцией для UI. */
 export async function listStoresForSupervisor(
   supervisorId: number
