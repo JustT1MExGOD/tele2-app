@@ -9,7 +9,8 @@
 | | |
 |---|---|
 | **База** | `https://<app>.up.railway.app` |
-| **Auth-заголовок (прод)** | `X-Telegram-Init-Data` — подписанный `tg.WebApp.initData`, проверяется HMAC'ом на сервере ([SECURITY.md](./SECURITY.md#2-аутентификация)) |
+| **Auth-заголовок (прод, Telegram)** | `X-Telegram-Init-Data` — подписанный `tg.WebApp.initData`, проверяется HMAC'ом на сервере ([SECURITY.md](./SECURITY.md#2-аутентификация)) |
+| **Auth (браузер/PWA)** | Cookie `t2_session` (httpOnly) вместо заголовка; на каждый non-GET запрос с этой cookie дополнительно нужен `X-CSRF-Token`, равный значению cookie `t2_csrf` ([SECURITY.md — CSRF](./SECURITY.md#1-периметр)) |
 | **Auth-заголовок (dev)** | `X-Telegram-Id` — только если `BOT_TOKEN` не задан или `ALLOW_INSECURE_AUTH=true`; в проде сервер с этим не стартует |
 | **Content-Type** | `application/json` везде, кроме `POST /me/avatar` (multipart) и `/export/*.csv` (`text/csv`) |
 | **Формат ошибки** | `{ "error": "<код>", "message": "<человекочитаемо>" }` — единый `setErrorHandler`, см. ниже |
@@ -36,8 +37,9 @@
 
 | Группа | Доступ | Примеры | Модуль (`backend/src/api/routes/`) |
 |--------|:---:|---------|--------------------------------------|
-| System | 🌐 | `GET /health` | `app.ts` |
-| Me / access | ✅ | `/me`, `/me/day`, `/me/bind`, `/me/access`, `/me/insight`, `/me/self-stats` | `me/index.ts` |
+| System | 🌐 | `GET /health`, `/healthz`, `/readyz`, `/integrations/health`, `/metrics` (Prometheus) | `app.ts` |
+| Auth (браузер/телефон) | 🔀 | `POST /auth/register`/`/login`/`/reset/:token` (🌐, публичные, свои rate-limit, CSRF-исключены), `POST /auth/logout` (🔓), `POST /auth/admin/reset-password/:employeeId` (👔), `GET/DELETE /auth/sessions`, `POST /auth/sessions/revoke-others` (🔓, ownership-scoped) | `auth/session.ts`, `auth/sessions-admin.ts` |
+| Me / access | ✅ | `/me`, `/me/day`, `/me/bind`, `/me/link-phone` (🔓, привязка телефона к своей же карточке, свой rate-limit), `/me/access`, `/me/insight`, `/me/self-stats` | `me/index.ts` |
 | Avatar | 🔀 | `POST /me/avatar` (🔓), `GET /avatars/:employeeId` (🌐, rate-limit 30/мин) | `me/avatar.ts` |
 | Access requests | 🔀 | `/access/status` (🔓), `/access/request` (🔓), `/access/orgs`/`/access/requests` (👔🛡), `PUT /supervisor/:id/sector` (🔑) | `org/access.ts` |
 | Sales / shifts | 🔀 | `/sales` (✅ своя, `canWriteSalesForOthers()` узко для чужой — 👔 manager/admin, **не** senior), `/sales/quick` (🔓, та же `canWriteSalesForOthers()` для чужой), `/sales/:id/zero` (👔), `/shifts/open\|close\|current`/`/sales/parse` (🔓), `/sync/batch` (🔓, та же `canWriteSalesForOthers()` на каждой операции батча) | `sales.ts`, `shifts.ts` |

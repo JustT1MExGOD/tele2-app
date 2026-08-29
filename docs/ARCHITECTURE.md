@@ -25,8 +25,13 @@ flowchart TB
         CH["Bot chats"]
     end
 
+    subgraph WEB["Браузер / standalone PWA / iPhone Web App"]
+        BR["Тот же frontend/*, второй канал входа<br/>(20.35.0-20.47.0)"]
+    end
+
     subgraph BE["Fastify backend (backend/src)"]
-        AUTH["auth/<br/>guards.ts (authPlugin, preHandler) · identity/principal · providers/telegram"]
+        CSRF["auth/csrf.ts<br/>double-submit t2_csrf + Sec-Fetch-Site/Origin<br/>(только если есть cookie t2_session)"]
+        AUTH["auth/<br/>guards.ts (authPlugin, preHandler) · identity/principal ·<br/>providers/telegram · providers/phone"]
         API["api/routes/<br/>29+ route-модулей, сгруппированы по домену:<br/>me/ · org/ · analytics/ · ops/ · profiles/ · flat (sales/schedules/plans/…)"]
         CORE["core/&lt;domain&gt;/<br/>бизнес-логика: plans · bfq · sales/nlp · shifts/pace ·<br/>employees/gamification · analytics/* · alerts · reports"]
         DATA["data/repositories/ + data/db/<br/>Full Data Access Layer, 19.22.0→20.8.0 —<br/>единственный путь к Postgres для всего backend"]
@@ -39,6 +44,7 @@ flowchart TB
     GROQ["Groq API<br/>llama-3.3-70b-versatile"]
 
     MA -- "X-Telegram-Init-Data<br/>(подписанный, прод)" --> AUTH
+    BR -- "t2_session cookie<br/>+ X-CSRF-Token (мутации)" --> CSRF --> AUTH
     AUTH --> API --> CORE
     API --> DATA --> PG
     CRON --> CORE
@@ -49,6 +55,12 @@ flowchart TB
     API --> INTEG
     CRON --> INTEG
 ```
+
+И Telegram Mini App, и браузерный/PWA-вход резолвятся в один и тот же
+`Identity → Principal` шов (`auth/principal.ts`, [ADR/005](./ADR/005-authentication-boundary.md))
+— два входных провайдера, не два параллельных приложения; вся бизнес-
+логика ниже `auth/` не знает, каким каналом пришёл запрос. Подробности
+слоя доверия (CSRF, cookie, session lifecycle) — [SECURITY.md](./SECURITY.md#2-аутентификация).
 
 Клиент **не** ходит в БД напрямую — только через API. «Сегодня» всегда
 через `todayMoscow()` (`Europe/Moscow`), не UTC контейнера. AI Copilot
@@ -112,8 +124,9 @@ tele2-app/
     │   │   └── shared/        (tenant.ts — брендинг/сети; scope-cache.ts — Supervisor Scope Cache; metrics-catalog.ts)
     │   │
     │   ├── data/                         (Full Data Access Layer, 19.22.0→20.8.0 — единственное место с прямым SQL)
-    │   │   ├── repositories/               (31 файл, по одному на таблицу/домен; orgId обязательным первым параметром
-    │   │   │                                у tenant-функций; CI check:no-direct-sql запрещает откат на 56 файлах)
+    │   │   ├── repositories/               (по одному файлу на таблицу/домен; orgId обязательным первым параметром
+    │   │   │                                у tenant-функций; CI check:no-direct-sql — ratchet-allowlist, растёт
+    │   │   │                                по мере переноса, не фиксированное число — см. сам скрипт)
     │   │   └── db/                          (index.ts — пул + query() + withTransaction(); migrate.ts — раннер миграций)
     │   │
     │   ├── platform/notifications/       (changelog.ts — версии для автоанонса; release-announce.ts — CAS-защищённая отправка)

@@ -5,6 +5,7 @@
  * week/BFQ rendering, bindMe, and avatar file picker.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals(overrides: { tgId?: number | null } = {}) {
   document.body.innerHTML = `
@@ -21,7 +22,9 @@ function setupGlobals(overrides: { tgId?: number | null } = {}) {
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
   `;
-  vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
+  // Documentation-audit XSS fix — реальная реализация esc(), не no-op стаб
+  // (no-op стаб не поймал бы регрессию title="..." экранирования ниже).
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', vi.fn((json?: boolean) => (json ? { 'Content-Type': 'application/json' } : {})));
   vi.stubGlobal('toast', vi.fn());
   vi.stubGlobal('closeModal', vi.fn());
@@ -90,6 +93,27 @@ describe('Мой план (миграция frontend/js/05-my-plan.js → src/pa
     await loadMyPlan();
     expect(document.getElementById('lkToday')!.innerHTML).toContain('Точка А');
     expect(document.getElementById('lkToday')!.innerHTML).toContain('50%');
+  });
+
+  // Documentation-audit XSS fix — store_name в "Моей неделе" раньше
+  // подставлялся в title="..." без esc().
+  it('loadMyPlan: store_name с " в title="..." "Моей недели" не разрывает атрибут', async () => {
+    const { getMe, getScheduleMonth } = setupGlobals();
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: 'Иван', role: 'employee' });
+    const payload = `Точка А" onmouseover="window.__pwned=1`;
+    getScheduleMonth.mockResolvedValue({
+      month: '2026-08', start: '', end: '',
+      items: [{ work_date: '2026-08-25', employee_id: 1, store_id: 's1', store_name: payload }]
+    });
+    const { loadMyPlan } = await import('../src/pages/my-plan/index.js');
+    await loadMyPlan();
+
+    // jsdom реально парсит HTML — если бы " разорвал title="...", здесь
+    // появился бы настоящий onmouseover на элементе.
+    expect(document.querySelectorAll('[onmouseover]').length).toBe(0);
+    expect((window as any).__pwned).toBeUndefined();
+    const dot = document.querySelector('#lkWeek .lk-day.today .st') as HTMLElement | null;
+    expect(dot?.getAttribute('title')).toContain(payload);
   });
 
   it('loadMyPlan: месячный план сотрудника найден — рендерит группы метрик', async () => {

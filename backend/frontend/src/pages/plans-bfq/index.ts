@@ -19,6 +19,18 @@ import type {
 } from '../../../../src/shared/api-types.js';
 import type { MonthSummaryRow } from '../../../../src/shared/api-types.js';
 
+/**
+ * Documentation-audit XSS fix (see docs/SECURITY.md — известные
+ * компромиссы) — same attribute-breakout class already closed in
+ * dealers.ts/cash-metrics.ts (20.49.0), missed here: jsEsc() only
+ * escapes the JS-string-literal `'`, the whole onclick="..." value
+ * still needs an outer esc() (HTML-attribute context) — a full_name
+ * containing `"` would otherwise break out of the attribute.
+ */
+function jsEsc(s: string): string {
+  return String(s ?? '').replace(/'/g, "\\'");
+}
+
 // 20.44 (Desktop Page Adaptation — Schedule/Plans, следующий шаг после
 // Team в 20.42.0) — monthplan-таблица на десктопе. MAIN/EXTRA подняты на
 // уровень модуля (раньше жили только внутри loadMonthPlans()) — нужны и
@@ -171,7 +183,7 @@ export async function loadMonthPlans(): Promise<void> {
           const plan = r.plan || {};
           const fact = r.fact || {};
           const pct = r.pct || {};
-          const nameClick = canManage() ? `onclick="event.stopPropagation();editEmployeeMonthPlan(${r.employee_id}, '${String(r.full_name || '').replace(/'/g, "\\'")}')"` : '';
+          const nameClick = canManage() ? `onclick="${esc(`event.stopPropagation();editEmployeeMonthPlan(${r.employee_id}, '${jsEsc(r.full_name || '')}')`)}"` : '';
           const mainCells = MAIN.map((m) => cell(m, fact, pct)).join('');
           const extraCells = EXTRA.map((m) => cell(m, fact, pct)).join('');
           const eid = 'mpx-' + idx;
@@ -262,8 +274,9 @@ function renderMonthPlanTable(): void {
         .map((m) => `<td class="${monthPlanCellTone(fact, pct, m.id)}">${Number(fact[m.id]) || 0}</td>`)
         .join('');
       const clickable = canManage();
-      const nameSafe = String(r.full_name || '').replace(/'/g, "\\'");
-      return `<tr${clickable ? ` data-clickable onclick="editEmployeeMonthPlan(${r.employee_id}, '${nameSafe}')"` : ''}>
+      const nameSafe = jsEsc(r.full_name || '');
+      const rowClick = clickable ? ` data-clickable onclick="${esc(`editEmployeeMonthPlan(${r.employee_id}, '${nameSafe}')`)}"` : '';
+      return `<tr${rowClick}>
         <td>${esc(r.full_name || '')}</td>
         <td>${esc(roleLabel(r.role || ''))}</td>
         <td>${r.shifts || 0} · ост. ${r.remaining_shifts || 0}</td>

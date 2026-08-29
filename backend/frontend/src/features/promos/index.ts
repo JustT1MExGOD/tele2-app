@@ -55,7 +55,7 @@ export async function loadPromos(): Promise<void> {
           <div class="promo-item" onclick="openPromoCard(${it.id})">
             <div>
               <div class="promo-mask">${it.mask || '••••'}</div>
-              <div class="promo-meta">${it.created_by_name || ''} · ${String(it.created_at || '').slice(0, 10)}</div>
+              <div class="promo-meta">${esc(it.created_by_name || '')} · ${String(it.created_at || '').slice(0, 10)}</div>
             </div>
             <div style="color:var(--hint)">›</div>
           </div>

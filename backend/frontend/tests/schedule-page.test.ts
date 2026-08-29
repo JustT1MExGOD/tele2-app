@@ -5,6 +5,7 @@
  * calendar grid, summary schedule, and the edit-day modal.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals(overrides: { role?: string } = {}) {
   document.body.innerHTML = `
@@ -17,7 +18,9 @@ function setupGlobals(overrides: { role?: string } = {}) {
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
   `;
-  vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
+  // Documentation-audit XSS fix — реальная реализация esc(), не no-op стаб
+  // (no-op стаб не поймал бы регрессию title="..." экранирования ниже).
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('orgQueryParam', () => '');
   vi.stubGlobal('toast', vi.fn());
@@ -118,6 +121,29 @@ describe('График (миграция frontend/js/04-schedule.js → src/page
     expect(html).toContain('Иван');
     expect(html).toContain('sch-grid');
     expect(document.getElementById('monthLabel')!.textContent).toBe('Август 2026');
+  });
+
+  // Documentation-audit XSS fix — store_name раньше подставлялся в
+  // title="..." без esc(), в отличие от соседних мест того же файла.
+  it('store_name с " в title="..." не разрывает атрибут — атрибут-breakout невозможен', async () => {
+    const { getEmployees, getScheduleMonth } = setupGlobals();
+    getEmployees.mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
+    const payload = `Точка А" onmouseover="window.__pwned=1`;
+    getScheduleMonth.mockResolvedValue({
+      month: '2026-08', start: '', end: '',
+      items: [{ work_date: '2026-08-01', shift_text: 'День', hours: 8, store_id: 's1', employee_id: 1, full_name: 'Иван', store_name: payload, store_short: 'A' }]
+    });
+    const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+    await loadMonthSchedule();
+
+    // jsdom реально парсит HTML — если бы " разорвал title="...", здесь
+    // появился бы настоящий onmouseover на элементе.
+    expect(document.querySelectorAll('[onmouseover]').length).toBe(0);
+    expect((window as any).__pwned).toBeUndefined();
+    // Значение всё ещё в атрибуте (в HTML-экранированном виде), не молча
+    // отброшено — esc() экранирует, не вырезает.
+    const cell = document.querySelector('.sch-cell.work') as HTMLElement | null;
+    expect(cell?.getAttribute('title')).toContain(payload);
   });
 
   it('loadMonthSchedule: сотрудник — сводный график скрыт; manager — показан', async () => {

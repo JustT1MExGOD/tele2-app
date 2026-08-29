@@ -84,6 +84,28 @@ describe('промокоды РТК (миграция frontend/js/12-promos.js �
     expect(list.innerHTML).toContain('openPromoCard(7)');
   });
 
+  // Documentation-audit XSS fix — created_by_name в списке (.promo-meta)
+  // не проходил esc(), хотя то же поле в карточке (openPromoCard) уже
+  // экранировалось с 20.49.0 — пропуск в одном из двух мест рендера.
+  it('loadPromos: created_by_name с HTML в списке не исполняется как разметка', async () => {
+    const { getPromos } = setupGlobals();
+    const payload = '<img src=x onerror="window.__pwned=1">';
+    getPromos.mockResolvedValue({
+      items: [{ id: 7, mask: 'XX••1234', created_by_name: payload, created_at: '2026-08-20T10:00:00Z' }]
+    });
+    const { openPromos } = await import('../src/features/promos/index.js');
+    await openPromos();
+
+    // jsdom реально парсит HTML — если бы created_by_name не экранировался,
+    // здесь появился бы настоящий <img onerror> элемент.
+    expect(document.querySelectorAll('img[onerror]').length).toBe(0);
+    expect((window as any).__pwned).toBeUndefined();
+    // Значение всё ещё видно на экране (в HTML-экранированном виде), не
+    // молча отброшено.
+    const list = document.getElementById('promoList')!;
+    expect(list.textContent).toContain(payload);
+  });
+
   it('loadPromos: ошибка API — не падает, показывает сообщение', async () => {
     const { getPromos } = setupGlobals();
     getPromos.mockRejectedValue(new Error('network'));

@@ -4,6 +4,7 @@
  * exhaustive (batch migration).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals(overrides: { role?: string } = {}) {
   document.body.innerHTML = `
@@ -23,7 +24,9 @@ function setupGlobals(overrides: { role?: string } = {}) {
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
   `;
-  vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
+  // Documentation-audit XSS fix — реальная реализация esc(), не no-op стаб
+  // (no-op стаб не поймал бы регрессию attribute-breakout фикса ниже).
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('orgQueryParam', () => '');
   vi.stubGlobal('toast', vi.fn());
@@ -159,6 +162,31 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
     expect(body).toContain('Анна');
     expect(body).toContain('Итого сеть');
     expect(body).toContain('editEmployeeMonthPlan(1');
+  });
+
+  // Documentation-audit XSS fix — то же attribute-breakout, что уже
+  // закрыт в dealers.ts/cash-metrics.ts (20.49.0), но пропущен здесь:
+  // full_name с " разрывал onclick="..." и на карточке, и в desktop-строке.
+  it('full_name с " не разрывает onclick="..." ни на карточке, ни в desktop-строке — атрибут-breakout невозможен', async () => {
+    const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
+    const payload = `Иван" onmouseover="window.__pwned=1`;
+    getPlansEmployeesMonth.mockResolvedValue({
+      rows: [{ employee_id: 1, full_name: payload, role: 'employee', shifts: 10, remaining_shifts: 2, plan: { sim: 10 }, fact: { sim: 5 }, pct: { sim: 50 } }],
+      remaining_days: 5,
+      totals: { fact: { sim: 5 }, plan: { sim: 10 }, pct: { sim: 50 } }
+    });
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
+    await loadMonthPlans();
+
+    // jsdom реально парсит HTML — если бы " разорвал атрибут, здесь
+    // появился бы настоящий onmouseover на элементе (карточка или <tr>).
+    const withOnmouseover = document.querySelectorAll('[onmouseover]');
+    expect(withOnmouseover.length).toBe(0);
+    expect((window as any).__pwned).toBeUndefined();
+    // Имя всё ещё видно на экране (в HTML-экранированном виде), не молча
+    // отброшено — esc() экранирует, не вырезает.
+    expect(document.getElementById('monthPlanList')!.textContent).toContain(payload);
+    expect(document.getElementById('monthPlanTableBody')!.textContent).toContain(payload);
   });
 
   it('loadMonthPlans: пустой список — таблица показывает то же сообщение с месяцем', async () => {

@@ -91,6 +91,7 @@ npx vitest run tests/adversarial/cross-tenant-write.test.ts
 | `BOT_TOKEN` | да (прод) | BotFather — без него сервер не стартует в `RAILWAY_ENVIRONMENT=production` |
 | `PORT` | Railway | listen port |
 | `ADMIN_TELEGRAM_ID` | желательно | admin |
+| `MINI_APP_URL` | желательно (браузер/PWA) | Origin Mini App/сайта — сверяется в CSRF-проверке (`auth/csrf.ts::expectedOrigin()`) как fallback, когда браузер не шлёт `Sec-Fetch-Site`; без переменной эта ветка проверки эффективно отключена, не блокирует, см. [SECURITY.md — CSRF](./SECURITY.md#1-периметр) |
 | `REPORT_CHAT_ID` | желательно | глобальный фолбэк-чат отчётов (по умолчанию — чат сети из `organizations.chat_id`) |
 | `RELEASE_CHANNEL_ID` | нет | отдельный Telegram-канал для автоанонса версий (с 18.11.0) — без него анонс тихо пропускается |
 | `BOT_POLLING` | нет | `false` отключает `getUpdates` (для второй локальной копии) |

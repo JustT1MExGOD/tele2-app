@@ -249,7 +249,7 @@ function calendarCellsHtml(emp: EmpMonth, y: number, m: number, total: number, e
     if (row) {
       const short = (row.store_short || row.store_name || '').slice(0, 4);
       const col = storeColor(row.store_id);
-      cells += `<div class="sch-cell work" ${click} title="${row.store_name || ''} ${row.shift_text || ''}"
+      cells += `<div class="sch-cell work" ${click} title="${esc(`${row.store_name || ''} ${row.shift_text || ''}`)}"
             style="background:${col}22;color:${col};border-color:${col}">
             <div class="d">${d}</div><div class="s">${short}</div></div>`;
     } else {

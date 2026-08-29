@@ -249,7 +249,7 @@ export async function loadMyPlan(): Promise<void> {
               <div class="lk-day ${isToday ? 'today' : ''} ${sch ? '' : 'off'}">
                 <div class="wd">${wdNames[d.getDay()]}</div>
                 <div class="dn">${d.getDate()}</div>
-                <div class="st" style="background:${col}" title="${sch ? sch.store_name || sch.store_id || '' : 'вых'}"></div>
+                <div class="st" style="background:${col}" title="${esc(sch ? sch.store_name || sch.store_id || '' : 'вых')}"></div>
               </div>`;
             })
             .join('')}
