@@ -4,7 +4,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireAuth } from '../../../auth/guards.js';
+import { requireActive } from '../../../auth/guards.js';
 import { buildShiftInsight, selfComparison, splitDayPlanByHours } from '../../../core/analytics/insights.js';
 import { getGamificationProfile, addXp, grantBadge } from '../../../core/employees/gamification.js';
 import { todayMoscow } from '../../../utils/date.js';
@@ -25,7 +25,7 @@ function num(v: any) {
 
 export async function registerInsightsRoutes(app: FastifyInstance) {
   app.get('/me/insight', async (request, reply): Promise<MyInsightResponse | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
     const employee_id = request.user!.employee_id!;
 
@@ -56,7 +56,7 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
   });
 
   app.get('/me/self-stats', async (request, reply): Promise<SelfStatsResponse | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const stats = await selfComparison(request.user!.employee_id!);
     const gam = await getGamificationProfile(request.user!.employee_id!);
     return { ...stats, gamification: gam };
@@ -70,7 +70,7 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
     '/me/tutorial-complete',
     { schema: { body: TutorialCompleteBody } },
     async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const employeeId = request.user!.employee_id!;
     const isManagerMode = (request.body as TutorialCompleteBody)?.mode === 'manager';
     const code = isManagerMode ? 'tutorial_mgr_done' : 'tutorial_done';
@@ -86,7 +86,7 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
   );
 
   app.get('/me/day-plan-split', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
     const employee_id = request.user!.employee_id!;
     const storeId = await schedulesRepo.findShiftStoreIdForDate(employee_id, date);

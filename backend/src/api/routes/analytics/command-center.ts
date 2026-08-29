@@ -5,7 +5,7 @@
  * трёх отдельных походов с фронта.
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { requireAuth, resolveViewOrgId } from '../../../auth/guards.js';
+import { requireActive, resolveViewOrgId } from '../../../auth/guards.js';
 import * as alertsRepo from '../../../data/repositories/alerts.js';
 import { suggestAction } from '../../../core/alerts/recommend.js';
 import {
@@ -25,7 +25,7 @@ function canViewCommandCenter(user: { role?: string } | null | undefined): boole
 
 export async function registerCommandCenterRoutes(app: FastifyInstance) {
   app.get('/command-center', async (request, reply): Promise<CommandCenterResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     if (!canViewCommandCenter(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });
     }

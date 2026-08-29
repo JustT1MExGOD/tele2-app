@@ -6,7 +6,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { authPlugin, requireAuth, requireManager } from '../../auth/guards.js';
+import { requireManager } from '../../auth/guards.js';
 import { invalidateMetricsCache, getMetricDefs } from '../../core/shared/metrics-catalog.js';
 import { serverError } from '../../shared/errors.js';
 import * as metricsRepo from '../../data/repositories/metrics.js';

@@ -5,7 +5,7 @@
  * почти целиком передаёт buildSupervisorDashboard() с scope из одной точки.
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { requireAuth, requireStoreInOrg } from '../../../auth/guards.js';
+import { requireActive, requireStoreInOrg } from '../../../auth/guards.js';
 import { buildSupervisorDashboard } from '../../../core/analytics/supervisor.js';
 import { todayMoscow } from '../../../utils/date.js';
 import { serverError } from '../../../shared/errors.js';
@@ -28,7 +28,7 @@ export async function registerStoreProfileRoutes(app: FastifyInstance) {
     '/stores/:id/profile',
     { preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })] },
     async (request, reply): Promise<StoreProfileResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     if (!canViewStoreProfile(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });
     }

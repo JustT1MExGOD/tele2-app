@@ -181,19 +181,25 @@ process.emit('SIGTERM');
 - **`GET /integrations/health`** — конфигурация Telegram/AI (только
   наличие env-переменных, без единого живого запроса к самим сервисам).
   Диагностика, не для автоматического мониторинга.
-- **`GET /metrics`** — Prometheus exposition format (`prom-client`).
-  Никто не обязан её scrape'ить постоянно — сама возможность есть уже
-  сейчас, коллектор подключается отдельно, когда понадобится. Четыре
-  группы: `http_*` (route — паттерн, не резолвнутый URL), `db_*`
-  (агрегатно), `jobs_*` (по имени джобы), `ai_*` (по operation) — плюс
-  стандартные Node.js process-метрики от `collectDefaultMetrics()`.
+- **`GET /metrics/system`** — Prometheus exposition format (`prom-client`).
+  Не `/metrics` — та строка занята бизнес-каталогом кастомных метрик
+  (`api/routes/metrics.ts`, существует с ранних версий проекта); коллизия
+  между ними ронялa регистрацию business-модуля целиком, молча, с самого
+  появления этого Prometheus-эндпоинта — найдено и разведено security-
+  аудитом 20.52.1 (`registerAllRoutes()` теперь падает громко на такую
+  коллизию, а не глотает её). Никто не обязан scrape'ить `/metrics/system`
+  постоянно — сама возможность есть уже сейчас, коллектор подключается
+  отдельно, когда понадобится. Четыре группы: `http_*` (route — паттерн,
+  не резолвнутый URL), `db_*` (агрегатно), `jobs_*` (по имени джобы),
+  `ai_*` (по operation) — плюс стандартные Node.js process-метрики от
+  `collectDefaultMetrics()`.
 
 Живая проверка:
 
 ```bash
 curl https://tele2-app-production.up.railway.app/healthz
 curl https://tele2-app-production.up.railway.app/readyz
-curl https://tele2-app-production.up.railway.app/metrics | head -50
+curl https://tele2-app-production.up.railway.app/metrics/system | head -50
 ```
 
 ## Связанные документы

@@ -5,7 +5,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireAuth, canWriteSalesForOthers, resolveViewOrgId, assertStoreInOrg } from '../../auth/guards.js';
+import { requireActive, canWriteSalesForOthers, resolveViewOrgId, assertStoreInOrg } from '../../auth/guards.js';
 import { parseSalePhrase } from '../../core/sales/nlp.js';
 import { evaluateAfterSale, evaluateShiftClose, getGamificationProfile } from '../../core/employees/gamification.js';
 import { generateShiftSummary } from '../../integrations/ai/client.js';
@@ -97,7 +97,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     '/shifts/open',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: ShiftOpenBody } },
     async (request, reply): Promise<ShiftOpenResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const body = (request.body || {}) as ShiftOpenBody;
     const employee_id = request.user!.employee_id!;
     const date = String(body.work_date || todayMoscow()).slice(0, 10);
@@ -155,7 +155,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // сиблинг /shifts/open уже 30/мин, симметрично.
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: ShiftCloseBody } },
     async (request, reply): Promise<ShiftCloseResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const body = (request.body || {}) as ShiftCloseBody;
     const employee_id = request.user!.employee_id!;
 
@@ -255,7 +255,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   );
 
   app.get('/shifts/current', async (request, reply): Promise<ShiftCurrentResponse | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const session = await shiftsRepo.findCurrentOpenWithStore(request.user!.employee_id!);
     if (!session) return { session: null };
 
@@ -271,7 +271,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     '/sales/parse',
     { schema: { body: SalesParseBody } },
     async (request, reply): Promise<SalesParseResponse | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const body = (request.body || {}) as SalesParseBody;
     const parsed = parseSalePhrase(String(body.text || ''));
     return parsed;
@@ -282,7 +282,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     '/sales/quick',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } }, schema: { body: SalesQuickBody } },
     async (request, reply): Promise<SalesQuickResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const body = (request.body || {}) as SalesQuickBody;
     const parsed = parseSalePhrase(String(body.text || ''));
     if (!Object.keys(parsed.metrics).length) {
@@ -375,7 +375,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     '/sync/batch',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: SyncBatchBody } },
     async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const body = (request.body || {}) as SyncBatchBody;
     const ops = Array.isArray(body.ops) ? body.ops : [];
     const results = [];

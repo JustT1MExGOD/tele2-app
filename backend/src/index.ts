@@ -93,7 +93,16 @@ try {
   await alertAndExit('❌ Миграции упали, сервер не стартует', e);
 }
 
-const app = await buildApp();
+// registerAllRoutes() (внутри buildApp()) теперь бросает, если хотя бы
+// один доменный route-модуль не смог зарегистрироваться (20.52.1 —
+// раньше молча продолжал с частью роутов отсутствующей, см. комментарий
+// в api/routes/index.ts) — тот же alertAndExit, что у миграций/шифрования.
+let app;
+try {
+  app = await buildApp();
+} catch (e: any) {
+  await alertAndExit('❌ Сборка приложения упала, сервер не стартует', e);
+}
 
 // ===== START =====
 const port = Number(process.env.PORT) || 3000;

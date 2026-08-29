@@ -69,10 +69,14 @@ describe('/integrations/health — диагностический срез ко�
   });
 });
 
-describe('/metrics — Prometheus exposition', () => {
+describe('/metrics/system — Prometheus exposition', () => {
+  // §5 (Auth Assurance Hardening, 20.52.1) — не /metrics: та строка
+  // принадлежит бизнес-каталогу кастомных метрик (api/routes/metrics.ts),
+  // коллизия между ними ронялa регистрацию business-модуля целиком молча
+  // (registerAllRoutes() ловил ошибку и продолжал) — см. app.ts.
   it('отдаёт text/plain Prometheus-формат, включающий HTTP/DB/jobs/AI метрики', async () => {
     const app = await getApp();
-    const res = await app.inject({ method: 'GET', url: '/metrics' });
+    const res = await app.inject({ method: 'GET', url: '/metrics/system' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/plain');
     expect(res.body).toContain('http_requests_total');

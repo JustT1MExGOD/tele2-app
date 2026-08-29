@@ -6,7 +6,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import * as employeesRepo from '../../../data/repositories/employees.js';
-import { requireAuth } from '../../../auth/guards.js';
+import { requireActive } from '../../../auth/guards.js';
 
 const MAX_AVATAR_BYTES = 1.5 * 1024 * 1024;
 
@@ -42,7 +42,7 @@ export async function registerAvatarRoutes(app: FastifyInstance) {
     // 30/мин) не должна быть дешевле чтения.
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const data = await request.file({ limits: { fileSize: MAX_AVATAR_BYTES } }).catch(() => null);
     if (!data) {
       return reply.code(400).send({ error: 'no_file', message: 'Файл не получен' });
@@ -63,7 +63,7 @@ export async function registerAvatarRoutes(app: FastifyInstance) {
     }
   );
 
-  // Публичный (не requireAuth) — <img src> не может передать Authorization.
+  // Публичный (не requireActive) — <img src> не может передать Authorization.
   // employeeId сам по себе не перечисляемый список, тот же уровень защиты,
   // что уже есть у других некритичных публичных полей (store.color и т.п.).
   // Жёсткий лимит — публичный эндпоинт без auth, единственная защита от

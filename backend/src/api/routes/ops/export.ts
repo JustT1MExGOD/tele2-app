@@ -4,7 +4,7 @@
  */
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { calculateAllBFQ } from '../../../core/bfq/service.js';
-import { requireAuth, requireManager, isManager, resolveViewOrgId } from '../../../auth/guards.js';
+import { requireActive, requireManager, isManager, resolveViewOrgId } from '../../../auth/guards.js';
 import { todayMoscow, currentMonthMoscow } from '../../../utils/date.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
@@ -49,7 +49,7 @@ function rangeTooWide(from: string, to: string): boolean {
 export async function registerExportRoutes(app: FastifyInstance) {
   // ========== HISTORY ==========
   app.get('/sales/history', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
 
     const q = request.query as {
       from?: string;

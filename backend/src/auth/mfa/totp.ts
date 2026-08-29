@@ -83,8 +83,11 @@ async function verifyTotpCode(employeeId: number, code: string, secret: string, 
   // но этот модуль всегда вызывает verify() без strategy:'hotp', так что
   // валидный результат здесь гарантированно TOTP-shaped.
   if (!result.valid || !('timeStep' in result)) return false;
-  await mfaRepo.recordTotpUse(employeeId, result.timeStep);
-  return true;
+  // §7 (доп. аудит 20.52.1) — recordTotpUse() теперь atomic claim, не
+  // безусловная запись: false значит конкурентный запрос уже занял этот
+  // (или более поздний) time-step — replay, не успех, даже если otplib
+  // локально посчитал код валидным.
+  return mfaRepo.recordTotpUse(employeeId, result.timeStep);
 }
 
 export async function disableTotp(employeeId: number): Promise<void> {

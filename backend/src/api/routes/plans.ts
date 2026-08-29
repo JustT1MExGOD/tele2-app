@@ -8,7 +8,7 @@
 
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireManager, requireAuth, requireActive, resolveViewOrgId, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from '../../auth/guards.js';
+import { requireManager, requireActive, resolveViewOrgId, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from '../../auth/guards.js';
 import { record as recordAudit } from '../../data/repositories/audit.js';
 import * as plansRepo from '../../data/repositories/plans.js';
 

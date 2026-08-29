@@ -3,7 +3,7 @@
  * репо-реструктуризация) — брендинг/сети уехали в org/branding.ts.
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { requireAuth, requireStoreInOrg } from '../../../auth/guards.js';
+import { requireActive, requireStoreInOrg } from '../../../auth/guards.js';
 import { salesHeatmap } from '../../../core/analytics/heatmap.js';
 import { serverError } from '../../../shared/errors.js';
 import type { HeatmapPreciseResponse } from '../../../shared/api-types.js';
@@ -13,7 +13,7 @@ export async function registerHeatmapRoutes(app: FastifyInstance) {
     '/heatmap/precise/:storeId',
     { preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })] },
     async (request, reply): Promise<HeatmapPreciseResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const storeId = (request.params as any).storeId;
     const weeks = Math.min(Number((request.query as any)?.weeks) || 4, 12);
     try {

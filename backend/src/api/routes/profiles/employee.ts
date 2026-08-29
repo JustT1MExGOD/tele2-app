@@ -5,7 +5,7 @@
  * в одном месте, по образцу routes-store-profile.ts (18.5).
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { requireAuth, requireEmployeeInOrg } from '../../../auth/guards.js';
+import { requireActive, requireEmployeeInOrg } from '../../../auth/guards.js';
 import { calculateEmployeeBFQ } from '../../../core/bfq/service.js';
 import { getGamificationProfile } from '../../../core/employees/gamification.js';
 import { todayMoscow, currentMonthMoscow } from '../../../utils/date.js';
@@ -29,7 +29,7 @@ export async function registerEmployeeProfileRoutes(app: FastifyInstance) {
     '/employees/:id/profile',
     { preHandler: [requireEmployeeInOrg('params', 'id', { allowOrgOverride: true })] },
     async (request, reply): Promise<EmployeeProfileResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     if (!canViewEmployeeProfile(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });
     }

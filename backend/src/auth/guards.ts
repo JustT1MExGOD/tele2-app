@@ -69,28 +69,6 @@ export async function authPlugin(request: FastifyRequest, _reply: FastifyReply) 
   }
 }
 
-export function requireAuth(request: FastifyRequest, reply: FastifyReply) {
-  if (!request.user?.employee_id) {
-    if (request.authError === 'phone_expired') {
-      reply.code(401).send({ error: 'session_expired', message: 'Сессия истекла, войдите снова.' });
-      return false;
-    }
-    if (request.authError === 'expired') {
-      reply.code(401).send({
-        error: 'session_expired',
-        message: 'Сессия истекла. Переоткройте Mini App через Telegram.'
-      });
-      return false;
-    }
-    reply.code(401).send({
-      error: 'unauthorized',
-      message: 'Привяжите Telegram в разделе «Мой»'
-    });
-    return false;
-  }
-  return true;
-}
-
 export interface RequireActiveOpts {
   /** §2/PRIV-MFA-2 — the MFA enrollment/status/logout endpoints must
    * remain reachable for a privileged account stuck in the

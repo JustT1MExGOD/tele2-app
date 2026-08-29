@@ -79,13 +79,31 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Dealers/Sectors', registerDealersRoutes]
 ];
 
+/**
+ * Раньше регистрация каждого модуля была в своём try/catch, ошибка
+ * логировалась и цикл шёл дальше — сервер успешно стартовал (Railway
+ * видел здоровый /healthz) с ЦЕЛЫМ доменом роутов молча отсутствующим
+ * (найдено security-аудитом 20.52.1: коллизия `GET /metrics` между
+ * Prometheus-эндпоинтом (app.ts) и business-каталогом метрик
+ * (metrics.ts) роняла регистрацию metrics.ts целиком — GET/POST/DELETE
+ * /metrics не существовали в проде, никто не заметил бы, не будь
+ * console.error, который никто не читает проактивно). Тот же принцип,
+ * что уже применён к BOT_TOKEN/шифрованию/миграциям в index.ts — молча
+ * жить в частично сломанном состоянии недопустимо, лучше не стартовать
+ * вообще и получить понятную ошибку сразу на деплое.
+ */
 export async function registerAllRoutes(app: FastifyInstance): Promise<void> {
+  const failures: string[] = [];
   for (const [label, register] of routeModules) {
     try {
       await register(app);
       console.log(`✅ ${label} routes registered`);
     } catch (e: any) {
       console.error(`${label} routes failed:`, e?.message || e);
+      failures.push(`${label}: ${e?.message || e}`);
     }
+  }
+  if (failures.length) {
+    throw new Error(`Route registration failed for: ${failures.join('; ')}`);
   }
 }

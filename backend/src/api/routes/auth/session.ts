@@ -257,17 +257,30 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const { token } = request.params as { token: string };
       const b = request.body as ResetBody;
 
-      const reset = await sessionsRepo.resolvePasswordReset(token);
+      // scrypt — чистый CPU, вне транзакции намеренно (не держать
+      // DB-соединение простаивающим на время хеширования).
+      const passwordHash = await hashPassword(b.password);
+
+      // §8 (доп. аудит 20.52.1) — claim токена + смена пароля + отзыв
+      // сессий одной транзакцией: раньше это были три независимых
+      // запроса — упасть между claim и setPasswordHash означало бы
+      // сжечь одноразовый токен, не поменяв пароль (пользователь остаётся
+      // без доступа и без валидной ссылки сброса). Атомарный claim
+      // (`UPDATE...WHERE used_at IS NULL...RETURNING`) сам по себе уже
+      // закрывает гонку конкурентного повторного использования токена;
+      // транзакция здесь — про целостность ПОСЛЕДОВАТЕЛЬНОСТИ шагов.
+      const reset = await withTransaction(async (q) => {
+        const claimed = await sessionsRepo.claimPasswordReset(token, q);
+        if (!claimed) return null;
+        await employeesRepo.setPasswordHash(claimed.employee_id, passwordHash, q);
+        // 20.48.0 — смена пароля инвалидирует все активные browser-сессии
+        // (устройство A украдено → пароль меняют на B → A не остаётся рабочим).
+        await sessionsRepo.deleteAllForEmployee(claimed.employee_id, q);
+        return claimed;
+      });
       if (!reset) {
         return reply.code(400).send({ error: 'invalid_token', message: 'Ссылка недействительна или уже использована' });
       }
-
-      const passwordHash = await hashPassword(b.password);
-      await employeesRepo.setPasswordHash(reset.employee_id, passwordHash);
-      await sessionsRepo.consumePasswordReset(reset.id);
-      // 20.48.0 — смена пароля инвалидирует все активные browser-сессии
-      // (устройство A украдено → пароль меняют на B → A не остаётся рабочим).
-      await sessionsRepo.deleteAllForEmployee(reset.employee_id);
 
       // §4/RESET-1 (20.52.1) — раньше сброс пароля ВСЕГДА сразу выдавал
       // рабочую сессию, даже для аккаунта с настроенным MFA — реальный

@@ -271,11 +271,16 @@ export async function buildApp(): Promise<FastifyInstance> {
     ai: { configured: !!process.env.GROQ_API_KEY }
   }));
 
-  // /metrics — Prometheus exposition format. Пока никто не обязан её
-  // scrape'ить постоянно — сама возможность появляется сейчас, коллектор
-  // (Grafana/Prometheus-совместимый бэкенд) подключается отдельно, когда
-  // реально понадобится, без переделки приложения.
-  app.get('/metrics', async (_request, reply) => {
+  // /metrics/system — Prometheus exposition format. НЕ /metrics: та строка
+  // уже занята бизнес-каталогом кастомных метрик (api/routes/metrics.ts,
+  // существует с ранних версий проекта) — коллизия найдена security-
+  // аудитом 20.52.1: Fastify бросает на повторной регистрации того же
+  // роута, registerAllRoutes() ловил это тихо (см. api/routes/index.ts) и
+  // весь GET/POST/DELETE /metrics business-модуль молча не регистрировался
+  // ни разу с момента появления этого Prometheus-эндпоинта. Никто не
+  // обязан scrape'ить этот путь постоянно — сама возможность есть, коллектор
+  // подключается отдельно, когда реально понадобится.
+  app.get('/metrics/system', async (_request, reply) => {
     reply.header('Content-Type', metricsRegistry.contentType);
     return metricsRegistry.metrics();
   });

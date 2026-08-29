@@ -89,8 +89,27 @@ export async function getTotpSecret(employeeId: number): Promise<{ secret: strin
   }
 }
 
-export async function recordTotpUse(employeeId: number, timeStep: number): Promise<void> {
-  await query(`UPDATE employee_totp SET last_time_step = $2, last_used_at = now() WHERE employee_id = $1`, [employeeId, timeStep]);
+/**
+ * Auth Assurance Hardening (20.52.1, §7 доп. аудит) — atomic claim of a
+ * replay-protection time-step (`WHERE last_time_step IS NULL OR
+ * last_time_step < $2`), not an unconditional write. Read-then-write
+ * (SELECT lastTimeStep in getTotpSecret, verify() locally, THEN this
+ * UPDATE) had a TOCTOU gap: two concurrent requests submitting the SAME
+ * still-valid code could both read the same lastTimeStep, both pass
+ * otplib's afterTimeStep check locally, and both then unconditionally
+ * write here — a replayed code succeeding twice concurrently, defeating
+ * the whole point of tracking last_time_step. Returns false when a
+ * concurrent caller already claimed this or a later step — the caller
+ * must treat that as verification failure, not silently succeed.
+ */
+export async function recordTotpUse(employeeId: number, timeStep: number): Promise<boolean> {
+  const res = await query(
+    `UPDATE employee_totp SET last_time_step = $2, last_used_at = now()
+     WHERE employee_id = $1 AND (last_time_step IS NULL OR last_time_step < $2)
+     RETURNING employee_id`,
+    [employeeId, timeStep]
+  );
+  return res.rows.length > 0;
 }
 
 export async function deleteTotp(employeeId: number): Promise<void> {
@@ -228,8 +247,23 @@ export async function resolvePendingLogin(token: string): Promise<{ id: number; 
   return res.rows[0] || null;
 }
 
-export async function consumePendingLogin(id: number): Promise<void> {
-  await query(`UPDATE mfa_pending_logins SET consumed_at = now() WHERE id = $1`, [id]);
+/**
+ * Auth Assurance Hardening (20.52.1, §7 доп. аудит) — atomic single-use
+ * claim (`UPDATE...WHERE consumed_at IS NULL...RETURNING`), same pattern
+ * as consumeRecoveryCode()/consumeWebAuthnChallenge() below. Without the
+ * `WHERE consumed_at IS NULL` guard here, two concurrent requests
+ * submitting the same valid code (e.g. a client-side double-submit on a
+ * flaky network) could both pass resolvePendingLogin()'s read before
+ * either called this — verifyFactor() itself doesn't consume anything,
+ * so both would then create a session. Returns false when a concurrent
+ * caller already claimed it — the route must not issue a second session.
+ */
+export async function consumePendingLogin(id: number): Promise<boolean> {
+  const res = await query(
+    `UPDATE mfa_pending_logins SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL RETURNING id`,
+    [id]
+  );
+  return res.rows.length > 0;
 }
 
 // ===== WebAuthn ceremony challenges =====

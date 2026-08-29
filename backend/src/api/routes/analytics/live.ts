@@ -4,7 +4,7 @@
  * analytics/what-if.ts.
  */
 import { FastifyInstance } from 'fastify';
-import { requireAuth, resolveViewOrgId } from '../../../auth/guards.js';
+import { requireActive, resolveViewOrgId } from '../../../auth/guards.js';
 import { getLiveNetworkMap } from '../../../core/analytics/live-map.js';
 import type { NetworkLiveResponse } from '../../../shared/api-types.js';
 
@@ -15,7 +15,7 @@ export async function registerLiveMapRoutes(app: FastifyInstance) {
     // КАЖДУЮ точку сети (core/analytics/live-map.ts), раньше без лимита.
     { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
     async (request, reply): Promise<NetworkLiveResponse | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     return getLiveNetworkMap(resolveViewOrgId(request.user!, org_id));
     }

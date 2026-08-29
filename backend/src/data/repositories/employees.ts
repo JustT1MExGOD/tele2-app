@@ -72,9 +72,9 @@ export async function findByIdWithPassword(employeeId: number): Promise<
 }
 
 /** Не-Telegram вход (20.35, план) — используется /auth/reset/:token (сброс
- * пароля) после успешного consumePasswordReset. */
-export async function setPasswordHash(employeeId: number, passwordHash: string): Promise<void> {
-  await query(`UPDATE employees SET password_hash = $1 WHERE id = $2`, [passwordHash, employeeId]);
+ * пароля) внутри одной транзакции с sessionsRepo.claimPasswordReset(). */
+export async function setPasswordHash(employeeId: number, passwordHash: string, q: typeof query = query): Promise<void> {
+  await q(`UPDATE employees SET password_hash = $1 WHERE id = $2`, [passwordHash, employeeId]);
 }
 
 /** Самопривязка телефона (20.36) — уже авторизованный через Telegram

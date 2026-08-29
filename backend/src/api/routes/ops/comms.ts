@@ -7,7 +7,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireAuth, requireManager, resolveViewOrgId } from '../../../auth/guards.js';
+import { requireActive, requireManager, resolveViewOrgId } from '../../../auth/guards.js';
 import * as commsRepo from '../../../data/repositories/comms.js';
 import type { AnnouncementsListResponse, CreateAnnouncementResponse, AnnouncementReadsResponse } from '../../../shared/api-types.js';
 
@@ -29,7 +29,7 @@ type PostChannelMessageBody = Static<typeof PostChannelMessageBody>;
 
 export async function registerCommsRoutes(app: FastifyInstance) {
   app.get('/announcements', async (request, reply): Promise<AnnouncementsListResponse | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const empId = request.user!.employee_id!;
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
@@ -50,7 +50,7 @@ export async function registerCommsRoutes(app: FastifyInstance) {
   // Security audit (20.52.0) — раньше без org-проверки: любой сотрудник
   // мог отметить прочитанным объявление ЧУЖОЙ сети, зная/угадав id.
   app.post('/announcements/:id/read', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
@@ -87,7 +87,7 @@ export async function registerCommsRoutes(app: FastifyInstance) {
   }
 
   app.get('/channels/:id/messages', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const { org_id } = request.query as { org_id?: string };
     if (!(await assertChannelInOrg(id, resolveViewOrgId(request.user!, org_id)))) {
@@ -101,7 +101,7 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     '/channels/:id/messages',
     { schema: { body: PostChannelMessageBody } },
     async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = request.body as PostChannelMessageBody;
     if (!(await assertChannelInOrg(id, resolveViewOrgId(request.user!, body.org_id)))) {

@@ -8,7 +8,7 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import {
-  requireAuth,
+  requireActive,
   requireManagerOrSupervisor,
   resolveViewOrgId,
   assertEmployeeInOrg,
@@ -163,12 +163,12 @@ export async function registerTasksRoutes(app: FastifyInstance) {
 
   // Свои задачи (любой активный сотрудник).
   app.get('/tasks/my', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     return tasksRepo.listForAssignee(request.user!.employee_id!);
   });
 
   app.get('/tasks/:id', async (request, reply): Promise<TaskDetailResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const task = await getTaskOr404(Number(id), reply);
     if (!task) return;
@@ -183,7 +183,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     '/tasks/:id/comments',
     { schema: { body: TaskCommentBody } },
     async (request, reply): Promise<AddTaskCommentResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const task = await getTaskOr404(Number(id), reply);
     if (!task) return;
@@ -205,7 +205,7 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     '/tasks/:id/status',
     { schema: { body: TaskStatusBody } },
     async (request, reply): Promise<ChangeTaskStatusResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const task = await getTaskOr404(Number(id), reply);
     if (!task) return;

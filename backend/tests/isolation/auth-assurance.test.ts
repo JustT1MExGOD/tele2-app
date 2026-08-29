@@ -352,4 +352,79 @@ describe('Auth Assurance Hardening (20.52.1)', () => {
       }
     });
   });
+
+  // §6/§7/§8 (доп. аудит 20.52.1) — TOCTOU races found by an external
+  // security review of this same MFA/session code: read-then-write pairs
+  // (resolve+consume, verify+record) that weren't atomic, so two
+  // concurrent requests with the same valid credential could both
+  // succeed. Fixed via atomic UPDATE...WHERE...RETURNING claims — these
+  // tests fire genuinely concurrent requests (Promise.all, not
+  // sequential awaits) to prove exactly one wins.
+  describe('Concurrency races — atomic single-use claims', () => {
+    it('TOTP: two concurrent verifications of the SAME code succeed exactly once (replay-protection race)', async () => {
+      const org = await fx.createOrg('Totp Race Org');
+      const admin = await fx.createEmployee(org, { role: 'admin', mfa: false });
+      const enrollment = await totp.startTotpEnrollment(admin.id, 'race-test');
+      const code = await generate({ secret: enrollment.secret, epoch: Math.floor(Date.now() / 1000) });
+      await totp.confirmTotpEnrollment(admin.id, code);
+
+      // A code already used for confirm — reuse it directly against
+      // verifyConfirmedTotp() concurrently (same still-in-window code,
+      // simulating an attacker replaying an observed valid code
+      // concurrently with the legitimate holder, or a client double-submit).
+      const nextCode = await generate({ secret: enrollment.secret, epoch: Math.floor(Date.now() / 1000) + 30 });
+      const [a, b] = await Promise.all([
+        totp.verifyConfirmedTotp(admin.id, nextCode),
+        totp.verifyConfirmedTotp(admin.id, nextCode)
+      ]);
+      const successCount = [a, b].filter(Boolean).length;
+      expect(successCount).toBe(1);
+    });
+
+    it('MFA login: two concurrent /auth/login/mfa submissions with the SAME token+code create exactly one session', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('Pending Login Race Org');
+      const passwordHash = await hashPassword('race-pass-1');
+      const phone = uniquePhone();
+      const admin = await fx.createPhoneEmployee(org, phone, passwordHash, { role: 'admin', fullName: 'Race Admin' });
+      const enrollment = await totp.startTotpEnrollment(admin.id, phone);
+      await totp.confirmTotpEnrollment(admin.id, await generate({ secret: enrollment.secret }));
+
+      const login = await app.inject({ method: 'POST', url: '/auth/login', payload: { phone, password: 'race-pass-1' } });
+      const mfaToken = login.json().mfa_token as string;
+      const code = await generate({ secret: enrollment.secret, epoch: Math.floor(Date.now() / 1000) + 30 });
+
+      const [r1, r2] = await Promise.all([
+        app.inject({ method: 'POST', url: '/auth/login/mfa', payload: { mfa_token: mfaToken, method: 'totp', code } }),
+        app.inject({ method: 'POST', url: '/auth/login/mfa', payload: { mfa_token: mfaToken, method: 'totp', code } })
+      ]);
+      const successes = [r1, r2].filter((r) => r.statusCode === 200);
+      expect(successes.length).toBe(1);
+
+      const sessionCount = await query('SELECT count(*) FROM employee_sessions WHERE employee_id = $1', [admin.id]);
+      expect(Number(sessionCount.rows[0].count)).toBe(1);
+    });
+
+    it('password reset: two concurrent /auth/reset/:token submissions with the SAME token succeed exactly once', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('Password Reset Race Org');
+      const passwordHash = await hashPassword('race-pass-2');
+      const phone = uniquePhone();
+      const employee = await fx.createPhoneEmployee(org, phone, passwordHash, { role: 'employee', fullName: 'Race Reset' });
+
+      const resetToken = await query(
+        `INSERT INTO employee_password_resets (employee_id, token_hash, expires_at)
+         VALUES ($1, encode(sha256($2::bytea), 'hex'), now() + interval '1 hour') RETURNING $2 as raw`,
+        [employee.id, 'reset-token-race']
+      );
+      const token = resetToken.rows[0].raw as string;
+
+      const [r1, r2] = await Promise.all([
+        app.inject({ method: 'POST', url: `/auth/reset/${token}`, payload: { password: 'race-new-pass-a' } }),
+        app.inject({ method: 'POST', url: `/auth/reset/${token}`, payload: { password: 'race-new-pass-b' } })
+      ]);
+      const successes = [r1, r2].filter((r) => r.statusCode === 200);
+      expect(successes.length).toBe(1);
+    });
+  });
 });

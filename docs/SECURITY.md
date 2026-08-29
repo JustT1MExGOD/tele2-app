@@ -624,6 +624,52 @@ enrollment стал бы недостижим. Вычисляется один �
 обязателен только для самых опасных действий". См.
 [ADR/009, раздел "20.52.1 revision"](./ADR/009-mfa-step-up.md).
 
+**Покрытие гейта завершено (20.52.2)** — независимый security-аудит
+нашёл, что новый гейт из 20.52.1 фактически не покрывал ~15 route-файлов
+(`command-center.ts`, `forecast.ts`, `comms.ts`, `shifts.ts`, `tasks.ts`,
+`support.ts`, `supervisor.ts`, `export.ts` и др.), использовавших более
+слабый `requireAuth` (только "identity resolved", без access_status и
+без MFA-гейта) вместо `requireActive()` — Command Center и другая
+privileged-функциональность оставались доступны admin/supervisor без
+MFA в обход заявленной политики. Найдено и подтверждено воспроизведением
+локально (не поверено на слово). Все ~31 вызова заменены на
+`requireActive()`; неиспользуемый `requireAuth()` удалён из
+`auth/guards.ts` целиком, чтобы не оставлять привлекательный обходной
+путь для будущего кода. `promos.ts` использовал собственный
+дублирующий resolver (`resolveEmployeeFromRequest()`, проверял
+access_status, но не MFA) — заменён на `requireActive()`.
+
+**Атомарность single-use claim'ов (20.52.2)** — тот же аудит нашёл
+TOCTOU-гонки в трёх местах этого же MFA/session-кода, где
+resolve-и-consume были раздельными запросами: TOTP replay-защита
+(`recordTotpUse()`), consumption pending-login токена
+(`consumePendingLogin()`), consumption токена сброса пароля (слит в
+`claimPasswordReset()`). Все три теперь — один atomic `UPDATE...WHERE
+...IS NULL...RETURNING`, тот же паттерн, что уже был в
+`consumeRecoveryCode()`/`consumeWebAuthnChallenge()`. Подтверждено
+regression-тестами с реальным `Promise.all()` (не последовательными
+await) — ровно один из двух конкурентных запросов побеждает в каждом
+случае. Сброс пароля также обёрнут в одну DB-транзакцию (claim + смена
+пароля + отзыв сессий) — раньше падение между шагами могло сжечь
+одноразовый токен, не сменив пароль.
+
+**Duplicate-route fail-open (20.52.2)** — тот же аудит нашёл, что
+`GET /metrics` был зарегистрирован дважды: Prometheus-эндпоинт (`app.ts`,
+20.32.0) и бизнес-каталог кастомных метрик (`api/routes/metrics.ts`,
+существует с ранних версий). Fastify бросает на повторной регистрации
+роута — `registerAllRoutes()` ловил эту ошибку в try/catch и продолжал,
+логируя в `console.error`, который никто не читает проактивно. Business
+metrics-модуль (GET/POST/DELETE) не регистрировался НИ РАЗУ с момента
+появления Prometheus-эндпоинта — воспроизведено локально, не было ни
+одного теста на этот роут. Исправлено: Prometheus переехал на
+`/metrics/system`; `registerAllRoutes()` теперь бросает (не глотает)
+ошибку регистрации любого модуля — `buildApp()`/`index.ts` используют
+тот же `alertAndExit`, что уже применён к миграциям/BOT_TOKEN/шифрованию,
+не тихая частичная деградация. Добавлено регресс-тестовое покрытие
+для `/metrics` (`tests/isolation/metrics-catalog-route.test.ts`) —
+раньше отсутствовало полностью, что и позволило багу остаться
+незамеченным.
+
 **Step-up (AAL3, "свежее подтверждение для ЭТОГО действия")** —
 channel-agnostic непрозрачный bearer-тикет (`mfa_step_up_tickets`, 10
 минут), не session-freshness: у Telegram-запросов нет server-side

@@ -164,15 +164,23 @@ export async function createPasswordReset(employeeId: number, createdBy: number 
   return token;
 }
 
-export async function resolvePasswordReset(token: string): Promise<{ id: number; employee_id: number } | null> {
-  const res = await query(
-    `SELECT id, employee_id FROM employee_password_resets
-     WHERE token_hash = $1 AND expires_at > now() AND used_at IS NULL`,
+/**
+ * Auth Assurance Hardening (20.52.1, §8 доп. аудит) — atomic claim in one
+ * statement (`UPDATE...WHERE used_at IS NULL...RETURNING`), not the
+ * former resolve-then-consume pair (separate SELECT + UPDATE). Two
+ * concurrent requests with the same reset token (double-submit on a
+ * flaky connection, or a raced replay) could both pass the SELECT's
+ * `used_at IS NULL` check before either UPDATE ran — both then setting a
+ * password from the same one-time token, whichever write landed last
+ * silently winning with no signal to the caller which one took effect.
+ * Now: only the caller that wins the atomic claim proceeds at all.
+ */
+export async function claimPasswordReset(token: string, q: typeof query = query): Promise<{ id: number; employee_id: number } | null> {
+  const res = await q(
+    `UPDATE employee_password_resets SET used_at = now()
+     WHERE token_hash = $1 AND expires_at > now() AND used_at IS NULL
+     RETURNING id, employee_id`,
     [hashToken(token)]
   );
   return res.rows[0] || null;
-}
-
-export async function consumePasswordReset(id: number): Promise<void> {
-  await query(`UPDATE employee_password_resets SET used_at = now() WHERE id = $1`, [id]);
 }

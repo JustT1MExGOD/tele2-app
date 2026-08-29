@@ -4,7 +4,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireActive, requireAuth } from '../../../auth/guards.js';
+import { requireActive } from '../../../auth/guards.js';
 import * as supportRepo from '../../../data/repositories/support.js';
 import { notifyAdmin, notifyUser } from '../../../integrations/telegram/bot.js';
 import { supportTicketAdmin } from '../../../integrations/telegram/messages.js';
@@ -74,13 +74,13 @@ export async function registerSupportRoutes(app: FastifyInstance) {
 
   /** Мои тикеты + сообщения */
   app.get('/support/my', async (request, reply): Promise<MyTicketsResponse | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const tg = Number(request.user!.telegram_id);
     return supportRepo.listMyTickets(tg, request.user!.employee_id);
   });
 
   app.get('/support/tickets/:id/messages', async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const t = await supportRepo.findTicket(Number(id));
     if (!t) return reply.code(404).send({ error: 'not found' });
@@ -100,7 +100,7 @@ export async function registerSupportRoutes(app: FastifyInstance) {
     '/support/tickets/:id/messages',
     { schema: { body: TicketMessageBody } },
     async (request, reply) => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = request.body as TicketMessageBody;
     const text = String(body.message || body.text || '').trim();

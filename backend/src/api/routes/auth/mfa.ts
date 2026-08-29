@@ -10,7 +10,6 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import {
-  requireAuth,
   requireActive,
   requireManager,
   requireEmployeeInOrg,
@@ -113,7 +112,11 @@ export async function registerMfaRoutes(app: FastifyInstance) {
       const ok = await verifyFactor(pending.employee_id, role, body);
       if (!ok) return reply.code(401).send({ error: 'invalid_mfa_code', message: 'Неверный код' });
 
-      await mfaRepo.consumePendingLogin(pending.id);
+      // §7 (доп. аудит 20.52.1) — атомарный claim: если конкурентный запрос
+      // (тот же валидный код, повторный сабмит) уже забрал этот токен между
+      // resolve и этой точкой, здесь false — не создаём вторую сессию.
+      const claimed = await mfaRepo.consumePendingLogin(pending.id);
+      if (!claimed) return reply.code(400).send({ error: 'invalid_or_expired_mfa_token', message: 'Ссылка на вход истекла, начните заново' });
       if (body.method === 'recovery_code') {
         // §16 — recovery-code login is a high-value security signal (the
         // primary/preferred factor was unavailable) — worth its own audit

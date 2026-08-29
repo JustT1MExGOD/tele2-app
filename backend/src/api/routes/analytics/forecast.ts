@@ -3,7 +3,7 @@
  * Выделено из routes-v13.ts.
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { requireAuth, requireManager, resolveViewOrgId, requireStoreInOrg } from '../../../auth/guards.js';
+import { requireActive, requireManager, resolveViewOrgId, requireStoreInOrg } from '../../../auth/guards.js';
 import { forecastStore, newbieCohorts, getStaffingHints } from '../../../core/analytics/forecast.js';
 import { rebuildHourProfiles } from '../../../core/analytics/heatmap.js';
 import { getLiveNetworkMap } from '../../../core/analytics/live-map.js';
@@ -23,7 +23,7 @@ export async function registerForecastRoutes(app: FastifyInstance) {
       preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })]
     },
     async (request, reply): Promise<ForecastResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { storeId } = request.params as { storeId: string };
     const from = String((request.query as any)?.from || todayMoscow()).slice(0, 10);
     const days = Math.min(Number((request.query as any)?.days) || 7, 14);

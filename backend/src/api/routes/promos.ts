@@ -4,7 +4,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { resolveViewOrgId } from '../../auth/guards.js';
+import { requireActive, resolveViewOrgId } from '../../auth/guards.js';
 import { serverError } from '../../shared/errors.js';
 import * as promosRepo from '../../data/repositories/promos.js';
 import type {
@@ -27,21 +27,9 @@ function maskPromoCode(code: string) {
   return s.slice(0, 2) + '•'.repeat(Math.min(8, s.length - 4)) + s.slice(-2);
 }
 
-function resolveEmployeeFromRequest(request: any): {
-  employee_id: number;
-  full_name: string;
-  role: string;
-  org_id: string;
-} | null {
-  const u = request.user;
-  if (!u || !u.employee_id || u.access_status !== 'active') return null;
-  return { employee_id: u.employee_id, full_name: u.full_name || '', role: u.role, org_id: u.org_id };
-}
-
 export async function registerPromosRoutes(app: FastifyInstance) {
-  app.get('/promos', async (request, reply): Promise<PromosListResponse | FastifyReply> => {
-    const user = resolveEmployeeFromRequest(request);
-    if (!user) return reply.code(401).send({ error: 'unauthorized', message: 'Привяжите Telegram' });
+  app.get('/promos', async (request, reply): Promise<PromosListResponse | FastifyReply | undefined> => {
+    if (!requireActive(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
     try {
@@ -60,9 +48,8 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/promos/:id', async (request, reply): Promise<PromoCard | FastifyReply> => {
-    const user = resolveEmployeeFromRequest(request);
-    if (!user) return reply.code(401).send({ error: 'unauthorized' });
+  app.get('/promos/:id', async (request, reply): Promise<PromoCard | FastifyReply | undefined> => {
+    if (!requireActive(request, reply)) return;
     const id = Number((request.params as any).id);
     const orgId = resolveViewOrgId(request.user!);
     try {
@@ -77,16 +64,15 @@ export async function registerPromosRoutes(app: FastifyInstance) {
   app.post(
     '/promos',
     { schema: { body: PostPromoBody } },
-    async (request, reply): Promise<CreatePromoResponse | FastifyReply> => {
-    const user = resolveEmployeeFromRequest(request);
-    if (!user) return reply.code(401).send({ error: 'unauthorized' });
+    async (request, reply): Promise<CreatePromoResponse | FastifyReply | undefined> => {
+    if (!requireActive(request, reply)) return;
     const body = request.body as PostPromoBody;
     const code = String(body.code || '').trim();
     if (!code) return reply.code(400).send({ error: 'code_required' });
     const note = body.note ? String(body.note).slice(0, 200) : null;
     const orgId = resolveViewOrgId(request.user!, body.org_id);
     try {
-      const item = await promosRepo.create(code, note, user.employee_id, user.full_name, orgId);
+      const item = await promosRepo.create(code, note, request.user!.employee_id!, request.user!.full_name || '', orgId);
       return { ok: true, item };
     } catch (e: any) {
       return serverError(request, reply, 'db_error', e);
@@ -94,13 +80,12 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     }
   );
 
-  app.post('/promos/:id/use', async (request, reply): Promise<PromoActionResponse | FastifyReply> => {
-    const user = resolveEmployeeFromRequest(request);
-    if (!user) return reply.code(401).send({ error: 'unauthorized' });
+  app.post('/promos/:id/use', async (request, reply): Promise<PromoActionResponse | FastifyReply | undefined> => {
+    if (!requireActive(request, reply)) return;
     const id = Number((request.params as any).id);
     const orgId = resolveViewOrgId(request.user!);
     try {
-      const used = await promosRepo.markUsed(id, user.employee_id, orgId);
+      const used = await promosRepo.markUsed(id, request.user!.employee_id!, orgId);
       if (!used) return reply.code(404).send({ error: 'not_found' });
       return { ok: true, used: true };
     } catch (e: any) {
@@ -108,9 +93,8 @@ export async function registerPromosRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/promos/:id/keep', async (request, reply): Promise<PromoActionResponse | FastifyReply> => {
-    const user = resolveEmployeeFromRequest(request);
-    if (!user) return reply.code(401).send({ error: 'unauthorized' });
+  app.post('/promos/:id/keep', async (request, reply): Promise<PromoActionResponse | FastifyReply | undefined> => {
+    if (!requireActive(request, reply)) return;
     return { ok: true, used: false };
   });
 }

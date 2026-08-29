@@ -5,7 +5,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireAuth, requireManager, resolveViewOrgId } from '../../../auth/guards.js';
+import { requireActive, requireManager, resolveViewOrgId } from '../../../auth/guards.js';
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from '../../../core/shared/tenant.js';
 import { invalidateAll as invalidateAllScopes } from '../../../core/shared/scope-cache.js';
 import type { OrgStoresResponse, BrandingResponse, OrgsListResponse, UpsertOrgResponse } from '../../../shared/api-types.js';
@@ -88,7 +88,7 @@ export async function registerBrandingRoutes(app: FastifyInstance) {
   // сеть тем же переключателем, что и везде (resolveViewOrgId) — остальные
   // роли override игнорируют и всегда видят только свою сеть.
   app.get('/org/stores', async (request, reply): Promise<OrgStoresResponse | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id) || 'default';
     return { org_id: orgId, stores: await listStoresForOrg(orgId) };

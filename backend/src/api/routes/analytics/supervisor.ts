@@ -19,7 +19,7 @@
  */
 
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { authPlugin, requireAuth, requireManager, resolveViewOrgId } from '../../../auth/guards.js';
+import { authPlugin, requireActive, requireManager, resolveViewOrgId } from '../../../auth/guards.js';
 import {
   resolveSupervisorStores,
   buildSupervisorDashboard
@@ -51,7 +51,7 @@ function canViewSupervisorHealth(user: { role?: string } | null | undefined): bo
 export async function registerSupervisorRoutes(app: FastifyInstance) {
   // Подставляем request.user из X-Telegram-Id на каждый запрос модуля
   app.get('/supervisor/dashboard', async (request, reply): Promise<SupervisorDashboardResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     if (!canViewSupervisor(request.user)) {
       return reply.code(403).send({
         error: 'forbidden',
@@ -96,7 +96,7 @@ export async function registerSupervisorRoutes(app: FastifyInstance) {
   });
 
   app.get('/supervisor/health', async (request, reply): Promise<SupervisorHealthResponse | FastifyReply | undefined> => {
-    if (!requireAuth(request, reply)) return;
+    if (!requireActive(request, reply)) return;
     if (!canViewSupervisorHealth(request.user)) {
       return reply.code(403).send({ error: 'forbidden' });
     }
