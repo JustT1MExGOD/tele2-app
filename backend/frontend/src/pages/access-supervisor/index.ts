@@ -20,7 +20,8 @@ import type {
   SubmitAccessRequestRequest,
   AccessRequestsListResponse,
   AdminTicketsSlaResponse,
-  SupervisorDashboardResponse
+  SupervisorDashboardResponse,
+  MfaTotpEnrollment
 } from '../../../../src/shared/api-types.js';
 
 // ===== ACCESS GATE =====
@@ -361,10 +362,17 @@ export async function submitPhoneLogin(): Promise<void> {
     toast('Заполните телефон и пароль', 'err');
     return;
   }
+  let res;
   try {
-    await window.apiClient.loginPhone(authHeaders(true), { phone, password });
+    res = await window.apiClient.loginPhone(authHeaders(true), { phone, password });
   } catch (e: any) {
     toast(e?.message || 'Неверный телефон или пароль', 'err');
+    return;
+  }
+  // 20.52.1 — пароль подтверждён, но у аккаунта настроен второй фактор:
+  // сессии ещё нет (см. auth/api/routes/auth/session.ts), нужен MFA-код.
+  if (res.mfa_required && res.mfa_token) {
+    showMfaLoginChallenge(res.mfa_token, res.mfa_methods || []);
     return;
   }
   toast('Вход выполнен', 'ok');
@@ -426,15 +434,205 @@ export async function submitPasswordReset(): Promise<void> {
     toast('Ссылка недействительна', 'err');
     return;
   }
+  let res;
   try {
-    await window.apiClient.consumePasswordReset(authHeaders(true), token, { password });
+    res = await window.apiClient.consumePasswordReset(authHeaders(true), token, { password });
   } catch (e: any) {
     toast(e?.message || 'Ссылка недействительна или уже использована', 'err');
     return;
   }
-  toast('Пароль обновлён', 'ok');
   history.replaceState(null, '', location.pathname);
+  // §4/RESET-1 (20.52.1) — сброс пароля для аккаунта с настроенным MFA
+  // больше не выдаёт сессию сразу, см. api/routes/auth/session.ts.
+  if (res.mfa_required && res.mfa_token) {
+    showMfaLoginChallenge(res.mfa_token, res.mfa_methods || []);
+    return;
+  }
+  toast('Пароль обновлён', 'ok');
   bootApp();
+}
+
+// ===== MFA (20.52.1, Auth Assurance Hardening) =====
+// Минимальный, но реально работающий UX: TOTP как основной path (не
+// требует WebAuthn browser API/ceremony-кода — тот путь сознательно
+// отложен, см. docs/ADR/009-mfa-step-up.md, "20.52.1 revision"). Без
+// этого экрана backend-политика "privileged без MFA не проходит дальше
+// enrollment-роутов" (auth/guards.ts) заблокировала бы вообще ВСЕХ
+// сегодняшних admin/supervisor — ни один ещё не настроил MFA.
+let mfaLoginToken: string | null = null;
+let mfaEnrollSecret: string | null = null;
+
+export function showMfaLoginChallenge(mfaToken: string, methods: string[]): void {
+  hideSplash();
+  mfaLoginToken = mfaToken;
+  const gate = document.getElementById('accessGate') as HTMLElement | null;
+  const body = document.getElementById('gateBody');
+  const sub = document.getElementById('gateSubtitle');
+  if (!gate || !body) return;
+  gate.style.cssText =
+    'display:block;position:fixed;inset:0;z-index:9999;background:var(--bg,#0a0a0b);overflow:auto;-webkit-overflow-scrolling:touch;visibility:visible;opacity:1;pointer-events:auto';
+  const sheet = document.querySelector('.sheet') as HTMLElement | null;
+  if (sheet) {
+    sheet.style.visibility = 'hidden';
+    sheet.style.pointerEvents = 'none';
+  }
+  if (sub) sub.textContent = 'Подтверждение входа';
+  const hasRecovery = methods.includes('recovery_code');
+  body.innerHTML = `
+        <div class="gate-card">
+          <div class="bind-glow"></div>
+          <div class="gate-icon">${LOCK_ICON}</div>
+          <div class="gate-title">Код из приложения-аутентификатора</div>
+          <div class="gate-desc">Введите 6-значный код из TOTP-приложения (Google Authenticator, 1Password и т.п.)${hasRecovery ? ', либо один из recovery-кодов' : ''}.</div>
+          <div class="field">
+            <label>Код</label>
+            <input id="mfaLoginCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="20">
+          </div>
+          <button class="btn-main" style="margin-top:8px" onclick="submitMfaLoginCode()">Подтвердить</button>
+        </div>`;
+  const input = document.getElementById('mfaLoginCode') as HTMLInputElement | null;
+  input?.focus();
+}
+
+export async function submitMfaLoginCode(): Promise<void> {
+  const raw = (document.getElementById('mfaLoginCode') as HTMLInputElement | null)?.value?.trim() || '';
+  if (!raw) {
+    toast('Введите код', 'err');
+    return;
+  }
+  if (!mfaLoginToken) {
+    toast('Сессия входа истекла, начните заново', 'err');
+    showLoginGate('login');
+    return;
+  }
+  // recovery-коды в этом проекте — "xxxx-xxxx-xxxx-xxxx-xxxx" (с дефисами,
+  // 20+ символов); всё остальное — TOTP-код.
+  const method = raw.length > 8 || raw.includes('-') ? 'recovery_code' : 'totp';
+  try {
+    await window.apiClient.loginMfa(authHeaders(true), { mfa_token: mfaLoginToken, method, code: raw });
+  } catch (e: any) {
+    toast(e?.message || 'Неверный код', 'err');
+    return;
+  }
+  mfaLoginToken = null;
+  toast('Вход выполнен', 'ok');
+  bootApp();
+}
+
+/** Показывается вместо обычной оболочки, когда GET /me вернул
+ * mfa_enrollment_required:true — backend уже физически блокирует все
+ * остальные защищённые роуты в этом состоянии (auth/guards.ts), этот
+ * экран — единственный способ пройти дальше. */
+export function showMfaEnrollmentGate(): void {
+  hideSplash();
+  const gate = document.getElementById('accessGate') as HTMLElement | null;
+  const body = document.getElementById('gateBody');
+  const sub = document.getElementById('gateSubtitle');
+  if (!gate || !body) return;
+  gate.style.cssText =
+    'display:block;position:fixed;inset:0;z-index:9999;background:var(--bg,#0a0a0b);overflow:auto;-webkit-overflow-scrolling:touch;visibility:visible;opacity:1;pointer-events:auto';
+  const sheet = document.querySelector('.sheet') as HTMLElement | null;
+  if (sheet) {
+    sheet.style.visibility = 'hidden';
+    sheet.style.pointerEvents = 'none';
+  }
+  if (sub) sub.textContent = 'Нужна настройка MFA';
+  body.innerHTML = `
+        <div class="gate-card">
+          <div class="bind-glow"></div>
+          <div class="gate-icon">${LOCK_ICON}</div>
+          <div class="gate-title">Для вашей роли обязателен второй фактор</div>
+          <div class="gate-desc">
+            Управляющие сетью и супервайзеры обязаны подключить
+            подтверждение входа (MFA) — это защищает от входа по одному
+            украденному паролю. Отсканируйте QR-код приложением-
+            аутентификатором (Google Authenticator, 1Password и т.п.) и
+            введите код, чтобы продолжить.
+          </div>
+          <button class="btn-main" style="margin-top:8px" onclick="submitMfaTotpEnrollStart()">Начать настройку</button>
+          <div class="bind-foot" style="position:relative;margin-top:14px"><a href="javascript:void(0)" onclick="logoutFromMfaGate()">Выйти</a></div>
+        </div>`;
+}
+
+export async function submitMfaTotpEnrollStart(): Promise<void> {
+  let enrollment: MfaTotpEnrollment;
+  try {
+    enrollment = await window.apiClient.mfaTotpEnroll(authHeaders(true));
+  } catch (e: any) {
+    toast(e?.message || 'Ошибка', 'err');
+    return;
+  }
+  mfaEnrollSecret = enrollment.secret;
+  const body = document.getElementById('gateBody');
+  if (!body) return;
+  body.innerHTML = `
+        <div class="gate-card">
+          <div class="bind-glow"></div>
+          <div class="gate-title">Отсканируйте QR-код</div>
+          <div class="gate-desc">Или введите секрет вручную: <code style="user-select:all">${esc(enrollment.secret)}</code></div>
+          <img src="${enrollment.qrCodeDataUrl}" alt="QR" style="display:block;margin:12px auto;width:200px;height:200px;border-radius:12px">
+          <div class="field">
+            <label>Код из приложения</label>
+            <input id="mfaEnrollCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="8">
+          </div>
+          <button class="btn-main" style="margin-top:8px" onclick="submitMfaTotpConfirmCode()">Подтвердить</button>
+        </div>`;
+  (document.getElementById('mfaEnrollCode') as HTMLInputElement | null)?.focus();
+}
+
+export async function submitMfaTotpConfirmCode(): Promise<void> {
+  const code = (document.getElementById('mfaEnrollCode') as HTMLInputElement | null)?.value?.trim() || '';
+  if (!code) {
+    toast('Введите код', 'err');
+    return;
+  }
+  try {
+    await window.apiClient.mfaTotpConfirm(authHeaders(true), code);
+  } catch (e: any) {
+    toast(e?.message || 'Неверный код — попробуйте ещё раз', 'err');
+    return;
+  }
+  mfaEnrollSecret = null;
+  let codes: string[] = [];
+  try {
+    const res = await window.apiClient.mfaRecoveryCodesGenerate(authHeaders(true));
+    codes = res.codes;
+  } catch (_) {
+    // TOTP уже подтверждён и это главное — recovery-коды всегда можно
+    // сгенерировать позже из профиля; не блокируем вход из-за этого шага.
+  }
+  const body = document.getElementById('gateBody');
+  if (!body) {
+    bootApp();
+    return;
+  }
+  if (!codes.length) {
+    toast('MFA настроен', 'ok');
+    bootApp();
+    return;
+  }
+  body.innerHTML = `
+        <div class="gate-card">
+          <div class="bind-glow"></div>
+          <div class="gate-title">Сохраните резервные коды</div>
+          <div class="gate-desc">Каждый код работает один раз — используйте, если потеряете доступ к приложению-аутентификатору. Сейчас они показаны единственный раз.</div>
+          <div style="font-family:monospace;font-size:14px;line-height:1.8;background:var(--card,#161618);border-radius:12px;padding:12px;margin:12px 0;user-select:all">
+            ${codes.map((c) => esc(c)).join('<br>')}
+          </div>
+          <button class="btn-main" onclick="ackMfaRecoveryCodesSaved()">Я сохранил(а) коды</button>
+        </div>`;
+}
+
+export function ackMfaRecoveryCodesSaved(): void {
+  toast('MFA настроен', 'ok');
+  bootApp();
+}
+
+export async function logoutFromMfaGate(): Promise<void> {
+  try {
+    await window.apiClient.logoutPhone(authHeaders(true));
+  } catch (_) {}
+  location.reload();
 }
 
 export async function bootApp(): Promise<void> {
@@ -470,6 +668,13 @@ export async function bootApp(): Promise<void> {
     if (me?.bound) {
       hideAccessGate();
       if (typeof applyBranding === 'function') applyBranding();
+      // 20.52.1 — backend уже физически блокирует все остальные защищённые
+      // роуты в этом состоянии (auth/guards.ts); этот экран — единственный
+      // путь дальше для privileged-аккаунта без MFA.
+      if (me?.mfa_enrollment_required) {
+        showMfaEnrollmentGate();
+        return;
+      }
       applyRoleGatedNav();
       enterHomeOrSupervisorShell();
       return;
@@ -490,6 +695,10 @@ export async function bootApp(): Promise<void> {
         me = await window.apiClient.getMe(authHeaders());
       } catch (_) {}
       hideAccessGate();
+      if (me?.mfa_enrollment_required) {
+        showMfaEnrollmentGate();
+        return;
+      }
       applyRoleGatedNav();
       enterHomeOrSupervisorShell();
       maybeOfferTutorial();
@@ -521,6 +730,10 @@ export async function bootApp(): Promise<void> {
     // секций сайдбара — общая функция applyRoleGatedNav() (см. выше);
     // 20.40.2 — раньше жила только здесь инлайн, не-Telegram/404/catch
     // ветки ниже её не вызывали вообще.
+    if (me?.mfa_enrollment_required) {
+      showMfaEnrollmentGate();
+      return;
+    }
     applyRoleGatedNav();
 
     enterHomeOrSupervisorShell();
@@ -532,6 +745,10 @@ export async function bootApp(): Promise<void> {
       me = await window.apiClient.getMe(authHeaders());
     } catch (_) {}
     hideAccessGate();
+    if (me?.mfa_enrollment_required) {
+      showMfaEnrollmentGate();
+      return;
+    }
     applyRoleGatedNav();
     enterHomeOrSupervisorShell();
   }
@@ -979,6 +1196,11 @@ declare global {
     submitPhoneLogin: typeof submitPhoneLogin;
     submitPhoneRegister: typeof submitPhoneRegister;
     submitPasswordReset: typeof submitPasswordReset;
+    submitMfaLoginCode: typeof submitMfaLoginCode;
+    submitMfaTotpEnrollStart: typeof submitMfaTotpEnrollStart;
+    submitMfaTotpConfirmCode: typeof submitMfaTotpConfirmCode;
+    ackMfaRecoveryCodesSaved: typeof ackMfaRecoveryCodesSaved;
+    logoutFromMfaGate: typeof logoutFromMfaGate;
   }
 }
 window.bootApp = bootApp;
@@ -998,6 +1220,11 @@ window.showLoginGate = showLoginGate;
 window.submitPhoneLogin = submitPhoneLogin;
 window.submitPhoneRegister = submitPhoneRegister;
 window.submitPasswordReset = submitPasswordReset;
+window.submitMfaLoginCode = submitMfaLoginCode;
+window.submitMfaTotpEnrollStart = submitMfaTotpEnrollStart;
+window.submitMfaTotpConfirmCode = submitMfaTotpConfirmCode;
+window.ackMfaRecoveryCodesSaved = ackMfaRecoveryCodesSaved;
+window.logoutFromMfaGate = logoutFromMfaGate;
 
 // init
 bootApp();

@@ -13,7 +13,7 @@
 -- is channel-agnostic by design (mfa_step_up_tickets) — it works the
 -- same way whether the admin is authenticated via Telegram initData
 -- (no persistent session to attach freshness to) or a browser
--- employee_sessions row. See docs/ADR/009-mfa.md.
+-- employee_sessions row. See docs/ADR/009-mfa-step-up.md.
 
 -- Session-level "was MFA completed at all during this browser session"
 -- (AAL2) — separate concept from step-up (AAL3, per-action freshness).

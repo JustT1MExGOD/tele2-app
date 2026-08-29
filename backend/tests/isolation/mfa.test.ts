@@ -142,14 +142,35 @@ describe('MFA — login second factor, step-up, enrollment guards', () => {
     expect(await recoveryCodes.countRemainingRecoveryCodes(id)).toBe(9);
   });
 
-  it('/auth/mfa/step-up refuses to issue a ticket for an account with no confirmed factor (mfa_not_configured)', async () => {
+  it('/auth/mfa/step-up refuses to issue a ticket for an account with no confirmed factor', async () => {
     const app = await getApp();
     const org = await fx.createOrg('StepUp NoFactor Org');
-    const admin = await fx.createEmployee(org, { role: 'admin' });
+    // §2/PRIV-MFA-1 (20.52.1) — an admin/supervisor with no confirmed
+    // factor is now blocked by the broader requireActive() gate
+    // (auth/guards.ts) before this route's own, more specific
+    // mfa_not_configured check ever runs — the two checks answer the
+    // same underlying question ("does this account have MFA?"), the
+    // broader one just fires first for privileged roles now. Confirmed
+    // separately (non-privileged role) below.
+    const admin = await fx.createEmployee(org, { role: 'admin', mfa: false });
     const res = await app.inject({
       method: 'POST',
       url: '/auth/mfa/step-up',
       headers: authAs(admin.telegramId),
+      payload: { method: 'totp', code: '123456' }
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toBe('mfa_enrollment_required');
+  });
+
+  it('/auth/mfa/step-up still answers mfa_not_configured for a non-privileged role with no factor (broader gate does not apply)', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('StepUp NoFactor NonPriv Org');
+    const employee = await fx.createEmployee(org, { role: 'employee' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/mfa/step-up',
+      headers: authAs(employee.telegramId),
       payload: { method: 'totp', code: '123456' }
     });
     expect(res.statusCode).toBe(400);
@@ -378,7 +399,7 @@ describe('MFA — login second factor, step-up, enrollment guards', () => {
   it('/auth/mfa/status reflects enrollment_required for admin without any factor', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Status Org');
-    const admin = await fx.createEmployee(org, { role: 'admin' });
+    const admin = await fx.createEmployee(org, { role: 'admin', mfa: false });
     const res = await app.inject({ method: 'GET', url: '/auth/mfa/status', headers: authAs(admin.telegramId) });
     expect(res.statusCode).toBe(200);
     const body = res.json();

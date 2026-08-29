@@ -24,3 +24,24 @@ export function randomKey(): Buffer {
 export function randomNonce(): Buffer {
   return randomBytes(GCM_NONCE_LENGTH);
 }
+
+/**
+ * §10 (Auth Assurance Hardening, 20.52.1) — `Buffer.from(str, 'base64')`
+ * is not a validity check: Node silently skips characters outside the
+ * base64 alphabet and does not enforce canonical padding, so malformed
+ * or non-canonical input can still decode to a same-length buffer that
+ * differs from what the sender intended. Used everywhere a base64 string
+ * comes from outside this process (env vars, stored envelope fields)
+ * before it is trusted as key/nonce/tag/ciphertext material.
+ */
+const STRICT_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+/** Empty string is valid canonical base64 for a zero-length buffer (e.g.
+ * AES-GCM ciphertext of an empty plaintext) — rejected only when
+ * non-empty AND malformed/non-canonical. */
+export function strictBase64Decode(value: string): Buffer {
+  if (typeof value !== 'string' || !STRICT_BASE64_RE.test(value)) {
+    throw new Error('Malformed base64');
+  }
+  return Buffer.from(value, 'base64');
+}

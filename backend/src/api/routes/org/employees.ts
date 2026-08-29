@@ -9,12 +9,13 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { withTransaction } from '../../../data/db/index.js';
-import { requireActive, requireManager, canAssignRole, resolveViewOrgId, requireEmployeeInOrg, Role } from '../../../auth/guards.js';
+import { requireActive, requireManager, canAssignRole, resolveViewOrgId, requireEmployeeInOrg, isMfaMandatoryForRole, Role } from '../../../auth/guards.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
 import { claimIdempotencyKey } from '../../../data/repositories/sync-log.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as supervisorSectorsRepo from '../../../data/repositories/supervisor-sectors.js';
+import * as sessionsRepo from '../../../data/repositories/sessions.js';
 import { invalidate as invalidateScope } from '../../../core/shared/scope-cache.js';
 import { assertStepUp } from '../../../auth/step-up.js';
 import type { EmployeesListResponse, CreateEmployeeResponse } from '../../../shared/api-types.js';
@@ -215,13 +216,19 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
     }
 
-    // Step-up (20.52.0) — выдача роли admin требует свежего подтверждения
-    // MFA прямо перед этим конкретным действием, не «когда-то раньше в
-    // этой сессии»; см. auth/step-up.ts — получить step-up ticket вообще
-    // невозможно без хотя бы одного настроенного у actor'а фактора.
-    if (role === 'admin' && !(await assertStepUp(request, reply))) return;
-
     const beforeRole = await employeesRepo.getRole(Number(id));
+
+    // Step-up (20.52.0, расширено 20.52.1 §12) — выдача ЛЮБОЙ MFA-mandatory
+    // роли (не только admin — supervisor видит данные всего сектора,
+    // тот же класс риска) требует свежего подтверждения MFA прямо перед
+    // этим конкретным действием, не «когда-то раньше в этой сессии»; см.
+    // auth/step-up.ts — получить step-up ticket вообще невозможно без
+    // хотя бы одного настроенного у actor'а фактора. Только на реальную
+    // эскалацию (новая роль ещё не была этой), не на переподтверждение
+    // уже privileged-роли лишний раз.
+    const isEscalation = isMfaMandatoryForRole(role) && role !== beforeRole;
+    if (isEscalation && !(await assertStepUp(request, reply))) return;
+
     const orgId = resolveViewOrgId(request.user!, b.org_id);
 
     // 19.23.0 (Audit Trail): смена роли + пересборка supervisor_sectors +
@@ -247,6 +254,20 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
       }, q);
       return res;
     });
+
+    // §14/15/ROLE-1 (20.52.1) — эскалация в privileged-роль отзывает ВСЕ
+    // активные сессии сотрудника: без этого уже открытая (AAL1, до
+    // назначения роли) browser-сессия молча унаследовала бы admin/
+    // supervisor-доступ на следующий же запрос (role читается заново из
+    // БД на каждый запрос, principal.ts::loadUser), не пройдя MFA вообще.
+    // Вне транзакции, best-effort, тем же принципом, что invalidateScope
+    // ниже — это защитная мера поверх уже закоммиченной смены роли, не
+    // часть её целостности.
+    if (isEscalation) {
+      await sessionsRepo.deleteAllForEmployee(Number(id)).catch((e: any) =>
+        console.error('revoke sessions on role escalation:', e?.message || e)
+      );
+    }
 
     // Инвалидация вне транзакции намеренно — кэш только про производительность
     // чтения, не про целостность данных (в отличие от withTransaction выше);

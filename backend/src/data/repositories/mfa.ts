@@ -10,7 +10,7 @@
 import { randomBytes, createHash } from 'crypto';
 import { query } from '../db/index.js';
 import { isEncryptionEnabled, createEnvKeyProvider, encryptField, decryptField, logDecryptFailure, type AadContext } from '../../security/crypto/index.js';
-import { DecryptionError, InvalidEnvelopeError } from '../../security/crypto/errors.js';
+import { DecryptionError, InvalidEnvelopeError, EncryptionDisabledError } from '../../security/crypto/errors.js';
 
 function generateOpaqueToken(): string {
   return randomBytes(32).toString('hex');
@@ -29,15 +29,22 @@ const totpAad = (employeeId: number): AadContext => ({ type: 'employee_totp.secr
  * needs the original Base32 secret, not a one-way hash) — protected by
  * the same envelope-encryption layer as support-ticket text (ADR-007),
  * own AAD context so a TOTP envelope can never be swapped for another
- * object's ciphertext. If DATA_ENCRYPTION_ENABLED is false the secret is
- * stored as a plain string in the same jsonb column shape the decrypt
- * path already treats as "not encrypted" for support.ts — TOTP enrollment
- * itself should not be offered in that configuration (see mfa/totp.ts).
+ * object's ciphertext.
+ *
+ * §8 (Auth Assurance Hardening, 20.52.1) — there is deliberately no
+ * plaintext fallback branch here. A TOTP secret is authentication
+ * material, not the kind of data that gets an honest "not encrypted yet"
+ * historical exception (unlike support-ticket text, see ADR-007) — if
+ * encryption is unavailable/misconfigured, enrollment must fail closed,
+ * not silently degrade to plaintext storage. Throws EncryptionDisabledError
+ * (propagated to the caller, see mfa/totp.ts::startTotpEnrollment) when
+ * DATA_ENCRYPTION_ENABLED is not true.
  */
 export async function upsertPendingTotp(employeeId: number, secretBase32: string): Promise<void> {
-  const stored = isEncryptionEnabled()
-    ? JSON.stringify(encryptField(secretBase32, totpAad(employeeId), createEnvKeyProvider()))
-    : JSON.stringify({ plain: secretBase32 });
+  if (!isEncryptionEnabled()) {
+    throw new EncryptionDisabledError();
+  }
+  const stored = JSON.stringify(encryptField(secretBase32, totpAad(employeeId), createEnvKeyProvider()));
   await query(
     `INSERT INTO employee_totp (employee_id, secret_encrypted, confirmed_at, last_time_step)
      VALUES ($1, $2::jsonb, NULL, NULL)
@@ -69,7 +76,9 @@ export async function getTotpSecret(employeeId: number): Promise<{ secret: strin
   if (!row) return null;
   const raw = row.secret_encrypted as any;
   try {
-    const secret = raw?.plain ?? decryptField(raw, totpAad(employeeId), createEnvKeyProvider());
+    // §8 — no plaintext-shaped fallback here on purpose: every row written
+    // by upsertPendingTotp() since it fails closed is a real envelope.
+    const secret = decryptField(raw, totpAad(employeeId), createEnvKeyProvider());
     return { secret, confirmed: !!row.confirmed_at, lastTimeStep: row.last_time_step === null ? null : Number(row.last_time_step) };
   } catch (e) {
     if (e instanceof DecryptionError || e instanceof InvalidEnvelopeError) {
@@ -251,19 +260,47 @@ export async function consumeWebAuthnChallenge(employeeId: number, kind: 'regist
 
 // ===== Step-up tickets =====
 
-export async function createStepUpTicket(employeeId: number, ttlMinutes: number): Promise<string> {
+/** `sessionToken` (§11, 20.52.1) — hashed and stored alongside the
+ * ticket when the issuing request carried a browser/phone session, so
+ * resolveStepUpTicket() can require the SAME session to present it.
+ * `undefined`/no session (Telegram) leaves the ticket employee-scoped
+ * only, unchanged from before this hardening pass. */
+export async function createStepUpTicket(employeeId: number, ttlMinutes: number, sessionToken?: string): Promise<string> {
   const token = generateOpaqueToken();
   await query(
-    `INSERT INTO mfa_step_up_tickets (employee_id, token_hash, expires_at) VALUES ($1,$2, now() + ($3 || ' minutes')::interval)`,
-    [employeeId, hashOpaqueToken(token), String(ttlMinutes)]
+    `INSERT INTO mfa_step_up_tickets (employee_id, token_hash, session_token_hash, expires_at)
+     VALUES ($1,$2,$3, now() + ($4 || ' minutes')::interval)`,
+    [employeeId, hashOpaqueToken(token), sessionToken ? hashToken(sessionToken) : null, String(ttlMinutes)]
   );
   return token;
 }
 
-export async function resolveStepUpTicket(employeeId: number, token: string): Promise<boolean> {
+/** `hashToken` reuses sessions.ts's own hashing scheme (both are plain
+ * sha256(token)) — duplicated here rather than imported to keep this
+ * repository's only cross-repository dependency to a single hash
+ * function, not a whole module. */
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * `sessionToken` — the CURRENT request's session token (undefined for
+ * Telegram). A ticket issued WITH a session binding only resolves for
+ * that exact session; a ticket issued without one (Telegram, or a
+ * browser ticket presented back over Telegram — not expected in
+ * practice, but not silently trusted either) requires the resolving
+ * request to also carry no session-bound expectation mismatch: NULL
+ * session_token_hash always matches (employee-scoped only, as before),
+ * a non-NULL one must equal the resolving request's own session hash.
+ */
+export async function resolveStepUpTicket(employeeId: number, token: string, sessionToken?: string): Promise<boolean> {
   const res = await query(
-    `SELECT id FROM mfa_step_up_tickets WHERE employee_id = $1 AND token_hash = $2 AND expires_at > now()`,
+    `SELECT session_token_hash FROM mfa_step_up_tickets
+     WHERE employee_id = $1 AND token_hash = $2 AND expires_at > now()`,
     [employeeId, hashOpaqueToken(token)]
   );
-  return res.rows.length > 0;
+  const row = res.rows[0];
+  if (!row) return false;
+  if (row.session_token_hash === null) return true;
+  return sessionToken !== undefined && row.session_token_hash === hashToken(sessionToken);
 }

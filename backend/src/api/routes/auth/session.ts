@@ -74,6 +74,26 @@ function esc(s: any) {
 const isProd = () => process.env.RAILWAY_ENVIRONMENT === 'production';
 
 /**
+ * §4/RESET-1 (Auth Assurance Hardening, 20.52.1) — shared by login and
+ * password reset: if the account has a confirmed second factor, primary
+ * credential verification alone (password OR a fresh password reset)
+ * must not issue a working session. Factored out so the two call sites
+ * can't silently drift — before this pass, /auth/login already had this
+ * gate but /auth/reset/:token did not, a real bypass (reset the password,
+ * skip MFA entirely).
+ */
+async function buildMfaChallengeResponse(employeeId: number): Promise<LoginResponse> {
+  const mfaToken = await mfaRepo.createPendingLogin(employeeId);
+  const methods: ('totp' | 'webauthn' | 'recovery_code')[] = [];
+  const creds = await mfaRepo.listActiveWebAuthnCredentials(employeeId);
+  if (creds.length) methods.push('webauthn');
+  if (await isTotpConfirmed(employeeId)) methods.push('totp');
+  const remaining = await mfaRepo.countActiveRecoveryCodes(employeeId);
+  if (remaining > 0) methods.push('recovery_code');
+  return { ok: true, mfa_required: true, mfa_token: mfaToken, mfa_methods: methods };
+}
+
+/**
  * 20.48.0 — t2_csrf ставится/ротируется ВМЕСТЕ с t2_session на каждый
  * новый логин (double-submit cookie, см. auth/csrf.ts::setCsrfCookie).
  */
@@ -203,19 +223,15 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       // возвращаем mfa_token (короткоживущий, single-use), реальная
       // cookie-сессия появляется только после POST /auth/mfa/login.
       // Роль здесь ни при чём — это свойство КОНКРЕТНОГО аккаунта (есть
-      // ли у него включённый фактор), не глобальная политика по роли
-      // (см. docs/ADR/010-mfa.md — mandatory для admin/supervisor
-      // обеспечивается тем, что все опасные действия требуют step-up,
-      // а step-up физически недостижим без хотя бы одного фактора).
+      // ли у него включённый фактор). Если аккаунт БЕЗ фактора и роль
+      // admin/supervisor — этот POST всё равно выдаст обычную сессию
+      // (AAL1), но auth/guards.ts::requireActive() заблокирует ею почти
+      // всё, кроме enrollment-роутов, на следующем же запросе (20.52.1,
+      // §2 — mandatory MFA перестал обеспечиваться только через step-up
+      // на опасные действия, см. docs/ADR/009-mfa-step-up.md, раздел
+      // "20.52.1 revision").
       if (await hasConfirmedMfaFactor(e.id)) {
-        const mfaToken = await mfaRepo.createPendingLogin(e.id);
-        const methods: ('totp' | 'webauthn' | 'recovery_code')[] = [];
-        const creds = await mfaRepo.listActiveWebAuthnCredentials(e.id);
-        if (creds.length) methods.push('webauthn');
-        if (await isTotpConfirmed(e.id)) methods.push('totp');
-        const remaining = await mfaRepo.countActiveRecoveryCodes(e.id);
-        if (remaining > 0) methods.push('recovery_code');
-        return { ok: true, mfa_required: true, mfa_token: mfaToken, mfa_methods: methods };
+        return buildMfaChallengeResponse(e.id);
       }
 
       const token = await sessionsRepo.createSession(e.id, false, e.role);
@@ -252,6 +268,14 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       // 20.48.0 — смена пароля инвалидирует все активные browser-сессии
       // (устройство A украдено → пароль меняют на B → A не остаётся рабочим).
       await sessionsRepo.deleteAllForEmployee(reset.employee_id);
+
+      // §4/RESET-1 (20.52.1) — раньше сброс пароля ВСЕГДА сразу выдавал
+      // рабочую сессию, даже для аккаунта с настроенным MFA — реальный
+      // обход второго фактора (укради/сбрось пароль → готовая сессия без
+      // единого MFA-кода). Теперь та же ветка, что и обычный логин.
+      if (await hasConfirmedMfaFactor(reset.employee_id)) {
+        return buildMfaChallengeResponse(reset.employee_id);
+      }
 
       const role = await employeesRepo.getRole(reset.employee_id);
       const sessionToken = await sessionsRepo.createSession(reset.employee_id, false, role);

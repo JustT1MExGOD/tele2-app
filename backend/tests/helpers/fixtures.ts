@@ -6,6 +6,8 @@
  */
 import { query } from '../../src/data/db/index.js';
 import { normalizePhone } from '../../src/utils/phone.js';
+import { startTotpEnrollment, confirmTotpEnrollment } from '../../src/auth/mfa/totp.js';
+import { generate as generateTotp } from 'otplib';
 
 let counter = 0;
 /** Уникальный префикс на тестовый прогон — safety net на случай, если
@@ -42,9 +44,27 @@ export class TestFixtures {
     return id;
   }
 
+  /**
+   * §2/PRIV-MFA-1 (Auth Assurance Hardening, 20.52.1) — auth/guards.ts
+   * now blocks any requireActive()-gated route for an admin/supervisor
+   * principal with no confirmed MFA factor (see auth/assurance.ts). Most
+   * isolation tests create admin/supervisor fixtures via createEmployee()
+   * below purely to exercise SOME OTHER route's business logic, not to
+   * test the MFA-enrollment gate itself — auto-enrolling here means the
+   * one centralized fixture stays correct for the whole suite instead of
+   * every individual test file having to know about MFA. Tests that
+   * specifically need an UN-enrolled privileged account (to test the
+   * gate itself) pass `mfa: false`.
+   */
+  async enrollTotpFor(employeeId: number): Promise<void> {
+    const enrollment = await startTotpEnrollment(employeeId, `fixture-${employeeId}`);
+    const code = await generateTotp({ secret: enrollment.secret, epoch: Math.floor(Date.now() / 1000) });
+    await confirmTotpEnrollment(employeeId, code);
+  }
+
   async createEmployee(
     orgId: string,
-    opts: { role?: Role; fullName?: string; telegramId?: number | null } = {}
+    opts: { role?: Role; fullName?: string; telegramId?: number | null; mfa?: boolean } = {}
   ): Promise<{ id: number; telegramId: number }> {
     // telegramId: null — незанятая карточка (для тестов /me/bind); undefined —
     // сгенерировать случайный, как раньше.
@@ -70,6 +90,10 @@ export class TestFixtures {
         `INSERT INTO identities (employee_id, provider, provider_key) VALUES ($1, 'telegram', $2)`,
         [id, String(telegramId)]
       );
+    }
+    const role = opts.role || 'employee';
+    if ((role === 'admin' || role === 'supervisor') && opts.mfa !== false) {
+      await this.enrollTotpFor(id);
     }
     return { id, telegramId: telegramId as number };
   }

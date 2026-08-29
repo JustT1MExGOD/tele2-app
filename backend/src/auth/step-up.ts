@@ -19,8 +19,14 @@ import * as mfaRepo from '../data/repositories/mfa.js';
 
 export const STEP_UP_TICKET_TTL_MINUTES = 10;
 
-export async function issueStepUpTicket(employeeId: number): Promise<string> {
-  return mfaRepo.createStepUpTicket(employeeId, STEP_UP_TICKET_TTL_MINUTES);
+/** `sessionToken` (§11, 20.52.1) — binds the ticket to the caller's
+ * current browser/phone session where one exists (request.sessionToken,
+ * set by auth/providers/phone.ts), so a stolen ticket can't be replayed
+ * from a different session of the same employee. Undefined for
+ * Telegram — that channel has no session object to bind to (ADR-005),
+ * the ticket stays employee-scoped only, same as before this hardening. */
+export async function issueStepUpTicket(employeeId: number, sessionToken?: string): Promise<string> {
+  return mfaRepo.createStepUpTicket(employeeId, STEP_UP_TICKET_TTL_MINUTES, sessionToken);
 }
 
 /** Boolean-returning check, same calling convention as requireManager()/
@@ -35,7 +41,7 @@ export async function assertStepUp(request: FastifyRequest, reply: FastifyReply)
     return false;
   }
   const token = request.headers['x-step-up-token'] as string | undefined;
-  if (!token || !(await mfaRepo.resolveStepUpTicket(employeeId, token))) {
+  if (!token || !(await mfaRepo.resolveStepUpTicket(employeeId, token, request.sessionToken))) {
     reply.code(403).send({
       error: 'step_up_required',
       message: 'Для этого действия нужно свежее подтверждение MFA'

@@ -17,6 +17,8 @@ import { resolveTelegramIdentity } from './providers/telegram.js';
 import { resolvePhoneIdentity } from './providers/phone.js';
 import { loadUser } from './principal.js';
 import type { AuthUser } from './principal.js';
+import { checkPrivilegedAssurance } from './assurance.js';
+export { MFA_MANDATORY_ROLES, isMfaMandatoryForRole } from './assurance.js';
 
 export type { Role, AccessStatus, AuthUser, Principal } from './principal.js';
 export { ROLE_LEVEL, canAssignRole, loadUser } from './principal.js';
@@ -54,6 +56,17 @@ export async function authPlugin(request: FastifyRequest, _reply: FastifyReply) 
   if (request.user?.employee_id) {
     request.log = request.log.child({ employee_id: request.user.employee_id, org_id: request.user.org_id });
   }
+  // Auth Assurance Hardening (20.52.1, PRIV-MFA-1) — computed once here
+  // (already async, runs once per request) rather than inside every
+  // requireActive() call — see auth/assurance.ts for what this actually
+  // checks and why it differs for Telegram vs browser/phone sessions.
+  if (request.user?.employee_id) {
+    request.mfaAssurance = await checkPrivilegedAssurance(
+      request.user.employee_id,
+      request.user.role,
+      request.sessionMfaVerifiedAt
+    );
+  }
 }
 
 export function requireAuth(request: FastifyRequest, reply: FastifyReply) {
@@ -78,7 +91,16 @@ export function requireAuth(request: FastifyRequest, reply: FastifyReply) {
   return true;
 }
 
-export function requireActive(request: FastifyRequest, reply: FastifyReply) {
+export interface RequireActiveOpts {
+  /** §2/PRIV-MFA-2 — the MFA enrollment/status/logout endpoints must
+   * remain reachable for a privileged account stuck in the
+   * mfa_enrollment_required state, or it could never complete enrollment
+   * at all (see auth/assurance.ts). Every OTHER requireActive()-gated
+   * route stays blocked for such an account until it enrolls. */
+  allowMfaEnrollment?: boolean;
+}
+
+export function requireActive(request: FastifyRequest, reply: FastifyReply, opts: RequireActiveOpts = {}) {
   const u = request.user;
   if (!u || u.access_status === 'none' || !u.employee_id) {
     if (request.authError === 'phone_expired') {
@@ -110,6 +132,21 @@ export function requireActive(request: FastifyRequest, reply: FastifyReply) {
       error: u.access_status,
       message: 'Доступ закрыт. Обратитесь к управляющему.'
     });
+    return false;
+  }
+  const assurance = request.mfaAssurance;
+  if (!opts.allowMfaEnrollment && assurance && assurance.ok === false) {
+    if (assurance.reason === 'mfa_enrollment_required') {
+      reply.code(403).send({
+        error: 'mfa_enrollment_required',
+        message: 'Для вашей роли обязателен MFA — настройте его перед продолжением'
+      });
+    } else {
+      reply.code(403).send({
+        error: 'mfa_reverification_required',
+        message: 'Эта сессия была начата до включения MFA — войдите заново'
+      });
+    }
     return false;
   }
   return true;

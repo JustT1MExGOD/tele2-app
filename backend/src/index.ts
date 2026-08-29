@@ -11,7 +11,7 @@ import { todayMoscow } from './utils/date.js';
 import { runSmartAlertsTick } from './core/alerts/service.js';
 import { announceReleaseIfNeeded } from './platform/notifications/release-announce.js';
 import { runJob } from './cron/job-logger.js';
-import { assertEncryptionConfigValid, CryptoConfigError } from './security/crypto/index.js';
+import { assertEncryptionConfigValid, assertProductionEncryptionRequired, CryptoConfigError } from './security/crypto/index.js';
 
 /**
  * Раньше падение миграции/старта было видно только в Railway logs, которые
@@ -52,6 +52,19 @@ if (process.env.RAILWAY_ENVIRONMENT === 'production') {
       '❌ Нет BOT_TOKEN в production, сервер не стартует',
       new Error('BOT_TOKEN is required in production')
     );
+  }
+  // Auth Assurance Hardening (20.52.1, §9) — TOTP secrets are real
+  // authentication material now (data/repositories/mfa.ts refuses to
+  // store them any other way, see the fail-closed guard there), so
+  // production silently running with DATA_ENCRYPTION_ENABLED off is no
+  // longer an acceptable degraded mode — it must not start at all.
+  try {
+    assertProductionEncryptionRequired();
+  } catch (e) {
+    if (e instanceof CryptoConfigError) {
+      await alertAndExit('❌ Шифрование обязательно в production, сервер не стартует', e);
+    }
+    throw e;
   }
 }
 

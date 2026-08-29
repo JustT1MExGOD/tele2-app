@@ -16,8 +16,10 @@ import {
   loadUser,
   resolveViewOrgId,
   canAssignRole,
+  isMfaMandatoryForRole,
   type Role
 } from '../../../auth/guards.js';
+import { assertStepUp } from '../../../auth/step-up.js';
 import { bot } from '../../../integrations/telegram/bot.js';
 import { withTransaction } from '../../../data/db/index.js';
 import { listActiveOrgsPublic } from '../../../core/shared/tenant.js';
@@ -25,6 +27,7 @@ import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as accessRequestsRepo from '../../../data/repositories/access-requests.js';
 import * as supervisorSectorsRepo from '../../../data/repositories/supervisor-sectors.js';
 import * as storesRepo from '../../../data/repositories/stores.js';
+import * as sessionsRepo from '../../../data/repositories/sessions.js';
 import { invalidate as invalidateScope } from '../../../core/shared/scope-cache.js';
 import type {
   AccessStatusResponse,
@@ -242,6 +245,11 @@ export async function registerAccessRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Заявка не принадлежит вашей сети' });
     }
 
+    // §12 (20.52.1) — approve — второй, отдельный от PATCH /employees/:id/role
+    // код-путь, которым можно выдать роль admin/supervisor (approving с
+    // явным role в теле); тот же класс риска, тот же свежий MFA-барьер.
+    if (isMfaMandatoryForRole(role) && !(await assertStepUp(request, reply))) return;
+
     // 20.15.0: раньше "уже не pending" проверялось ЗДЕСЬ, до транзакции —
     // это читало status нативно (не CAS), поэтому при двух одновременных
     // approve тот, что дошёл до этой строки чуть позже, чем первый успел
@@ -297,6 +305,18 @@ export async function registerAccessRoutes(app: FastifyInstance) {
 
     if (employeeId === null) {
       return { ok: true, deduped: true, employee_id: null, role };
+    }
+
+    // §14/15/ROLE-1 (20.52.1) — тот же приём, что PATCH /employees/:id/role:
+    // если approve выдаёт privileged-роль УЖЕ существующей карточке
+    // (claim-путь), её возможная существующая browser-сессия не должна
+    // молча унаследовать admin/supervisor-доступ без MFA. Для только что
+    // созданного сотрудника (new-employee-путь) сессий ещё физически нет —
+    // no-op, но вызывать безусловно проще, чем разветвлять по ветке.
+    if (isMfaMandatoryForRole(role)) {
+      await sessionsRepo.deleteAllForEmployee(employeeId).catch((e: any) =>
+        console.error('revoke sessions on approve-with-privileged-role:', e?.message || e)
+      );
     }
 
     if (bot && req.telegram_id) {

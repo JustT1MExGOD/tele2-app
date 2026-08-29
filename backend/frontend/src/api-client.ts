@@ -83,6 +83,8 @@ import type {
   LogoutResponse,
   ConsumeResetRequest,
   ConsumeResetResponse,
+  MfaStatusResponse,
+  MfaTotpEnrollment,
   ListSessionsResponse,
   RevokeSessionResponse,
   RevokeOtherSessionsResponse,
@@ -517,6 +519,30 @@ export async function consumePasswordReset(
   return request(`/auth/reset/${encodeURIComponent(token)}`, headers, { method: 'POST', body });
 }
 
+// ---------- MFA (20.52.1, Auth Assurance Hardening) ----------
+export async function loginMfa(
+  headers: Record<string, string>,
+  body: { mfa_token: string; method: 'totp' | 'recovery_code'; code: string }
+): Promise<LoginResponse> {
+  return request('/auth/login/mfa', headers, { method: 'POST', body });
+}
+
+export async function getMfaStatus(headers: Record<string, string>): Promise<MfaStatusResponse> {
+  return request('/auth/mfa/status', headers);
+}
+
+export async function mfaTotpEnroll(headers: Record<string, string>): Promise<MfaTotpEnrollment> {
+  return request('/auth/mfa/totp/enroll', headers, { method: 'POST', body: {} });
+}
+
+export async function mfaTotpConfirm(headers: Record<string, string>, code: string): Promise<{ ok: true }> {
+  return request('/auth/mfa/totp/confirm', headers, { method: 'POST', body: { code } });
+}
+
+export async function mfaRecoveryCodesGenerate(headers: Record<string, string>): Promise<{ ok: true; codes: string[] }> {
+  return request('/auth/mfa/recovery-codes/generate', headers, { method: 'POST', body: {} });
+}
+
 // ---------- Активные сессии (20.48.0, Web Security & Trust Layer) ----------
 export async function listSessions(headers: Record<string, string>): Promise<ListSessionsResponse> {
   return request('/auth/sessions', headers);
@@ -926,6 +952,11 @@ declare global {
       loginPhone: typeof loginPhone;
       logoutPhone: typeof logoutPhone;
       consumePasswordReset: typeof consumePasswordReset;
+      loginMfa: typeof loginMfa;
+      getMfaStatus: typeof getMfaStatus;
+      mfaTotpEnroll: typeof mfaTotpEnroll;
+      mfaTotpConfirm: typeof mfaTotpConfirm;
+      mfaRecoveryCodesGenerate: typeof mfaRecoveryCodesGenerate;
       listSessions: typeof listSessions;
       revokeSession: typeof revokeSession;
       revokeOtherSessions: typeof revokeOtherSessions;
@@ -1037,6 +1068,11 @@ window.apiClient = {
   loginPhone,
   logoutPhone,
   consumePasswordReset,
+  loginMfa,
+  getMfaStatus,
+  mfaTotpEnroll,
+  mfaTotpConfirm,
+  mfaRecoveryCodesGenerate,
   listSessions,
   revokeSession,
   revokeOtherSessions,

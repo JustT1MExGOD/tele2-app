@@ -34,6 +34,7 @@ const CLEAN_FILES = [
   'src/auth/mfa/recovery-codes.ts',
   'src/auth/mfa/index.ts',
   'src/auth/step-up.ts',
+  'src/auth/assurance.ts',
   'src/api/routes/auth/sessions-admin.ts',
   'src/api/routes/analytics/forecast.ts',
   'src/api/routes/analytics/heatmap.ts',

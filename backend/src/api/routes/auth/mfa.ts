@@ -1,13 +1,23 @@
 /**
- * MFA (20.52.0) — TOTP/WebAuthn/recovery-codes enrollment + management,
- * login-time second-factor verification, and step-up ticket issuance.
- * See docs/ADR/010-mfa.md for the architecture (why WebAuthn-first,
- * why step-up is a channel-agnostic ticket, why enrollment is enforced
- * via step-up-gated actions rather than a blanket route interceptor).
+ * MFA (20.52.0, hardened 20.52.1) — TOTP/WebAuthn/recovery-codes
+ * enrollment + management, login-time second-factor verification, and
+ * step-up ticket issuance. See docs/ADR/009-mfa-step-up.md for the
+ * architecture (why WebAuthn-first, why step-up is a channel-agnostic
+ * ticket) and its "20.52.1 revision" section for why privileged access
+ * is now blocked outright (not just dangerous actions) until MFA is
+ * enrolled — see auth/assurance.ts.
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireAuth, requireActive, requireManager, requireEmployeeInOrg, resolveViewOrgId } from '../../../auth/guards.js';
+import {
+  requireAuth,
+  requireActive,
+  requireManager,
+  requireEmployeeInOrg,
+  resolveViewOrgId,
+  MFA_MANDATORY_ROLES,
+  isMfaMandatoryForRole
+} from '../../../auth/guards.js';
 import { assertStepUp, issueStepUpTicket } from '../../../auth/step-up.js';
 import { hasConfirmedMfaFactor } from '../../../auth/mfa/index.js';
 import * as totp from '../../../auth/mfa/totp.js';
@@ -17,6 +27,7 @@ import * as mfaRepo from '../../../data/repositories/mfa.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
+import { EncryptionDisabledError } from '../../../security/crypto/errors.js';
 import { setSessionCookie } from './session.js';
 import type { MfaStatusResponse } from '../../../shared/api-types.js';
 
@@ -44,22 +55,19 @@ const WebAuthnRegisterVerifyBody = Type.Object({
 });
 type WebAuthnRegisterVerifyBody = Static<typeof WebAuthnRegisterVerifyBody>;
 
-/** Роли, для которых MFA — обязательная политика (§3 брифа). Само
- * ограничение реализовано не блокировкой всего API до enrollment'а (см.
- * ADR-010), а тем, что все step-up-gated опасные действия физически
- * недостижимы без хотя бы одного настроенного фактора — это поле только
- * управляет тем, что показывает /auth/mfa/status фронтенду как "нужно
- * дозаполнить". */
-const MFA_MANDATORY_ROLES = new Set(['admin', 'supervisor']);
-
 /**
  * Единая точка проверки одного из трёх факторов — переиспользуется и
  * login-time verify (POST /auth/mfa/login), и step-up (POST /auth/mfa/step-up).
  * WebAuthn — двухшаговая церемония (нужен отдельный /webauthn/options
  * запрос ДО этого вызова, challenge уже должен быть создан), TOTP и
- * recovery_code — однодверные.
+ * recovery_code — однодверные. `role` определяет, требуем ли UV от
+ * WebAuthn-ответа (§7, 20.52.1) — privileged-роли строго, остальные мягко.
  */
-async function verifyFactor(employeeId: number, body: { method: string; code?: string; response?: unknown }): Promise<boolean> {
+async function verifyFactor(
+  employeeId: number,
+  role: string | null | undefined,
+  body: { method: string; code?: string; response?: unknown }
+): Promise<boolean> {
   if (body.method === 'totp') {
     return body.code ? totp.verifyConfirmedTotp(employeeId, body.code) : false;
   }
@@ -68,7 +76,7 @@ async function verifyFactor(employeeId: number, body: { method: string; code?: s
   }
   if (body.method === 'webauthn') {
     if (!body.response) return false;
-    const result = await webauthn.finishAuthentication(employeeId, body.response as any);
+    const result = await webauthn.finishAuthentication(employeeId, body.response as any, isMfaMandatoryForRole(role));
     return result.verified;
   }
   return false;
@@ -85,7 +93,8 @@ export async function registerMfaRoutes(app: FastifyInstance) {
       const pending = await mfaRepo.resolvePendingLogin(mfa_token);
       if (!pending) return reply.code(400).send({ error: 'invalid_or_expired_mfa_token' });
       try {
-        return await webauthn.startAuthentication(pending.employee_id);
+        const role = await employeesRepo.getRole(pending.employee_id);
+        return await webauthn.startAuthentication(pending.employee_id, isMfaMandatoryForRole(role));
       } catch {
         return reply.code(503).send({ error: 'webauthn_not_configured' });
       }
@@ -100,11 +109,27 @@ export async function registerMfaRoutes(app: FastifyInstance) {
       const pending = await mfaRepo.resolvePendingLogin(body.mfa_token);
       if (!pending) return reply.code(400).send({ error: 'invalid_or_expired_mfa_token', message: 'Ссылка на вход истекла, начните заново' });
 
-      const ok = await verifyFactor(pending.employee_id, body);
+      const role = await employeesRepo.getRole(pending.employee_id);
+      const ok = await verifyFactor(pending.employee_id, role, body);
       if (!ok) return reply.code(401).send({ error: 'invalid_mfa_code', message: 'Неверный код' });
 
       await mfaRepo.consumePendingLogin(pending.id);
-      const role = await employeesRepo.getRole(pending.employee_id);
+      if (body.method === 'recovery_code') {
+        // §16 — recovery-code login is a high-value security signal (the
+        // primary/preferred factor was unavailable) — worth its own audit
+        // trail entry independent of the generic MFA success path below.
+        const orgId = await employeesRepo.getOrgId(pending.employee_id);
+        await recordAudit({
+          orgId,
+          actorEmployeeId: pending.employee_id,
+          actorTelegramId: null,
+          action: 'mfa.recovery_code_used',
+          targetType: 'employee',
+          targetId: String(pending.employee_id),
+          requestId: request.id,
+          actorRole: role
+        });
+      }
       const token = await sessionsRepo.createSession(pending.employee_id, true, role);
       setSessionCookie(reply, token);
       return { ok: true };
@@ -118,7 +143,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!requireActive(request, reply)) return;
       try {
-        return await webauthn.startAuthentication(request.user!.employee_id!);
+        return await webauthn.startAuthentication(request.user!.employee_id!, isMfaMandatoryForRole(request.user!.role));
       } catch {
         return reply.code(503).send({ error: 'webauthn_not_configured' });
       }
@@ -133,15 +158,30 @@ export async function registerMfaRoutes(app: FastifyInstance) {
       const employeeId = request.user!.employee_id!;
       // Физически невозможно получить step-up ticket без хотя бы одного
       // настроенного фактора — это и есть реальное принудительное
-      // применение "нет MFA → нет опасных действий" (см. ADR-010),
-      // а не отдельный enrollment-гейт на каждый роут.
+      // применение "нет MFA → нет опасных действий" (см. ADR-009).
       if (!(await hasConfirmedMfaFactor(employeeId))) {
         return reply.code(400).send({ error: 'mfa_not_configured', message: 'Сначала настройте MFA (TOTP или ключ доступа)' });
       }
       const body = request.body as StepUpBody;
-      const ok = await verifyFactor(employeeId, body);
+      const ok = await verifyFactor(employeeId, request.user!.role, body);
       if (!ok) return reply.code(401).send({ error: 'invalid_mfa_code', message: 'Неверный код' });
-      const ticket = await issueStepUpTicket(employeeId);
+      if (body.method === 'recovery_code') {
+        await recordAudit({
+          orgId: request.user!.org_id,
+          actorEmployeeId: employeeId,
+          actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+          action: 'mfa.recovery_code_used',
+          targetType: 'employee',
+          targetId: String(employeeId),
+          requestId: request.id,
+          actorRole: request.user!.role
+        });
+      }
+      // §11 — bind the ticket to THIS browser/phone session where one
+      // exists, so a stolen ticket can't be replayed from a different
+      // session of the same employee; undefined (Telegram — no session
+      // object) leaves the ticket session-agnostic, same as before.
+      const ticket = await issueStepUpTicket(employeeId, request.sessionToken);
       return { ok: true, step_up_token: ticket };
     }
   );
@@ -149,7 +189,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
   // ===== Общий статус =====
 
   app.get('/auth/mfa/status', async (request, reply): Promise<MfaStatusResponse | undefined> => {
-    if (!requireActive(request, reply)) return;
+    if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
     const employeeId = request.user!.employee_id!;
     const totpConfirmed = await totp.isTotpConfirmed(employeeId);
     const creds = await webauthn.listCredentials(employeeId);
@@ -167,15 +207,22 @@ export async function registerMfaRoutes(app: FastifyInstance) {
   // ===== TOTP enrollment =====
 
   app.post('/auth/mfa/totp/enroll', async (request, reply) => {
-    if (!requireActive(request, reply)) return;
+    if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
     const user = request.user!;
     const label = String(user.full_name || user.telegram_id || user.employee_id);
-    const enrollment = await totp.startTotpEnrollment(user.employee_id!, label);
-    // Секрет отдаётся клиенту РОВНО один раз, на этом ответе — после
-    // confirm его больше никто не видит (§5: "never expose the secret
-    // again after enrollment unless the enrollment flow specifically
-    // requires it before confirmation" — здесь требует, это и есть тот момент).
-    return enrollment;
+    try {
+      const enrollment = await totp.startTotpEnrollment(user.employee_id!, label);
+      // Секрет отдаётся клиенту РОВНО один раз, на этом ответе — после
+      // confirm его больше никто не видит (§5: "never expose the secret
+      // again after enrollment unless the enrollment flow specifically
+      // requires it before confirmation" — здесь требует, это и есть тот момент).
+      return enrollment;
+    } catch (e) {
+      if (e instanceof EncryptionDisabledError) {
+        return reply.code(503).send({ error: 'totp_unavailable', message: 'TOTP временно недоступен — обратитесь к администратору' });
+      }
+      throw e;
+    }
   });
 
   app.post(
@@ -184,10 +231,25 @@ export async function registerMfaRoutes(app: FastifyInstance) {
     // лимита (1M комбинаций); тот же тир, что /auth/mfa/step-up.
     { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, schema: { body: TotpConfirmBody } },
     async (request, reply) => {
-      if (!requireActive(request, reply)) return;
+      if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
       const { code } = request.body as TotpConfirmBody;
       const ok = await totp.confirmTotpEnrollment(request.user!.employee_id!, code);
       if (!ok) return reply.code(400).send({ error: 'invalid_code', message: 'Неверный код — попробуйте ещё раз' });
+      // §6/ROLE-1 — a real factor was just proved server-side for THIS
+      // request; upgrade the current browser/phone session to AAL2 right
+      // now instead of forcing a redundant logout+relogin. No-ops for
+      // Telegram (no session token).
+      if (request.sessionToken) await sessionsRepo.markSessionMfaVerified(request.sessionToken);
+      await recordAudit({
+        orgId: request.user!.org_id,
+        actorEmployeeId: request.user!.employee_id,
+        actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+        action: 'mfa.totp_enabled',
+        targetType: 'employee',
+        targetId: String(request.user!.employee_id),
+        requestId: request.id,
+        actorRole: request.user!.role
+      });
       return { ok: true };
     }
   );
@@ -209,19 +271,30 @@ export async function registerMfaRoutes(app: FastifyInstance) {
     }
     if (!(await assertStepUp(request, reply))) return;
     await totp.disableTotp(employeeId);
+    await recordAudit({
+      orgId: request.user!.org_id,
+      actorEmployeeId: employeeId,
+      actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+      action: 'mfa.totp_disabled',
+      targetType: 'employee',
+      targetId: String(employeeId),
+      requestId: request.id,
+      actorRole: request.user!.role
+    });
     return { ok: true };
   });
 
   // ===== WebAuthn enrollment =====
 
   app.post('/auth/mfa/webauthn/register/options', async (request, reply) => {
-    if (!requireActive(request, reply)) return;
+    if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
     const user = request.user!;
     try {
       return await webauthn.startRegistration(
         user.employee_id!,
         String(user.telegram_id || user.employee_id),
-        String(user.full_name || 'T2 Sales')
+        String(user.full_name || 'T2 Sales'),
+        isMfaMandatoryForRole(user.role)
       );
     } catch {
       return reply.code(503).send({ error: 'webauthn_not_configured', message: 'WebAuthn недоступен в этом окружении' });
@@ -232,7 +305,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
     '/auth/mfa/webauthn/register/verify',
     { schema: { body: WebAuthnRegisterVerifyBody } },
     async (request, reply) => {
-      if (!requireActive(request, reply)) return;
+      if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
       const body = request.body as WebAuthnRegisterVerifyBody;
       const result = await webauthn.finishRegistration(
         request.user!.employee_id!,
@@ -240,12 +313,23 @@ export async function registerMfaRoutes(app: FastifyInstance) {
         body.device_name ? String(body.device_name).slice(0, 100) : null
       );
       if (!result.verified) return reply.code(400).send({ error: 'verification_failed' });
+      if (request.sessionToken) await sessionsRepo.markSessionMfaVerified(request.sessionToken);
+      await recordAudit({
+        orgId: request.user!.org_id,
+        actorEmployeeId: request.user!.employee_id,
+        actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+        action: 'mfa.webauthn_added',
+        targetType: 'employee',
+        targetId: String(request.user!.employee_id),
+        requestId: request.id,
+        actorRole: request.user!.role
+      });
       return { ok: true };
     }
   );
 
   app.get('/auth/mfa/webauthn/credentials', async (request, reply) => {
-    if (!requireActive(request, reply)) return;
+    if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
     const creds = await webauthn.listCredentials(request.user!.employee_id!);
     return creds.map((c) => ({
       id: c.id,
@@ -277,13 +361,23 @@ export async function registerMfaRoutes(app: FastifyInstance) {
     if (!(await assertStepUp(request, reply))) return;
     const revoked = await webauthn.revokeCredential(Number(id), employeeId);
     if (!revoked) return reply.code(404).send({ error: 'not_found' });
+    await recordAudit({
+      orgId: request.user!.org_id,
+      actorEmployeeId: employeeId,
+      actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+      action: 'mfa.webauthn_removed',
+      targetType: 'employee',
+      targetId: String(employeeId),
+      requestId: request.id,
+      actorRole: request.user!.role
+    });
     return { ok: true };
   });
 
   // ===== Recovery codes =====
 
   app.post('/auth/mfa/recovery-codes/generate', async (request, reply) => {
-    if (!requireActive(request, reply)) return;
+    if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
     const employeeId = request.user!.employee_id!;
     // Регенерация — если уже есть настроенный фактор, это заменяет
     // существующий набор кодов, поэтому требует step-up тем же приёмом,
@@ -293,6 +387,16 @@ export async function registerMfaRoutes(app: FastifyInstance) {
     // разрешаем без него только когда факторов ещё нет вообще.
     if (await hasConfirmedMfaFactor(employeeId)) {
       if (!(await assertStepUp(request, reply))) return;
+      await recordAudit({
+        orgId: request.user!.org_id,
+        actorEmployeeId: employeeId,
+        actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+        action: 'mfa.recovery_codes_regenerated',
+        targetType: 'employee',
+        targetId: String(employeeId),
+        requestId: request.id,
+        actorRole: request.user!.role
+      });
     }
     const codes = await recoveryCodes.generateRecoveryCodes(employeeId);
     // Коды отдаются один раз, здесь — дальше только их хеши в БД.
@@ -300,7 +404,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
   });
 
   app.get('/auth/mfa/recovery-codes/status', async (request, reply) => {
-    if (!requireActive(request, reply)) return;
+    if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
     const remaining = await recoveryCodes.countRemainingRecoveryCodes(request.user!.employee_id!);
     return { remaining };
   });

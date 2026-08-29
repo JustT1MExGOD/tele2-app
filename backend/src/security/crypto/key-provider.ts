@@ -21,7 +21,7 @@
  * env-gated фичи проекта (ALLOW_INSECURE_AUTH, GROQ_API_KEY).
  */
 import { CryptoConfigError } from './errors.js';
-import { AES_256_KEY_LENGTH } from './random.js';
+import { AES_256_KEY_LENGTH, strictBase64Decode } from './random.js';
 import type { KeyProvider, VersionedKey } from './types.js';
 
 export function isEncryptionEnabled(): boolean {
@@ -49,7 +49,7 @@ function parseKeks(): Record<string, Buffer> {
     }
     let key: Buffer;
     try {
-      key = Buffer.from(value, 'base64');
+      key = strictBase64Decode(value);
     } catch {
       throw new CryptoConfigError(`ENCRYPTION_KEKS["${version}"] is not valid base64`);
     }
@@ -84,6 +84,28 @@ export function assertEncryptionConfigValid(): void {
       `ENCRYPTION_ACTIVE_KEY_VERSION="${active}" has no matching entry in ENCRYPTION_KEKS`
     );
   }
+}
+
+/**
+ * §9 (Auth Assurance Hardening, 20.52.1) — `assertEncryptionConfigValid()`
+ * above is a no-op when the flag is off, which was fine while encryption
+ * only protected an optional feature (support-ticket text). Now that TOTP
+ * secrets — real authentication material — go through this same layer
+ * (data/repositories/mfa.ts refuses to store them any other way), a
+ * production server that starts with encryption OFF would silently make
+ * MFA enrollment unavailable rather than failing closed and loudly. This
+ * is checked separately from assertEncryptionConfigValid() (called only
+ * under RAILWAY_ENVIRONMENT=production, see index.ts) so local/dev/test
+ * runs keep working with the flag off by default.
+ */
+export function assertProductionEncryptionRequired(): void {
+  if (!isEncryptionEnabled()) {
+    throw new CryptoConfigError(
+      'DATA_ENCRYPTION_ENABLED must be true in production — TOTP secrets and other ' +
+      'sensitive fields require the envelope-encryption layer to be active, not silently disabled'
+    );
+  }
+  assertEncryptionConfigValid();
 }
 
 export function createEnvKeyProvider(): KeyProvider {

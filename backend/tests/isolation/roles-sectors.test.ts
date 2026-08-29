@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getApp, authAs } from '../helpers/app.js';
+import { getApp, authAs, setupTotpAndStepUp } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 
@@ -97,10 +97,13 @@ describe('Изоляция назначения ролей и секторов',
   it('PATCH /employees/:id/role — role=supervisor С sector_id реально пишет строку в supervisor_sectors', async () => {
     const app = await getApp();
     const candidate = await fx.createEmployee(orgA, { role: 'employee' });
+    // §12 (20.52.1) — назначение supervisor теперь тоже step-up-gated
+    // эскалация (тот же класс риска, что admin), не только сам admin-роут.
+    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
     const res = await app.inject({
       method: 'PATCH',
       url: `/employees/${candidate.id}/role`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json', ...stepUp },
       payload: { role: 'supervisor', sector_id: sectorId }
     });
     expect(res.statusCode).toBe(200);
@@ -112,10 +115,11 @@ describe('Изоляция назначения ролей и секторов',
   it('PATCH /employees/:id/role — role=supervisor БЕЗ sector_id не пишет строку и не падает (текущее осознанное поведение — "пропустить, назначу позже")', async () => {
     const app = await getApp();
     const candidate = await fx.createEmployee(orgA, { role: 'employee' });
+    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
     const res = await app.inject({
       method: 'PATCH',
       url: `/employees/${candidate.id}/role`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json', ...stepUp },
       payload: { role: 'supervisor' }
     });
     expect(res.statusCode).toBe(200);

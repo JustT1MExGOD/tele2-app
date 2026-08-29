@@ -12,7 +12,13 @@ import { hkdfDerive } from '../../src/security/crypto/kdf.js';
 import { canonicalAad, decryptField, encryptField, isEncryptedEnvelope, assertEnvelopeShape } from '../../src/security/crypto/envelope.js';
 import { wrapDek, unwrapDek } from '../../src/security/crypto/keyring.js';
 import { DecryptionError, InvalidEnvelopeError, UnknownKeyVersionError } from '../../src/security/crypto/errors.js';
-import { assertEncryptionConfigValid, createEnvKeyProvider, isEncryptionEnabled } from '../../src/security/crypto/key-provider.js';
+import {
+  assertEncryptionConfigValid,
+  assertProductionEncryptionRequired,
+  createEnvKeyProvider,
+  isEncryptionEnabled
+} from '../../src/security/crypto/key-provider.js';
+import { strictBase64Decode } from '../../src/security/crypto/random.js';
 import type { EncryptedEnvelope, KeyProvider } from '../../src/security/crypto/types.js';
 
 function testKeyProvider(versions: Record<string, string>, activeVersion: string): KeyProvider {
@@ -339,5 +345,67 @@ describe('security/crypto/key-provider — env parsing (§4/§8/§38)', () => {
     process.env.ENCRYPTION_ACTIVE_KEY_VERSION = 'v1';
     expect(() => assertEncryptionConfigValid()).toThrow();
     restoreEnv();
+  });
+
+  // §9/CRYPTO-1 (Auth Assurance Hardening, 20.52.1)
+  it('assertProductionEncryptionRequired() throws when the flag is off', () => {
+    restoreEnv();
+    delete process.env.DATA_ENCRYPTION_ENABLED;
+    expect(() => assertProductionEncryptionRequired()).toThrow(/DATA_ENCRYPTION_ENABLED must be true/);
+    restoreEnv();
+  });
+
+  it('assertProductionEncryptionRequired() throws when the flag is on but misconfigured (delegates to assertEncryptionConfigValid)', () => {
+    restoreEnv();
+    process.env.DATA_ENCRYPTION_ENABLED = 'true';
+    delete process.env.ENCRYPTION_KEKS;
+    expect(() => assertProductionEncryptionRequired()).toThrow();
+    restoreEnv();
+  });
+
+  it('assertProductionEncryptionRequired() passes when the flag is on and correctly configured', () => {
+    restoreEnv();
+    process.env.DATA_ENCRYPTION_ENABLED = 'true';
+    process.env.ENCRYPTION_KEKS = JSON.stringify({ v1: Buffer.alloc(32, 1).toString('base64') });
+    process.env.ENCRYPTION_ACTIVE_KEY_VERSION = 'v1';
+    expect(() => assertProductionEncryptionRequired()).not.toThrow();
+    restoreEnv();
+  });
+});
+
+// §10/CRYPTO-1 (Auth Assurance Hardening, 20.52.1) — Buffer.from(str,'base64')
+// is not a validity check (silently drops invalid characters instead of
+// throwing); strictBase64Decode() is the shared helper used everywhere a
+// base64 string is trusted as key/nonce/tag/ciphertext material.
+describe('security/crypto/random — strictBase64Decode (§10)', () => {
+  it('accepts canonical base64, including the empty string (zero-length buffer)', () => {
+    expect(strictBase64Decode('').length).toBe(0);
+    const key = Buffer.alloc(32, 9);
+    expect(strictBase64Decode(key.toString('base64')).equals(key)).toBe(true);
+  });
+
+  it('rejects characters outside the base64 alphabet', () => {
+    expect(() => strictBase64Decode('###not-base64###')).toThrow();
+    expect(() => strictBase64Decode('abc def')).toThrow(); // space
+    expect(() => strictBase64Decode('abc_def')).toThrow(); // base64url, not base64
+  });
+
+  it('rejects incorrect padding/length', () => {
+    expect(() => strictBase64Decode('QQ')).toThrow(); // 2 chars, no padding — not a valid block
+    expect(() => strictBase64Decode('QQ===')).toThrow(); // too much padding
+  });
+
+  it('a malformed KEK that Buffer.from() would silently accept is rejected in ENCRYPTION_KEKS parsing', () => {
+    const ORIGINAL = { ...process.env };
+    process.env.DATA_ENCRYPTION_ENABLED = 'true';
+    // 32 valid base64 chars decode to 24 bytes normally, but appending a
+    // stray non-alphabet character is exactly the kind of input
+    // Buffer.from(str,'base64') decodes anyway (silently dropping it) —
+    // this must now be rejected before it ever reaches key-length checks.
+    process.env.ENCRYPTION_KEKS = JSON.stringify({ v1: Buffer.alloc(32, 1).toString('base64') + '!' });
+    process.env.ENCRYPTION_ACTIVE_KEY_VERSION = 'v1';
+    expect(() => assertEncryptionConfigValid()).toThrow(/base64/i);
+    for (const k of Object.keys(process.env)) if (!(k in ORIGINAL)) delete process.env[k];
+    Object.assign(process.env, ORIGINAL);
   });
 });

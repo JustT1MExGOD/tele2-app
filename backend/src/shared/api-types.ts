@@ -351,6 +351,13 @@ export interface MeResponse {
   /** Не-Telegram вход (20.36) — второй способ входа уже привязан к
    * карточке, или null, если ещё нет. */
   phone?: string | null;
+  /** 20.52.1 (Auth Assurance Hardening) — true когда роль требует MFA, а
+   * подтверждённого фактора нет (или эта конкретная browser-сессия
+   * ещё не проходила MFA) — фронт должен показать экран обязательного
+   * enrollment вместо обычной оболочки; backend уже физически блокирует
+   * все остальные защищённые роуты в этом состоянии (см. auth/guards.ts),
+   * это поле — только сигнал для UI, не отдельный источник правды. */
+  mfa_enrollment_required?: boolean;
 }
 
 export interface BindMeRequest {
@@ -642,6 +649,14 @@ export interface MfaStatusResponse {
   webauthn_credential_count: number;
   recovery_codes_remaining: number;
   enrollment_required: boolean;
+}
+
+/** 20.52.1 — ответ POST /auth/mfa/totp/enroll: secret отдаётся клиенту
+ * ровно один раз, на этом ответе (см. auth/mfa/totp.ts). */
+export interface MfaTotpEnrollment {
+  secret: string;
+  otpauthUri: string;
+  qrCodeDataUrl: string;
 }
 
 export interface LogoutResponse {

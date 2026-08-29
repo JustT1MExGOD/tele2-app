@@ -65,7 +65,10 @@ export async function registerMeRoutes(app: FastifyInstance) {
       telegram_id: request.user.telegram_id,
       is_manager: isManager(request.user),
       org_id: request.user.org_id,
-      phone
+      phone,
+      // 20.52.1 — request.mfaAssurance уже посчитан один раз в authPlugin
+      // (auth/guards.ts); просто читаем результат, не пересчитываем.
+      mfa_enrollment_required: !!request.mfaAssurance && !request.mfaAssurance.ok
     };
   });
 

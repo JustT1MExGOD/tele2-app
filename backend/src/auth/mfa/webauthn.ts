@@ -39,7 +39,16 @@ export function isWebAuthnConfigured(): boolean {
   return rpConfig() !== null;
 }
 
-export async function startRegistration(employeeId: number, userName: string, userDisplayName: string) {
+/**
+ * §7 (Auth Assurance Hardening, 20.52.1) — `requireUV` is role-driven by
+ * the caller (api/routes/auth/mfa.ts passes true for admin/supervisor):
+ * privileged enrollment asks for a UV-capable authenticator (PIN/biometric)
+ * so authentication later can actually enforce it, not just hint at it.
+ * Non-privileged callers keep the softer 'preferred' hint — MFA isn't
+ * mandatory policy for them, no reason to force UV hardware they may not
+ * have.
+ */
+export async function startRegistration(employeeId: number, userName: string, userDisplayName: string, requireUV: boolean) {
   const rp = rpConfig();
   if (!rp) throw new Error('WebAuthn is not configured (MINI_APP_URL missing)');
   const existing = await mfaRepo.listActiveWebAuthnCredentials(employeeId);
@@ -50,7 +59,7 @@ export async function startRegistration(employeeId: number, userName: string, us
     userDisplayName,
     attestationType: 'none',
     excludeCredentials: existing.map((c) => ({ id: c.credential_id })),
-    authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' }
+    authenticatorSelection: { residentKey: 'preferred', userVerification: requireUV ? 'required' : 'preferred' }
   });
   await mfaRepo.createWebAuthnChallenge(employeeId, 'register', options.challenge);
   return options;
@@ -66,12 +75,22 @@ export async function finishRegistration(
   const expectedChallenge = await mfaRepo.consumeWebAuthnChallenge(employeeId, 'register');
   if (!expectedChallenge) return { verified: false };
 
-  const result = await verifyRegistrationResponse({
-    response,
-    expectedChallenge,
-    expectedOrigin: rp.origin,
-    expectedRPID: rp.rpID
-  });
+  // §7 — verifyRegistrationResponse throws (rather than returning
+  // verified:false) on a mismatched challenge/origin/RPID or malformed
+  // response; without this the route handler would surface an opaque 500
+  // instead of the same clean "verification failed" outcome every other
+  // rejection reason already produces.
+  let result;
+  try {
+    result = await verifyRegistrationResponse({
+      response,
+      expectedChallenge,
+      expectedOrigin: rp.origin,
+      expectedRPID: rp.rpID
+    });
+  } catch {
+    return { verified: false };
+  }
   if (!result.verified || !result.registrationInfo) return { verified: false };
 
   const { credential, credentialDeviceType, credentialBackedUp } = result.registrationInfo;
@@ -87,17 +106,20 @@ export async function finishRegistration(
   return { verified: true };
 }
 
-export async function startAuthentication(employeeId: number) {
+export async function startAuthentication(employeeId: number, requireUV: boolean) {
   const rp = rpConfig();
   if (!rp) throw new Error('WebAuthn is not configured (MINI_APP_URL missing)');
   const creds = await mfaRepo.listActiveWebAuthnCredentials(employeeId);
   const options = await generateAuthenticationOptions({
     rpID: rp.rpID,
-    // Step-up/second-factor context (§4 docstring note in generateAuthenticationOptions):
-    // discouraged, not required — the primary factor (password/Telegram)
-    // already proved presence; WebAuthn here proves POSSESSION of the
-    // registered key, not a fresh biometric/PIN gate on top of it.
-    userVerification: 'discouraged',
+    // §7 — was unconditionally 'discouraged' while the server-side verify
+    // call below defaulted requireUserVerification to true (the
+    // @simplewebauthn/server default) — an inconsistency where an
+    // authenticator honoring the 'discouraged' hint could produce a
+    // response the server would then reject. Now explicit and consistent
+    // on both sides: privileged callers get 'required'/true, others get
+    // 'preferred'/false so a non-UV authenticator still works for them.
+    userVerification: requireUV ? 'required' : 'preferred',
     allowCredentials: creds.map((c) => ({ id: c.credential_id }))
   });
   await mfaRepo.createWebAuthnChallenge(employeeId, 'authenticate', options.challenge);
@@ -106,7 +128,8 @@ export async function startAuthentication(employeeId: number) {
 
 export async function finishAuthentication(
   employeeId: number,
-  response: AuthenticationResponseJSON
+  response: AuthenticationResponseJSON,
+  requireUV: boolean
 ): Promise<{ verified: boolean }> {
   const rp = rpConfig();
   if (!rp) return { verified: false };
@@ -128,13 +151,22 @@ export async function finishAuthentication(
     counter: stored.counter
   };
 
-  const result = await verifyAuthenticationResponse({
-    response,
-    expectedChallenge,
-    expectedOrigin: rp.origin,
-    expectedRPID: rp.rpID,
-    credential
-  });
+  let result;
+  try {
+    result = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge,
+      expectedOrigin: rp.origin,
+      expectedRPID: rp.rpID,
+      credential,
+      requireUserVerification: requireUV
+    });
+  } catch {
+    // §7 — wrong challenge/origin/RPID/malformed response all throw here;
+    // fail closed the same way an invalid signature would (verified:false),
+    // not an unhandled 500.
+    return { verified: false };
+  }
   if (!result.verified) return { verified: false };
 
   await mfaRepo.updateWebAuthnCounter(stored.credential_id, result.authenticationInfo.newCounter);

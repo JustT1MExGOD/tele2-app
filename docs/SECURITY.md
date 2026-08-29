@@ -302,12 +302,16 @@ telegram-identity (phone переживает, как и раньше `employees
 абсолютным TTL: **30 дней** для обычных ролей, **7 дней** для
 admin/supervisor (§9 брифа — «for privileged users consider shorter
 lifetimes»), не продлевается. Cookie `t2_session` несёт тот же `maxAge`.
-**Idle-таймаут — 14 дней**: `resolveSession()` дополнительно проверяет
-`last_seen_at > now() - 14 days`, не только `expires_at > now()` — сессия,
-к которой не притрагивались 14 дней, перестаёт резолвиться, даже если
-абсолютный TTL ещё не истёк. `last_seen_at` обновляется `touchSession()`
-(троттлинг раз в час — не на каждый запрос, только достаточно для
-14-дневного окна).
+**Idle-таймаут — раздельный по роли (20.52.1)**: `resolveSession()`
+проверяет `last_seen_at > now() - N`, не только `expires_at > now()`
+— **14 дней** для обычных ролей, **18 часов** для admin/supervisor
+(JOIN на `employees.role`, читается свежо, не снимок на момент
+создания сессии). Раньше idle был единой 14-дневной политикой для всех
+— при абсолютном TTL уже 7 дней для privileged это делало idle
+полностью бессмысленным параметром именно для той роли, ради которой
+его в первую очередь стоило заводить (14 > 7 — idle никогда не успевал
+сработать раньше абсолютного истечения). `last_seen_at` обновляется
+`touchSession()` (троттлинг раз в час — не на каждый запрос).
 
 **Компрометация `BOT_TOKEN`** — секрет уровня «полный контроль над ботом»
 (отправка сообщений от его имени, чтение входящих во всех чатах, куда он
@@ -501,7 +505,7 @@ API-клиент (`api-client.ts`, 91 функция) сознательно б�
 |---|---|---|
 | TLS (transport) | IMPLEMENTED | Railway/HTTPS — граница транспорта, не application-уровень |
 | Хешированные credentials/tokens | IMPLEMENTED | `password_hash` — `crypto.scrypt` (необратимо, не шифрование); `employee_sessions.token_hash`/`employee_password_resets.token_hash` — `sha256` одноразовых секретов. Никогда не «шифрование, которое можно расшифровать» — восстанавливать эти значения не нужно, см. §44 несовместимость целей |
-| **Application-Level Envelope Encryption (Level 2)** | IMPLEMENTED, узкий scope | `backend/src/security/crypto/**` (20.51.0) — AES-256-GCM, DEK per-object, KEK версионирован вне PostgreSQL, HKDF-derived wrap-key, AAD связывает ciphertext с id/типом объекта. Подключено только к `support_tickets.message`/`admin_reply` и `support_messages.body` — backend по-прежнему расшифровывает по требованию (owner/admin читают тикет), это НЕ E2EE |
+| **Application-Level Envelope Encryption (Level 2)** | IMPLEMENTED | `backend/src/security/crypto/**` (20.51.0) — AES-256-GCM, DEK per-object, KEK версионирован вне PostgreSQL, HKDF-derived wrap-key, AAD связывает ciphertext с id/типом объекта. Потребители: `support_tickets.message`/`admin_reply`, `support_messages.body` (owner/admin читают по требованию, не E2EE), и `employee_totp.secret_encrypted` (20.52.0/20.52.1 — TOTP-секрет, fail-closed без фолбэка, см. ниже) |
 | **True E2EE (Level 3)** | NOT IMPLEMENTED | Ни одна фича продукта сегодня не является приватной перепиской 1:1 (см. ADR-008) — строить device identity/handshake/ratchet ради несуществующего private channel означало бы придумывать продуктовую фичу, не защищать существующую |
 | Post-quantum (ML-KEM/hybrid) | NOT IMPLEMENTED | Зависит от E2EE-слоя, которого нет; не заявляем «post-quantum secure» нигде в документации, пока PQ-слой не реализован полностью |
 
@@ -544,6 +548,28 @@ Master Key / KEK (env ENCRYPTION_KEKS, версионирован, ротиру�
 сообщения ошибок содержат только класс ошибки и метаданные (`alg`/`kid`/
 `table`/`id`), никогда сырые байты.
 
+**Production обязан иметь шифрование включённым (CRYPTO-1, 20.52.1)** —
+`assertProductionEncryptionRequired()` (`index.ts`, только под
+`RAILWAY_ENVIRONMENT=production`) не даёт серверу стартовать, если
+`DATA_ENCRYPTION_ENABLED` не `true` — раньше проверялось только "если
+включено — то корректно", выключенное состояние было легитимным для
+production. Теперь, когда шифрование защищает не только опциональный
+support-ticket-текст, но и TOTP-секреты (реальный authentication
+material — enrollment сам бросает `EncryptionDisabledError` без него),
+тихая работа без него в production больше не приемлема. Не влияет на
+dev/test — там флаг по умолчанию выключен, тесты сами включают его
+глобально в `tests/setup.ts` тестовым (не production) ключом.
+
+**Строгая base64-валидация (CRYPTO-1, 20.52.1)** — `Buffer.from(str,
+'base64')` не бросает на невалидном/non-canonical входе (тихо
+отбрасывает posторонние символы) — не проверка валидности сама по себе.
+`strictBase64Decode()` (`security/crypto/random.ts`) применяется везде,
+где base64-строка приходит извне доверенной границы: KEK
+(`ENCRYPTION_KEKS`), nonce/tag/ciphertext AEAD-полей конверта. AEAD
+tag-проверка (GCM) уже страховала от эксплуатации испорченных байт как
+таковых — это про дисциплину fail-closed на входе, не про новую дыру,
+которая была эксплуатируема раньше.
+
 ### 11. Multi-Factor Authentication (MFA)
 
 Полное архитектурное решение —
@@ -557,12 +583,46 @@ Master Key / KEK (env ENCRYPTION_KEKS, версионирован, ротиру�
 (совместимый fallback) → recovery codes (последний резерв). SMS не
 используется ни для одного из них.
 
+**Auth Assurance model (AAL1/AAL2/AAL3, 20.52.1)** — явные, разные
+понятия, не смешиваются:
+- **AAL1** — только primary-аутентификация (пароль или Telegram initData
+  HMAC). Достаточно для обычных ролей; для admin/supervisor — только для
+  входа и MFA-enrollment роутов, см. ниже.
+- **AAL2** — подтверждённый фактор ЕСТЬ у аккаунта (для Telegram, где
+  сессии нет вообще, ADR-005) ИЛИ конкретная browser/phone-сессия САМА
+  прошла MFA при выдаче (`employee_sessions.mfa_verified_at`, для
+  browser/phone). Два разных, явно различаемых сигнала —
+  `auth/assurance.ts::checkPrivilegedAssurance()` возвращает
+  `mfa_enrollment_required` (фактора нет вообще) отдельно от
+  `mfa_reverification_required` (фактор есть, но ЭТА сессия не проходила
+  MFA — например, была выдана до enrollment).
+- **AAL3** — свежий step-up (см. ниже) для конкретного опасного действия
+  прямо сейчас, не "было пройдено когда-то в этой сессии".
+
 **Login-time второй фактор** — свойство конкретного аккаунта (есть ли
 подтверждённый TOTP/WebAuthn), не глобальная политика по роли: `POST
 /auth/login` с паролем возвращает `{mfa_required:true, mfa_token}`
 вместо сессии, если фактор подтверждён; `POST /auth/mfa/login`
 довершает вход. `mfa_token` — опаque, single-use, 5 минут
-(`mfa_pending_logins`).
+(`mfa_pending_logins`). Та же логика в `POST /auth/reset/:token`
+(20.52.1, RESET-1) — сброс пароля для аккаунта с MFA тоже не выдаёт
+сессию сразу, требует MFA так же, как обычный вход.
+
+**PRIV-MFA-1/2 — MFA реально обязателен, не только для опасных действий
+(20.52.1)** — `auth/guards.ts::requireActive()` блокирует `403
+mfa_enrollment_required` для admin/supervisor без подтверждённого
+фактора на КАЖДОМ защищённом роуте, кроме явно помеченных
+enrollment/status/logout (`{allowMfaEnrollment:true}`) — иначе
+enrollment стал бы недостижим. Вычисляется один раз в `authPlugin`
+(`auth/assurance.ts`), одинаково для Telegram (пересчитывается заново
+на каждый запрос) и browser-сессий. Раньше (20.52.0) mandatory
+обеспечивался только тем, что step-up физически недостижим без
+фактора — обычные privileged-функции (не step-up-gated) оставались
+доступны на голом AAL1; это было осознанно отклонённой альтернативой
+("блокировка всего API" виделась слишком широкой), но оказалось
+недостаточным для реального требования "MFA обязателен", не "MFA
+обязателен только для самых опасных действий". См.
+[ADR/009, раздел "20.52.1 revision"](./ADR/009-mfa-step-up.md).
 
 **Step-up (AAL3, "свежее подтверждение для ЭТОГО действия")** —
 channel-agnostic непрозрачный bearer-тикет (`mfa_step_up_tickets`, 10
@@ -571,13 +631,31 @@ channel-agnostic непрозрачный bearer-тикет (`mfa_step_up_ticket
 (initData перепроверяется заново каждый раз, ADR-005) — тикет работает
 одинаково для Telegram и browser. Получить тикет (`POST
 /auth/mfa/step-up`) физически невозможно без хотя бы одного
-подтверждённого фактора (`mfa_not_configured`, 400) — это и есть
-реальный enforcement "MFA обязателен для admin/supervisor", не
-отдельный enrollment-гейт на каждый роут.
+подтверждённого фактора. С 20.52.1 тикет также привязывается к
+конкретной browser/phone-сессии, если запрос её нёс
+(`mfa_step_up_tickets.session_token_hash`) — украденный тикет не
+работает из другой сессии того же сотрудника; для Telegram (нет
+сессии) остаётся employee-scoped, как раньше.
 
 Step-up-gated действия сегодня: `PATCH /employees/:id/role` при
-`role==='admin'`, `POST /auth/admin/reset-password/:employeeId`, `POST
-/employees/:id/mfa/reset`.
+эскалации в admin ИЛИ supervisor (расширено с одного admin — 20.52.1,
+§12: supervisor видит данные всего сектора, тот же класс риска), `POST
+/access/requests/:id/approve` при выдаче admin/supervisor через
+approve-путь (второй, отдельный от PATCH код-путь для той же
+операции — 20.52.1), `POST /auth/admin/reset-password/:employeeId`,
+`POST /employees/:id/mfa/reset`. Осознанно НЕ step-up-gated: демоушен
+ИЗ admin/supervisor (не эскалация — а требование step-up там мешало бы
+containment при реальном инциденте, см. RUNBOOK.md); `POST
+/metrics`/export-роуты (задокументированный trade-off, см. "Известные
+компромиссы").
+
+**ROLE-1 — эскалация роли отзывает существующие сессии (20.52.1)** —
+`PATCH /employees/:id/role` и `POST /access/requests/:id/approve`
+вызывают `sessionsRepo.deleteAllForEmployee()`, когда новая роль
+admin/supervisor и отличается от прежней: без этого уже открытая (до
+назначения роли) browser-сессия унаследовала бы privileged-доступ на
+следующий же запрос (role читается заново из БД на каждый запрос,
+`principal.ts::loadUser()`), не проходя MFA вообще.
 
 **Last-factor removal guard (MFA-3)** — отключение TOTP/отзыв
 последнего WebAuthn-credential блокируется (`last_mfa_factor`, 400) для
@@ -589,22 +667,41 @@ admin/supervisor, если после этого не останется ни о
 secret, не recoverable material — тот же принцип, что session/reset
 токены, см. §44 брифа). Атомарно single-use
 (`UPDATE...WHERE used_at IS NULL...RETURNING`, race-safe). Регенерация
-инвалидирует весь предыдущий набор целиком.
+инвалидирует весь предыдущий набор целиком. Использование
+recovery-кода при логине/step-up пишет отдельное audit-событие
+(`mfa.recovery_code_used`, 20.52.1) — высокоценный сигнал (основной
+фактор был недоступен).
 
 **TOTP replay-защита** — принятый time-step запоминается
 (`employee_totp.last_time_step`), `afterTimeStep` в `otplib.verify()`
 отклоняет повторное использование того же/более раннего окна, даже с
 верным кодом.
 
+**TOTP-1 — секрет никогда не хранится plaintext (20.52.1)** —
+`upsertPendingTotp()` бросает `EncryptionDisabledError`, если
+`DATA_ENCRYPTION_ENABLED` не `true` (раньше — молча падал на
+`{plain: secret}` в той же jsonb-колонке). Production обязан стартовать
+с шифрованием включённым (`assertProductionEncryptionRequired()`,
+`index.ts`) — см. §10 ниже.
+
+**WebAuthn `userVerification` — строго для privileged (20.52.1)** —
+регистрация и аутентификация для admin/supervisor требуют
+`userVerification:'required'` с обеих сторон (генерация опций И
+серверная проверка, `requireUserVerification`); раньше опции просили
+`'discouraged'`/`'preferred'`, а проверка уже по умолчанию требовала UV
+(`@simplewebauthn/server`'s default `true`) — несогласованность, могла
+привести к отказу для честно enrolled non-UV-аутентификатора. Для
+обычных ролей — `'preferred'`/мягкая проверка.
+
 **Известные пробелы этого захода** (см. также финальный отчёт аудита):
 полноценная WebAuthn-церемония (реальный authenticator response) не
 покрыта end-to-end тестами — только граничные проверки
-(malformed/чужой credential id/"не настроено"); frontend UI для
-enrollment/login-MFA не реализован — backend полностью функционален и
-протестирован через прямые HTTP-вызовы, но нет экрана в
-`frontend/src/**`. Ни один существующий сотрудник не имеет MFA сегодня
-(миграция не бэкфиллит фактор никому) — обратная совместимость логина
-не нарушена.
+(malformed/чужой credential id/"не настроено"/UV-опции). Frontend UI
+(20.52.1) реализован для TOTP-пути (login-challenge, mandatory
+enrollment, recovery codes once) — WebAuthn-регистрация/аутентификация
+в браузере сознательно отложена (требует полноценной ceremony-логики,
+TOTP уже полностью закрывает mandatory-политику без риска лишить
+доступа существующих admin/supervisor).
 
 ---
 
@@ -684,13 +781,12 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
 |---|---|---|
 | Reuse отозванной сессии | Механизм есть (удалённая строка → `resolveSession()` не находит её), но нет именного adversarial-теста, явно проверяющего запрос СРАЗУ ПОСЛЕ `DELETE /auth/sessions/:id`/logout | Именной regression-тест — обязательный gate перед тем, как считать это закрытым классом |
 | Отдельная временная блокировка аккаунта после N неудачных попыток входа | Нет — только rate-limit по времени (10/мин, хешированный телефон, см. [threat-model](./THREAT-MODEL.md)) | Порог + временная блокировка на `/auth/*`, отдельно от общего rate-limit |
-| Полноценная WebAuthn-церемония в тестах | Покрыты только граничные проверки (malformed input, чужой credential id, "не настроено") — реальный authenticator response не симулируется | Виртуальный/software authenticator в test suite |
-| Frontend UI для MFA (enrollment/login-second-factor) | Backend полностью функционален и протестирован (20.52.0, ADR-009), UI-экранов нет | Экраны enrollment/login-MFA в `frontend/src/**` |
-| Журнал допуска со стабильными кодами | Часть событий в `audit_log` (роль, деактивация, экспорт), но без единой таксономии | Стабильные коды `AUTH_FAILURE`/`SESSION_REVOKED`/`MASS_EXPORT`/`ACCESS_DENIED` |
+| Полноценная WebAuthn-церемония в тестах | Покрыты только граничные проверки (malformed input, чужой credential id, "не настроено", UV-опции) — реальный authenticator response не симулируется | Виртуальный/software authenticator в test suite |
+| Frontend UI для WebAuthn (enrollment/login) | TOTP-путь реализован (login-challenge, mandatory enrollment, recovery codes once — 20.52.1); WebAuthn browser-ceremony UI сознательно отложен — TOTP уже закрывает mandatory-политику без риска лишить доступа | Экраны WebAuthn register/authenticate в `frontend/src/**` |
+| Журнал допуска со стабильными кодами | Часть событий в `audit_log` (роль, деактивация, экспорт, MFA enable/disable/reset, recovery-code use — 20.52.1), но без единой таксономии кодов и без структурного event-stream отдельно от audit_log | Стабильные коды `AUTH_FAILURE`/`SESSION_REVOKED`/`MASS_EXPORT`/`ACCESS_DENIED` |
 | Строгий CSP без inline | `scriptSrc`/`default-src`/`object-src` уже строгие; `script-src-attr`/`style-src-attr`/`styleSrc` — `unsafe-inline` (см. [известные компромиссы](#известные-компромиссы)) | Event-delegation вместо `onclick=`, nonce/hash для нужных `<style>` — отдельная эпоха по объёму, сопоставимая с Frontend rewrite |
 | SAST / secret-scanning в CI | `npm audit --audit-level=high` — только известные уязвимости зависимостей; нет CodeQL/Semgrep/gitleaks/trufflehog, нет Dependabot | Хотя бы один SAST-скан + secret-scanning как gate CI |
-| Пиннинг GitHub Actions по SHA | Actions указаны по major-тегу (`@v4`) | Пиннинг по коммит-SHA — снижает supply-chain риск компрометации Action |
-| MFA / passkeys | Нет — телефон+пароль или Telegram initData, без второго фактора | Не запрошено владельцем продукта; не путать с направлением — это не в текущем плане, а честная фиксация отсутствия |
+| Отдельная временная блокировка аккаунта после N неудачных попыток MFA-кода | Только rate-limit по времени (20/мин на `/auth/mfa/*`) | Порог + временная блокировка, отдельно от общего rate-limit |
 | Idempotency-based ключ по `employee_id` вместо IP для уже аутентифицированных лимитов | Все лимиты выше `/auth/login` — по IP (сознательно, 20.50.0) | Отдельное архитектурное решение, не запрошено в текущем скоупе — см. [20.50.0 в CHANGELOG](../CHANGELOG.md) |
 
 Не входит и не должно появляться как факт: HSM, PCI DSS, сертификация по

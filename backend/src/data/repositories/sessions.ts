@@ -26,8 +26,19 @@ const ABSOLUTE_TTL_DAYS_DEFAULT = 30;
 /** Idle-таймаут (20.52.0) — раньше был только абсолютный TTL, sessions
  * roadmap в docs/SECURITY.md явно называл отсутствие idle-таймаута
  * известным пробелом. Сессия, к которой не притрагивались 14 дней,
- * перестаёт резолвиться, даже если её абсолютный TTL ещё не истёк. */
-const IDLE_TIMEOUT_DAYS = 14;
+ * перестаёт резолвиться, даже если её абсолютный TTL ещё не истёк.
+ *
+ * §13 (Auth Assurance Hardening, 20.52.1) — 14 дней idle было ЕДИНОЙ
+ * политикой для всех, а privileged absolute TTL уже 7 дней — то есть idle
+ * никогда фактически не успевал сработать раньше абсолютного истечения
+ * для admin/supervisor (14 > 7), полностью бессмысленный параметр именно
+ * для той роли, ради которой его в первую очередь стоило заводить.
+ * Отдельный, заметно короче, idle-таймаут для privileged-ролей — открытая
+ * вкладка администратора, оставленная без дела на ночь, не должна
+ * оставаться рабочей сессией до утра.
+ */
+const IDLE_TIMEOUT_HOURS_PRIVILEGED = 18;
+const IDLE_TIMEOUT_DAYS_DEFAULT = 14;
 
 const PRIVILEGED_ROLES = new Set(['admin', 'supervisor']);
 
@@ -51,14 +62,45 @@ export async function createSession(employeeId: number, mfaVerified = false, rol
   return token;
 }
 
-export async function resolveSession(token: string): Promise<{ employee_id: number } | null> {
+/**
+ * `mfa_verified_at` (20.52.0/20.52.1) — surfaced to the caller so
+ * auth/guards.ts can tell "this session actually completed MFA" (AAL2)
+ * apart from "the account merely has MFA configured" (see
+ * auth/assurance.ts::checkPrivilegedAssurance — the two are different
+ * guarantees, RESET-1/ROLE-1 invariants).
+ *
+ * Idle timeout is role-dependent (§13) — joins employees for the
+ * CURRENT role (not a role snapshotted at session creation), same
+ * "always read fresh" principle principal.ts already applies to
+ * authorization decisions elsewhere in this codebase.
+ */
+export async function resolveSession(token: string): Promise<{ employee_id: number; mfa_verified_at: string | null } | null> {
   const res = await query(
-    `SELECT employee_id FROM employee_sessions
-     WHERE token_hash = $1 AND expires_at > now()
-       AND last_seen_at > now() - ($2 || ' days')::interval`,
-    [hashToken(token), String(IDLE_TIMEOUT_DAYS)]
+    `SELECT es.employee_id, es.mfa_verified_at
+     FROM employee_sessions es
+     JOIN employees e ON e.id = es.employee_id
+     WHERE es.token_hash = $1
+       AND es.expires_at > now()
+       AND es.last_seen_at > now() - (
+         CASE WHEN e.role = ANY($2::text[])
+           THEN ($3 || ' hours')::interval
+           ELSE ($4 || ' days')::interval
+         END
+       )`,
+    [hashToken(token), Array.from(PRIVILEGED_ROLES), String(IDLE_TIMEOUT_HOURS_PRIVILEGED), String(IDLE_TIMEOUT_DAYS_DEFAULT)]
   );
   return res.rows[0] || null;
+}
+
+/** §6/ROLE-1 — upgrades an already-issued session to AAL2 the moment its
+ * owner proves a factor server-side within that same request (MFA
+ * enrollment confirm, WebAuthn registration verify) — avoids forcing a
+ * redundant logout+relogin right after enrollment while staying
+ * cryptographically honest (a real factor WAS just verified for this
+ * session, not merely configured on the account). Silently no-ops for
+ * Telegram-authenticated callers (no token). */
+export async function markSessionMfaVerified(token: string): Promise<void> {
+  await query(`UPDATE employee_sessions SET mfa_verified_at = now() WHERE token_hash = $1`, [hashToken(token)]);
 }
 
 /** Не на каждый запрос — раз в час, чтобы не писать в БД на каждый чих. */

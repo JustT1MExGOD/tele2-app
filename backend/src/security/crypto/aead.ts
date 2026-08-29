@@ -18,7 +18,7 @@
 import { createCipheriv, createDecipheriv, timingSafeEqual } from 'crypto';
 import type { AeadBox } from './types.js';
 import { DecryptionError, InvalidEnvelopeError } from './errors.js';
-import { AES_256_KEY_LENGTH, GCM_NONCE_LENGTH, GCM_TAG_LENGTH, randomNonce } from './random.js';
+import { AES_256_KEY_LENGTH, GCM_NONCE_LENGTH, GCM_TAG_LENGTH, randomNonce, strictBase64Decode } from './random.js';
 
 function assertKeyLength(key: Buffer): void {
   if (key.length !== AES_256_KEY_LENGTH) {
@@ -50,9 +50,11 @@ export function aeadDecrypt(key: Buffer, box: AeadBox, aad: Buffer): Buffer {
   assertKeyLength(key);
   let nonce: Buffer, tag: Buffer, ciphertext: Buffer;
   try {
-    nonce = Buffer.from(box.nonce, 'base64');
-    tag = Buffer.from(box.tag, 'base64');
-    ciphertext = Buffer.from(box.ciphertext, 'base64');
+    nonce = strictBase64Decode(box.nonce);
+    tag = strictBase64Decode(box.tag);
+    // Ciphertext length varies with payload size — no canonical-length
+    // check beyond "valid base64" makes sense here (unlike nonce/tag).
+    ciphertext = strictBase64Decode(box.ciphertext);
   } catch {
     throw new InvalidEnvelopeError('Malformed base64 in AEAD box');
   }

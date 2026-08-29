@@ -13,5 +13,5 @@ export {
   EncryptionDisabledError
 } from './errors.js';
 export { canonicalAad, encryptField, decryptField, isEncryptedEnvelope, assertEnvelopeShape } from './envelope.js';
-export { isEncryptionEnabled, createEnvKeyProvider, assertEncryptionConfigValid } from './key-provider.js';
+export { isEncryptionEnabled, createEnvKeyProvider, assertEncryptionConfigValid, assertProductionEncryptionRequired } from './key-provider.js';
 export { logDecryptFailure } from './log.js';

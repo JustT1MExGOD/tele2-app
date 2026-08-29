@@ -33,3 +33,17 @@ if (!isLocal && process.env.ALLOW_REMOTE_TEST_DB !== 'true') {
 // Telegram initData — тесты авторизуются заголовком, как и безопасный
 // локальный сервер весь этот сеанс.
 process.env.ALLOW_INSECURE_AUTH = 'true';
+
+// Auth Assurance Hardening (20.52.1, §8) — TOTP secrets now fail closed
+// without encryption configured (data/repositories/mfa.ts), so the test
+// suite needs a real (test-only, never a production value) key by
+// default for MFA enrollment to work at all. `if (!process.env...)` so
+// tests that explicitly manage these vars themselves (crypto-envelope.test.ts,
+// support-envelope-encryption.test.ts — they save/restore process.env
+// per-test) aren't affected; this only fills in a default when nothing
+// else has opinions yet.
+if (!process.env.DATA_ENCRYPTION_ENABLED) process.env.DATA_ENCRYPTION_ENABLED = 'true';
+if (!process.env.ENCRYPTION_KEKS) {
+  process.env.ENCRYPTION_KEKS = JSON.stringify({ 'test-1': Buffer.alloc(32, 7).toString('base64') });
+}
+if (!process.env.ENCRYPTION_ACTIVE_KEY_VERSION) process.env.ENCRYPTION_ACTIVE_KEY_VERSION = 'test-1';

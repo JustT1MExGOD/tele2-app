@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Браузер/PWA · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.52.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.52.1-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-897%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя, либо браузер несёт cookie-сессию (телефон+пароль) → сервер на Fastify проверяет identity и права через общий шов (`auth/principal.ts`) → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.52.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.52.1` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -487,6 +487,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.50.1** | Хотфикс — repo-wide документационный аудит нашёл 4 реальных XSS-пробела, не закрытых 20.49.0 (тот же attribute-breakout/без-esc() класс, пропущенный в других файлах того же прохода): `plans-bfq.ts` monthplan-карточка и desktop-строка (onclick), `promos.ts` список (created_by_name без esc(), карточка того же промокода уже была защищена), `schedule.ts`/`my-plan.ts` `title="..."`. Заодно 3 frontend-тестовых файла переведены с no-op esc()-стаба на реальную реализацию (тот же класс проблемы, что уже чинили в `promos.test.ts` в 20.49.0) — иначе новые regression-тесты ничего не доказывали бы. 4 новых теста с настоящим XSS-payload, 411→415 frontend, backend не тронут |
 | **20.51.0** | Application-Level Envelope Encryption — по запросу владельца продукта на hybrid-ratcheting крипто-архитектуру аудит не нашёл в продукте ни одной 1:1 приватной переписки (`channels`/`task_comments`/`announcements` — team-broadcast по дизайну); единственный реальный кандидат — текст support-тикетов. Level 2 (application-level encryption, `backend/src/security/crypto/**` — AES-256-GCM/HKDF/CSPRNG через `node:crypto` built-in, ноль новых зависимостей) реализован для `support_tickets`/`support_messages`: KEK версионирован в env (никогда в Postgres), DEK per-object, AAD связывает ciphertext с объектом, rotation без re-encryption всего хранилища. Level 3 (true E2EE — device identity/handshake/ratchet/PQ) осознанно НЕ реализован — нет продуктового кандидата (см. `docs/ADR/008`), не «отменено», а честно PLANNED. Попутно найден и исправлен пред-существующий баг: `support_tickets` reply-функции писали в несуществующую колонку `updated_at`, `500` на каждый ответ сотрудника в своём тикете. 44+6 новых тестов, 432→482 backend |
 | **20.52.0** | Principal Security Audit — MFA & Step-Up, IDOR-фиксы: полный аудит по 10 доверительным поверхностям, объём брифа многонедельный, сделан осознанный триаж. Обязательный MFA для admin/supervisor — WebAuthn/passkey приоритетно (`@simplewebauthn/server`), TOTP fallback (`otplib`), recovery codes, без SMS; TOTP-секрет через уже существующий crypto-слой (20.51.0). Channel-agnostic step-up — bearer-тикет (`X-Step-Up-Token`, TTL 10 мин, привязан к `employee_id`, не к сессии — у Telegram-канала её нет вообще, ADR-005); MFA обязателен без route-interceptor — тикет-эндпоинт сам отказывает без факторов. Session hardening — idle timeout 14 дней + сокращённый абсолютный TTL для admin/supervisor (7 дней). IDOR-аудит закрыл реальные org-scoping пробелы (`/plans/stores/:id/month`, `/employee/progress/:id`, `/alerts/:id/read`, `/announcements/:id/read`) + явные admin-only проверки на 4 роутах. Найден и починен бисекцией воспроизводимый Fastify-баг (второй `onSend`-хук ломал `POST /me/avatar`). Осознанно не реализовано: frontend MFA UI, security-observability события, fuzz-тесты, SBOM — см. `docs/SECURITY.md`. 35 новых тестов, 482→519 backend |
+| **20.52.1** | Auth Assurance Hardening — фокусированное ужесточение 20.52.0 (не новая архитектура). Главный найденный пробел (PRIV-MFA-1/2): admin/supervisor без MFA раньше получал полноценную AAL1-сессию, проходившую ВСЕ обычные privileged-роуты — только step-up-gated опасные действия были недостижимы. Новый `auth/assurance.ts` + `requireActive()`-гейт блокирует `403 mfa_enrollment_required` для privileged-роли без фактора на каждом защищённом роуте (кроме enrollment/status/logout), одинаково для Telegram и browser. Закрыт реальный обход MFA через сброс пароля (RESET-1 — `/auth/reset/:token` выдавал сессию сразу даже с настроенным вторым фактором) и ROLE-1 (эскалация роли теперь отзывает существующие сессии сотрудника). Idle-таймаут сессии — раздельный по роли (18ч для admin/supervisor вместо общих 14 дней). WebAuthn `userVerification:'required'` для privileged с обеих сторон (было несогласовано). Step-up-тикет привязан к конкретной browser-сессии, если она есть. TOTP-секрет больше не имеет plaintext-фолбэка (fail closed); production обязан стартовать с `DATA_ENCRYPTION_ENABLED=true` — **требует ручной настройки Railway-переменных перед деплоем**. Строгая base64-валидация KEK/AEAD-полей. Минимальный frontend MFA UI (TOTP-путь: login-challenge, mandatory enrollment, recovery codes once) — без него релиз заблокировал бы всех сегодняшних admin/supervisor. 16+8 новых тестов, 520→544 backend |
 
 ---
 
@@ -1432,6 +1433,6 @@ Protection) — **[docs/SECURITY.md](docs/SECURITY.md)**. Какие данны�
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.52.0 · август 2026*
+*README · актуально на v20.52.1 · август 2026*
 
 </div>

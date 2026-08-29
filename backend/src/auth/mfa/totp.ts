@@ -12,6 +12,7 @@
 import { generateSecret, generateURI, verify } from 'otplib';
 import QRCode from 'qrcode';
 import * as mfaRepo from '../../data/repositories/mfa.js';
+import { EncryptionDisabledError } from '../../security/crypto/errors.js';
 
 const ISSUER = 'T2 Sales';
 /** RFC 6238 рекомендует не расширять окно верификации бездумно — ±30с
@@ -29,7 +30,12 @@ export interface TotpEnrollment {
 /** Начинает/перезапускает enrollment — секрет сохраняется, но НЕ активен
  * (confirmed_at остаётся NULL) пока владелец не подтвердит его валидным
  * кодом через confirmTotpEnrollment(). Незавершённый enrollment не
- * должен удовлетворять MFA-политике (§5 инвариант). */
+ * должен удовлетворять MFA-политике (§5 инвариант).
+ *
+ * Throws EncryptionDisabledError (§8, 20.52.1) if DATA_ENCRYPTION_ENABLED
+ * is not true — TOTP enrollment fails closed rather than falling back to
+ * plaintext storage; the route handler (api/routes/auth/mfa.ts) maps this
+ * to a clean 503, not an opaque 500. */
 export async function startTotpEnrollment(employeeId: number, label: string): Promise<TotpEnrollment> {
   const secret = generateSecret();
   await mfaRepo.upsertPendingTotp(employeeId, secret);
