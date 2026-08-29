@@ -4,6 +4,14 @@ on:
   push:
   workflow_dispatch:
 
+# 20.52.0 (security audit) — без явного permissions: GITHUB_TOKEN
+# получает дефолтный набор прав репозитория (может отличаться по
+# организации/времени создания репо, но потенциально шире, чем нужно
+# этому воркфлоу). Ни один шаг ниже не пишет в репозиторий/пакеты/релизы —
+# read-only достаточно.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -32,9 +40,14 @@ jobs:
       ALLOW_INSECURE_AUTH: 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      # 20.52.0 (security audit) — пиннинг по commit SHA, не мутируемому
+      # тегу @v4 (supply-chain: тег может быть переставлен на другой
+      # коммит владельцем/скомпрометированным аккаунтом; SHA — нет).
+      # Версия в комментарии — только для читаемости, сверяется вручную
+      # при обновлении, не источником правды для самого пиннинга.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm

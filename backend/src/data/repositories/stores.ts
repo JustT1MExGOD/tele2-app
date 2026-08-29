@@ -131,14 +131,28 @@ export async function listWithDisplayName(orgId: string): Promise<(StoreRecord &
   return res.rows;
 }
 
-/** GET /supervisor/stores, ветка manager/admin — ВНИМАНИЕ: в исходном SQL
- * (routes-v8.ts, до 20.8.0) не было org-фильтра вообще — manager/admin
- * видели точки всех сетей разом в этом конкретном пикере. Перенесено
- * дословно, не исправлено — см. итоговый отчёт 20.8.0 о находке. */
+/** GET /supervisor/stores, ветка admin — намеренно без org-фильтра: admin
+ * уже имеет установленный, задокументированный global view в этом
+ * проекте (GET /orgs, дилеры/секторы). Раньше эта же функция без
+ * разбора звалась и для manager (routes-v8.ts, до 20.8.0) — исправлено
+ * security-аудитом 20.52.0, см. listActiveForPickerInOrg() ниже. */
 export async function listAllActiveForPicker(): Promise<Pick<StoreRecord, 'id' | 'name' | 'code' | 'color' | 'plan_share'>[]> {
   const res = await query(
     `SELECT id, COALESCE(display_name, name) as name, code, color, plan_share FROM stores s
      WHERE is_active = true OR is_active IS NULL ORDER BY s.name`
+  );
+  return res.rows;
+}
+
+/** Тот же пикер, но org-scoped — для manager (не admin) в GET /supervisor/stores:
+ * найдено security-аудитом 20.52.0, что manager одной сети видел точки
+ * ВСЕХ сетей через listAllActiveForPicker() выше. */
+export async function listActiveForPickerInOrg(orgId: string): Promise<Pick<StoreRecord, 'id' | 'name' | 'code' | 'color' | 'plan_share'>[]> {
+  const res = await query(
+    `SELECT id, COALESCE(display_name, name) as name, code, color, plan_share FROM stores s
+     WHERE (is_active = true OR is_active IS NULL) AND COALESCE(org_id, 'default') = $1
+     ORDER BY s.name`,
+    [orgId]
   );
   return res.rows;
 }

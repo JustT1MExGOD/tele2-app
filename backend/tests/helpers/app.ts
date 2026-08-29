@@ -34,3 +34,34 @@ export function authAsSession(sessionToken: string, csrfToken = 'test-csrf-token
     'x-csrf-token': csrfToken
   };
 }
+
+/**
+ * 20.52.0 (MFA) — enrolls a confirmed TOTP factor directly (bypassing
+ * the HTTP enrollment ceremony, which needs its own test coverage
+ * elsewhere) and mints a step-up ticket, for tests that just need to
+ * get PAST a step-up-gated route to exercise the route's own logic —
+ * not re-testing MFA enrollment/step-up itself in every such test.
+ */
+export async function setupTotpAndStepUp(employeeId: number, authHeaders: Record<string, string>, getApp2 = getApp) {
+  const { generate } = await import('otplib');
+  const totp = await import('../../src/auth/mfa/totp.js');
+  const enrollment = await totp.startTotpEnrollment(employeeId, `test-${employeeId}`);
+  const now = Math.floor(Date.now() / 1000);
+  const confirmCode = await generate({ secret: enrollment.secret, epoch: now });
+  await totp.confirmTotpEnrollment(employeeId, confirmCode);
+
+  // Replay-защита (afterTimeStep) отвергла бы тот же timeStep, что уже
+  // принят confirm'ом выше — код для СЛЕДУЮЩЕГО 30-секундного окна.
+  const stepUpCode = await generate({ secret: enrollment.secret, epoch: now + 30 });
+  const app = await getApp2();
+  const res = await app.inject({
+    method: 'POST',
+    url: '/auth/mfa/step-up',
+    headers: authHeaders,
+    payload: { method: 'totp', code: stepUpCode }
+  });
+  if (res.statusCode !== 200) {
+    throw new Error(`setupTotpAndStepUp: step-up failed with ${res.statusCode}: ${res.body}`);
+  }
+  return { 'x-step-up-token': res.json().step_up_token as string };
+}

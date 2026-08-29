@@ -162,8 +162,27 @@ export async function buildApp(): Promise<FastifyInstance> {
   // GET /avatars/:id уже ставит свой `private, max-age=300` до onSend
   // (пропускается), @fastify/static (cacheControl:true по умолчанию) тоже
   // успевает выставить свой заголовок до этого хука.
+  // Permissions-Policy (20.52.0) — @fastify/helmet 13.x не включает этот
+  // заголовок ни в дефолты, ни как отдельный экспорт (проверено чтением
+  // node_modules/helmet напрямую). Единственный Browser Permissions API,
+  // которым реально пользуется фронтенд — geolocation (открытие/закрытие
+  // смены, pages/shift/index.ts); camera/microphone/usb/payment и т.д.
+  // явно закрыты, не оставлены на дефолт браузера. Объединено с
+  // Cache-Control в ОДНОМ onSend-хуке намеренно — второй отдельный
+  // app.addHook('onSend', ...) в этом месте цепочки стабильно
+  // воспроизводил "Cannot write headers after they are sent" на
+  // multipart-роутах (POST /me/avatar) при раннем return из requireAuth
+  // (гонка @fastify/multipart's stream cleanup с количеством/порядком
+  // onSend-хуков) — найдено и закрыто до пуша, один hook с двумя
+  // заголовками эту гонку не даёт.
   app.addHook('onSend', async (request, reply, payload) => {
     if (!reply.getHeader('cache-control')) reply.header('Cache-Control', 'no-store');
+    if (!reply.getHeader('permissions-policy')) {
+      reply.header(
+        'Permissions-Policy',
+        'geolocation=(self), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()'
+      );
+    }
     return payload;
   });
 

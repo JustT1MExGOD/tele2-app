@@ -56,10 +56,14 @@ describe('Product Analytics — вовлечённость по алертам (
     const id = await insertAlert(store, 'anomaly_vs_forecast');
 
     const app = await getApp();
-    const forbidden = await app.inject({ method: 'POST', url: `/alerts/${id}/read`, headers: authAs(employee.telegramId) });
+    // 20.52.0 — /alerts/:id/read получил org-scope check (schema: { body:
+    // AlertOrgBody }), тем же паттерном, что уже у /ack и /status — нужен
+    // валидный (пусть пустой) JSON body, иначе TypeBox-валидация отвечает
+    // 400 раньше, чем запрос доходит до requireManager()/org-проверки.
+    const forbidden = await app.inject({ method: 'POST', url: `/alerts/${id}/read`, headers: authAs(employee.telegramId), payload: {} });
     expect(forbidden.statusCode).toBe(403);
 
-    const ok = await app.inject({ method: 'POST', url: `/alerts/${id}/read`, headers: authAs(manager.telegramId) });
+    const ok = await app.inject({ method: 'POST', url: `/alerts/${id}/read`, headers: authAs(manager.telegramId), payload: {} });
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toEqual({ ok: true });
 

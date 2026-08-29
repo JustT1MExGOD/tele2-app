@@ -5,7 +5,7 @@
  * инстансе, не только что новый не ломает старый.
  */
 import { describe, it, expect, afterAll } from 'vitest';
-import { getApp, authAs, authAsSession } from '../helpers/app.js';
+import { getApp, authAs, authAsSession, setupTotpAndStepUp } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import { hashPassword, verifyPassword } from '../../src/auth/password.js';
@@ -225,10 +225,12 @@ describe('Не-Telegram вход — телефон + пароль', () => {
     const passwordHash = await hashPassword('old-password');
     const { id: employeeId, phone } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Reset Test' });
 
+    // 20.52.0 (MFA) — сброс чужого пароля теперь step-up-gated.
+    const stepUpHeaders = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
     const genLink = await app.inject({
       method: 'POST',
       url: `/auth/admin/reset-password/${employeeId}`,
-      headers: authAs(admin.telegramId)
+      headers: { ...authAs(admin.telegramId), ...stepUpHeaders }
     });
     expect(genLink.statusCode).toBe(200);
     const resetUrl: string = genLink.json().reset_url;

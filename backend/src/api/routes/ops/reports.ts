@@ -65,12 +65,25 @@ export async function registerReportsRoutes(app: FastifyInstance) {
     }
   );
 
-  /** Ручная отправка микро/итога в REPORT_CHAT_ID (для теста) */
+  /**
+   * Ручная отправка микро/итога (для теста) — sendMicroReports()/
+   * sendFinalReports() (cron/reports.ts) сами по себе сетевые (проходят
+   * ВСЕ точки ВСЕХ сетей по расписанию, без orgId-параметра — тот же код,
+   * что и настоящий cron). Security audit (20.52.0) — раньше требовался
+   * только requireManager: любой manager одной сети мог форсировать
+   * реальную отправку Telegram-картинок в чаты ВСЕХ остальных сетей,
+   * многократно (rate-limit ограничивает частоту, не охват). Сужено до
+   * admin — обычному manager для проверки своей точки уже служит
+   * org-scoped GET /reports/day/:storeId (превью без реальной отправки).
+   */
   app.post(
     '/reports/send-micro',
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { body: SendMicroBody } },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
+    if (request.user!.role !== 'admin') {
+      return reply.code(403).send({ error: 'forbidden', message: 'Только для администратора' });
+    }
     try {
       const { sendMicroReports } = await import('../../../cron/reports.js');
       const body = (request.body || {}) as SendMicroBody;
@@ -91,6 +104,9 @@ export async function registerReportsRoutes(app: FastifyInstance) {
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { body: SendFinalBody } },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
+    if (request.user!.role !== 'admin') {
+      return reply.code(403).send({ error: 'forbidden', message: 'Только для администратора' });
+    }
     try {
       const { sendFinalReports } = await import('../../../cron/reports.js');
       const body = (request.body || {}) as SendFinalBody;

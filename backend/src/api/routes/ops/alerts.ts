@@ -79,24 +79,41 @@ export async function registerAlertsRoutes(app: FastifyInstance) {
     }
   );
 
-  // Product Analytics (20.34) — первый просмотр алерта менеджером. Простое
-  // "открыли/нет" (announcements/:id/read задаёт тот же уровень строгости —
-  // requireAuth без org-проверки владения, здесь чуть строже requireManager,
-  // потому что сама страница алертов уже под этим гейтом), без body.
-  app.post('/alerts/:id/read', async (request, reply) => {
+  // Product Analytics (20.34) — первый просмотр алерта менеджером.
+  // Security audit (20.52.0) — раньше без org-проверки владения (тот же
+  // класс, что уже закрыт в /ack и /status выше) — manager другой сети
+  // мог отметить прочитанным чужой алерт, зная/угадав id.
+  app.post(
+    '/alerts/:id/read',
+    { schema: { body: AlertOrgBody } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { id } = request.params as { id: string };
+    const { org_id } = (request.body || {}) as AlertOrgBody;
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    const alert = await alertsRepo.findStoreId(Number(id));
+    if (!alert) return reply.code(404).send({ error: 'not found' });
+    if (alert.store_id && !(await assertStoreInOrg(alert.store_id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Алерт не принадлежит вашей сети' });
+    }
     await alertsRepo.markOpened(Number(id));
     return { ok: true };
-  });
+    }
+  );
 
   app.post(
     '/alerts/run',
-    // 20.50.0 — ручной триггер полного прохода smart-алертов по всем
-    // точкам сети, редкое admin-действие.
+    // 20.50.0 — ручной триггер полного прохода smart-алертов по ВСЕЙ сети
+    // (комментарий уже называл его "редким admin-действием"). Security
+    // audit (20.52.0) — гвард на деле был requireManager, не admin: любой
+    // manager любой сети мог форсировать полный сетевой пересчёт.
+    // Приведено в соответствие с уже заявленным намерением.
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
+    if (request.user!.role !== 'admin') {
+      return reply.code(403).send({ error: 'forbidden', message: 'Только для администратора' });
+    }
     return runSmartAlertsTick();
     }
   );

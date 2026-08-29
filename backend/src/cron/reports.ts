@@ -8,7 +8,7 @@
 import { todayMoscow } from '../utils/date.js';
 import { getSalesSumColumns } from '../core/shared/metrics-catalog.js';
 import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '../integrations/telegram/bot.js';
-import { shiftReminder, microReport, finalReport, microLines, finalLines } from '../integrations/telegram/messages.js';
+import { shiftReminder, microReport, finalReport, microLines, finalLines, esc } from '../integrations/telegram/messages.js';
 import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../core/reports/image.js';
 import { generateDipComment } from '../integrations/ai/client.js';
 import { materializeStoreDailyPlans } from '../core/plans/service.js';
@@ -180,7 +180,12 @@ async function sendStoreStoryReport(
     );
     if (!r.ok) throw new Error(r.error || 'media_group_failed');
 
-    await notifyChat(`🏁 <b>${st.name}</b> · итог дня · ${date}\n\n${comment.text}`, chatId, threadId);
+    // Security audit (20.52.0) — оба поля раньше шли в parse_mode:'HTML'
+    // сообщение без esc(): st.name (кастомное название точки, admin-
+    // controlled) и comment.text (AI-сгенерированный текст, Groq) — оба
+    // потенциально ломают Telegram HTML-разметку или (для AI-текста)
+    // внедряют её намеренно через prompt injection в исходных данных.
+    await notifyChat(`🏁 <b>${esc(st.name)}</b> · итог дня · ${date}\n\n${esc(comment.text)}`, chatId, threadId);
     return r;
   } catch (e: any) {
     console.warn('Story report failed, fallback to single final image:', e?.message || e);

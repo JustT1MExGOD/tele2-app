@@ -78,9 +78,15 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     '/admin/rebuild-hour-profiles',
     // 20.50.0 — пересчёт по ВСЕЙ БД разом (см. комментарий выше), редкое
     // admin-действие, не должно вызываться часто ни намеренно, ни по ошибке.
+    // Security audit (20.52.0) — комментарий уже называл это "admin-
+    // действием", но гвард был requireManager: любой manager любой сети
+    // мог форсировать полный пересчёт по всей БД. Приведено в соответствие.
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
     async (request, reply) => {
     if (!requireManager(request, reply)) return;
+    if (request.user!.role !== 'admin') {
+      return reply.code(403).send({ error: 'forbidden', message: 'Только для администратора' });
+    }
     return rebuildHourProfiles();
     }
   );

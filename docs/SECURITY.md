@@ -120,6 +120,7 @@ Defense-in-depth: ни один отдельный уровень не един�
 | 8 | Обработка ошибок | Единый формат, без утечки внутренностей | `app.ts::setErrorHandler`, `shared/errors.ts` |
 | 9 | Frontend | Экранирование вывода, CSP, typed-контракт | `frontend/js/*.js`, `frontend/src/api-client.ts` |
 | 10 | Cryptographic Data Protection | Application-level envelope encryption (Level 2) на чувствительных полях; E2EE (Level 3) — NOT IMPLEMENTED, см. ADR-008 | `security/crypto/*`, `data/repositories/support.ts` |
+| 11 | Multi-Factor Authentication + step-up | WebAuthn/TOTP/recovery codes; channel-agnostic step-up ticket на опасные действия; last-factor removal guard | `auth/mfa/*`, `auth/step-up.ts`, `api/routes/auth/mfa.ts` |
 
 ---
 
@@ -150,6 +151,7 @@ Defense-in-depth: ни один отдельный уровень не един�
   | `POST /me/link-phone` | 5/мин | Привязка телефона+пароля к своей же карточке (20.36.0) — редкое self-service действие |
   | `POST /auth/login` | 10/мин, ключ — `sha256(normalizePhone(phone))` | 20.48.0: не по IP — закрывает distributed brute-force по одному номеру через много IP; работает ВМЕСТЕ с общим 300/мин-по-IP лимитом, не вместо него |
   | `POST /auth/reset/:token` | 10/мин | Одноразовый токен сброса пароля в URL — сам по себе секрет, но лимит закрывает перебор битых/устаревших токенов |
+  | `POST /auth/login/mfa`, `/auth/mfa/step-up`, `/auth/mfa/totp/confirm` | 20/мин | 20.52.0: 6-значный TOTP/recovery-код — брутфорсибельный без лимита |
   | `POST /reports/send-micro`, `/send-final` | 10/мин | Рендер PNG через worker-пул — дорогая CPU-операция |
   | `POST /reports/send-digest` | 10/мин | То же — генерация изображения |
   | `GET /avatars/:employeeId` | 30/мин | Единственный публичный (без сессии) GET-эндпоинт — см. [известные компромиссы](#известные-компромиссы) |
@@ -163,7 +165,6 @@ Defense-in-depth: ни один отдельный уровень не един�
   | `GET /sales/audit`, `/export/*.csv`, `/export/bi/daily` | 10-20/мин | 20.50.0: export-роуты, раньше без лимита вообще |
   | `POST /schedule/what-if(/apply)` | 20/мин, 10/мин | 20.50.0: полная симуляция + (для `/apply`) реальные записи в `schedules` |
   | `GET /access/orgs`, `/access/employees-directory`, `/access/status` | 30/мин | 20.50.0: единственная анонимная (без сессии) поверхность API, раньше без лимита — см. [известные компромиссы](#известные-компромиссы) |
-  | `POST /auth/login` | 10/мин, ключ — `sha256(normalizePhone(phone))` | 20.48.0: не по IP — закрывает distributed brute-force по одному номеру через много IP; работает ВМЕСТЕ с общим 300/мин-по-IP лимитом, не вместо него |
 
   **`trustProxy: 1`** (20.48.0, `app.ts`) — Railway кладёт приложение за
   ровно одним reverse-proxy хопом; доверяем ровно ему, не `true` (который
@@ -296,15 +297,17 @@ telegram-identity (phone переживает, как и раньше `employees
 свою browser-сессию). Список — только `id/created_at/last_seen_at/current`,
 без IP/User-Agent/геолокации (PII/privacy surface, не запрошено).
 
-**Срок жизни сессии** — `employee_sessions.expires_at` фиксируется при
-создании (`createSession()`, `data/repositories/sessions.ts`) на **30
-дней абсолютно**, не продлевается; `resolveSession()` проверяет только
-`expires_at > now()`. `last_seen_at` обновляется отдельно (`touchSession()`,
-троттлинг раз в час) — это только для отображения в списке сессий, **не**
-влияет на резолв: idle-таймаут (автоматический logout по бездействию) на
-сегодня **не реализован** — сессия остаётся рабочей все 30 дней независимо
-от активности. Cookie `t2_session` несёт тот же `maxAge` (30 дней), синим
-цветом с `expires_at`. Явный idle-таймаут — см. [security roadmap](#security-roadmap--целевой-профиль).
+**Срок жизни сессии** (20.52.0, обновлено) — `employee_sessions.expires_at`
+фиксируется при создании (`createSession()`, `data/repositories/sessions.ts`)
+абсолютным TTL: **30 дней** для обычных ролей, **7 дней** для
+admin/supervisor (§9 брифа — «for privileged users consider shorter
+lifetimes»), не продлевается. Cookie `t2_session` несёт тот же `maxAge`.
+**Idle-таймаут — 14 дней**: `resolveSession()` дополнительно проверяет
+`last_seen_at > now() - 14 days`, не только `expires_at > now()` — сессия,
+к которой не притрагивались 14 дней, перестаёт резолвиться, даже если
+абсолютный TTL ещё не истёк. `last_seen_at` обновляется `touchSession()`
+(троттлинг раз в час — не на каждый запрос, только достаточно для
+14-дневного окна).
 
 **Компрометация `BOT_TOKEN`** — секрет уровня «полный контроль над ботом»
 (отправка сообщений от его имени, чтение входящих во всех чатах, куда он
@@ -541,6 +544,68 @@ Master Key / KEK (env ENCRYPTION_KEKS, версионирован, ротиру�
 сообщения ошибок содержат только класс ошибки и метаданные (`alg`/`kid`/
 `table`/`id`), никогда сырые байты.
 
+### 11. Multi-Factor Authentication (MFA)
+
+Полное архитектурное решение —
+[docs/ADR/009](./ADR/009-mfa-step-up.md). Библиотеки — только vetted:
+`@simplewebauthn/server`/`@simplewebauthn/browser` (WebAuthn/passkey),
+`otplib` v13 (TOTP, дефолтные плагины `NobleCryptoPlugin`/
+`ScureBase32Plugin` — `@noble/hashes`/`@scure/base`). Ни один
+криптографический примитив не написан самостоятельно.
+
+**Иерархия факторов**: WebAuthn/passkey (приоритетный) → TOTP
+(совместимый fallback) → recovery codes (последний резерв). SMS не
+используется ни для одного из них.
+
+**Login-time второй фактор** — свойство конкретного аккаунта (есть ли
+подтверждённый TOTP/WebAuthn), не глобальная политика по роли: `POST
+/auth/login` с паролем возвращает `{mfa_required:true, mfa_token}`
+вместо сессии, если фактор подтверждён; `POST /auth/mfa/login`
+довершает вход. `mfa_token` — опаque, single-use, 5 минут
+(`mfa_pending_logins`).
+
+**Step-up (AAL3, "свежее подтверждение для ЭТОГО действия")** —
+channel-agnostic непрозрачный bearer-тикет (`mfa_step_up_tickets`, 10
+минут), не session-freshness: у Telegram-запросов нет server-side
+сессии, куда можно было бы класть "MFA было пройдено N минут назад"
+(initData перепроверяется заново каждый раз, ADR-005) — тикет работает
+одинаково для Telegram и browser. Получить тикет (`POST
+/auth/mfa/step-up`) физически невозможно без хотя бы одного
+подтверждённого фактора (`mfa_not_configured`, 400) — это и есть
+реальный enforcement "MFA обязателен для admin/supervisor", не
+отдельный enrollment-гейт на каждый роут.
+
+Step-up-gated действия сегодня: `PATCH /employees/:id/role` при
+`role==='admin'`, `POST /auth/admin/reset-password/:employeeId`, `POST
+/employees/:id/mfa/reset`.
+
+**Last-factor removal guard (MFA-3)** — отключение TOTP/отзыв
+последнего WebAuthn-credential блокируется (`last_mfa_factor`, 400) для
+admin/supervisor, если после этого не останется ни одного фактора.
+Обычные роли (MFA не обязателен политикой) — без ограничения.
+
+**Recovery codes** — CSPRNG (`crypto.randomBytes`), показываются один
+раз в plaintext, дальше хранится только `sha256`-хеш (opaque bearer
+secret, не recoverable material — тот же принцип, что session/reset
+токены, см. §44 брифа). Атомарно single-use
+(`UPDATE...WHERE used_at IS NULL...RETURNING`, race-safe). Регенерация
+инвалидирует весь предыдущий набор целиком.
+
+**TOTP replay-защита** — принятый time-step запоминается
+(`employee_totp.last_time_step`), `afterTimeStep` в `otplib.verify()`
+отклоняет повторное использование того же/более раннего окна, даже с
+верным кодом.
+
+**Известные пробелы этого захода** (см. также финальный отчёт аудита):
+полноценная WebAuthn-церемония (реальный authenticator response) не
+покрыта end-to-end тестами — только граничные проверки
+(malformed/чужой credential id/"не настроено"); frontend UI для
+enrollment/login-MFA не реализован — backend полностью функционален и
+протестирован через прямые HTTP-вызовы, но нет экрана в
+`frontend/src/**`. Ни один существующий сотрудник не имеет MFA сегодня
+(миграция не бэкфиллит фактор никому) — обратная совместимость логина
+не нарушена.
+
 ---
 
 ## Известные компромиссы
@@ -557,11 +622,11 @@ Master Key / KEK (env ENCRYPTION_KEKS, версионирован, ротиру�
 | CSP разрешает `unsafe-inline` для `script-src-attr`/`style-src-attr` | Остальная CSP строгая (`default-src 'self'`, `object-src 'none'` и т.д.); реальные XSS-дыры, которые эта строгость закрыла бы дополнительным слоем, устранены адресно в 20.49.0 (`esc()` у источника инъекции, не только у её исполнения) | Точный объём подтверждён аудитом 20.49.0: 265+ `onclick=`/`onchange=`/`oninput=` (21 TS-файл + `index.html`) + ~400 `style=`. Закрытие требует перевода на event-delegation/CSS-классы поэкранно с тестами — сопоставимо по объёму с Frontend rewrite (20.3.0-20.30.0, ~27 версий). Запланировано отдельной эпохой (Web Security & Trust Layer, следующая часть), не забыто |
 | `styleSrc: 'unsafe-inline'` (block-level) | Единственный потребитель — `shift/index.ts`, keyframe-анимация конфетти через `document.createElement('style')` | Не убирать без замены (nonce/hash или отказ от динамического `<style>`) — сломает анимацию молча (CSP-нарушения для стилей не бросают JS-ошибку) |
 | Supervisor Scope Cache — in-memory, не Redis | 5-минутный TTL, точечная инвалидация при смене сектора/роли | Прод — 1 реплика Railway (`grammy`-бот на long-polling не переживёт вторую реплику без перехода на webhook); Redis добавил бы сетевой failure mode без выигрыша в корректности при одной реплике. **Уточнение**: кэш обслуживает только `resolveSupervisorStores()` (кабинет супервайзера/Command Center, `core/analytics/supervisor.ts`) — общий `getUserStoreIds()` (`auth/guards.ts`), используемый другими роутами для фильтрации по сектору, ходит в `supervisor_sectors` напрямую, кэш не трогает; расхождение TTL между путями структурно невозможно, потому что кэш не единственный источник данных |
-| `GET /supervisor/stores` (ветка manager/admin) отдаёт точки ВСЕХ сетей без org-фильтра | Ролевой гейт (`manager`/`admin` уже видят чужие данные широко); нет | Перенесено дословно из до-DAL кода (`data/repositories/stores.ts::listAllActiveForPicker()`, комментарий в самом коде фиксирует находку 20.8.0) — единственный репозиторный запрос без `orgId`-параметра во всём этом пикере; не исправлено намеренно тогда, не переоткрыто с тех пор |
 | `check-dangerous-js-patterns.mjs` (CI) не проверяет `innerHTML`/`onclick=` эвристикой | Сознательный выбор (высокий false-positive без AST, см. сам скрипт) | Значит новый недоэкранированный sink не поймается автоматически — только ручным/периодическим аудитом, как этот. Четыре конкретных места такого класса (`promos.ts` список, `plans-bfq.ts`×2, `schedule.ts`/`my-plan.ts` `title=`) найдены этим документационным аудитом и закрыты в 20.50.1 — не гипотетический риск, реальный прецедент |
 | Динамические тела запроса (кастомные метрики, `sync/batch`, `what-if moves`) вне строгой TypeBox-схемы | `additionalProperties: true` + ручная фильтрация в обработчике (regex на ключи, `Number()`) | Схема не должна быть строже уже отлаженной ручной логики; форма тела определяется каталогом метрик динамически |
 | `GET /access/orgs` + `GET /access/employees-directory` публичны без сессии | Отдают только названия сетей и список имён/id для формы регистрации, не бизнес-данные (продажи/кассу/роли); с 20.50.0 — 30/мин лимит (раньше вообще без лимита) | Нужны гостю ДО того, как у него есть identity — пикер сети и «я из списка» на регистрации; разведка оргструктуры — реальная, но малая цена (см. [THREAT-MODEL.md](./THREAT-MODEL.md)) |
 | `normalizePhone()` (20.48.0) принимает только RU-формы, международные номера отклоняются | `validatePhone()` даёт понятный 400, не тихую порчу данных | Проект целиком русскоязычный (`Europe/Moscow`); `libphonenumber` ради узкой задачи не тянули — расширить при реальной потребности в международных номерах |
+| `POST /metrics`/`DELETE /metrics/:id` — любой manager (не только admin) мутирует ГЛОБАЛЬНЫЙ каталог кастомных метрик (`ALTER TABLE` на 3 таблицах), общий для всех сетей | `requireManager` — не гейтится по org, каталог метрик архитектурно один на всё приложение | Найдено security-аудитом 20.52.0, не исправлено — сужение до admin-only было бы продуктовым решением (кто должен заводить метрики), не чисто security-фиксом; см. финальный отчёт |
 
 ## RBAC — таблица прав по ролям
 
@@ -617,8 +682,10 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
 
 | Направление | Сейчас | Целевое состояние |
 |---|---|---|
-| Idle-таймаут сессии | Нет — только абсолютный TTL 30 дней (см. [аутентификация](#2-аутентификация)) | Автоматическое истечение по бездействию, отдельно от абсолютного TTL |
 | Reuse отозванной сессии | Механизм есть (удалённая строка → `resolveSession()` не находит её), но нет именного adversarial-теста, явно проверяющего запрос СРАЗУ ПОСЛЕ `DELETE /auth/sessions/:id`/logout | Именной regression-тест — обязательный gate перед тем, как считать это закрытым классом |
+| Отдельная временная блокировка аккаунта после N неудачных попыток входа | Нет — только rate-limit по времени (10/мин, хешированный телефон, см. [threat-model](./THREAT-MODEL.md)) | Порог + временная блокировка на `/auth/*`, отдельно от общего rate-limit |
+| Полноценная WebAuthn-церемония в тестах | Покрыты только граничные проверки (malformed input, чужой credential id, "не настроено") — реальный authenticator response не симулируется | Виртуальный/software authenticator в test suite |
+| Frontend UI для MFA (enrollment/login-second-factor) | Backend полностью функционален и протестирован (20.52.0, ADR-009), UI-экранов нет | Экраны enrollment/login-MFA в `frontend/src/**` |
 | Журнал допуска со стабильными кодами | Часть событий в `audit_log` (роль, деактивация, экспорт), но без единой таксономии | Стабильные коды `AUTH_FAILURE`/`SESSION_REVOKED`/`MASS_EXPORT`/`ACCESS_DENIED` |
 | Строгий CSP без inline | `scriptSrc`/`default-src`/`object-src` уже строгие; `script-src-attr`/`style-src-attr`/`styleSrc` — `unsafe-inline` (см. [известные компромиссы](#известные-компромиссы)) | Event-delegation вместо `onclick=`, nonce/hash для нужных `<style>` — отдельная эпоха по объёму, сопоставимая с Frontend rewrite |
 | SAST / secret-scanning в CI | `npm audit --audit-level=high` — только известные уязвимости зависимостей; нет CodeQL/Semgrep/gitleaks/trufflehog, нет Dependabot | Хотя бы один SAST-скан + secret-scanning как gate CI |
@@ -655,5 +722,7 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
   Application-Level Envelope Encryption (Level 2), 20.51.0.
 - [docs/ADR/008](./ADR/008-e2ee-not-implemented.md) — почему E2EE
   (Level 3) не реализован.
+- [docs/ADR/009](./ADR/009-mfa-step-up.md) — MFA и channel-agnostic
+  step-up, 20.52.0.
 - [CHANGELOG.md](../CHANGELOG.md) — полная построчная хронология каждой
   security-правки с датами и версиями.

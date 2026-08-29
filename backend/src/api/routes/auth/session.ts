@@ -28,6 +28,10 @@ import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as identitiesRepo from '../../../data/repositories/identities.js';
 import * as accessRequestsRepo from '../../../data/repositories/access-requests.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
+import * as mfaRepo from '../../../data/repositories/mfa.js';
+import { hasConfirmedMfaFactor } from '../../../auth/mfa/index.js';
+import { isTotpConfirmed } from '../../../auth/mfa/totp.js';
+import { assertStepUp } from '../../../auth/step-up.js';
 import type {
   RegisterPhoneRequest,
   RegisterPhoneResponse,
@@ -73,7 +77,7 @@ const isProd = () => process.env.RAILWAY_ENVIRONMENT === 'production';
  * 20.48.0 — t2_csrf ставится/ротируется ВМЕСТЕ с t2_session на каждый
  * новый логин (double-submit cookie, см. auth/csrf.ts::setCsrfCookie).
  */
-function setSessionCookie(reply: FastifyReply, token: string) {
+export function setSessionCookie(reply: FastifyReply, token: string) {
   reply.setCookie(COOKIE_NAME, token, {
     httpOnly: true,
     secure: isProd(),
@@ -194,7 +198,27 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         return reply.code(403).send({ error: 'not_active', message: 'Доступ ещё не подтверждён' });
       }
 
-      const token = await sessionsRepo.createSession(e.id);
+      // 20.52.0 (MFA) — если у сотрудника есть подтверждённый второй
+      // фактор, пароль сам по себе больше не выдаёт рабочую сессию:
+      // возвращаем mfa_token (короткоживущий, single-use), реальная
+      // cookie-сессия появляется только после POST /auth/mfa/login.
+      // Роль здесь ни при чём — это свойство КОНКРЕТНОГО аккаунта (есть
+      // ли у него включённый фактор), не глобальная политика по роли
+      // (см. docs/ADR/010-mfa.md — mandatory для admin/supervisor
+      // обеспечивается тем, что все опасные действия требуют step-up,
+      // а step-up физически недостижим без хотя бы одного фактора).
+      if (await hasConfirmedMfaFactor(e.id)) {
+        const mfaToken = await mfaRepo.createPendingLogin(e.id);
+        const methods: ('totp' | 'webauthn' | 'recovery_code')[] = [];
+        const creds = await mfaRepo.listActiveWebAuthnCredentials(e.id);
+        if (creds.length) methods.push('webauthn');
+        if (await isTotpConfirmed(e.id)) methods.push('totp');
+        const remaining = await mfaRepo.countActiveRecoveryCodes(e.id);
+        if (remaining > 0) methods.push('recovery_code');
+        return { ok: true, mfa_required: true, mfa_token: mfaToken, mfa_methods: methods };
+      }
+
+      const token = await sessionsRepo.createSession(e.id, false, e.role);
       setSessionCookie(reply, token);
       return { ok: true };
     }
@@ -229,7 +253,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       // (устройство A украдено → пароль меняют на B → A не остаётся рабочим).
       await sessionsRepo.deleteAllForEmployee(reset.employee_id);
 
-      const sessionToken = await sessionsRepo.createSession(reset.employee_id);
+      const role = await employeesRepo.getRole(reset.employee_id);
+      const sessionToken = await sessionsRepo.createSession(reset.employee_id, false, role);
       setSessionCookie(reply, sessionToken);
       return { ok: true };
     }
@@ -242,6 +267,10 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     { preHandler: [requireEmployeeInOrg('params', 'employeeId', { allowOrgOverride: true })] },
     async (request, reply): Promise<AdminResetPasswordResponse | FastifyReply | undefined> => {
       if (!requireManager(request, reply)) return;
+      // Step-up (20.52.0) — сброс чужого пароля даёт полный доступ к
+      // аккаунту через первый же вход — та же категория риска, что выдача
+      // роли admin, поэтому тот же свежий MFA-барьер перед действием.
+      if (!(await assertStepUp(request, reply))) return;
       const { employeeId } = request.params as { employeeId: string };
       const { org_id } = (request.query || {}) as { org_id?: string };
       resolveViewOrgId(request.user!, org_id);

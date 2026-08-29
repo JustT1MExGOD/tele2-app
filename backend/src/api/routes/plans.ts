@@ -166,14 +166,22 @@ export async function registerPlansRoutes(app: FastifyInstance) {
   });
 
   // План одной точки на месяц (вносится вручную, независимо от планов сотрудников)
-  app.get('/plans/stores/:id/month', async (request, reply): Promise<StoreMonthPlanResponse | FastifyReply | undefined> => {
+  // Security audit (20.52.0) — этот GET не имел org-scope check вообще,
+  // в отличие от PUT-сиблинга сразу ниже (уже requireStoreInOrg): любой
+  // активный сотрудник любой сети мог прочитать план продаж чужой точки,
+  // просто подобрав/перебрав id. Тот же preHandler, что у PUT.
+  app.get(
+    '/plans/stores/:id/month',
+    { preHandler: [requireStoreInOrg('params', 'id', { allowOrgOverride: true })] },
+    async (request, reply): Promise<StoreMonthPlanResponse | FastifyReply | undefined> => {
     if (!requireActive(request, reply)) return;
     const { id } = request.params as { id: string };
     const { month } = request.query as { month?: string };
     const m = month || currentMonthMoscow();
     const plan = await getStoreMonthPlan(id, m);
     return plan || { store_id: id, month: monthStart(m), empty: true };
-  });
+    }
+  );
 
   // Manager: задать / обновить месячный план точки (только своей сети)
   app.put(

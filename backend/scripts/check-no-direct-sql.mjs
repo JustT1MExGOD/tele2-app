@@ -28,6 +28,12 @@ const ROOT = path.join(__dirname, '..');
 const CLEAN_FILES = [
   'src/api/routes/analytics/command-center.ts',
   'src/api/routes/auth/session.ts',
+  'src/api/routes/auth/mfa.ts',
+  'src/auth/mfa/totp.ts',
+  'src/auth/mfa/webauthn.ts',
+  'src/auth/mfa/recovery-codes.ts',
+  'src/auth/mfa/index.ts',
+  'src/auth/step-up.ts',
   'src/api/routes/auth/sessions-admin.ts',
   'src/api/routes/analytics/forecast.ts',
   'src/api/routes/analytics/heatmap.ts',

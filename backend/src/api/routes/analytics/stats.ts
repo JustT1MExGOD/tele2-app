@@ -4,7 +4,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { todayMoscow } from '../../../utils/date.js';
-import { requireActive, resolveViewOrgId } from '../../../auth/guards.js';
+import { requireActive, resolveViewOrgId, assertEmployeeInOrg } from '../../../auth/guards.js';
 import { getSalesSumColumns } from '../../../core/shared/metrics-catalog.js';
 import * as repo from '../../../data/repositories/stats.js';
 import type { StatsDailyResponse, DashboardResponse, EmployeeProgressResponse } from '../../../shared/api-types.js';
@@ -49,6 +49,17 @@ export async function registerStatsRoutes(app: FastifyInstance) {
     const isManagerRole = request.user!.role === 'manager' || request.user!.role === 'admin';
     if (!isManagerRole && String(request.user!.employee_id) !== String(id)) {
       return reply.code(403).send({ error: 'forbidden', message: 'Можно смотреть только свой прогресс' });
+    }
+    // Security audit (20.52.0) — manager-ветка не проверяла org-scope
+    // вообще (в отличие от структурно идентичных GET /plans/employees/:id/month
+    // и GET /bfq/:employeeId, у которых assertEmployeeInOrg уже был):
+    // manager чужой сети мог прочитать план/факт продаж сотрудника другой
+    // сети, просто подставив его id.
+    if (isManagerRole && String(request.user!.employee_id) !== String(id)) {
+      const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
+      if (!(await assertEmployeeInOrg(Number(id), orgId))) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
+      }
     }
     const { date } = request.query as { date?: string };
     const d = date || todayMoscow();

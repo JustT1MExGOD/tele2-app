@@ -16,6 +16,7 @@ import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as supervisorSectorsRepo from '../../../data/repositories/supervisor-sectors.js';
 import { invalidate as invalidateScope } from '../../../core/shared/scope-cache.js';
+import { assertStepUp } from '../../../auth/step-up.js';
 import type { EmployeesListResponse, CreateEmployeeResponse } from '../../../shared/api-types.js';
 
 const PostEmployeeBody = Type.Object({
@@ -213,6 +214,12 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     if (!canAssignRole(request.user!.role, role)) {
       return reply.code(403).send({ error: 'forbidden', message: 'Можно назначать только роли ниже своей' });
     }
+
+    // Step-up (20.52.0) — выдача роли admin требует свежего подтверждения
+    // MFA прямо перед этим конкретным действием, не «когда-то раньше в
+    // этой сессии»; см. auth/step-up.ts — получить step-up ticket вообще
+    // невозможно без хотя бы одного настроенного у actor'а фактора.
+    if (role === 'admin' && !(await assertStepUp(request, reply))) return;
 
     const beforeRole = await employeesRepo.getRole(Number(id));
     const orgId = resolveViewOrgId(request.user!, b.org_id);

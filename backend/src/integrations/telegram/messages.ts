@@ -14,7 +14,7 @@ const EMOJI_POOL: Record<string, string[]> = {
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
-function esc(s: any) {
+export function esc(s: any) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function bar(pct: number, width = 10): string {

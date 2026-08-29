@@ -24,6 +24,16 @@ describe('Security headers — X-Content-Type-Options / Referrer-Policy / Cache-
     expect(res.headers['cache-control']).toBe('no-store');
   });
 
+  it('Permissions-Policy (20.52.0): geolocation=(self), остальные API явно закрыты', async () => {
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: '/healthz' });
+    const policy = res.headers['permissions-policy'] as string;
+    expect(policy).toContain('geolocation=(self)');
+    expect(policy).toContain('camera=()');
+    expect(policy).toContain('microphone=()');
+    expect(policy).toContain('payment=()');
+  });
+
   it('GET /avatars/:id с реальными данными — сохраняет свой Cache-Control, не перезаписан в no-store', async () => {
     const fx = new TestFixtures();
     try {

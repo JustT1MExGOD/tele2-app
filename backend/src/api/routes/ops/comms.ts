@@ -47,9 +47,17 @@ export async function registerCommsRoutes(app: FastifyInstance) {
     }
   );
 
+  // Security audit (20.52.0) — раньше без org-проверки: любой сотрудник
+  // мог отметить прочитанным объявление ЧУЖОЙ сети, зная/угадав id.
   app.post('/announcements/:id/read', async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const { id } = request.params as { id: string };
+    const { org_id } = request.query as { org_id?: string };
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    const annOrgId = await commsRepo.findOrgId(id);
+    if (!annOrgId || annOrgId !== orgId) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Объявление не принадлежит вашей сети' });
+    }
     await commsRepo.markRead(Number(id), request.user!.employee_id);
     return { ok: true };
   });

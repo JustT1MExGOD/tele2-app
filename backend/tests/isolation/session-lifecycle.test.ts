@@ -4,7 +4,7 @@
  * инвалидировать все активные browser-сессии сотрудника немедленно.
  */
 import { describe, it, expect, afterAll } from 'vitest';
-import { getApp, authAs, authAsSession } from '../helpers/app.js';
+import { getApp, authAs, authAsSession, setupTotpAndStepUp } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import { hashPassword } from '../../src/auth/password.js';
@@ -63,10 +63,12 @@ describe('Session lifecycle — отзыв при деактивации и см
     const beforeReset = await app.inject({ method: 'GET', url: '/access/requests', headers: authAsSession(tokenA) });
     expect(beforeReset.statusCode).toBe(403); // employee, не manager — но авторизован (не 401)
 
+    // 20.52.0 (MFA) — сброс чужого пароля теперь step-up-gated.
+    const stepUpHeaders = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
     const genLink = await app.inject({
       method: 'POST',
       url: `/auth/admin/reset-password/${employeeId}`,
-      headers: authAs(admin.telegramId)
+      headers: { ...authAs(admin.telegramId), ...stepUpHeaders }
     });
     const resetUrl: string = genLink.json().reset_url;
     const token = resetUrl.split('reset=')[1];
@@ -103,5 +105,40 @@ describe('Session lifecycle — отзыв при деактивации и см
 
     const afterLogin = await app.inject({ method: 'GET', url: '/access/requests', headers: authAsSession(preLoginToken) });
     expect(afterLogin.statusCode).toBe(401);
+  });
+
+  it('idle timeout (20.52.0): a session untouched for >14 days no longer resolves, even with a valid absolute TTL remaining', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Idle Timeout Org');
+    const passwordHash = await hashPassword('idle-pass');
+    const { id } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Idle Target' });
+    const token = await sessionsRepo.createSession(id);
+
+    const fresh = await app.inject({ method: 'GET', url: '/access/requests', headers: authAsSession(token) });
+    expect(fresh.statusCode).toBe(403); // авторизован (employee, не 401), просто не manager
+
+    await query(`UPDATE employee_sessions SET last_seen_at = now() - interval '15 days' WHERE token_hash = $1`, [sessionsRepo.hashToken(token)]);
+    const stale = await app.inject({ method: 'GET', url: '/access/requests', headers: authAsSession(token) });
+    expect(stale.statusCode).toBe(401);
+  });
+
+  it('privileged roles (admin/supervisor) get a shorter absolute session TTL than regular roles (§9)', async () => {
+    const org = await fx.createOrg('Privileged TTL Org');
+    const passwordHash = await hashPassword('priv-pass');
+    const { id: adminId } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Priv Admin', role: 'admin' });
+    const { id: empId } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Priv Employee', role: 'employee' });
+
+    await sessionsRepo.createSession(adminId, false, 'admin');
+    await sessionsRepo.createSession(empId, false, 'employee');
+
+    const rows = await query(
+      `SELECT employee_id, expires_at - created_at AS ttl FROM employee_sessions WHERE employee_id = ANY($1)`,
+      [[adminId, empId]]
+    );
+    const adminTtlDays = rows.rows.find((r: any) => Number(r.employee_id) === adminId).ttl.days;
+    const empTtlDays = rows.rows.find((r: any) => Number(r.employee_id) === empId).ttl.days;
+    expect(adminTtlDays).toBeLessThan(empTtlDays);
+    expect(adminTtlDays).toBe(7);
+    expect(empTtlDays).toBe(30);
   });
 });

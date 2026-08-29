@@ -353,8 +353,13 @@ export async function registerAccessRoutes(app: FastifyInstance) {
   app.get('/supervisor/stores', async (request, reply) => {
     if (!requireManagerOrSupervisor(request, reply)) return;
     const user = request.user!;
-    if (user.role === 'manager' || user.role === 'admin') {
+    if (user.role === 'admin') {
       return storesRepo.listAllActiveForPicker();
+    }
+    if (user.role === 'manager') {
+      // Security audit (20.52.0) — раньше manager получал точки ВСЕХ
+      // сетей через тот же listAllActiveForPicker(), что и admin.
+      return storesRepo.listActiveForPickerInOrg(user.org_id);
     }
     return supervisorSectorsRepo.listStoresForSupervisor(user.employee_id!);
   });

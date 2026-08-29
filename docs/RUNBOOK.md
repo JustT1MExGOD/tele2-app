@@ -22,6 +22,57 @@ WHERE telegram_id = <TG_ID>;
 запись в прод-БД в обход миграций требует явного подтверждения владельца
 продукта, это не входит в предодобренный автономный набор действий.
 
+## Компрометация пароля/сессии сотрудника (с MFA или без)
+
+**Обнаружить**: подозрительные действия в `audit_log` (`actor_employee_id`,
+время/характер действий, не типичные для этого человека); жалоба самого
+сотрудника («не входил, но что-то изменилось»).
+
+**Сдержать**:
+1. `DELETE FROM employee_sessions WHERE employee_id = <ID>` — отзывает
+   ВСЕ browser-сессии немедленно (тот же эффект, что `deleteAllForEmployee()`
+   при сбросе пароля/MFA, см. `data/repositories/sessions.ts`).
+2. Если у аккаунта есть MFA (`GET /auth/mfa/status` через admin-доступ к
+   БД: `SELECT * FROM employee_totp/employee_webauthn_credentials WHERE
+   employee_id=<ID>`) и есть подозрение, что скомпрометирован ИМЕННО
+   второй фактор (не только пароль) — `POST /employees/:id/mfa/reset`
+   (admin, требует собственный step-up) отзывает TOTP/WebAuthn/recovery
+   codes сотрудника целиком и его сессии заодно.
+3. Сброс пароля — `POST /auth/admin/reset-password/:employeeId` (admin,
+   требует step-up) выдаёт одноразовую ссылку смены пароля, сама смена
+   инвалидирует все сессии автоматически.
+
+**Восстановить**: сотрудник проходит `/auth/reset/:token` (новый пароль),
+при необходимости — заново включает MFA через `/auth/mfa/totp/enroll` или
+`/auth/mfa/webauthn/register/options`.
+
+**Проверить**: `SELECT * FROM audit_log WHERE target_id=<ID> AND action IN
+('employee.mfa_reset','password_reset') ORDER BY created_at DESC` —
+подтвердить, что сброс реально применился и когда.
+
+## Admin без MFA потерял пароль ИЛИ подозрение на компрометацию admin-аккаунта
+
+MFA (WebAuthn/TOTP/recovery codes, 20.52.0) — опциональная возможность
+до тех пор, пока никто явно не включил её конкретному аккаунту (frontend
+enrollment UI не реализован, см. `docs/ADR/009`). Если скомпрометирован
+admin, у которого MFA не настроен:
+
+1. Действовать как «Восстановление доступа (admin)» выше (прямой SQL,
+   требует подтверждения владельца продукта).
+2. Отдельно отозвать все его сессии (см. процедуру выше).
+3. После восстановления — рекомендовать включить MFA этому аккаунту
+   (`POST /auth/mfa/totp/enroll` → `/auth/mfa/totp/confirm`, или
+   WebAuthn-эквивалент) прежде чем считать инцидент закрытым.
+
+Если у скомпрометированного admin УЖЕ был настроен MFA, и step-up-gated
+действия (выдача роли admin, сброс чужого пароля/MFA) видны в
+`audit_log` от его имени — это означает, что второй фактор тоже был в
+руках атакующего (получить step-up ticket без него невозможно, см.
+`docs/ADR/009`); ротация/пересоздание его MFA-факторов обязательна
+(`POST /employees/:id/mfa/reset` от ДРУГОГО admin, если такой есть, иначе
+прямой SQL `DELETE FROM employee_totp/employee_webauthn_credentials/
+employee_recovery_codes WHERE employee_id=<ID>`).
+
 ## Ротация `BOT_TOKEN`
 
 Компрометация токена (утёк в лог, коммит, скриншот) — токен даёт полный

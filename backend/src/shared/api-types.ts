@@ -624,6 +624,24 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   ok: true;
+  /** 20.52.0 (MFA) — password verified, but a second factor is still
+   * required before a real session is issued. When true, no session/CSRF
+   * cookie has been set yet — the client must complete
+   * POST /auth/mfa/login with mfa_token before it has a working session. */
+  mfa_required?: true;
+  mfa_token?: string;
+  mfa_methods?: ('totp' | 'webauthn' | 'recovery_code')[];
+}
+
+/** 20.52.0 (MFA) — soft-nag surfaced on /me for admin/supervisor without
+ * a confirmed factor yet; enrollment itself is never blocked, but
+ * step-up-gated actions are (see auth/step-up.ts). */
+export interface MfaStatusResponse {
+  enabled: boolean;
+  totp_confirmed: boolean;
+  webauthn_credential_count: number;
+  recovery_codes_remaining: number;
+  enrollment_required: boolean;
 }
 
 export interface LogoutResponse {

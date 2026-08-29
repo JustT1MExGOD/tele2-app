@@ -18,20 +18,45 @@ export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-export async function createSession(employeeId: number): Promise<string> {
+/** Абсолютный TTL (§9 — «for privileged users consider shorter lifetimes»):
+ * admin/supervisor держат более широкий доступ, поэтому короче живут по
+ * умолчанию — 7 дней, не 30. */
+const ABSOLUTE_TTL_DAYS_PRIVILEGED = 7;
+const ABSOLUTE_TTL_DAYS_DEFAULT = 30;
+/** Idle-таймаут (20.52.0) — раньше был только абсолютный TTL, sessions
+ * roadmap в docs/SECURITY.md явно называл отсутствие idle-таймаута
+ * известным пробелом. Сессия, к которой не притрагивались 14 дней,
+ * перестаёт резолвиться, даже если её абсолютный TTL ещё не истёк. */
+const IDLE_TIMEOUT_DAYS = 14;
+
+const PRIVILEGED_ROLES = new Set(['admin', 'supervisor']);
+
+/**
+ * `mfaVerified` — 20.52.0: true only when this session was issued right
+ * after a successful second-factor check (POST /auth/mfa/login), so
+ * downstream code can tell "this browser session completed MFA" (AAL2)
+ * apart from "password/reset alone".
+ * `role` — определяет абсолютный TTL (см. ABSOLUTE_TTL_DAYS_PRIVILEGED);
+ * необязателен для обратной совместимости существующих вызовов, но без
+ * него privileged-роли получают дефолтный (более длинный) TTL.
+ */
+export async function createSession(employeeId: number, mfaVerified = false, role?: string | null): Promise<string> {
   const token = generateToken();
+  const ttlDays = role && PRIVILEGED_ROLES.has(role) ? ABSOLUTE_TTL_DAYS_PRIVILEGED : ABSOLUTE_TTL_DAYS_DEFAULT;
   await query(
-    `INSERT INTO employee_sessions (employee_id, token_hash, expires_at)
-     VALUES ($1, $2, now() + interval '30 days')`,
-    [employeeId, hashToken(token)]
+    `INSERT INTO employee_sessions (employee_id, token_hash, expires_at, mfa_verified_at)
+     VALUES ($1, $2, now() + ($3 || ' days')::interval, ${mfaVerified ? 'now()' : 'NULL'})`,
+    [employeeId, hashToken(token), String(ttlDays)]
   );
   return token;
 }
 
 export async function resolveSession(token: string): Promise<{ employee_id: number } | null> {
   const res = await query(
-    `SELECT employee_id FROM employee_sessions WHERE token_hash = $1 AND expires_at > now()`,
-    [hashToken(token)]
+    `SELECT employee_id FROM employee_sessions
+     WHERE token_hash = $1 AND expires_at > now()
+       AND last_seen_at > now() - ($2 || ' days')::interval`,
+    [hashToken(token), String(IDLE_TIMEOUT_DAYS)]
   );
   return res.rows[0] || null;
 }

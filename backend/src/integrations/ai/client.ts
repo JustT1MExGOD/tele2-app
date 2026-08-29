@@ -6,6 +6,11 @@ import { aiRequestsTotal, aiRequestDuration, aiRequestFailuresTotal } from '../.
 // с нашим объёмом (пара summary в день + до 3 комментариев к просадкам) с запасом.
 const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const DIP_THRESHOLD_PCT = 85;
+// Security audit (20.52.0) — fetch() без таймаута раньше мог держать
+// вызывающий HTTP-запрос (/shifts/close, /forecast/:storeId) или cron-
+// джобу открытыми неограниченно долго, если Groq зависнет — availability/
+// DoS-adjacent находка, не про утечку данных.
+const GROQ_TIMEOUT_MS = 15_000;
 
 type AiOperation = 'shift_summary' | 'dip_comment' | 'forecast_summary';
 
@@ -29,7 +34,8 @@ async function callGroq(prompt: string, maxTokens: number, operation: AiOperatio
         model: MODEL,
         max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }]
-      })
+      }),
+      signal: AbortSignal.timeout(GROQ_TIMEOUT_MS)
     });
     endTimer();
     if (!res.ok) {
