@@ -151,7 +151,9 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
 
   app.post(
     '/shifts/close',
-    { schema: { body: ShiftCloseBody } },
+    // 20.50.0 — дёргает Groq (generateShiftSummary) на каждом закрытии;
+    // сиблинг /shifts/open уже 30/мин, симметрично.
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: ShiftCloseBody } },
     async (request, reply): Promise<ShiftCloseResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const body = (request.body || {}) as ShiftCloseBody;

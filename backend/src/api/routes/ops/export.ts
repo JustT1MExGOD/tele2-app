@@ -34,6 +34,18 @@ function csvEscape(v: any) {
   return s;
 }
 
+// 20.50.0 (Web Security & Trust Layer, часть 3) — findForCsvExport() не
+// несёт LIMIT (в отличие от findSalesAudit(), у которой уже есть LIMIT 500,
+// см. data/repositories/sales.ts) — тихо обрезать строки было бы хуже для
+// файла, которым реально пользуется бухгалтерия (неполные данные без
+// предупреждения), поэтому ограничиваем ШИРИНУ диапазона явной ошибкой,
+// не количество строк молча.
+const MAX_EXPORT_RANGE_DAYS = 400;
+function rangeTooWide(from: string, to: string): boolean {
+  const days = (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000;
+  return days > MAX_EXPORT_RANGE_DAYS;
+}
+
 export async function registerExportRoutes(app: FastifyInstance) {
   // ========== HISTORY ==========
   app.get('/sales/history', async (request, reply) => {
@@ -69,7 +81,12 @@ export async function registerExportRoutes(app: FastifyInstance) {
     return { from, to, count: rows.length, items: rows };
   });
 
-  app.get('/sales/audit', async (request, reply) => {
+  app.get(
+    '/sales/audit',
+    // 20.50.0 — уже LIMIT 500 в SQL (findSalesAudit), лимит здесь только
+    // для консистентности с остальными export-роутами.
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const q = request.query as { from?: string; to?: string; employee_id?: string; org_id?: string };
     const from = q.from || todayMoscow().slice(0, 8) + '01';
@@ -78,15 +95,27 @@ export async function registerExportRoutes(app: FastifyInstance) {
     return salesRepo.findSalesAudit({
       from, to, orgId, employeeId: q.employee_id ? Number(q.employee_id) : null
     });
-  });
+    }
+  );
 
   // ========== EXPORT ==========
-  app.get('/export/sales.csv', async (request, reply) => {
+  app.get(
+    '/export/sales.csv',
+    // 20.50.0 — findForCsvExport() не имеет LIMIT (см. rangeTooWide выше);
+    // единственный реально неограниченный export в приложении.
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
 
     const q = request.query as { from?: string; to?: string; store_id?: string; org_id?: string };
     const from = q.from || todayMoscow().slice(0, 8) + '01';
     const to = q.to || todayMoscow();
+    if (rangeTooWide(from, to)) {
+      return reply.code(400).send({
+        error: 'range_too_wide',
+        message: `Сузьте диапазон дат — максимум ${MAX_EXPORT_RANGE_DAYS} дней за один экспорт`
+      });
+    }
     const orgId = resolveViewOrgId(request.user!, q.org_id);
     const rows = await salesRepo.findForCsvExport({ from, to, orgId, storeId: q.store_id || null });
     const header = [
@@ -113,9 +142,14 @@ export async function registerExportRoutes(app: FastifyInstance) {
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="sales_${from}_${to}.csv"`)
       .send('﻿' + lines.join('\n'));
-  });
+    }
+  );
 
-  app.get('/export/bfq.csv', async (request, reply) => {
+  app.get(
+    '/export/bfq.csv',
+    // 20.50.0 — уже естественно ограничен одним месяцем, лимит для консистентности.
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { month, org_id } = request.query as { month?: string; org_id?: string };
     const m = month || currentMonthMoscow();
@@ -153,9 +187,14 @@ export async function registerExportRoutes(app: FastifyInstance) {
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="bfq_${m}.csv"`)
       .send('﻿' + lines.join('\n'));
-  });
+    }
+  );
 
-  app.get('/export/schedules.csv', async (request, reply) => {
+  app.get(
+    '/export/schedules.csv',
+    // 20.50.0 — уже естественно ограничен одним месяцем, лимит для консистентности.
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { month, org_id } = request.query as { month?: string; org_id?: string };
     const m = month || currentMonthMoscow();
@@ -182,5 +221,6 @@ export async function registerExportRoutes(app: FastifyInstance) {
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="schedules_${m}.csv"`)
       .send('﻿' + lines.join('\n'));
-  });
+    }
+  );
 }

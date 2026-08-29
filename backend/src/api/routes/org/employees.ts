@@ -11,6 +11,7 @@ import { Type, Static } from '@sinclair/typebox';
 import { withTransaction } from '../../../data/db/index.js';
 import { requireActive, requireManager, canAssignRole, resolveViewOrgId, requireEmployeeInOrg, Role } from '../../../auth/guards.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
+import { claimIdempotencyKey } from '../../../data/repositories/sync-log.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as supervisorSectorsRepo from '../../../data/repositories/supervisor-sectors.js';
@@ -21,7 +22,8 @@ const PostEmployeeBody = Type.Object({
   full_name: Type.String({ minLength: 1 }),
   short_name: Type.Optional(Type.String()),
   role: Type.Optional(Type.String()),
-  org_id: Type.Optional(Type.String())
+  org_id: Type.Optional(Type.String()),
+  client_id: Type.Optional(Type.String())
 });
 type PostEmployeeBody = Static<typeof PostEmployeeBody>;
 
@@ -58,7 +60,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
   app.post(
     '/employees',
     { schema: { body: PostEmployeeBody } },
-    async (request, reply): Promise<CreateEmployeeResponse | FastifyReply | undefined> => {
+    async (request, reply): Promise<CreateEmployeeResponse | { ok: true; deduped: true } | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const b = request.body as PostEmployeeBody;
     const full_name = String(b.full_name || '').trim();
@@ -72,6 +74,19 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // Новый сотрудник попадает в сеть создающего его менеджера; admin может
     // явно указать другую сеть (переключатель сети в UI шлёт org_id).
     const org_id = resolveViewOrgId(request.user!, b.org_id);
+
+    // 20.50.0 — двойной тап/ретрай раньше молча создавал двух сотрудников с
+    // одинаковым full_name/role/org_id: на employees нет UNIQUE на
+    // (full_name, org_id), id — обычный serial, каждый INSERT проходит
+    // независимо. Тот же приём, что уже в POST /tasks (claimIdempotencyKey,
+    // race-safe UNIQUE(client_id) + ON CONFLICT DO NOTHING) — опциональный,
+    // не ломает клиентов, которые ещё не шлют client_id.
+    if (b.client_id) {
+      const tg = request.user!.telegram_id ? Number(request.user!.telegram_id) : null;
+      const fresh = await claimIdempotencyKey(String(b.client_id).slice(0, 128), request.user!.employee_id, tg, b);
+      if (!fresh) return { ok: true, deduped: true };
+    }
+
     return employeesRepo.createEmployee(full_name, short_name, role, org_id);
     }
   );

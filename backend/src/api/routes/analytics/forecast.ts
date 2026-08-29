@@ -16,7 +16,12 @@ import type { ForecastResponse, StaffingHintsResponse } from '../../../shared/ap
 export async function registerForecastRoutes(app: FastifyInstance) {
   app.get(
     '/forecast/:storeId',
-    { preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })] },
+    {
+      // 20.50.0 (Web Security & Trust Layer, часть 3) — дёргает Groq при
+      // отсутствии кэша, реальные деньги за вызов; не должен быть частым.
+      config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+      preHandler: [requireStoreInOrg('params', 'storeId', { allowOrgOverride: true })]
+    },
     async (request, reply): Promise<ForecastResponse | FastifyReply | undefined> => {
     if (!requireAuth(request, reply)) return;
     const { storeId } = request.params as { storeId: string };
@@ -25,9 +30,14 @@ export async function registerForecastRoutes(app: FastifyInstance) {
     const fc = await forecastStore(storeId, from, days);
 
     // AI только объясняет уже посчитанный прогноз словами, раз в день на
-    // точку (кэш в ai_audit) — не дёргает Groq при каждом открытии страницы.
+    // точку (кэш в ai_audit, ключ — (storeId, from)). 20.50.0 — from был
+    // полностью клиентским, а кэш ключуется именно по нему: разные from на
+    // каждый запрос давали разные кэш-ключи и свежий Groq-вызов на КАЖДЫЙ
+    // запрос, а не раз в день, как обещал комментарий. Генерируем сводку
+    // только для today — единственный кейс, где "раз в день на точку"
+    // вообще имеет смысл; для любой другой даты отдаём null без вызова AI.
     let aiSummary = await getLatestForecastSummary(storeId, from);
-    if (!aiSummary && fc.history_days >= 7) {
+    if (!aiSummary && fc.history_days >= 7 && from === todayMoscow()) {
       const storeName = await storesRepo.findDisplayName(storeId);
       aiSummary = await generateForecastSummary({
         storeId,
@@ -43,12 +53,18 @@ export async function registerForecastRoutes(app: FastifyInstance) {
 
   // «Кого куда поставить» — эвристика на основе прогноза + текущего графика,
   // не точный расчёт (абсолютной меры «нужно N человек» у нас нет).
-  app.get('/staffing-hints', async (request, reply): Promise<StaffingHintsResponse | undefined> => {
+  app.get(
+    '/staffing-hints',
+    // 20.50.0 — цикл forecastStore() по каждой точке сети (N последовательных
+    // тяжёлых запросов), без лимита раньше не было вообще никакой защиты.
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request, reply): Promise<StaffingHintsResponse | undefined> => {
     if (!requireManager(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const days = Math.min(Number((request.query as any)?.days) || 7, 14);
     return { items: await getStaffingHints(days, resolveViewOrgId(request.user!, org_id)) };
-  });
+    }
+  );
 
   app.get('/cohorts/newbies', async (request, reply) => {
     if (!requireManager(request, reply)) return;
@@ -58,13 +74,24 @@ export async function registerForecastRoutes(app: FastifyInstance) {
 
   // Пересчёт почасовых профилей — обслуживающая операция над всей БД разом,
   // ничего чужого не показывает наружу, поэтому без scoping по сети.
-  app.post('/admin/rebuild-hour-profiles', async (request, reply) => {
+  app.post(
+    '/admin/rebuild-hour-profiles',
+    // 20.50.0 — пересчёт по ВСЕЙ БД разом (см. комментарий выше), редкое
+    // admin-действие, не должно вызываться часто ни намеренно, ни по ошибке.
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     return rebuildHourProfiles();
-  });
+    }
+  );
 
   // ========== BI EXPORT (JSON truth) ==========
-  app.get('/export/bi/daily', async (request, reply) => {
+  app.get(
+    '/export/bi/daily',
+    // 20.50.0 — дамп продаж + getLiveNetworkMap() (N+1 по точкам сети) в
+    // одном ответе, раньше без собственного лимита.
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     const orgId = resolveViewOrgId(request.user!, org_id);
@@ -78,5 +105,6 @@ export async function registerForecastRoutes(app: FastifyInstance) {
       sales,
       network: live
     };
-  });
+    }
+  );
 }

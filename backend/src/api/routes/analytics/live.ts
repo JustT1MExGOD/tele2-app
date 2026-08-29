@@ -9,9 +9,15 @@ import { getLiveNetworkMap } from '../../../core/analytics/live-map.js';
 import type { NetworkLiveResponse } from '../../../shared/api-types.js';
 
 export async function registerLiveMapRoutes(app: FastifyInstance) {
-  app.get('/network/live', async (request, reply): Promise<NetworkLiveResponse | undefined> => {
+  app.get(
+    '/network/live',
+    // 20.50.0 — getLiveNetworkMap() делает 5 последовательных запросов НА
+    // КАЖДУЮ точку сети (core/analytics/live-map.ts), раньше без лимита.
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request, reply): Promise<NetworkLiveResponse | undefined> => {
     if (!requireAuth(request, reply)) return;
     const { org_id } = request.query as { org_id?: string };
     return getLiveNetworkMap(resolveViewOrgId(request.user!, org_id));
-  });
+    }
+  );
 }

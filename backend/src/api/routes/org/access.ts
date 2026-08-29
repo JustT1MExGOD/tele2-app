@@ -74,7 +74,14 @@ function esc(s: any) {
 
 export async function registerAccessRoutes(app: FastifyInstance) {
   // ===== ACCESS STATUS (гость может) =====
-  app.get('/access/status', async (request): Promise<AccessStatusResponse> => {
+  app.get(
+    '/access/status',
+    // 20.50.0 — единственная анонимная (без сессии вообще) поверхность API
+    // (вместе с /access/orgs и /access/employees-directory ниже), раньше
+    // вообще без лимита; тот же тир, что у /avatars/:employeeId (30/мин,
+    // тоже public без auth).
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request): Promise<AccessStatusResponse> => {
     // request.user уже проставлен глобальным authPlugin и подтверждён
     // подписью Telegram initData (или явным ALLOW_INSECURE_AUTH в деве) —
     // раньше при отсутствующем request.user роут тихо доверял голому
@@ -98,22 +105,31 @@ export async function registerAccessRoutes(app: FastifyInstance) {
       status: user.access_status === 'none' ? 'none' : user.access_status,
       user
     };
-  });
+    }
+  );
 
   // Активные сети — пикер при регистрации. Публично: гость ещё не
   // авторизован, id+имя(+бренд для темизации) — ничего чувствительного
   // (нет chat_id, нет sector_id).
-  app.get('/access/orgs', async (): Promise<AccessOrgsResponse> => {
+  app.get(
+    '/access/orgs',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (): Promise<AccessOrgsResponse> => {
     return listActiveOrgsPublic();
-  });
+    }
+  );
 
   // Список сотрудников для «я вот этот» (только имена, без чувствительного).
   // ?org_id= — сузить до сети, которую гость уже выбрал в пикере, иначе
   // выбрав сеть B он всё равно мог «заклеймить» сотрудника сети A.
-  app.get('/access/employees-directory', async (request): Promise<AccessDirectoryResponse> => {
+  app.get(
+    '/access/employees-directory',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request): Promise<AccessDirectoryResponse> => {
     const { org_id } = request.query as { org_id?: string };
     return employeesRepo.findUnclaimedDirectory(org_id ? String(org_id) : undefined);
-  });
+    }
+  );
 
   // Заявка на доступ
   app.post(

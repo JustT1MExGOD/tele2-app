@@ -90,10 +90,16 @@ export async function registerAlertsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.post('/alerts/run', async (request, reply) => {
+  app.post(
+    '/alerts/run',
+    // 20.50.0 — ручной триггер полного прохода smart-алертов по всем
+    // точкам сети, редкое admin-действие.
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
     if (!requireManager(request, reply)) return;
     return runSmartAlertsTick();
-  });
+    }
+  );
 
   // Learn (21.x) — сработала ли рекомендация: сводка по всей сети разом
   // (across org'ов), как /orgs — admin-only, не scoped по сети.

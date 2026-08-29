@@ -62,7 +62,9 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
 
   app.post(
     '/metrics',
-    { schema: { body: PostMetricBody } },
+    // 20.50.0 — ALTER TABLE на 3 таблицах на каждый вызов (ensureColumn) —
+    // schema-мутация, не должна быть частой.
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: PostMetricBody } },
     async (request, reply): Promise<CreateMetricResponse | FastifyReply> => {
     if (!requireManager(request, reply)) return;
     const body = request.body as PostMetricBody;

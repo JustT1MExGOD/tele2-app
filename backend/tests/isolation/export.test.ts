@@ -116,4 +116,29 @@ describe('Изоляция истории/аудита/CSV-экспортов (/
     expect(res.statusCode).toBe(200);
     expect(res.body).not.toContain('Export Employee A');
   });
+
+  // 20.50.0 (Web Security & Trust Layer, часть 3) — findForCsvExport() не
+  // несёт LIMIT (в отличие от findSalesAudit()); единственная защита от
+  // выгрузки всей истории продаж сети одним запросом — явная ошибка на
+  // слишком широкий диапазон дат, не тихая обрезка строк.
+  it('GET /export/sales.csv — диапазон >400 дней отклоняется явной ошибкой', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/export/sales.csv?from=2020-01-01&to=2026-06-19',
+      headers: authAs(managerA.telegramId)
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('range_too_wide');
+  });
+
+  it('GET /export/sales.csv — диапазон ровно 400 дней проходит штатно', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/export/sales.csv?from=2025-05-15&to=${DATE}`,
+      headers: authAs(managerA.telegramId)
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });

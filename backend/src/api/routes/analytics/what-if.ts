@@ -19,7 +19,11 @@ import type { WhatIfResponse, WhatIfApplyResponse } from '../../../shared/api-ty
 const WhatIfMove = Type.Object({}, { additionalProperties: true });
 const WhatIfBody = Type.Object({
   date: Type.Optional(Type.String()),
-  moves: Type.Optional(Type.Array(WhatIfMove)),
+  // 20.50.0 — реальный сценарий (менеджер переставляет команду на день) не
+  // требует больше пары десятков ходов; каждый move — 2 последовательных
+  // запроса в simulateScheduleMoves, без maxItems ограничением была только
+  // мягкая Fastify's 1MB body limit.
+  moves: Type.Optional(Type.Array(WhatIfMove, { maxItems: 200 })),
   employee_id: Type.Optional(Type.Number()),
   from_store: Type.Optional(Type.Union([Type.Null(), Type.String()])),
   to_store: Type.Optional(Type.String()),
@@ -30,7 +34,8 @@ type WhatIfBody = Static<typeof WhatIfBody>;
 export async function registerWhatIfRoutes(app: FastifyInstance) {
   app.post(
     '/schedule/what-if',
-    { schema: { body: WhatIfBody } },
+    // 20.50.0 — полная sandbox-симуляция, раньше без собственного лимита.
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, schema: { body: WhatIfBody } },
     async (request, reply): Promise<WhatIfResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const body = (request.body || {}) as WhatIfBody;
@@ -56,7 +61,8 @@ export async function registerWhatIfRoutes(app: FastifyInstance) {
   /** Применить what-if сдвиги в schedules (реальная запись) */
   app.post(
     '/schedule/what-if/apply',
-    { schema: { body: WhatIfBody } },
+    // 20.50.0 — то же + реальные записи в schedules, чуть жёстче симуляции.
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { body: WhatIfBody } },
     async (request, reply): Promise<WhatIfApplyResponse | FastifyReply | undefined> => {
     if (!requireManager(request, reply)) return;
     const body = (request.body || {}) as WhatIfBody;

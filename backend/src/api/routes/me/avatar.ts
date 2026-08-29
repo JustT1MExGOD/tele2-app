@@ -36,7 +36,12 @@ function sniffImageMime(buf: Buffer): string | null {
 }
 
 export async function registerAvatarRoutes(app: FastifyInstance) {
-  app.post('/me/avatar', async (request, reply) => {
+  app.post(
+    '/me/avatar',
+    // 20.50.0 — write-сторона уже лимитированного read (GET /avatars/:id,
+    // 30/мин) не должна быть дешевле чтения.
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     const data = await request.file({ limits: { fileSize: MAX_AVATAR_BYTES } }).catch(() => null);
     if (!data) {
@@ -55,7 +60,8 @@ export async function registerAvatarRoutes(app: FastifyInstance) {
     }
     await employeesRepo.setAvatar(request.user!.employee_id!, buffer, realMime);
     return { ok: true };
-  });
+    }
+  );
 
   // Публичный (не requireAuth) — <img src> не может передать Authorization.
   // employeeId сам по себе не перечисляемый список, тот же уровень защиты,

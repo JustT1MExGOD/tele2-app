@@ -111,4 +111,31 @@ describe('Изоляция алертов (POST /alerts/:id/ack) и what-if (/sc
     const body = res.json();
     expect(body.count).toBe(1);
   });
+
+  // 20.50.0 (Web Security & Trust Layer, часть 3) — moves раньше не имел
+  // maxItems, единственной границей была мягкая Fastify 1MB body limit;
+  // каждый move — 2 последовательных запроса в simulateScheduleMoves.
+  it('POST /schedule/what-if — moves больше 200 элементов отклоняется валидацией схемы', async () => {
+    const app = await getApp();
+    const moves = Array.from({ length: 201 }, () => ({ employee_id: employeeA.id, to_store: storeA }));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/schedule/what-if',
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { date: WORK_DATE, moves }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /schedule/what-if — moves ровно 200 элементов проходит валидацию', async () => {
+    const app = await getApp();
+    const moves = Array.from({ length: 200 }, () => ({ employee_id: employeeA.id, to_store: storeA }));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/schedule/what-if',
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { date: WORK_DATE, moves }
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });

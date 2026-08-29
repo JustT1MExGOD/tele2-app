@@ -76,4 +76,60 @@ describe('Изоляция сотрудников (/employees)', () => {
     fx.employeeIds.push(body.id);
     expect(body.org_id).toBe(orgB);
   });
+
+  // 20.50.0 (Web Security & Trust Layer, часть 3) — двойной тап/ретрай
+  // раньше молча создавал двух сотрудников с одинаковым full_name/role/
+  // org_id (нет UNIQUE на (full_name, org_id), id — обычный serial).
+  // Тот же приём, что уже у POST /tasks (claimIdempotencyKey).
+  it('POST /employees с client_id — повторный запрос дедуплицируется, создан ровно один сотрудник', async () => {
+    const app = await getApp();
+    const clientId = `test-dup-${Date.now()}`;
+    const payload = { full_name: 'Idempotent Hire', client_id: clientId };
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/employees',
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload
+    });
+    expect(first.statusCode).toBe(200);
+    const firstBody = first.json();
+    fx.employeeIds.push(firstBody.id);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/employees',
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toEqual({ ok: true, deduped: true });
+
+    const list = await app.inject({ method: 'GET', url: '/employees', headers: authAs(managerA.telegramId) });
+    const matches = list.json().filter((r: any) => r.full_name === 'Idempotent Hire');
+    expect(matches.length).toBe(1);
+  });
+
+  it('POST /employees без client_id (легаси-клиент) — повторный запрос по-прежнему создаёт двух сотрудников (обратная совместимость)', async () => {
+    const app = await getApp();
+    const payload = { full_name: 'Legacy Double Submit' };
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/employees',
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload
+    });
+    fx.employeeIds.push(first.json().id);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/employees',
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload
+    });
+    fx.employeeIds.push(second.json().id);
+
+    expect(Number(first.json().id)).not.toBe(Number(second.json().id));
+  });
 });
