@@ -129,6 +129,9 @@ tele2-app/
     │   │   │                                по мере переноса, не фиксированное число — см. сам скрипт)
     │   │   └── db/                          (index.ts — пул + query() + withTransaction(); migrate.ts — раннер миграций)
     │   │
+    │   ├── security/crypto/              (20.51.0, Application-Level Envelope Encryption — types/errors/random/
+    │   │                                    aead/kdf/key-provider/keyring/envelope/log; built-in node:crypto
+    │   │                                    только, без сторонних зависимостей — см. docs/ADR/007)
     │   ├── platform/notifications/       (changelog.ts — версии для автоанонса; release-announce.ts — CAS-защищённая отправка)
     │   ├── integrations/
     │   │   ├── telegram/                  (bot.ts — Grammy-инстанс, notifyChat/notifyAdmin; messages.ts — шаблоны сообщений)
@@ -268,7 +271,9 @@ ambient-глобалов в `legacy-globals.d.ts` писабельные (`let`,
 ## Связанные документы
 
 - [SECURITY.md](./SECURITY.md) — слои защиты поверх этой структуры (RBAC,
-  Data Access Layer, аудит).
+  Data Access Layer, аудит, Cryptographic Data Protection).
+- [DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md) —
+  какие данные требуют backend plaintext, какие зашифрованы и почему.
 - [API.md](./API.md) — таблица эндпоинтов по модулям `api/routes/`.
 - [DEVELOPMENT.md](./DEVELOPMENT.md) — как запустить и проверить локально.
 - [ADR/](./ADR/) — почему структура именно такая, не другая.

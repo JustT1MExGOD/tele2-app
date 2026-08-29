@@ -11,6 +11,7 @@ import { todayMoscow } from './utils/date.js';
 import { runSmartAlertsTick } from './core/alerts/service.js';
 import { announceReleaseIfNeeded } from './platform/notifications/release-announce.js';
 import { runJob } from './cron/job-logger.js';
+import { assertEncryptionConfigValid, CryptoConfigError } from './security/crypto/index.js';
 
 /**
  * Раньше падение миграции/старта было видно только в Railway logs, которые
@@ -52,6 +53,22 @@ if (process.env.RAILWAY_ENVIRONMENT === 'production') {
       new Error('BOT_TOKEN is required in production')
     );
   }
+}
+
+// Application-Level Envelope Encryption (Phase B, 20.51.0) — если
+// DATA_ENCRYPTION_ENABLED=true, а ENCRYPTION_KEKS/ENCRYPTION_ACTIVE_KEY_
+// VERSION сломаны или отсутствуют, сервер не должен стартовать и молча
+// писать/читать plaintext вместо шифрования (тот же принцип, что уже
+// применён к BOT_TOKEN выше — не «поехать небезопасно»). Проверяется во
+// ВСЕХ окружениях, не только production: `assertEncryptionConfigValid()`
+// сама no-op'ает, если флаг выключен.
+try {
+  assertEncryptionConfigValid();
+} catch (e) {
+  if (e instanceof CryptoConfigError) {
+    await alertAndExit('❌ Некорректная конфигурация шифрования, сервер не стартует', e);
+  }
+  throw e;
 }
 
 // Непримененные миграции — перед подъёмом приложения, не после: если схема

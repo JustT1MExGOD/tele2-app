@@ -5,9 +5,9 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Браузер/PWA · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.50.1-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.51.0-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-847%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-897%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя, либо браузер несёт cookie-сессию (телефон+пароль) → сервер на Fastify проверяет identity и права через общий шов (`auth/principal.ts`) → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.50.1` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная версия клиента:** `20.51.0` · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -481,11 +481,11 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.43.0** | Бот подчищает за собой сообщения в группах/каналах через 2+ дня — владелец продукта выдал admin-права и доступ к сообщениям, попросил автоудаление везде, где бот пишет в группы/каналы, кроме релиз-канала (архив истории версий навсегда). Новая таблица `bot_sent_messages` (`message_id integer`, не `bigint` — иначе node-postgres отдаёт строкой), `notifyChat`/`notifyChatPhoto`/`notifyChatMediaGroup` (единственный проход всех групповых отправок) захватывают `message_id` из ответа Telegram API и пишут в журнал через `trackGroupMessage()`, пропуская `RELEASE_CHANNEL_ID`. Новый `cron/message-cleanup.ts` (раз в день, 03:00 МСК, тот же паттерн, что `digest.ts`/`alerts.ts`) удаляет сообщения старше 2 дней через `bot.api.deleteMessage()` и убирает строку журнала в любом случае — мёртвые записи не копятся. 6 новых backend-тестов на реальном Postgres, frontend не тронут |
 | **20.44.0** | Schedule/Plans — Desktop Page Adaptation, следующий шаг после Team (staged roadmap из 20.40, Part G). Сводный график (`.sum-sch-table`) — только визуальный рестайл под токен `.data-table-wrap`, без сортировки (матрица «сотрудник × день», колонки-дни не атрибуты для сортировки, цветовая подсветка точки не тронута). Планы и факт за месяц (`monthplan`) — новая desktop-таблица `#monthPlanTableWrap`: 6 сортируемых основных метрик постоянно, общий тумблер над таблицей добавляет/убирает 9 EXTRA-колонок сразу для всех строк (не раскрытие по каждой строке, как на мобильных карточках). Клик по строке у `canManage()` — та же модалка `editEmployeeMonthPlan()`, что на карточках; "Итого сеть" не кликабельна и не сортируется. 6 новых фронтенд-тестов, backend не тронут |
 | **20.45.0** | Command Center + Supervisor — `.workspace-grid` на списки-секции (staged roadmap из 20.40, Part G, следующий шаг после Schedule/Plans). Никакого нового JS-функционала — только раскладка уже карточно-списочных секций (`.sv-store`/`.sv-drop`/`.sv-rank`/`.progress-block`) в адаптивную сетку вместо одной колонки на десктопе. `#svStoresBody`/`#svPeopleBody` (100% содержимого — карточки) получили grid-правила напрямую по id в CSS; Command Center/«Обзор»/«Тренд» (список — часть контейнера рядом с героем/графиком) — карточки обёрнуты в новый `<div class="workspace-grid">` точечной правкой шаблона. `.sv-hero`/`.sv-chart`/внутренняя разметка карточек не тронуты. 3 новых/расширенных фронтенд-теста, backend не тронут |
-| **20.47.0** | iPhone Web App/Safari — safe-area слой поверх Telegram Mini App, без нового дизайна и без переписывания мобильного интерфейса. Единые переменные `--app-safe-top/bottom/left/right` = `max(--tg-content-safe-top, env(safe-area-inset-*))` поверх уже существующего Telegram-механизма (не сумма — гарантирует отсутствие двойных отступов внутри Telegram, второй параллельный детект iPhone не заводился). `--bottom-nav-safe-offset` (92px база + safe-bottom) — единая переменная вместо разрозненных `calc()` у body/FAB/bottom-nav/sheet-modal/tutorial/gate-shell; на устройствах без notch резолвится в прежние значения побайтово. Landscape iPhone (до ~926px) reach-ит десктоп-shell `@860px` — туда тоже добавлены left/right/bottom safe-area (чистый пробел, не регрессия). `apple-mobile-web-app-*`/`theme-color` meta-теги (без manifest/Service Worker — вне объёма); `theme-color` синхронизируется с той же темой, что уже уходит в `tg.setBackgroundColor()`. Проверено и оставлено как есть: input/select уже 16px, dvh-фолбэк уже на месте, `overscroll-behavior`/tap-highlight уже были — повторно не чинились |
 | **20.48.0** | Web Security & Trust Layer, часть 1 — Authentication & Session Security: после появления standalone PWA у приложения три канала входа, не один Telegram. Новая `identities`-таблица (schema-level, порог, дважды отложенный ADR-005) — единственный источник правды auth-резолва; `employees.telegram_id`/`phone` остаются для не-auth потребителей. Разная семантика конфликта: Telegram — ownership transfer атомарным `INSERT...ON CONFLICT`, Phone — строгий `409`, не transfer. Найден и исправлен пред-существующий race-баг в `claimTelegramId()`'s CTE (перенос на занятую карточку мог словить ложный 409). Session lifecycle — деактивация/password reset немедленно отзывают все browser-сессии; новые `GET/DELETE /auth/sessions`, `revoke-others`. CSRF (double-submit cookie + Sec-Fetch-Site/Origin), rate-limit `/auth/login` по хэшированному нормализованному телефону не IP, `trustProxy:1`. 10 новых тестов, 383→416 backend |
 | **20.49.0** | Web Security & Trust Layer, часть 2 — Browser Security: реальные XSS-фиксы (`esc()`), не гипотетические — `progressHTML()` (nav.ts, самый широкий охват), store name в 7+ файлах, `jsEsc()`/`JSON.stringify()`-в-атрибуте (`dealers`/`cash-metrics`, attribute-breakout — имя с `"` разрывало `onclick="..."`, второго порядка XSS против admin), `promos` note (пишет любой сотрудник, самый низкий барьер входа). Новый `check-dangerous-js-patterns.mjs` (CI-gate, модель — `check-no-direct-sql.mjs`). `Cache-Control: no-store` глобальным хуком на ответы без своего заголовка (avatar/статика не перезаписаны — проверено живым curl). Подтверждено чистым: postMessage, clickjacking, localStorage, open-redirect. Явно отложено — закрытие `unsafe-inline` для `script-src-attr`/`style-src-attr` (265+ мест, отдельная эпоха, сопоставимая с Frontend rewrite). 6 новых тестов, 416→421 backend, 404→411 frontend |
 | **20.50.0** | Web Security & Trust Layer, часть 3 — API Abuse Protection: rate-limit на 16 роутах без лимита (AI-роуты `/forecast`/`/shifts/close`, N-запросов-циклы `/staffing-hints`/`/network/live`, полные пересчёты `/admin/rebuild-hour-profiles`/`/alerts/run`, schema-мутация `/metrics`, экспорты, анонимная `/access/*`). `GET /export/sales.csv` — единственный неограниченный export, теперь явная ошибка на диапазон >400 дней вместо тихой обрезки. `what-if.moves` — `maxItems:200`. `/forecast/:storeId` — AI-сводка теперь только для `from===today` (закрыт cache-busting через произвольный `from`, дававший свежий Groq-вызов на каждый запрос). `POST /employees` — idempotency тем же примитивом, что `/tasks` (`claimIdempotencyKey`). Два вывода research-агентов перепроверены и отклонены как ложные (`/sales/audit` уже `LIMIT 500`; `POST /stores` уже корректно даёт 409 через глобальный error handler). 13 новых тестов, 421→432 backend, фронтенд не тронут |
 | **20.50.1** | Хотфикс — repo-wide документационный аудит нашёл 4 реальных XSS-пробела, не закрытых 20.49.0 (тот же attribute-breakout/без-esc() класс, пропущенный в других файлах того же прохода): `plans-bfq.ts` monthplan-карточка и desktop-строка (onclick), `promos.ts` список (created_by_name без esc(), карточка того же промокода уже была защищена), `schedule.ts`/`my-plan.ts` `title="..."`. Заодно 3 frontend-тестовых файла переведены с no-op esc()-стаба на реальную реализацию (тот же класс проблемы, что уже чинили в `promos.test.ts` в 20.49.0) — иначе новые regression-тесты ничего не доказывали бы. 4 новых теста с настоящим XSS-payload, 411→415 frontend, backend не тронут |
+| **20.51.0** | Application-Level Envelope Encryption — по запросу владельца продукта на hybrid-ratcheting крипто-архитектуру аудит не нашёл в продукте ни одной 1:1 приватной переписки (`channels`/`task_comments`/`announcements` — team-broadcast по дизайну); единственный реальный кандидат — текст support-тикетов. Level 2 (application-level encryption, `backend/src/security/crypto/**` — AES-256-GCM/HKDF/CSPRNG через `node:crypto` built-in, ноль новых зависимостей) реализован для `support_tickets`/`support_messages`: KEK версионирован в env (никогда в Postgres), DEK per-object, AAD связывает ciphertext с объектом, rotation без re-encryption всего хранилища. Level 3 (true E2EE — device identity/handshake/ratchet/PQ) осознанно НЕ реализован — нет продуктового кандидата (см. `docs/ADR/008`), не «отменено», а честно PLANNED. Попутно найден и исправлен пред-существующий баг: `support_tickets` reply-функции писали в несуществующую колонку `updated_at`, `500` на каждый ответ сотрудника в своём тикете. 44+6 новых тестов, 432→482 backend |
 
 ---
 
@@ -1404,9 +1404,11 @@ check:no-direct-sql` держит Data Access Layer, версионирован�
 
 Полный разбор (initData/HMAC, CORS, rate-limit/CSP, TypeBox-валидация,
 Data Access Layer, Audit Trail, Concurrency & Workflow Integrity,
-Supervisor Scope Cache, Authentication Boundary) —
-**[docs/SECURITY.md](docs/SECURITY.md)**. Архитектурные решения с
-альтернативами и причинами — **[docs/ADR/](docs/ADR/)**.
+Supervisor Scope Cache, Authentication Boundary, Cryptographic Data
+Protection) — **[docs/SECURITY.md](docs/SECURITY.md)**. Какие данные
+зашифрованы и почему — **[docs/DATA-SECURITY-ARCHITECTURE.md](docs/DATA-SECURITY-ARCHITECTURE.md)**.
+Архитектурные решения с альтернативами и причинами —
+**[docs/ADR/](docs/ADR/)**.
 
 ---
 
@@ -1429,6 +1431,6 @@ Supervisor Scope Cache, Authentication Boundary) —
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.50.1 · август 2026*
+*README · актуально на v20.51.0 · август 2026*
 
 </div>

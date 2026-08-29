@@ -98,6 +98,9 @@ npx vitest run tests/adversarial/cross-tenant-write.test.ts
 | `ALLOW_INSECURE_AUTH` | нет | `true` включает dev-фоллбэк на голый `X-Telegram-Id` без проверки initData — **сервер откажется стартовать с этим в проде**, см. [SECURITY.md](./SECURITY.md#2-аутентификация) |
 | `GROQ_API_KEY` | нет | ключ Groq (console.groq.com, free tier, без карты) — включает AI Copilot; без ключа обе функции no-op'ают |
 | `GROQ_MODEL` | нет | override модели, дефолт `llama-3.3-70b-versatile` |
+| `DATA_ENCRYPTION_ENABLED` | нет | `true` включает Application-Level Envelope Encryption (20.51.0) для support-тикетов — новые записи шифруются; без флага (по умолчанию) поведение как раньше, plaintext. Чтение уже зашифрованных строк не зависит от флага, см. [SECURITY.md — Cryptographic Data Protection](./SECURITY.md#10-cryptographic-data-protection) |
+| `ENCRYPTION_KEKS` | нужно, если `DATA_ENCRYPTION_ENABLED=true` | JSON `{"<version>":"<base64 32 байта>", ...}` — все известные версии master key (KEK), включая уже неактивные (для чтения старых записей после rotation). Никогда не коммитить реальные значения |
+| `ENCRYPTION_ACTIVE_KEY_VERSION` | нужно, если `DATA_ENCRYPTION_ENABLED=true` | Версия из `ENCRYPTION_KEKS`, которой шифруются НОВЫЕ записи. Сервер откажется стартовать, если версия не найдена в `ENCRYPTION_KEKS` (см. `assertEncryptionConfigValid()`, `src/index.ts`) |
 
 ## Соглашения
 

@@ -119,6 +119,7 @@ Defense-in-depth: ни один отдельный уровень не един�
 | 7 | Audit Trail | Кто/что/когда/над кем, транзакционно с мутацией | `data/repositories/audit.ts` |
 | 8 | Обработка ошибок | Единый формат, без утечки внутренностей | `app.ts::setErrorHandler`, `shared/errors.ts` |
 | 9 | Frontend | Экранирование вывода, CSP, typed-контракт | `frontend/js/*.js`, `frontend/src/api-client.ts` |
+| 10 | Cryptographic Data Protection | Application-level envelope encryption (Level 2) на чувствительных полях; E2EE (Level 3) — NOT IMPLEMENTED, см. ADR-008 | `security/crypto/*`, `data/repositories/support.ts` |
 
 ---
 
@@ -485,6 +486,61 @@ API-клиент (`api-client.ts`, 91 функция) сознательно б�
 `<script src=...>`, ожидающие общую глобальную область к моменту
 выполнения; IIFE сохраняет ту же семантику загрузки.
 
+### 10. Cryptographic Data Protection
+
+Полный разбор — [docs/DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md)
+(таблица данных по классам), [ADR/007](./ADR/007-application-level-envelope-encryption.md)
+(что реализовано), [ADR/008](./ADR/008-e2ee-not-implemented.md) (что нет
+и почему). Здесь — статус коротко, по слоям, ничего не заявлено сверх
+того, что реально в коде:
+
+| Слой | Статус | Что это |
+|---|---|---|
+| TLS (transport) | IMPLEMENTED | Railway/HTTPS — граница транспорта, не application-уровень |
+| Хешированные credentials/tokens | IMPLEMENTED | `password_hash` — `crypto.scrypt` (необратимо, не шифрование); `employee_sessions.token_hash`/`employee_password_resets.token_hash` — `sha256` одноразовых секретов. Никогда не «шифрование, которое можно расшифровать» — восстанавливать эти значения не нужно, см. §44 несовместимость целей |
+| **Application-Level Envelope Encryption (Level 2)** | IMPLEMENTED, узкий scope | `backend/src/security/crypto/**` (20.51.0) — AES-256-GCM, DEK per-object, KEK версионирован вне PostgreSQL, HKDF-derived wrap-key, AAD связывает ciphertext с id/типом объекта. Подключено только к `support_tickets.message`/`admin_reply` и `support_messages.body` — backend по-прежнему расшифровывает по требованию (owner/admin читают тикет), это НЕ E2EE |
+| **True E2EE (Level 3)** | NOT IMPLEMENTED | Ни одна фича продукта сегодня не является приватной перепиской 1:1 (см. ADR-008) — строить device identity/handshake/ratchet ради несуществующего private channel означало бы придумывать продуктовую фичу, не защищать существующую |
+| Post-quantum (ML-KEM/hybrid) | NOT IMPLEMENTED | Зависит от E2EE-слоя, которого нет; не заявляем «post-quantum secure» нигде в документации, пока PQ-слой не реализован полностью |
+
+**Ключевая иерархия (Level 2)**:
+
+```
+Master Key / KEK (env ENCRYPTION_KEKS, версионирован, ротируется)
+       │
+       ▼ HKDF-SHA256, domain label t2/envelope/wrap-key/v1
+  Wrap Key
+       │
+       ▼ AES-256-GCM
+  Data Encryption Key (DEK) — CSPRNG, один на объект, хранится только wrapped
+       │
+       ▼ AES-256-GCM, AAD = {type, id, ...}
+  ciphertext поля
+```
+
+**Rotation** — `ENCRYPTION_ACTIVE_KEY_VERSION` управляет только тем,
+каким KEK шифруются НОВЫЕ записи; `unwrapDek()` резолвит любую известную
+версию из `ENCRYPTION_KEKS`, поэтому старые записи остаются читаемыми
+без re-encryption всего хранилища при добавлении новой версии.
+
+**Downgrade-инвариант** — `DATA_ENCRYPTION_ENABLED` гейтит только
+запись; чтение уже зашифрованной строки расшифровывается всегда,
+независимо от текущего состояния флага. Выключить флаг нельзя сделать
+эквивалентом «рассекретить всё обратно» — это и есть требование §32/§48.7
+не допускать silent downgrade в plaintext.
+
+**Fail-closed** — повреждённый/чужим ключом зашифрованный конверт
+никогда не возвращает мусор или тихий plaintext-фолбэк: `decryptField()`
+бросает `DecryptionError`/`InvalidEnvelopeError`; на уровне репозитория
+(`data/repositories/support.ts`) единичное чтение резервируется явным
+`[ошибка расшифровки]`-маркером с логированием только класса ошибки
+(`errorClass`, не текст/содержимое), не 500 на весь список и не
+подстановка plaintext.
+
+**Секреты не логируются** — ни KEK, ни DEK, ни plaintext не появляются в
+логах/audit_log/ответах API; см. `security/crypto/errors.ts`/`log.ts` —
+сообщения ошибок содержат только класс ошибки и метаданные (`alg`/`kid`/
+`table`/`id`), никогда сырые байты.
+
 ---
 
 ## Известные компромиссы
@@ -592,5 +648,12 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
   диаграмма потока запроса.
 - [docs/ADR/005](./ADR/005-authentication-boundary.md) — решение о
   выделении Authentication Boundary (20.9.0).
+- [docs/DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md) —
+  таблица данных по классам защиты (кто должен видеть plaintext, кто
+  владеет ключом).
+- [docs/ADR/007](./ADR/007-application-level-envelope-encryption.md) —
+  Application-Level Envelope Encryption (Level 2), 20.51.0.
+- [docs/ADR/008](./ADR/008-e2ee-not-implemented.md) — почему E2EE
+  (Level 3) не реализован.
 - [CHANGELOG.md](../CHANGELOG.md) — полная построчная хронология каждой
   security-правки с датами и версиями.

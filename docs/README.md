@@ -8,8 +8,9 @@
 | Документ | О чём | Когда читать |
 |---|---|---|
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | Диаграмма потока запроса, дерево `backend/src/`, правила слоёв и регистрации роутов | Первый файл в проекте; перед структурной правкой |
-| **[SECURITY.md](./SECURITY.md)** | 9 слоёв защиты, RBAC-матрица, известные компромиссы, тестовое покрытие | Перед любой правкой авторизации/доступа |
-| **[THREAT-MODEL.md](./THREAT-MODEL.md)** | Кто может навредить, чему и как — 1 страница | Перед security-ревью, при онбординге в контекст рисков |
+| **[SECURITY.md](./SECURITY.md)** | 10 слоёв защиты, RBAC-матрица, известные компромиссы, тестовое покрытие, Cryptographic Data Protection | Перед любой правкой авторизации/доступа |
+| **[DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md)** | Таблица данных проекта — кто должен видеть plaintext, что зашифровано, кто владеет ключом | Перед добавлением нового чувствительного поля/фичи |
+| **[THREAT-MODEL.md](./THREAT-MODEL.md)** | Кто может навредить, чему и как, включая криптографический слой | Перед security-ревью, при онбординге в контекст рисков |
 | **[API.md](./API.md)** | Все HTTP-эндпоинты с уровнем доступа, формат ошибок | Интеграция с бэкендом, фронтенд-разработка |
 | **[FEATURES.md](./FEATURES.md)** | Что умеет приложение — по каждому экрану, метрики, формулы | Понять продукт, не только код |
 | **[DEVELOPMENT.md](./DEVELOPMENT.md)** | Локальный запуск, тесты, env-переменные | Первый запуск проекта локально |
@@ -37,6 +38,8 @@
 | [004](./ADR/004-typebox-validation.md) | TypeBox для валидации write-роутов | принято, реализовано |
 | [005](./ADR/005-authentication-boundary.md) | Authentication Boundary (Identity/Principal изолированы от Telegram) | принято, реализовано |
 | [006](./ADR/006-frontend-iife-bundle-not-full-vite-migration.md) | Typed API-клиент как отдельный iife-бандл, не полная миграция на Vite | принято, суперсед частично в 20.12.0+ (см. ADR сам файл) |
+| [007](./ADR/007-application-level-envelope-encryption.md) | Application-Level Envelope Encryption (Level 2) для support-тикетов | принято, реализовано |
+| [008](./ADR/008-e2ee-not-implemented.md) | E2EE/device identity/ratchet/post-quantum — почему НЕ реализовано | рассмотрено, PLANNED |
 
 ## Архив
 
