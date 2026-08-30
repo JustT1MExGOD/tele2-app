@@ -6,7 +6,7 @@
 -- @fastify/rate-limit config in app.ts/routes: this table survives
 -- process restarts and would work across multiple instances, which the
 -- in-memory limiter cannot.
-CREATE TABLE IF NOT EXISTS security_rate_limit_counters (
+CREATE TABLE IF NOT EXISTS public.security_rate_limit_counters (
   bucket_key text NOT NULL,
   window_start timestamptz NOT NULL,
   count integer NOT NULL DEFAULT 1,
@@ -14,4 +14,4 @@ CREATE TABLE IF NOT EXISTS security_rate_limit_counters (
 );
 
 -- Cleanup queries (self-triggered, see rate-limit.ts) scan by window_start.
-CREATE INDEX IF NOT EXISTS idx_security_rate_limit_window ON security_rate_limit_counters (window_start);
+CREATE INDEX IF NOT EXISTS idx_security_rate_limit_window ON public.security_rate_limit_counters (window_start);
