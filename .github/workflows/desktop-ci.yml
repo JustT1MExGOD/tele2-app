@@ -1,0 +1,65 @@
+name: Desktop CI
+
+on:
+  push:
+  workflow_dispatch:
+
+# Same discipline as the main ci.yml (20.52.0 security audit): read-only
+# GITHUB_TOKEN, nothing in this workflow writes to the repo/packages/
+# releases — build artifacts are uploaded via actions/upload-artifact,
+# not published anywhere.
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    # §63 of the brief — a real Windows runner, not a cross-compile from
+    # Linux: DESK-* tests and the packaging step both need to reflect
+    # what actually happens on Windows, not an emulated approximation.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Test suite
+        run: npm test
+
+      # §50/§64 — unsigned this pass (no certificate configured in CI
+      # secrets yet, see docs/DESKTOP-RELEASE.md); electron-builder
+      # produces a working, installable, unsigned NSIS installer
+      # regardless — this step proves the package actually builds on a
+      # real Windows runner, not that it's production-signed.
+      - name: Package (unsigned dev build)
+        run: npm run desktop:package
+
+      - name: Compute installer SHA-256
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem -Path release -Filter "T2Sales-Setup-*.exe" | Select-Object -First 1
+          if (-not $file) { throw "No installer artifact found in release/" }
+          $hash = Get-FileHash -Path $file.FullName -Algorithm SHA256
+          Write-Output "$($file.Name): $($hash.Hash)"
+          "$($hash.Hash)  $($file.Name)" | Out-File -FilePath "release/$($file.Name).sha256.txt" -Encoding utf8
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: t2sales-desktop-installer
+          path: |
+            release/T2Sales-Setup-*.exe
+            release/T2Sales-Setup-*.exe.sha256.txt
+          if-no-files-found: error

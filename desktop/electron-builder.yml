@@ -1,0 +1,51 @@
+# T2Sales-Setup-x64-20.55.0.exe build config (§51/§52 of the brief).
+#
+# Per-user install preferred, no admin required — this pass ships no
+# native/elevated component (NoopWindowsCompatibilityAdapter only), so
+# there is nothing that needs machine-wide installation or elevation.
+# Signing (§50): hooks read a certificate from CI secrets if present;
+# this pass has no certificate configured, so CI builds are unsigned dev
+# builds — see docs/DESKTOP-RELEASE.md for what production signing needs.
+appId: com.t2sales.desktop
+productName: T2 Sales
+copyright: T2 Sales
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # No certificate configured this pass (§50) — electron-builder produces
+  # an unsigned build when these are unset, which is expected and
+  # documented, not a bug. CI secrets (never committed) would populate
+  # CSC_LINK/CSC_KEY_PASSWORD for a real signed release.
+  # signingHashAlgorithms/publisherName intentionally left at defaults —
+  # only meaningful once a real certificate exists.
+  artifactName: 'T2Sales-Setup-x64-${version}.${ext}'
+
+nsis:
+  # Per-user install — no admin required (§51/§29: the main app must run
+  # and install without Administrator; there is no elevated component
+  # this pass to justify a per-machine install).
+  perMachine: false
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  # NSIS's generated uninstaller removes what it installed and nothing
+  # more — there is no service/proxy/registry-global-state to clean up
+  # beyond the app's own files, since RELAY is entirely in-process
+  # (protocol.handle on an Electron session, not an external process or
+  # port binding) and WINDOWS_COMPAT ships as a no-op this pass (§31/§51:
+  # clean uninstall, no leftover proxy/service, no system network state
+  # changes to undo).
+  deleteAppDataOnUninstall: true
+
+publish: null

@@ -1,0 +1,24 @@
+{
+  "name": "t2sales-desktop",
+  "version": "20.55.0",
+  "private": true,
+  "main": "dist/main/index.js",
+  "scripts": {
+    "desktop:typecheck": "tsc --noEmit",
+    "desktop:test": "vitest run",
+    "desktop:build": "tsc && node scripts/bundle-preload.mjs",
+    "desktop:dev": "npm run desktop:build && electron dist/main/index.js",
+    "desktop:package": "npm run desktop:build && electron-builder --win --x64",
+    "test": "vitest run",
+    "verify:preload-sandbox": "node scripts/verify-preload-sandbox.mjs",
+    "test:network-acceptance": "vitest run --config vitest.network-acceptance.config.mts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10"
+  }
+}

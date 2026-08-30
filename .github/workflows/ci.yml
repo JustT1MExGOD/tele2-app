@@ -88,3 +88,35 @@ jobs:
 
       - name: Test suite
         run: npm test
+
+  # 20.55.0 — T2 Edge Relay (relay/) is a small, Node-only, independently
+  # deployable service (§16 of the desktop brief: not merged into the
+  # main backend) — a second job here rather than a separate workflow
+  # file, since it doesn't need Postgres/frontend build/anything the main
+  # job's service container provides. Some tests make real, read-only
+  # HTTPS calls to the live production origin and a couple of public
+  # test hosts (badssl.com, iana.org) to prove TLS/SSRF/diagnostics
+  # behavior against a real network, not just mocks — same discipline as
+  # the backend's own test suite's occasional live-origin checks.
+  relay:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: relay/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Test suite
+        run: npm test
