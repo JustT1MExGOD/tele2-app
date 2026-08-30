@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "20.53.0",
+  "version": "20.54.0",
   "type": "module",
   "engines": {
     "node": "22.x"
@@ -16,7 +16,8 @@
     "check:route-auth": "node scripts/check-route-auth-policy.mjs",
     "test": "vitest run",
     "test:frontend": "vitest run --config frontend/vitest.config.ts",
-    "migrate": "tsx src/migrate-cli.ts"
+    "migrate": "tsx src/migrate-cli.ts",
+    "backfill:support-encryption": "tsx src/scripts/backfill-support-encryption.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

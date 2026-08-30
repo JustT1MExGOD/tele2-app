@@ -6,6 +6,7 @@
  * navigator.geolocation, stubbed to resolve instantly.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals() {
   document.body.innerHTML = `
@@ -15,7 +16,10 @@ function setupGlobals() {
     <div id="lkShift"></div><div id="lkInsight"></div><div id="lkGamification"></div>
     <div id="liveList"></div><div id="liveMeta"></div>
   `;
-  vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
+  // §P1-E (20.54.0) — real esc(), not a no-op passthrough: a stub that
+  // doesn't escape can't catch an escaping regression (see the session/
+  // live-map store_name and staff-list XSS fixes covered below).
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('orgQueryParam', () => '');
   vi.stubGlobal('toast', vi.fn());
@@ -113,6 +117,18 @@ describe('Смена/live/калькуляторы (миграция frontend/js
     expect(html).toContain('closeShiftSession()');
   });
 
+  // §P1-E (20.54.0) — session.store_name is admin-entered free text,
+  // rendered raw into the "Смена открыта" widget before this fix.
+  it('loadShiftAndInsight: store_name экранируется — не исполняемый HTML в DOM', async () => {
+    const { getShiftCurrent } = setupGlobals();
+    getShiftCurrent.mockResolvedValue({ session: { store_name: '<img src=x onerror=alert(1)>', opened_at: '2026-08-25T07:00:00Z' }, fact: { sim: 2 }, day_plan: { sim: 5 } });
+    const { loadShiftAndInsight } = await import('../src/pages/shift/index.js');
+    await loadShiftAndInsight(1);
+    const el = document.getElementById('lkShift')!;
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.innerHTML).toContain('&lt;img');
+  });
+
   it('loadShiftAndInsight: инсайт с прогнозом — рендерит блок фокуса', async () => {
     const { getMyInsight } = setupGlobals();
     getMyInsight.mockResolvedValue({ insight: { message: 'Дожми MNP', focus: ['Больше MNP'], projected_total: 12, plan_total: 15, on_track: false } });
@@ -167,7 +183,21 @@ describe('Смена/live/калькуляторы (миграция frontend/js
     const html = document.getElementById('liveList')!.innerHTML;
     expect(html).toContain('Точка А');
     expect(html).toContain('Иван');
-    expect(html).toContain("openStoreProfile('s1')");
+  });
+
+  // §P1-E (20.54.0) — staff short_name/full_name is admin-entered, joined
+  // and rendered raw into each store card's staff-list line before this fix.
+  it('loadLiveMap: имена сотрудников на точке экранируются — не исполняемый HTML в DOM', async () => {
+    const { getNetworkLive } = setupGlobals();
+    getNetworkLive.mockResolvedValue({
+      date: '2026-08-25',
+      stores: [{ store_id: 's1', name: 'Точка А', status: 'ok', plan_pct: 70, staff: [{ short_name: '<img src=x onerror=alert(1)>' }], fact: { sim: 3 }, plan: { sim: 5 } }]
+    });
+    const { loadLiveMap } = await import('../src/pages/shift/index.js');
+    await loadLiveMap();
+    const el = document.getElementById('liveList')!;
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.innerHTML).toContain('&lt;img');
   });
 
   it('window.* мост — все 13 функций', async () => {

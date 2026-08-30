@@ -28,6 +28,7 @@ import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
 import { EncryptionDisabledError } from '../../../security/crypto/errors.js';
+import { consume, ipDimension, accountDimension } from '../../../security/rate-limit.js';
 import { setSessionCookie } from './session.js';
 import type { MfaStatusResponse } from '../../../shared/api-types.js';
 
@@ -82,6 +83,27 @@ async function verifyFactor(
   return false;
 }
 
+/**
+ * §P1-A (20.54.0) — persistent layer on top of the existing per-route
+ * in-memory @fastify/rate-limit config (already on every call site
+ * below): bounds TOTP/WebAuthn/recovery-code brute force by BOTH IP and
+ * account across restarts, not just IP within one process's lifetime.
+ * `action` keeps login-time verify, step-up, and Telegram-grant-verify
+ * on separate budgets — they're different security decisions, a burst
+ * failing one shouldn't consume the other's headroom.
+ */
+async function enforceMfaVerifyRateLimit(request: any, reply: FastifyReply, employeeId: number, action: string): Promise<boolean> {
+  const rl = await consume(
+    [ipDimension(action, request.ip, 30, 300), accountDimension(action, employeeId, 10, 300)],
+    request.log
+  );
+  if (!rl.allowed) {
+    reply.code(429).send({ error: 'rate_limited', message: 'Слишком много попыток — попробуйте позже' });
+    return false;
+  }
+  return true;
+}
+
 export async function registerMfaRoutes(app: FastifyInstance) {
   // ===== Login-time second factor (после успешного пароля, до выдачи сессии) =====
 
@@ -109,6 +131,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
       const pending = await mfaRepo.resolvePendingLogin(body.mfa_token);
       if (!pending) return reply.code(400).send({ error: 'invalid_or_expired_mfa_token', message: 'Ссылка на вход истекла, начните заново' });
 
+      if (!(await enforceMfaVerifyRateLimit(request, reply, pending.employee_id, 'mfa_login_verify'))) return;
       const role = await employeesRepo.getRole(pending.employee_id);
       const ok = await verifyFactor(pending.employee_id, role, body);
       if (!ok) return reply.code(401).send({ error: 'invalid_mfa_code', message: 'Неверный код' });
@@ -166,6 +189,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
       if (!(await hasConfirmedMfaFactor(employeeId))) {
         return reply.code(400).send({ error: 'mfa_not_configured', message: 'Сначала настройте MFA (TOTP или ключ доступа)' });
       }
+      if (!(await enforceMfaVerifyRateLimit(request, reply, employeeId, 'mfa_step_up_verify'))) return;
       const body = request.body as StepUpBody;
       const ok = await verifyFactor(employeeId, request.user!.role, body);
       if (!ok) return reply.code(401).send({ error: 'invalid_mfa_code', message: 'Неверный код' });
@@ -225,6 +249,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
       if (!(await hasConfirmedMfaFactor(employeeId))) {
         return reply.code(400).send({ error: 'mfa_not_configured', message: 'Сначала настройте MFA (TOTP или ключ доступа)' });
       }
+      if (!(await enforceMfaVerifyRateLimit(request, reply, employeeId, 'mfa_telegram_verify'))) return;
       const body = request.body as StepUpBody;
       const ok = await verifyFactor(employeeId, request.user!.role, body);
       if (!ok) return reply.code(401).send({ error: 'invalid_mfa_code', message: 'Неверный код' });
@@ -301,6 +326,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
     { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, schema: { body: TotpConfirmBody } },
     async (request, reply) => {
       if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
+      if (!(await enforceMfaVerifyRateLimit(request, reply, request.user!.employee_id!, 'mfa_totp_confirm'))) return;
       const { code } = request.body as TotpConfirmBody;
       const ok = await totp.confirmTotpEnrollment(request.user!.employee_id!, code);
       if (!ok) return reply.code(400).send({ error: 'invalid_code', message: 'Неверный код — попробуйте ещё раз' });

@@ -12,6 +12,7 @@ import { runSmartAlertsTick } from './core/alerts/service.js';
 import { announceReleaseIfNeeded } from './platform/notifications/release-announce.js';
 import { runJob } from './cron/job-logger.js';
 import { assertEncryptionConfigValid, assertProductionEncryptionRequired, CryptoConfigError } from './security/crypto/index.js';
+import { validateProductionConfig, ConfigValidationError } from './config/validate.js';
 
 /**
  * Раньше падение миграции/старта было видно только в Railway logs, которые
@@ -63,6 +64,17 @@ if (process.env.RAILWAY_ENVIRONMENT === 'production') {
   } catch (e) {
     if (e instanceof CryptoConfigError) {
       await alertAndExit('❌ Шифрование обязательно в production, сервер не стартует', e);
+    }
+    throw e;
+  }
+  // §P1-A (20.54.0) — MINI_APP_URL silently disables the CSRF Origin
+  // check and WebAuthn RP config when unset (see config/validate.ts);
+  // same fail-closed treatment as the guards above, not a degraded mode.
+  try {
+    validateProductionConfig();
+  } catch (e) {
+    if (e instanceof ConfigValidationError) {
+      await alertAndExit('❌ Некорректная конфигурация production, сервер не стартует', e);
     }
     throw e;
   }

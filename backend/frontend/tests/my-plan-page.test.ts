@@ -95,6 +95,30 @@ describe('Мой план (миграция frontend/js/05-my-plan.js → src/pa
     expect(document.getElementById('lkToday')!.innerHTML).toContain('50%');
   });
 
+  // §P1-E (20.54.0) — full_name (profile header), store_name and
+  // shift_text (both lk-pill in the hero AND the "Сегодня" ring card)
+  // were all rendered raw before this fix.
+  it('loadMyPlan: full_name/store_name/shift_text экранируются — не исполняемый HTML в DOM', async () => {
+    const { getMe, getMyDay } = setupGlobals();
+    getMe.mockResolvedValue({ bound: true, employee_id: 1, full_name: '<img src=x onerror=alert(1)>', role: 'employee' });
+    getMyDay.mockResolvedValue({
+      bound: true,
+      shift: { store_id: 's1', store_name: '<script>alert(2)</script>', shift_text: '<img src=y onerror=alert(3)>', hours: 8 },
+      total: { fact: 5, plan: 10, pct: 50 }
+    });
+    const { loadMyPlan } = await import('../src/pages/my-plan/index.js');
+    await loadMyPlan();
+    const profile = document.getElementById('lkProfile')!;
+    const today = document.getElementById('lkToday')!;
+    expect(profile.querySelector('img')).toBeNull();
+    expect(profile.querySelector('script')).toBeNull();
+    expect(today.querySelector('img')).toBeNull();
+    expect(today.querySelector('script')).toBeNull();
+    expect(profile.innerHTML).toContain('&lt;img');
+    expect(profile.innerHTML).toContain('&lt;script&gt;');
+    expect(today.innerHTML).toContain('&lt;script&gt;');
+  });
+
   // Documentation-audit XSS fix — store_name в "Моей неделе" раньше
   // подставлялся в title="..." без esc().
   it('loadMyPlan: store_name с " в title="..." "Моей недели" не разрывает атрибут', async () => {

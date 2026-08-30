@@ -5,6 +5,7 @@
  * dashboard/top-7, greeting, streak, and "О приложении".
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals(overrides: { role?: string } = {}) {
   document.body.innerHTML = `
@@ -39,7 +40,10 @@ function setupGlobals(overrides: { role?: string } = {}) {
       <button class="row" id="btnMgrTutorial" style="display:none">Обучение manager</button>
     </div>
   `;
-  vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
+  // §P1-E (20.54.0) — real esc(), not a no-op passthrough: a stub that
+  // doesn't escape can't catch an escaping regression (see the
+  // shift_text/firstName XSS fixes covered below).
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('orgQueryParam', () => '');
   vi.stubGlobal('toast', vi.fn());
@@ -115,6 +119,24 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     expect(document.getElementById('myDayStoreHeadDesktop')!.innerHTML).toContain('A1');
   });
 
+  // §P1-E (20.54.0) — shift_text is admin-entered free text (schedule
+  // shift label), rendered raw into innerHTML before this fix.
+  it('loadMyDay: shift_text экранируется — не исполняемый HTML в DOM', async () => {
+    const { getMyDay } = setupGlobals();
+    getMyDay.mockResolvedValue({
+      bound: true,
+      shift: { store_id: 's1', store_name: 'Точка А', store_code: 'A1', store_address: null, color: null, shift_text: '<img src=x onerror=alert(1)>', hours: 8 },
+      total: { fact: 0, plan: 0, pct: 0 },
+      progress: {},
+      tasks: []
+    });
+    const { loadMyDay } = await import('../src/pages/home/index.js');
+    await loadMyDay();
+    const el = document.getElementById('myDayBody')!;
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.innerHTML).toContain('&lt;img');
+  });
+
   it('completeMyTask: успех — тостит и перезагружает "Мой день"', async () => {
     const { changeTaskStatus, getMyDay } = setupGlobals();
     const { completeMyTask } = await import('../src/pages/home/index.js');
@@ -177,6 +199,20 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     expect(html).toContain('v21.4.0');
     expect(html).toContain('Петров'); // me.full_name.split(' ')[1] — "Фамилия Имя" order
     expect(document.getElementById('headerDate')!.textContent).toBe('25.08.2026');
+  });
+
+  // §P1-E (20.54.0) — full_name is admin-entered, rendered raw as the
+  // greeting's first name before this fix.
+  it('loadHome: приветствие экранирует full_name — не исполняемый HTML в DOM', async () => {
+    setupGlobals();
+    // No spaces — firstName picks split(' ')[1] || split(' ')[0], so a
+    // single space-free payload survives intact into whichever branch wins.
+    vi.stubGlobal('me', { employee_id: 1, role: 'employee', full_name: '<img/src=x/onerror=alert(1)>' });
+    const { loadHome } = await import('../src/pages/home/index.js');
+    await loadHome();
+    const el = document.getElementById('greetingCard')!;
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.innerHTML).toContain('&lt;img');
   });
 
   it('loadHome: топ-7 недоступен без dash — сообщение', async () => {

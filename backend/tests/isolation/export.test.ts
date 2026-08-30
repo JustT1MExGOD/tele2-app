@@ -141,4 +141,62 @@ describe('Изоляция истории/аудита/CSV-экспортов (/
     });
     expect(res.statusCode).toBe(200);
   });
+
+  // §P1-F (20.54.0) — CSV formula injection: employee/store display names
+  // are admin-entered, not platform-controlled, so a name starting with
+  // =/+/-/@ would otherwise be interpreted as a formula by Excel/Sheets
+  // when the export is opened (e.g. a fake "employee" onboarded with a
+  // name like `=cmd|'/c calc'!A1`). csvSafeCell() must prefix a leading
+  // apostrophe for any such cell.
+  describe('CSV formula injection (§P1-F)', () => {
+    let orgC: string, storeC: string, evilEmployee: { id: number; telegramId: number };
+    const EVIL_NAME = '=cmd|\'/c calc\'!A1';
+
+    beforeAll(async () => {
+      orgC = await fx.createOrg('Org C');
+      storeC = await fx.createStore(orgC, '+SUM(1+1)*cmd');
+      evilEmployee = await fx.createEmployee(orgC, { role: 'manager', fullName: EVIL_NAME });
+      await query(
+        `INSERT INTO sales (employee_id, store_id, sale_date, sim) VALUES ($1, $2, $3, 1)`,
+        [evilEmployee.id, storeC, DATE]
+      );
+    });
+
+    it('GET /export/sales.csv — formula-like employee/store names are neutralized', async () => {
+      const app = await getApp();
+      const res = await app.inject({
+        method: 'GET',
+        url: `/export/sales.csv?from=${DATE}&to=${DATE}`,
+        headers: authAs(evilEmployee.telegramId)
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).not.toContain(';' + EVIL_NAME);
+      expect(res.body).not.toContain(';+SUM');
+      expect(res.body).toContain(`'${EVIL_NAME}`);
+      expect(res.body).toContain(`'+SUM(1+1)*cmd`);
+    });
+
+    it('GET /export/bfq.csv — formula-like employee name is neutralized', async () => {
+      const app = await getApp();
+      const month = DATE.slice(0, 7);
+      const res = await app.inject({
+        method: 'GET',
+        url: `/export/bfq.csv?month=${month}`,
+        headers: authAs(evilEmployee.telegramId)
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).not.toContain(';' + EVIL_NAME);
+      expect(res.body).toContain(`'${EVIL_NAME}`);
+    });
+
+    it('normal Cyrillic/UTF-8 names pass through unmodified (no false-positive escaping)', async () => {
+      const app = await getApp();
+      const res = await app.inject({
+        method: 'GET',
+        url: `/export/sales.csv?from=${DATE}&to=${DATE}`,
+        headers: authAs(managerA.telegramId)
+      });
+      expect(res.body).toContain('Export Employee A');
+    });
+  });
 });

@@ -629,6 +629,16 @@ export function ackMfaRecoveryCodesSaved(): void {
 }
 
 export async function logoutFromMfaGate(): Promise<void> {
+  // §P1-G (20.54.0) — best-effort flush while the session is still
+  // valid, then unconditionally wipe anything left over: a shared
+  // device's next login must never auto-replay this identity's queued
+  // offline sales. See frontend/offline-queue.js::clear() for why.
+  try {
+    await (window as any).OfflineQueue?.flush?.();
+  } catch (_) {}
+  try {
+    await (window as any).OfflineQueue?.clear?.();
+  } catch (_) {}
   try {
     await window.apiClient.logoutPhone(authHeaders(true));
   } catch (_) {}

@@ -9,6 +9,7 @@ import { todayMoscow, currentMonthMoscow } from '../../../utils/date.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
+import { csvSafeCell, safeFilenameSegment } from '../../../security/csv-safe.js';
 
 // 19.23.0 (Audit Trail) — экспорт не мутация, просто фиксируем факт "кто
 // когда что выгрузил" (data exfiltration угол из исходного ревью). Ошибку
@@ -26,12 +27,6 @@ function auditExport(request: FastifyRequest, orgId: string, targetId: string, f
     requestId: request.id,
     actorRole: request.user!.role
   }).catch((e: any) => request.log.error(e, 'audit write failed for export.csv'));
-}
-
-function csvEscape(v: any) {
-  const s = String(v ?? '');
-  if (/[;"\n,]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
 }
 
 // 20.50.0 (Web Security & Trust Layer, часть 3) — findForCsvExport() не
@@ -133,14 +128,14 @@ export async function registerExportRoutes(app: FastifyInstance) {
         r.sim, r.mnp, r.pa, r.combo, r.phones, r.accessories,
         r.insurance, r.wink, r.shpd, r.focus, r.settings,
         r.credit_request, r.credit_issued, r.plotter, r.hb
-      ].map(csvEscape).join(';'));
+      ].map(csvSafeCell).join(';'));
     }
 
     auditExport(request, orgId, 'sales', { from, to, store_id: q.store_id || null });
 
     reply
       .header('Content-Type', 'text/csv; charset=utf-8')
-      .header('Content-Disposition', `attachment; filename="sales_${from}_${to}.csv"`)
+      .header('Content-Disposition', `attachment; filename="sales_${safeFilenameSegment(from)}_${safeFilenameSegment(to)}.csv"`)
       .send('﻿' + lines.join('\n'));
     }
   );
@@ -178,14 +173,14 @@ export async function registerExportRoutes(app: FastifyInstance) {
         r.pct?.phones,
         r.shifts?.worked,
         r.shifts?.remaining
-      ].map(csvEscape).join(';'));
+      ].map(csvSafeCell).join(';'));
     }
 
     auditExport(request, orgId, 'bfq', { month: m });
 
     reply
       .header('Content-Type', 'text/csv; charset=utf-8')
-      .header('Content-Disposition', `attachment; filename="bfq_${m}.csv"`)
+      .header('Content-Disposition', `attachment; filename="bfq_${safeFilenameSegment(m)}.csv"`)
       .send('﻿' + lines.join('\n'));
     }
   );
@@ -212,14 +207,14 @@ export async function registerExportRoutes(app: FastifyInstance) {
       lines.push([
         String(r.work_date).slice(0, 10),
         r.full_name, r.store_name, r.code, r.shift_text, r.hours
-      ].map(csvEscape).join(';'));
+      ].map(csvSafeCell).join(';'));
     }
 
     auditExport(request, orgId, 'schedules', { month: m });
 
     reply
       .header('Content-Type', 'text/csv; charset=utf-8')
-      .header('Content-Disposition', `attachment; filename="schedules_${m}.csv"`)
+      .header('Content-Disposition', `attachment; filename="schedules_${safeFilenameSegment(m)}.csv"`)
       .send('﻿' + lines.join('\n'));
     }
   );

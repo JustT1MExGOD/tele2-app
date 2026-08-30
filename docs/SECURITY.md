@@ -172,6 +172,19 @@ Defense-in-depth: ни один отдельный уровень не един�
   соответствует реальному клиенту, что подрывает точность IP-based
   rate-limit выше.
 
+  **Distributed rate-limit layer (20.54.0, §P1-A)** —
+  `security/rate-limit.ts`, Postgres-backed (`security_rate_limit_counters`,
+  fixed-window counters), второй слой ПОВЕРХ таблицы выше, не вместо неё:
+  переживает рестарт/деплой (in-memory `@fastify/rate-limit` — нет), ключуется
+  сразу по нескольким осям (IP + аккаунт/identity-hash), fail-closed на
+  сбое хранилища (блокирует только текущий запрос, ничего не пишет —
+  без риска бессрочной блокировки). Применён на `POST /auth/login`,
+  `/auth/reset/:token`, `/auth/login/mfa`, `/auth/mfa/step-up`,
+  `/auth/mfa/telegram/verify`, `/auth/mfa/totp/confirm` — самая
+  brute-force-чувствительная поверхность; остальные роуты из таблицы
+  выше остаются только на in-memory лимите (см. [известные
+  компромиссы](#известные-компромиссы)).
+
   **CSRF (double-submit cookie + Sec-Fetch-Site/Origin, 20.48.0)** —
   мутирующий запрос с cookie-сессией (`t2_session`) обязан нести
   `X-CSRF-Token`, совпадающий с не-`httpOnly` cookie `t2_csrf`
@@ -215,7 +228,12 @@ Defense-in-depth: ни один отдельный уровень не един�
 `ALLOW_INSECURE_AUTH=true`. Это не просто конвенция — жёсткий гварт:
 `src/index.ts` вообще отказывается стартовать в
 `RAILWAY_ENVIRONMENT=production`, если `ALLOW_INSECURE_AUTH=true` **или**
-`BOT_TOKEN` не задан. Сама initData-сессия живёт **1 час** (было 24,
+`BOT_TOKEN` не задан. Тот же гварт (20.54.0, `config/validate.ts`) теперь
+требует `MINI_APP_URL` в виде валидного `https://` URL — без него
+`auth/csrf.ts::expectedOrigin()` тихо отдаёт `''`, и Origin-слой CSRF
+(двойной-submit-токен продолжает работать независимо) молча выключается
+вместо явного отказа; см. `docs/security/20.54-baseline.md` (§P1-H).
+Сама initData-сессия живёт **1 час** (было 24,
 снижено в 19.14.0 по рекомендации Telegram) — по истечении роут отвечает
 понятным `session_expired`, а не голым 401.
 
@@ -529,6 +547,19 @@ Master Key / KEK (env ENCRYPTION_KEKS, версионирован, ротиру�
 версию из `ENCRYPTION_KEKS`, поэтому старые записи остаются читаемыми
 без re-encryption всего хранилища при добавлении новой версии.
 
+**Backfill/rewrap tooling (20.54.0, §P1-D)** —
+`backend/src/scripts/backfill-support-encryption.ts`: resumable/
+idempotent/batched, закрывает две смежные, но разные задачи. Обычный
+режим шифрует legacy plaintext-строки (`support_tickets`/
+`support_messages`, созданные до включения `DATA_ENCRYPTION_ENABLED` —
+read-only проверка прода в рамках 20.54.0 нашла 10 таких строк,
+инструмент готов, на проде намеренно не запущен). `--rewrap` режим
+закрывает вторую половину — миграцию УЖЕ зашифрованных строк на новый
+активный ключ после ротации (находит `kid ≠ ENCRYPTION_ACTIVE_KEY_VERSION`,
+расшифровывает под тем ключом, что назван в конверте, шифрует заново
+под активным). Оба режима никогда не логируют содержимое, только id/
+счётчики.
+
 **Downgrade-инвариант** — `DATA_ENCRYPTION_ENABLED` гейтит только
 запись; чтение уже зашифрованной строки расшифровывается всегда,
 независимо от текущего состояния флага. Выключить флаг нельзя сделать
@@ -787,12 +818,13 @@ TOTP уже полностью закрывает mandatory-политику б�
 | Публичные аватарки (`GET /avatars/:employeeId`) без сессии | rate-limit 30/мин | `<img src>` физически не может послать `Authorization`-заголовок; подписанные ссылки с TTL — больший рефакторинг, отложен, не забыт |
 | CSP разрешает `unsafe-inline` для `script-src-attr`/`style-src-attr` | Остальная CSP строгая (`default-src 'self'`, `object-src 'none'` и т.д.); реальные XSS-дыры, которые эта строгость закрыла бы дополнительным слоем, устранены адресно в 20.49.0 (`esc()` у источника инъекции, не только у её исполнения) | Точный объём подтверждён аудитом 20.49.0: 265+ `onclick=`/`onchange=`/`oninput=` (21 TS-файл + `index.html`) + ~400 `style=`. Закрытие требует перевода на event-delegation/CSS-классы поэкранно с тестами — сопоставимо по объёму с Frontend rewrite (20.3.0-20.30.0, ~27 версий). Запланировано отдельной эпохой (Web Security & Trust Layer, следующая часть), не забыто |
 | `styleSrc: 'unsafe-inline'` (block-level) | Единственный потребитель — `shift/index.ts`, keyframe-анимация конфетти через `document.createElement('style')` | Не убирать без замены (nonce/hash или отказ от динамического `<style>`) — сломает анимацию молча (CSP-нарушения для стилей не бросают JS-ошибку) |
-| Supervisor Scope Cache — in-memory, не Redis | 5-минутный TTL, точечная инвалидация при смене сектора/роли | Прод — 1 реплика Railway (`grammy`-бот на long-polling не переживёт вторую реплику без перехода на webhook); Redis добавил бы сетевой failure mode без выигрыша в корректности при одной реплике. **Уточнение**: кэш обслуживает только `resolveSupervisorStores()` (кабинет супервайзера/Command Center, `core/analytics/supervisor.ts`) — общий `getUserStoreIds()` (`auth/guards.ts`), используемый другими роутами для фильтрации по сектору, ходит в `supervisor_sectors` напрямую, кэш не трогает; расхождение TTL между путями структурно невозможно, потому что кэш не единственный источник данных |
+| Supervisor Scope Cache — in-memory, не Redis | 5-минутный TTL, точечная инвалидация при смене сектора/роли | Прод — 1 реплика Railway (`grammy`-бот на long-polling не переживёт вторую реплику без перехода на webhook); Redis добавил бы сетевой failure mode без выигрыша в корректности при одной реплике. **Уточнение (исправлено 20.54.0 — предыдущая формулировка здесь была неточной)**: кэш обслуживает только `resolveSupervisorStores()` (кабинет супервайзера/Command Center, `core/analytics/supervisor.ts`) — это же единственное место, где сектор супервайзера вообще ограничивает видимость. `getUserStoreIds()` (`auth/guards.ts`) существует, но не вызывается НИ ОДНИМ роутом — не «используется другими роутами», а мёртвый код; `GET /employees`, `GET /stores`, `/sales/history`, `/stores/:id/profile`, `/employees/:id/profile` отдают supervisor данные всей сети, не только сектора — сознательный (перепроверенный с владельцем продукта в 20.54.0, не переоткрыт) trade-off: сектор сегодня — только dashboard-scope для агрегатов, не confidentiality-граница на весь app; см. `docs/security/20.54-baseline.md`, §P1-C |
 | `check-dangerous-js-patterns.mjs` (CI) не проверяет `innerHTML`/`onclick=` эвристикой | Сознательный выбор (высокий false-positive без AST, см. сам скрипт) | Значит новый недоэкранированный sink не поймается автоматически — только ручным/периодическим аудитом, как этот. Четыре конкретных места такого класса (`promos.ts` список, `plans-bfq.ts`×2, `schedule.ts`/`my-plan.ts` `title=`) найдены этим документационным аудитом и закрыты в 20.50.1 — не гипотетический риск, реальный прецедент |
 | Динамические тела запроса (кастомные метрики, `sync/batch`, `what-if moves`) вне строгой TypeBox-схемы | `additionalProperties: true` + ручная фильтрация в обработчике (regex на ключи, `Number()`) | Схема не должна быть строже уже отлаженной ручной логики; форма тела определяется каталогом метрик динамически |
 | `GET /access/orgs` + `GET /access/employees-directory` публичны без сессии | Отдают только названия сетей и список имён/id для формы регистрации, не бизнес-данные (продажи/кассу/роли); с 20.50.0 — 30/мин лимит (раньше вообще без лимита) | Нужны гостю ДО того, как у него есть identity — пикер сети и «я из списка» на регистрации; разведка оргструктуры — реальная, но малая цена (см. [THREAT-MODEL.md](./THREAT-MODEL.md)) |
 | `normalizePhone()` (20.48.0) принимает только RU-формы, международные номера отклоняются | `validatePhone()` даёт понятный 400, не тихую порчу данных | Проект целиком русскоязычный (`Europe/Moscow`); `libphonenumber` ради узкой задачи не тянули — расширить при реальной потребности в международных номерах |
 | `POST /metrics`/`DELETE /metrics/:id` — любой manager (не только admin) мутирует ГЛОБАЛЬНЫЙ каталог кастомных метрик (`ALTER TABLE` на 3 таблицах), общий для всех сетей | `requireManager` — не гейтится по org, каталог метрик архитектурно один на всё приложение | Найдено security-аудитом 20.52.0, не исправлено — сужение до admin-only было бы продуктовым решением (кто должен заводить метрики), не чисто security-фиксом; см. финальный отчёт |
+| Distributed (Postgres-backed) rate-limit слой (20.54.0) применён только на credential-verification роутах (login/MFA/reset) | Остальные rate-limited роуты (см. таблицу выше) остаются только на in-memory `@fastify/rate-limit` — переживает не рестарт, а один процесс | Сознательный скоуп прохода — бóльшая ценность на брутфорс-чувствительной поверхности; полный перевод всех роутов отложен, см. `docs/security/20.54-baseline.md` |
 
 ## RBAC — таблица прав по ролям
 
@@ -889,5 +921,8 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
   (Level 3) не реализован.
 - [docs/ADR/009](./ADR/009-mfa-step-up.md) — MFA и channel-agnostic
   step-up, 20.52.0.
+- [docs/security/20.54-baseline.md](./security/20.54-baseline.md) —
+  findings/fixes/явно отложенное для 20.54.0 (rate-limit, CSV injection,
+  offline-queue isolation, MINI_APP_URL config validation).
 - [CHANGELOG.md](../CHANGELOG.md) — полная построчная хронология каждой
   security-правки с датами и версиями.

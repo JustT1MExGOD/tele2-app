@@ -5,6 +5,7 @@
  * employee card, and the CRUD state-changing actions.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals(overrides: { role?: string } = {}) {
   document.body.innerHTML = `
@@ -34,7 +35,10 @@ function setupGlobals(overrides: { role?: string } = {}) {
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
   `;
-  vi.stubGlobal('esc', (s: unknown) => String(s ?? ''));
+  // §P1-E (20.54.0) — real esc(), not a no-op passthrough: a stub that
+  // doesn't escape can't catch an escaping regression (see the
+  // schedule store_name/shift_text XSS fix covered below).
+  vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('orgQueryParam', () => '');
   vi.stubGlobal('toast', vi.fn());
@@ -161,6 +165,31 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     expect(html).toContain('Точка А');
     expect(html).toContain('openEmployeeProfile(1)');
     expect(html).toContain('zeroSaleMetric(5,\'sim\',1)');
+  });
+
+  // §P1-E (20.54.0) — shift_text/store_name from the schedule are
+  // admin-entered free text, rendered raw into the employee card before
+  // this fix.
+  it('openEmployeeCard: shift_text/store_name экранируются — не исполняемый HTML в DOM', async () => {
+    const { getEmployees, getSales, getSchedules } = setupGlobals({ role: 'manager' });
+    getEmployees.mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
+    getSales.mockResolvedValue([]);
+    getSchedules.mockResolvedValue([{
+      work_date: '2026-08-25',
+      shift_text: '<img src=x onerror=alert(1)>',
+      hours: 8,
+      store_id: 's1',
+      employee_id: 1,
+      full_name: 'Иван',
+      store_name: '<script>alert(2)</script>'
+    }]);
+    const { openEmployeeCard } = await import('../src/pages/team/index.js');
+    await openEmployeeCard(1);
+    const modalBody = document.getElementById('modalBody')!;
+    expect(modalBody.querySelector('img')).toBeNull();
+    expect(modalBody.querySelector('script')).toBeNull();
+    expect(modalBody.innerHTML).toContain('&lt;img');
+    expect(modalBody.innerHTML).toContain('&lt;script&gt;');
   });
 
   it('setRole: не-manage — no-op', async () => {

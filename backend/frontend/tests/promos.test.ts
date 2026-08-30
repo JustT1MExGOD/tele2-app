@@ -106,6 +106,22 @@ describe('промокоды РТК (миграция frontend/js/12-promos.js �
     expect(list.textContent).toContain(payload);
   });
 
+  // §P1-E (20.54.0) — same class of gap as created_by_name above, found
+  // in the same audit pass: `mask` (server-computed from the admin-
+  // entered promo code, first+last 2 chars survive masking) was rendered
+  // raw in the list view while other fields nearby were already esc()'d.
+  it('loadPromos: mask с HTML-подобным содержимым не исполняется как разметка', async () => {
+    const { getPromos } = setupGlobals();
+    getPromos.mockResolvedValue({
+      items: [{ id: 7, mask: '<s•••••••pt', created_by_name: 'Иван', created_at: '2026-08-20T10:00:00Z' }]
+    });
+    const { openPromos } = await import('../src/features/promos/index.js');
+    await openPromos();
+    const list = document.getElementById('promoList')!;
+    expect(list.querySelectorAll('s').length).toBe(0);
+    expect(list.innerHTML).toContain('&lt;s');
+  });
+
   it('loadPromos: ошибка API — не падает, показывает сообщение', async () => {
     const { getPromos } = setupGlobals();
     getPromos.mockRejectedValue(new Error('network'));

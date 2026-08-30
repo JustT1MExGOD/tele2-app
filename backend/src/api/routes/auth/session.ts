@@ -32,6 +32,7 @@ import * as mfaRepo from '../../../data/repositories/mfa.js';
 import { hasConfirmedMfaFactor } from '../../../auth/mfa/index.js';
 import { isTotpConfirmed } from '../../../auth/mfa/totp.js';
 import { assertStepUp } from '../../../auth/step-up.js';
+import { consume, ipDimension, identityDimension } from '../../../security/rate-limit.js';
 import type {
   RegisterPhoneRequest,
   RegisterPhoneResponse,
@@ -206,6 +207,23 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const b = request.body as LoginBody;
       const phone = normalizePhone(String(b.phone || ''));
 
+      // §P1-A (20.54.0) — persistent layer on top of the in-memory
+      // per-route limiter above (same phone-hash identity, plus IP):
+      // survives restarts, and additionally bounds guessing against an
+      // UNKNOWN phone number (the in-memory limiter's keyGenerator
+      // already does this too, but only until the next deploy).
+      const phoneHash = phone ? createHash('sha256').update(phone).digest('hex') : createHash('sha256').update('unknown').digest('hex');
+      const rl = await consume(
+        [
+          ipDimension('login', request.ip, 30, 300),
+          identityDimension('login', phoneHash, 10, 300)
+        ],
+        request.log
+      );
+      if (!rl.allowed) {
+        return reply.code(429).send({ error: 'rate_limited', message: 'Слишком много попыток входа — попробуйте позже' });
+      }
+
       // 20.48.0 — identities, не employeesRepo.findByPhone напрямую.
       const employeeId = phone ? await identitiesRepo.findEmployeeId('phone', phone) : null;
       const e = employeeId ? await employeesRepo.findByIdWithPassword(employeeId) : null;
@@ -256,6 +274,22 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     async (request, reply): Promise<ConsumeResetResponse | FastifyReply> => {
       const { token } = request.params as { token: string };
       const b = request.body as ResetBody;
+
+      // §P1-A (20.54.0) — reset tokens are 32 random bytes (unguessable
+      // on their own), but the endpoint is unauthenticated by design;
+      // the persistent limiter bounds an attacker probing many token
+      // guesses from one IP even below the in-memory per-route cap.
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      const rl = await consume(
+        [
+          ipDimension('password_reset', request.ip, 20, 300),
+          identityDimension('password_reset', tokenHash, 10, 300)
+        ],
+        request.log
+      );
+      if (!rl.allowed) {
+        return reply.code(429).send({ error: 'rate_limited', message: 'Слишком много попыток — попробуйте позже' });
+      }
 
       // scrypt — чистый CPU, вне транзакции намеренно (не держать
       // DB-соединение простаивающим на время хеширования).

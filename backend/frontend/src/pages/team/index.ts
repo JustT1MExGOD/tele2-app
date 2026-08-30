@@ -414,7 +414,7 @@ export async function openEmployeeCard(id: number): Promise<void> {
           <div class="field">
             <label>Смена сегодня</label>
             <div style="font-size:15px;font-weight:600">
-              ${sch ? `${sch.store_name || sch.store_id} · ${sch.shift_text || ''} (${sch.hours || ''}ч)` : 'Выходной / нет в графике'}
+              ${sch ? `${esc(sch.store_name || sch.store_id || '')} · ${esc(sch.shift_text || '')} (${sch.hours || ''}ч)` : 'Выходной / нет в графике'}
             </div>
           </div>
           <div class="block-label">Продажи сегодня</div>

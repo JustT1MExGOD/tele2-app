@@ -118,13 +118,13 @@ export async function loadMyPlan(): Promise<void> {
               <button type="button" class="lk-avatar-edit" onclick="pickAvatarFile()" title="Сменить аватарку"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" /> <circle cx="12" cy="13" r="3" /> </svg></button>
             </div>
             <div>
-              <div class="lk-name">${fullName}</div>
+              <div class="lk-name">${esc(fullName)}</div>
               <span class="lk-role ${role === 'manager' || role === 'admin' ? 'manager' : ''}">${roleLabel(role)}</span>
             </div>
           </div>
           <div class="lk-hero-meta">
-            ${storeName ? `<div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /> <circle cx="12" cy="10" r="3" /> </svg> <strong>${storeName}</strong></div>` : `<div class="lk-pill">Сегодня выходной</div>`}
-            ${shift?.shift_text ? `<div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 6v6l4 2" /> </svg> <strong>${shift.shift_text}</strong>${shift.hours ? ' · ' + shift.hours + 'ч' : ''}</div>` : ''}
+            ${storeName ? `<div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /> <circle cx="12" cy="10" r="3" /> </svg> <strong>${esc(storeName)}</strong></div>` : `<div class="lk-pill">Сегодня выходной</div>`}
+            ${shift?.shift_text ? `<div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 6v6l4 2" /> </svg> <strong>${esc(shift.shift_text)}</strong>${shift.hours ? ' · ' + shift.hours + 'ч' : ''}</div>` : ''}
             <div class="lk-pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg> <strong>${formatDateRu(today)}</strong></div>
           </div>
         </div>`;
@@ -154,7 +154,7 @@ export async function loadMyPlan(): Promise<void> {
             <div class="lk-ring-sub">Выполнение дневного плана по ключевым метрикам.</div>
             <div class="lk-ring-store">
               <span class="lk-dot" style="background:${color}"></span>
-              ${storeName}${shift?.shift_text ? ' · ' + shift.shift_text : ''}
+              ${esc(storeName)}${shift?.shift_text ? ' · ' + esc(shift.shift_text) : ''}
             </div>
           </div>
         </div>`
@@ -461,6 +461,16 @@ export function openLinkPhone(): void {
 }
 
 export async function logoutSelf(): Promise<void> {
+  // §P1-G (20.54.0) — same reasoning as access-supervisor's
+  // logoutFromMfaGate(): flush what we can while still authenticated,
+  // then wipe the rest so the next login on this device can't
+  // auto-replay this identity's queued offline sales.
+  try {
+    await (window as any).OfflineQueue?.flush?.();
+  } catch (_) {}
+  try {
+    await (window as any).OfflineQueue?.clear?.();
+  } catch (_) {}
   try {
     await window.apiClient.logoutPhone(authHeaders(true));
   } catch (_) {

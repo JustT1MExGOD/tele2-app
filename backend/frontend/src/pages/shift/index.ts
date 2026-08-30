@@ -318,7 +318,7 @@ export async function loadShiftAndInsight(empId: number): Promise<void> {
               <div class="progress-block" style="margin-bottom:12px">
                 <div class="section-title" style="margin-bottom:8px">Смена открыта</div>
                 <div style="font-size:13px;color:var(--hint);margin-bottom:10px">
-                  ${(sess as any).store_name || (sess as any).store_id} · с ${timeMoscow((sess as any).opened_at) || '—'} МСК
+                  ${esc((sess as any).store_name || (sess as any).store_id || '')} · с ${timeMoscow((sess as any).opened_at) || '—'} МСК
                 </div>
                 ${['sim', 'mnp', 'pa', 'combo'].map((m) => progressHTML(metricLabel(m), liveFact[m], livePlan[m])).join('')}
                 <button class="btn-main" style="background:#e74c3c;margin-top:10px" onclick="closeShiftSession()">Закрыть смену</button>
@@ -461,7 +461,7 @@ export async function loadLiveMap(): Promise<void> {
       box.innerHTML = stores
         .map((st) => {
           const statusColor = st.status === 'critical' ? '#e74c3c' : st.status === 'warn' ? '#f39c12' : '#2ecc71';
-          const staff = (st.staff || []).map((s) => s.short_name || s.full_name || s.employee_id).join(', ') || 'никого';
+          const staff = (st.staff || []).map((s) => esc(s.short_name || s.full_name || s.employee_id || '')).join(', ') || 'никого';
           const cash = st.cash ? `Касса Δ ${st.cash.delta}` : 'Касса —';
           return `
             <div class="progress-block" style="margin-bottom:10px;border-left:4px solid ${st.color || statusColor};cursor:pointer"

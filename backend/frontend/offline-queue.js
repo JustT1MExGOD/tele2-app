@@ -91,6 +91,33 @@
     return ops.length;
   }
 
+  /**
+   * §P1-G (20.54.0) — account isolation. The queue (IndexedDB, one
+   * store for the whole browser) was never scoped to a session/identity
+   * and nothing cleared it on logout: User A queues an offline sale on
+   * a shared device, logs out before the network comes back, User B
+   * logs in on the same device, and the `online` listener/30s interval
+   * below would flush User A's still-pending op under whatever
+   * cookie/headers happen to be current — a manager session (B) could
+   * silently submit A's stale queued sale. The server-side authorization
+   * in /sync/batch (api/routes/shifts.ts) already refuses to let a
+   * non-manager sync someone else's employee_id, so a plain-employee B
+   * is safe (the op just fails and lingers) — but a manager B is not.
+   * Call this from every logout path BEFORE clearing the session cookie,
+   * never after: it deletes whatever a best-effort flush() didn't
+   * manage to send, so nothing queued under the old identity survives
+   * to replay under the next one.
+   */
+  async function clear() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async function flush() {
     if (!navigator.onLine) return { skipped: true };
     const ops = await allOps();
@@ -129,6 +156,7 @@
     enqueueSale,
     flush,
     pendingCount,
-    allOps
+    allOps,
+    clear
   };
 })(window);
