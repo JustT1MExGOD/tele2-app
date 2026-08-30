@@ -16,6 +16,7 @@ import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as supervisorSectorsRepo from '../../../data/repositories/supervisor-sectors.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
+import * as mfaRepo from '../../../data/repositories/mfa.js';
 import { invalidate as invalidateScope } from '../../../core/shared/scope-cache.js';
 import { assertStepUp } from '../../../auth/step-up.js';
 import type { EmployeesListResponse, CreateEmployeeResponse } from '../../../shared/api-types.js';
@@ -266,6 +267,11 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     if (isEscalation) {
       await sessionsRepo.deleteAllForEmployee(Number(id)).catch((e: any) =>
         console.error('revoke sessions on role escalation:', e?.message || e)
+      );
+      // 20.53.0 — тот же принцип для Telegram AAL2-грантов (см.
+      // org/access.ts's approve-путь для полного объяснения сценария).
+      await mfaRepo.revokeAllTelegramGrants(Number(id)).catch((e: any) =>
+        console.error('revoke telegram grants on role escalation:', e?.message || e)
       );
     }
 

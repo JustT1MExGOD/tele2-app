@@ -78,7 +78,7 @@ describe('Supervisor Scope Cache', () => {
     const res = await app.inject({
       method: 'PUT',
       url: `/supervisor/${supervisor.id}/sector`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { sector_id: sectorY }
     });
     expect(res.statusCode).toBe(200);
@@ -104,7 +104,7 @@ describe('Supervisor Scope Cache', () => {
     const res = await app.inject({
       method: 'PUT',
       url: `/admin/org/${orgA}`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { name: 'Scope Cache Org A', sector_id: sectorY }
     });
     expect(res.statusCode).toBe(200);

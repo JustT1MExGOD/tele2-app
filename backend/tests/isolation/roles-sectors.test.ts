@@ -82,7 +82,7 @@ describe('Изоляция назначения ролей и секторов',
     const res = await app.inject({
       method: 'PUT',
       url: `/supervisor/${employeeA.id}/sector`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { sector_id: sectorId }
     });
     expect(res.statusCode).toBe(200);
@@ -99,11 +99,11 @@ describe('Изоляция назначения ролей и секторов',
     const candidate = await fx.createEmployee(orgA, { role: 'employee' });
     // §12 (20.52.1) — назначение supervisor теперь тоже step-up-gated
     // эскалация (тот же класс риска, что admin), не только сам admin-роут.
-    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
+    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId, admin.telegramGrantToken));
     const res = await app.inject({
       method: 'PATCH',
       url: `/employees/${candidate.id}/role`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json', ...stepUp },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json', ...stepUp },
       payload: { role: 'supervisor', sector_id: sectorId }
     });
     expect(res.statusCode).toBe(200);
@@ -115,11 +115,11 @@ describe('Изоляция назначения ролей и секторов',
   it('PATCH /employees/:id/role — role=supervisor БЕЗ sector_id не пишет строку и не падает (текущее осознанное поведение — "пропустить, назначу позже")', async () => {
     const app = await getApp();
     const candidate = await fx.createEmployee(orgA, { role: 'employee' });
-    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
+    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId, admin.telegramGrantToken));
     const res = await app.inject({
       method: 'PATCH',
       url: `/employees/${candidate.id}/role`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json', ...stepUp },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json', ...stepUp },
       payload: { role: 'supervisor' }
     });
     expect(res.statusCode).toBe(200);

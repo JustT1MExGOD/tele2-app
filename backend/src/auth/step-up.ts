@@ -5,28 +5,30 @@
  * server-side session at all) or a browser employee_sessions cookie.
  *
  * Deliberately NOT session-freshness-based (e.g. "was MFA done in the
- * last 15 minutes of this session") — Telegram has no session object to
- * attach that freshness state to. Instead: a short-lived opaque bearer
- * ticket (mfa_step_up_tickets), obtained by POST /auth/mfa/step-up with
- * a fresh MFA proof, sent back as X-Step-Up-Token on the dangerous
- * request. Getting a ticket at all REQUIRES a confirmed MFA factor to
- * exist (auth/mfa/*.ts verify functions return false otherwise) — this
- * is what actually enforces "no dangerous action without MFA configured",
- * not a separate enrollment-gate on every route.
+ * last 15 minutes of this session") — freshness for THIS action is what
+ * the ticket itself proves. Short-lived opaque bearer ticket
+ * (mfa_step_up_tickets), obtained by POST /auth/mfa/step-up with a fresh
+ * MFA proof, sent back as X-Step-Up-Token on the dangerous request.
+ * Getting a ticket at all REQUIRES a confirmed MFA factor to exist
+ * (auth/mfa/*.ts verify functions return false otherwise) — this is what
+ * actually enforces "no dangerous action without MFA configured", not a
+ * separate enrollment-gate on every route.
  */
 import { FastifyRequest, FastifyReply } from 'fastify';
 import * as mfaRepo from '../data/repositories/mfa.js';
 
 export const STEP_UP_TICKET_TTL_MINUTES = 10;
 
-/** `sessionToken` (§11, 20.52.1) — binds the ticket to the caller's
- * current browser/phone session where one exists (request.sessionToken,
- * set by auth/providers/phone.ts), so a stolen ticket can't be replayed
- * from a different session of the same employee. Undefined for
- * Telegram — that channel has no session object to bind to (ADR-005),
- * the ticket stays employee-scoped only, same as before this hardening. */
-export async function issueStepUpTicket(employeeId: number, sessionToken?: string): Promise<string> {
-  return mfaRepo.createStepUpTicket(employeeId, STEP_UP_TICKET_TTL_MINUTES, sessionToken);
+/** channel-context token (§11 20.52.1, generalized §35 20.53.0) — binds
+ * the ticket to the caller's current channel context where one exists:
+ * `request.sessionToken` for browser/phone (set by
+ * auth/providers/phone.ts), `request.telegramGrantToken` for Telegram
+ * (set by auth/mfa/telegram-grant.ts, only once the Telegram AAL2 grant
+ * itself has been resolved) — so a stolen ticket can't be replayed from
+ * a different session/grant of the same employee. Neither present
+ * leaves the ticket employee-scoped only. */
+export async function issueStepUpTicket(employeeId: number, channelToken?: string): Promise<string> {
+  return mfaRepo.createStepUpTicket(employeeId, STEP_UP_TICKET_TTL_MINUTES, channelToken);
 }
 
 /** Boolean-returning check, same calling convention as requireManager()/
@@ -41,7 +43,8 @@ export async function assertStepUp(request: FastifyRequest, reply: FastifyReply)
     return false;
   }
   const token = request.headers['x-step-up-token'] as string | undefined;
-  if (!token || !(await mfaRepo.resolveStepUpTicket(employeeId, token, request.sessionToken))) {
+  const channelToken = request.sessionToken ?? request.telegramGrantToken;
+  if (!token || !(await mfaRepo.resolveStepUpTicket(employeeId, token, channelToken))) {
     reply.code(403).send({
       error: 'step_up_required',
       message: 'Для этого действия нужно свежее подтверждение MFA'

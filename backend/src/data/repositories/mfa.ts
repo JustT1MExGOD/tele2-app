@@ -292,19 +292,75 @@ export async function consumeWebAuthnChallenge(employeeId: number, kind: 'regist
   return res.rows[0]?.challenge || null;
 }
 
+// ===== Telegram AAL2 grants (20.53.0) =====
+//
+// The Telegram-channel equivalent of employee_sessions.mfa_verified_at:
+// short-lived, server-side proof that this employee verified a second
+// factor recently FOR THIS Telegram access context, not just "has one
+// configured" (see docs/ADR/009-mfa-step-up.md, "20.53.0 revision" — the
+// gap this closes). Same discipline as every other opaque token here —
+// only the hash is stored, the raw value lives only in the HttpOnly
+// cookie the client holds.
+
+const TELEGRAM_GRANT_TTL_HOURS = 12;
+
+export async function createTelegramGrant(employeeId: number): Promise<string> {
+  const token = generateOpaqueToken();
+  await query(
+    `INSERT INTO mfa_telegram_grants (employee_id, token_hash, expires_at)
+     VALUES ($1,$2, now() + ($3 || ' hours')::interval)`,
+    [employeeId, hashOpaqueToken(token), String(TELEGRAM_GRANT_TTL_HOURS)]
+  );
+  return token;
+}
+
+/** Returns the grant's `created_at` (an ISO timestamp string) when valid
+ * — used the same way employee_sessions.mfa_verified_at is used for the
+ * browser channel: a concrete, non-null value that assurance.ts treats
+ * as "AAL2 verified for this channel context". Null when no matching,
+ * unexpired grant exists — the caller must treat that as
+ * mfa_reverification_required, exactly like a browser session issued
+ * before its account had a factor. Touches last_seen_at (throttled, same
+ * 1h window as sessions.ts::touchSession) — not itself security-relevant,
+ * purely so an idle-grant-cleanup job (if one is ever added) has a real
+ * signal to work from. */
+export async function resolveTelegramGrant(employeeId: number, token: string): Promise<string | null> {
+  const res = await query(
+    `SELECT id, created_at FROM mfa_telegram_grants
+     WHERE employee_id = $1 AND token_hash = $2 AND expires_at > now()`,
+    [employeeId, hashOpaqueToken(token)]
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  await query(
+    `UPDATE mfa_telegram_grants SET last_seen_at = now() WHERE id = $1 AND last_seen_at < now() - interval '1 hour'`,
+    [row.id]
+  ).catch(() => {});
+  return row.created_at;
+}
+
+/** Security-state-change revocation (MFA reset, deactivation, role
+ * change) — same trigger points as sessionsRepo.deleteAllForEmployee(),
+ * called alongside it, not instead of it. */
+export async function revokeAllTelegramGrants(employeeId: number, q: typeof query = query): Promise<void> {
+  await q(`DELETE FROM mfa_telegram_grants WHERE employee_id = $1`, [employeeId]);
+}
+
 // ===== Step-up tickets =====
 
-/** `sessionToken` (§11, 20.52.1) — hashed and stored alongside the
- * ticket when the issuing request carried a browser/phone session, so
- * resolveStepUpTicket() can require the SAME session to present it.
- * `undefined`/no session (Telegram) leaves the ticket employee-scoped
- * only, unchanged from before this hardening pass. */
-export async function createStepUpTicket(employeeId: number, ttlMinutes: number, sessionToken?: string): Promise<string> {
+/** `channelToken` (§11 20.52.1, generalized §35 20.53.0) — hashed and
+ * stored alongside the ticket when the issuing request carried a
+ * channel-context token: a browser/phone session token, OR (since
+ * 20.53.0) a Telegram AAL2 grant token. Column name (session_token_hash)
+ * predates the Telegram grant concept and is kept for schema stability —
+ * it now binds to either kind of channel-context token interchangeably.
+ * `undefined` (neither present) leaves the ticket employee-scoped only. */
+export async function createStepUpTicket(employeeId: number, ttlMinutes: number, channelToken?: string): Promise<string> {
   const token = generateOpaqueToken();
   await query(
     `INSERT INTO mfa_step_up_tickets (employee_id, token_hash, session_token_hash, expires_at)
      VALUES ($1,$2,$3, now() + ($4 || ' minutes')::interval)`,
-    [employeeId, hashOpaqueToken(token), sessionToken ? hashToken(sessionToken) : null, String(ttlMinutes)]
+    [employeeId, hashOpaqueToken(token), channelToken ? hashToken(channelToken) : null, String(ttlMinutes)]
   );
   return token;
 }
@@ -318,16 +374,15 @@ function hashToken(token: string): string {
 }
 
 /**
- * `sessionToken` — the CURRENT request's session token (undefined for
- * Telegram). A ticket issued WITH a session binding only resolves for
- * that exact session; a ticket issued without one (Telegram, or a
- * browser ticket presented back over Telegram — not expected in
- * practice, but not silently trusted either) requires the resolving
- * request to also carry no session-bound expectation mismatch: NULL
+ * `channelToken` — the CURRENT request's channel-context token (browser
+ * session token or Telegram grant token; undefined if neither present).
+ * A ticket issued WITH a channel binding only resolves for that exact
+ * session/grant; a ticket issued without one requires the resolving
+ * request to also carry no channel-bound expectation mismatch: NULL
  * session_token_hash always matches (employee-scoped only, as before),
- * a non-NULL one must equal the resolving request's own session hash.
+ * a non-NULL one must equal the resolving request's own channel-token hash.
  */
-export async function resolveStepUpTicket(employeeId: number, token: string, sessionToken?: string): Promise<boolean> {
+export async function resolveStepUpTicket(employeeId: number, token: string, channelToken?: string): Promise<boolean> {
   const res = await query(
     `SELECT session_token_hash FROM mfa_step_up_tickets
      WHERE employee_id = $1 AND token_hash = $2 AND expires_at > now()`,
@@ -336,5 +391,5 @@ export async function resolveStepUpTicket(employeeId: number, token: string, ses
   const row = res.rows[0];
   if (!row) return false;
   if (row.session_token_hash === null) return true;
-  return sessionToken !== undefined && row.session_token_hash === hashToken(sessionToken);
+  return channelToken !== undefined && row.session_token_hash === hashToken(channelToken);
 }

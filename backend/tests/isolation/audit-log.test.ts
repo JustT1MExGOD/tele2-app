@@ -33,7 +33,7 @@ describe('Audit Trail', () => {
     const res = await app.inject({
       method: 'PATCH',
       url: `/employees/${employeeA.id}/role`,
-      headers: { ...authAs(adminA.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(adminA.telegramId, adminA.telegramGrantToken), 'content-type': 'application/json' },
       payload: { role: 'senior' }
     });
     expect(res.statusCode).toBe(200);
@@ -55,12 +55,12 @@ describe('Audit Trail', () => {
 
   it('GET /audit — чужая сеть не видит события другой сети', async () => {
     const app = await getApp();
-    const resA = await app.inject({ method: 'GET', url: '/audit', headers: authAs(adminA.telegramId) });
+    const resA = await app.inject({ method: 'GET', url: '/audit', headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
     expect(resA.statusCode).toBe(200);
     const itemsA = resA.json().items;
     expect(itemsA.some((i: any) => i.org_id === orgB)).toBe(false);
 
-    const resB = await app.inject({ method: 'GET', url: '/audit', headers: authAs(adminB.telegramId) });
+    const resB = await app.inject({ method: 'GET', url: '/audit', headers: authAs(adminB.telegramId, adminB.telegramGrantToken) });
     expect(resB.statusCode).toBe(200);
     const itemsB = resB.json().items;
     expect(itemsB.some((i: any) => i.org_id === orgA)).toBe(false);
@@ -83,7 +83,7 @@ describe('Audit Trail', () => {
       [orgA, marker]
     );
     const app = await getApp();
-    const res = await app.inject({ method: 'GET', url: `/audit?action=sales.correction`, headers: authAs(adminA.telegramId) });
+    const res = await app.inject({ method: 'GET', url: `/audit?action=sales.correction`, headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
     expect(res.statusCode).toBe(200);
     const items = res.json().items;
     expect(items.every((i: any) => i.action === 'sales.correction')).toBe(true);
@@ -93,7 +93,7 @@ describe('Audit Trail', () => {
 
   it('GET /audit — фильтр по target_type сужает выборку', async () => {
     const app = await getApp();
-    const res = await app.inject({ method: 'GET', url: `/audit?target_type=employee`, headers: authAs(adminA.telegramId) });
+    const res = await app.inject({ method: 'GET', url: `/audit?target_type=employee`, headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
     expect(res.statusCode).toBe(200);
     const items = res.json().items;
     expect(items.every((i: any) => i.target_type === 'employee')).toBe(true);
@@ -107,7 +107,7 @@ describe('Audit Trail', () => {
     );
     const app = await getApp();
     const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const res = await app.inject({ method: 'GET', url: `/audit?from=${encodeURIComponent(from)}`, headers: authAs(adminA.telegramId) });
+    const res = await app.inject({ method: 'GET', url: `/audit?from=${encodeURIComponent(from)}`, headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
     expect(res.statusCode).toBe(200);
     const items = res.json().items;
     expect(items.some((i: any) => i.target_id === marker)).toBe(false);
@@ -116,7 +116,7 @@ describe('Audit Trail', () => {
 
   it('GET /audit — limit/offset пагинируют', async () => {
     const app = await getApp();
-    const page1 = await app.inject({ method: 'GET', url: `/audit?limit=1&offset=0`, headers: authAs(adminA.telegramId) });
+    const page1 = await app.inject({ method: 'GET', url: `/audit?limit=1&offset=0`, headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
     expect(page1.json().items.length).toBeLessThanOrEqual(1);
   });
 
@@ -131,10 +131,10 @@ describe('Audit Trail', () => {
     );
     const app = await getApp();
     // Без override — adminA сидит в orgA, чужого маркера не видит.
-    const withoutOverride = await app.inject({ method: 'GET', url: '/audit', headers: authAs(adminA.telegramId) });
+    const withoutOverride = await app.inject({ method: 'GET', url: '/audit', headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
     expect(withoutOverride.json().items.some((i: any) => i.target_id === marker)).toBe(false);
 
-    const res = await app.inject({ method: 'GET', url: `/audit?org_id=${orgB}`, headers: authAs(adminA.telegramId) });
+    const res = await app.inject({ method: 'GET', url: `/audit?org_id=${orgB}`, headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
     expect(res.statusCode).toBe(200);
     const items = res.json().items;
     expect(items.every((i: any) => i.org_id === orgB)).toBe(true);

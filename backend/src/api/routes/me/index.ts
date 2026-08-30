@@ -68,7 +68,12 @@ export async function registerMeRoutes(app: FastifyInstance) {
       phone,
       // 20.52.1 — request.mfaAssurance уже посчитан один раз в authPlugin
       // (auth/guards.ts); просто читаем результат, не пересчитываем.
-      mfa_enrollment_required: !!request.mfaAssurance && !request.mfaAssurance.ok
+      // 20.53.0 — mfa_enrollment_required (нет фактора вообще, нужен
+      // полный enrollment) и mfa_reverification_required (фактор есть,
+      // но этот channel-контекст — browser-сессия ИЛИ Telegram AAL2-грант
+      // — его ещё не подтвердил) — разные экраны на фронте.
+      mfa_enrollment_required: request.mfaAssurance?.ok === false && request.mfaAssurance.reason === 'mfa_enrollment_required',
+      mfa_reverification_required: request.mfaAssurance?.ok === false && request.mfaAssurance.reason === 'mfa_reverification_required'
     };
   });
 

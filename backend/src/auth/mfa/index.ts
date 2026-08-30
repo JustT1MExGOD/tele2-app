@@ -14,3 +14,4 @@ export async function hasConfirmedMfaFactor(employeeId: number): Promise<boolean
 export * as totp from './totp.js';
 export * as webauthn from './webauthn.js';
 export * as recoveryCodes from './recovery-codes.js';
+export * as telegramGrant from './telegram-grant.js';

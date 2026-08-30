@@ -543,6 +543,14 @@ export async function mfaRecoveryCodesGenerate(headers: Record<string, string>):
   return request('/auth/mfa/recovery-codes/generate', headers, { method: 'POST', body: {} });
 }
 
+// ---------- Telegram AAL2 grant (20.53.0) ----------
+export async function mfaTelegramVerify(
+  headers: Record<string, string>,
+  body: { method: 'totp' | 'recovery_code'; code: string }
+): Promise<{ ok: true }> {
+  return request('/auth/mfa/telegram/verify', headers, { method: 'POST', body });
+}
+
 // ---------- Активные сессии (20.48.0, Web Security & Trust Layer) ----------
 export async function listSessions(headers: Record<string, string>): Promise<ListSessionsResponse> {
   return request('/auth/sessions', headers);
@@ -957,6 +965,7 @@ declare global {
       mfaTotpEnroll: typeof mfaTotpEnroll;
       mfaTotpConfirm: typeof mfaTotpConfirm;
       mfaRecoveryCodesGenerate: typeof mfaRecoveryCodesGenerate;
+      mfaTelegramVerify: typeof mfaTelegramVerify;
       listSessions: typeof listSessions;
       revokeSession: typeof revokeSession;
       revokeOtherSessions: typeof revokeOtherSessions;
@@ -1073,6 +1082,7 @@ window.apiClient = {
   mfaTotpEnroll,
   mfaTotpConfirm,
   mfaRecoveryCodesGenerate,
+  mfaTelegramVerify,
   listSessions,
   revokeSession,
   revokeOtherSessions,

@@ -47,7 +47,7 @@ describe('Изоляция живой карты (GET /network/live)', () => {
     const res = await app.inject({
       method: 'GET',
       url: `/network/live?org_id=${encodeURIComponent(orgB)}`,
-      headers: authAs(admin.telegramId)
+      headers: authAs(admin.telegramId, admin.telegramGrantToken)
     });
     const body = res.json();
     const rows = body.stores;

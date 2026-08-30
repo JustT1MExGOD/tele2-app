@@ -1,7 +1,9 @@
 # 009 — MFA (WebAuthn + TOTP + recovery codes) и channel-agnostic step-up
 
 **Статус**: принято, реализовано (20.52.0); дополнено 20.52.1 (см.
-"20.52.1 revision" ниже — mandatory-политика ужесточена).
+"20.52.1 revision" ниже — mandatory-политика ужесточена) и 20.53.0 (см.
+"20.53.0 revision" — закрыт Telegram AAL2-пробел, найденный независимым
+security-аудитом репозитория).
 
 ## Контекст
 
@@ -170,6 +172,51 @@ browser/phone-сессии, если она есть (`mfa_step_up_tickets.sessi
 корректно"); base64-парсинг KEK/AEAD-полей стал строгим
 (`strictBase64Decode`, отклоняет non-canonical представление, которое
 `Buffer.from()` тихо принимал).
+
+## 20.53.0 revision — Telegram AAL2 grant (Full Security & Reliability Hardening)
+
+Независимый security-аудит репозитория (20.52.1) правильно указал на
+архитектурный пробел, оставшийся даже после 20.52.1's requireActive()-гейта:
+для Telegram-запросов `checkPrivilegedAssurance()` трактовал "нет session-
+объекта" (у Telegram initData его нет вообще, ADR-005) как основание
+принять "у аккаунта ЕСТЬ настроенный фактор" за достаточное доказательство
+AAL2 — без того, чтобы этот фактор был реально подтверждён именно для
+ТЕКУЩЕГО Telegram-доступа. Практически: украденное устройство/Telegram-
+сессия с валидной initData HMAC давали privileged-доступ любому admin с
+настроенным (но не подтверждённым в этом конкретном заходе) фактором —
+второй фактор существовал только "на бумаге" аккаунта, не был реально
+предъявлен атакующим.
+
+**Решение**: Telegram-канал получил тот же класс доказательства, что уже
+был у browser-сессий (`employee_sessions.mfa_verified_at`) — короткоживущий
+(12ч) server-side grant (`mfa_telegram_grants`, `auth/mfa/telegram-grant.ts`),
+выдаваемый только после реальной проверки TOTP/WebAuthn/recovery-code
+через новый `POST /auth/mfa/telegram/verify`. Grant — opaque bearer token
+в HttpOnly Secure cookie (`t2_tg_aal2`, тот же origin, что уже используют
+CSRF/WebAuthn RP — без cross-site-сложностей), в БД хранится только hash.
+Не второй "логин" — initData HMAC остаётся единственным доказательством
+identity; grant — чисто AAL2-слой поверх него, только для privileged-ролей.
+
+`checkPrivilegedAssurance()` больше не различает каналы: обоим требуется
+конкретный ненулевой timestamp ("AAL2 подтверждён ИМЕННО для этого
+контекста"), не просто "фактор существует". Это устранило `undefined`
+как отдельный случай в сигнатуре функции — теперь только `string | null`.
+
+Step-up-тикеты (`mfa_step_up_tickets.session_token_hash`) теперь
+привязываются к Telegram-гранту так же, как раньше только к browser-
+сессии — угнанный тикет бесполезен без соответствующего granted-контекста
+на любом канале. Grant отзывается при MFA reset и при эскалации роли —
+те же триггеры, что уже отзывали browser-сессии (§14/15, 20.52.1) — по
+той же причине: заранее существующий грант не должен молча "засчитаться"
+после того, как аккаунт стал privileged или сменил второй фактор.
+
+**Альтернативы, отклонённые повторно**: cookie SameSite=None (не нужен —
+тот же origin, что уже используют CSRF/WebAuthn, никакого cross-site
+контекста); localStorage/sessionStorage для grant-токена (прямо запрещено
+брифом — bearer-токен в JS-доступном хранилище не HttpOnly, XSS читает
+его напрямую); считать Telegram initData сам по себе вторым фактором
+(прямо запрещено брифом — initData доказывает identity, не possession
+второго фактора).
 
 ## Связанные документы
 

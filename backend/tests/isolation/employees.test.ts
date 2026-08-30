@@ -69,7 +69,7 @@ describe('Изоляция сотрудников (/employees)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/employees',
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { full_name: 'New Hire B via Admin', org_id: orgB }
     });
     const body = res.json();

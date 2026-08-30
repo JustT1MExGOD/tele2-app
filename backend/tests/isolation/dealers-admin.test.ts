@@ -55,7 +55,7 @@ describe('Дилеры/Секторы (GET /admin/dealers, PATCH /admin/dealers/
 
   it('GET /admin/dealers — строит дерево дилер → сектор → сети/супервайзеры, непривязанное — в отдельных хвостах', async () => {
     const app = await getApp();
-    const res = await app.inject({ method: 'GET', url: '/admin/dealers', headers: authAs(admin.telegramId) });
+    const res = await app.inject({ method: 'GET', url: '/admin/dealers', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
     expect(res.statusCode).toBe(200);
     const body = res.json();
 
@@ -88,7 +88,7 @@ describe('Дилеры/Секторы (GET /admin/dealers, PATCH /admin/dealers/
     const res = await app.inject({
       method: 'PATCH',
       url: `/admin/dealers/${dealerId}`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { name: 'Переименованный дилер' }
     });
     expect(res.statusCode).toBe(200);
@@ -101,7 +101,7 @@ describe('Дилеры/Секторы (GET /admin/dealers, PATCH /admin/dealers/
     const res = await app.inject({
       method: 'PATCH',
       url: `/admin/sectors/${encodeURIComponent(sectorAssignedId)}`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { name: 'Северный сектор' }
     });
     expect(res.statusCode).toBe(200);

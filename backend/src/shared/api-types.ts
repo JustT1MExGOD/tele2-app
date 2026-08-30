@@ -358,6 +358,10 @@ export interface MeResponse {
    * все остальные защищённые роуты в этом состоянии (см. auth/guards.ts),
    * это поле — только сигнал для UI, не отдельный источник правды. */
   mfa_enrollment_required?: boolean;
+  /** 20.53.0 — роль требует MFA, фактор подтверждён на аккаунте, но ЭТОТ
+   * channel-контекст (browser-сессия или Telegram AAL2-грант) его ещё не
+   * подтверждал — нужен лёгкий re-verify экран, не полный enrollment. */
+  mfa_reverification_required?: boolean;
 }
 
 export interface BindMeRequest {

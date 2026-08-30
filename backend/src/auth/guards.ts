@@ -17,7 +17,8 @@ import { resolveTelegramIdentity } from './providers/telegram.js';
 import { resolvePhoneIdentity } from './providers/phone.js';
 import { loadUser } from './principal.js';
 import type { AuthUser } from './principal.js';
-import { checkPrivilegedAssurance } from './assurance.js';
+import { checkPrivilegedAssurance, isMfaMandatoryForRole } from './assurance.js';
+import { resolveTelegramGrantForRequest } from './mfa/telegram-grant.js';
 export { MFA_MANDATORY_ROLES, isMfaMandatoryForRole } from './assurance.js';
 
 export type { Role, AccessStatus, AuthUser, Principal } from './principal.js';
@@ -56,15 +57,30 @@ export async function authPlugin(request: FastifyRequest, _reply: FastifyReply) 
   if (request.user?.employee_id) {
     request.log = request.log.child({ employee_id: request.user.employee_id, org_id: request.user.org_id });
   }
-  // Auth Assurance Hardening (20.52.1, PRIV-MFA-1) — computed once here
-  // (already async, runs once per request) rather than inside every
-  // requireActive() call — see auth/assurance.ts for what this actually
-  // checks and why it differs for Telegram vs browser/phone sessions.
+  // Auth Assurance Hardening (20.52.1, PRIV-MFA-1; revised 20.53.0) —
+  // computed once here (already async, runs once per request) rather
+  // than inside every requireActive() call. Resolving WHICH channel's
+  // AAL2 signal to check only when the role is actually MFA-mandatory —
+  // same short-circuit checkPrivilegedAssurance() applies, avoids a
+  // wasted grant-cookie DB lookup on every Telegram request from the
+  // (overwhelming majority) non-privileged workforce.
   if (request.user?.employee_id) {
+    let channelAal2VerifiedAt: string | null = null;
+    if (isMfaMandatoryForRole(request.user.role)) {
+      // request.sessionToken is set only by the phone/browser provider
+      // (auth/providers/phone.ts) — its absence here means Telegram
+      // resolved this request (see resolveUser() above: Telegram takes
+      // priority, phone is the fallback), the only two identity
+      // providers this codebase has (ADR-005/20.9.0).
+      channelAal2VerifiedAt =
+        request.sessionToken !== undefined
+          ? (request.sessionMfaVerifiedAt ?? null)
+          : await resolveTelegramGrantForRequest(request, request.user.employee_id);
+    }
     request.mfaAssurance = await checkPrivilegedAssurance(
       request.user.employee_id,
       request.user.role,
-      request.sessionMfaVerifiedAt
+      channelAal2VerifiedAt
     );
   }
 }
@@ -120,9 +136,13 @@ export function requireActive(request: FastifyRequest, reply: FastifyReply, opts
         message: 'Для вашей роли обязателен MFA — настройте его перед продолжением'
       });
     } else {
+      // 20.53.0 — канал-нейтральная формулировка: раньше текст ("войдите
+      // заново") предполагал только browser-сессию, но эта ветка теперь
+      // покрывает и Telegram (нет "логина", куда можно было бы "войти
+      // заново" — см. auth/mfa/telegram-grant.ts).
       reply.code(403).send({
         error: 'mfa_reverification_required',
-        message: 'Эта сессия была начата до включения MFA — войдите заново'
+        message: 'Требуется повторное подтверждение MFA для этого доступа'
       });
     }
     return false;

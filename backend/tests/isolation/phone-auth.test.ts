@@ -109,7 +109,7 @@ describe('Не-Telegram вход — телефон + пароль', () => {
     const approve = await app.inject({
       method: 'POST',
       url: `/access/requests/${requestId}/approve`,
-      headers: authAs(admin.telegramId),
+      headers: authAs(admin.telegramId, admin.telegramGrantToken),
       payload: {}
     });
     expect(approve.statusCode).toBe(200);
@@ -144,7 +144,7 @@ describe('Не-Telegram вход — телефон + пароль', () => {
     const approve = await app.inject({
       method: 'POST',
       url: `/access/requests/${requestId}/approve`,
-      headers: authAs(admin.telegramId),
+      headers: authAs(admin.telegramId, admin.telegramGrantToken),
       payload: {}
     });
     expect(approve.statusCode).toBe(200);
@@ -226,11 +226,11 @@ describe('Не-Telegram вход — телефон + пароль', () => {
     const { id: employeeId, phone } = await fx.createPhoneEmployee(org, uniquePhone(), passwordHash, { fullName: 'Reset Test' });
 
     // 20.52.0 (MFA) — сброс чужого пароля теперь step-up-gated.
-    const stepUpHeaders = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
+    const stepUpHeaders = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId, admin.telegramGrantToken));
     const genLink = await app.inject({
       method: 'POST',
       url: `/auth/admin/reset-password/${employeeId}`,
-      headers: { ...authAs(admin.telegramId), ...stepUpHeaders }
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), ...stepUpHeaders }
     });
     expect(genLink.statusCode).toBe(200);
     const resetUrl: string = genLink.json().reset_url;

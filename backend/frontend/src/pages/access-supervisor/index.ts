@@ -635,6 +635,59 @@ export async function logoutFromMfaGate(): Promise<void> {
   location.reload();
 }
 
+// ===== Telegram AAL2 reverification (20.53.0) =====
+// Показывается вместо обычной оболочки, когда GET /me вернул
+// mfa_reverification_required:true — фактор на аккаунте уже настроен,
+// но ЭТОТ конкретный Telegram-контекст (Mini App-сессия) его ещё не
+// подтверждал (нет initData-эквивалента "логина", см.
+// auth/mfa/telegram-grant.ts) — лёгкий одноразовый экран, не полный
+// enrollment (QR/recovery-коды здесь не нужны, фактор уже есть).
+export function showMfaTelegramReverifyGate(): void {
+  hideSplash();
+  const gate = document.getElementById('accessGate') as HTMLElement | null;
+  const body = document.getElementById('gateBody');
+  const sub = document.getElementById('gateSubtitle');
+  if (!gate || !body) return;
+  gate.style.cssText =
+    'display:block;position:fixed;inset:0;z-index:9999;background:var(--bg,#0a0a0b);overflow:auto;-webkit-overflow-scrolling:touch;visibility:visible;opacity:1;pointer-events:auto';
+  const sheet = document.querySelector('.sheet') as HTMLElement | null;
+  if (sheet) {
+    sheet.style.visibility = 'hidden';
+    sheet.style.pointerEvents = 'none';
+  }
+  if (sub) sub.textContent = 'Подтверждение MFA';
+  body.innerHTML = `
+        <div class="gate-card">
+          <div class="bind-glow"></div>
+          <div class="gate-icon">${LOCK_ICON}</div>
+          <div class="gate-title">Подтвердите вход</div>
+          <div class="gate-desc">Для вашей роли требуется подтверждение второго фактора в этом сеансе Mini App. Введите код из приложения-аутентификатора или один из recovery-кодов.</div>
+          <div class="field">
+            <label>Код</label>
+            <input id="mfaTgReverifyCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="20">
+          </div>
+          <button class="btn-main" style="margin-top:8px" onclick="submitMfaTelegramReverifyCode()">Подтвердить</button>
+        </div>`;
+  (document.getElementById('mfaTgReverifyCode') as HTMLInputElement | null)?.focus();
+}
+
+export async function submitMfaTelegramReverifyCode(): Promise<void> {
+  const raw = (document.getElementById('mfaTgReverifyCode') as HTMLInputElement | null)?.value?.trim() || '';
+  if (!raw) {
+    toast('Введите код', 'err');
+    return;
+  }
+  const method = raw.length > 8 || raw.includes('-') ? 'recovery_code' : 'totp';
+  try {
+    await window.apiClient.mfaTelegramVerify(authHeaders(true), { method, code: raw });
+  } catch (e: any) {
+    toast(e?.message || 'Неверный код', 'err');
+    return;
+  }
+  toast('Подтверждено', 'ok');
+  bootApp();
+}
+
 export async function bootApp(): Promise<void> {
   applyTheme(localStorage.getItem('t2_theme') || 'light');
   const dateEl = document.getElementById('headerDate');
@@ -675,6 +728,13 @@ export async function bootApp(): Promise<void> {
         showMfaEnrollmentGate();
         return;
       }
+      // 20.53.0 — фактор настроен, но этот Telegram-контекст его ещё не
+      // подтверждал (auth/mfa/telegram-grant.ts) — лёгкий re-verify,
+      // не полный enrollment.
+      if (me?.mfa_reverification_required) {
+        showMfaTelegramReverifyGate();
+        return;
+      }
       applyRoleGatedNav();
       enterHomeOrSupervisorShell();
       return;
@@ -697,6 +757,13 @@ export async function bootApp(): Promise<void> {
       hideAccessGate();
       if (me?.mfa_enrollment_required) {
         showMfaEnrollmentGate();
+        return;
+      }
+      // 20.53.0 — фактор настроен, но этот Telegram-контекст его ещё не
+      // подтверждал (auth/mfa/telegram-grant.ts) — лёгкий re-verify,
+      // не полный enrollment.
+      if (me?.mfa_reverification_required) {
+        showMfaTelegramReverifyGate();
         return;
       }
       applyRoleGatedNav();
@@ -734,6 +801,10 @@ export async function bootApp(): Promise<void> {
       showMfaEnrollmentGate();
       return;
     }
+    if (me?.mfa_reverification_required) {
+      showMfaTelegramReverifyGate();
+      return;
+    }
     applyRoleGatedNav();
 
     enterHomeOrSupervisorShell();
@@ -747,6 +818,10 @@ export async function bootApp(): Promise<void> {
     hideAccessGate();
     if (me?.mfa_enrollment_required) {
       showMfaEnrollmentGate();
+      return;
+    }
+    if (me?.mfa_reverification_required) {
+      showMfaTelegramReverifyGate();
       return;
     }
     applyRoleGatedNav();
@@ -1201,6 +1276,8 @@ declare global {
     submitMfaTotpConfirmCode: typeof submitMfaTotpConfirmCode;
     ackMfaRecoveryCodesSaved: typeof ackMfaRecoveryCodesSaved;
     logoutFromMfaGate: typeof logoutFromMfaGate;
+    showMfaTelegramReverifyGate: typeof showMfaTelegramReverifyGate;
+    submitMfaTelegramReverifyCode: typeof submitMfaTelegramReverifyCode;
   }
 }
 window.bootApp = bootApp;
@@ -1225,6 +1302,8 @@ window.submitMfaTotpEnrollStart = submitMfaTotpEnrollStart;
 window.submitMfaTotpConfirmCode = submitMfaTotpConfirmCode;
 window.ackMfaRecoveryCodesSaved = ackMfaRecoveryCodesSaved;
 window.logoutFromMfaGate = logoutFromMfaGate;
+window.showMfaTelegramReverifyGate = showMfaTelegramReverifyGate;
+window.submitMfaTelegramReverifyCode = submitMfaTelegramReverifyCode;
 
 // init
 bootApp();

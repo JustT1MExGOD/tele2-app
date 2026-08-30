@@ -22,6 +22,7 @@ import { hasConfirmedMfaFactor } from '../../../auth/mfa/index.js';
 import * as totp from '../../../auth/mfa/totp.js';
 import * as webauthn from '../../../auth/mfa/webauthn.js';
 import * as recoveryCodes from '../../../auth/mfa/recovery-codes.js';
+import * as telegramGrant from '../../../auth/mfa/telegram-grant.js';
 import * as mfaRepo from '../../../data/repositories/mfa.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
@@ -180,12 +181,77 @@ export async function registerMfaRoutes(app: FastifyInstance) {
           actorRole: request.user!.role
         });
       }
-      // §11 — bind the ticket to THIS browser/phone session where one
-      // exists, so a stolen ticket can't be replayed from a different
-      // session of the same employee; undefined (Telegram — no session
-      // object) leaves the ticket session-agnostic, same as before.
-      const ticket = await issueStepUpTicket(employeeId, request.sessionToken);
+      // §11 (20.52.1), generalized §35 (20.53.0) — bind the ticket to
+      // THIS request's channel-context token where one exists (browser
+      // session token, or — since the Telegram AAL2 grant — a Telegram
+      // grant token too), so a stolen ticket can't be replayed from a
+      // different session/grant of the same employee. Neither present
+      // (shouldn't happen here: requireActive already required AAL2,
+      // which for Telegram now REQUIRES a resolved grant) leaves the
+      // ticket channel-agnostic, same fallback as before.
+      const ticket = await issueStepUpTicket(employeeId, request.sessionToken ?? request.telegramGrantToken);
       return { ok: true, step_up_token: ticket };
+    }
+  );
+
+  // ===== Telegram AAL2 grant (20.53.0, P0 §2) =====
+  // Telegram has no "login" event to gate a session-freshness check on
+  // (initData HMAC is re-verified fresh every request — ADR-005) —
+  // these routes are what a Telegram-authenticated privileged principal
+  // hits when auth/assurance.ts reports mfa_reverification_required:
+  // the account has a confirmed factor, but this specific Mini App
+  // access context hasn't proved it yet. Same verifyFactor() as
+  // login/step-up; success issues a real per-context grant (see
+  // auth/mfa/telegram-grant.ts), not just a session-side-effect.
+
+  app.post(
+    '/auth/mfa/telegram/webauthn/options',
+    async (request, reply) => {
+      if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
+      try {
+        return await webauthn.startAuthentication(request.user!.employee_id!, isMfaMandatoryForRole(request.user!.role));
+      } catch {
+        return reply.code(503).send({ error: 'webauthn_not_configured' });
+      }
+    }
+  );
+
+  app.post(
+    '/auth/mfa/telegram/verify',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, schema: { body: StepUpBody } },
+    async (request, reply) => {
+      if (!requireActive(request, reply, { allowMfaEnrollment: true })) return;
+      const employeeId = request.user!.employee_id!;
+      if (!(await hasConfirmedMfaFactor(employeeId))) {
+        return reply.code(400).send({ error: 'mfa_not_configured', message: 'Сначала настройте MFA (TOTP или ключ доступа)' });
+      }
+      const body = request.body as StepUpBody;
+      const ok = await verifyFactor(employeeId, request.user!.role, body);
+      if (!ok) return reply.code(401).send({ error: 'invalid_mfa_code', message: 'Неверный код' });
+      if (body.method === 'recovery_code') {
+        await recordAudit({
+          orgId: request.user!.org_id,
+          actorEmployeeId: employeeId,
+          actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+          action: 'mfa.recovery_code_used',
+          targetType: 'employee',
+          targetId: String(employeeId),
+          requestId: request.id,
+          actorRole: request.user!.role
+        });
+      }
+      await telegramGrant.issueTelegramGrant(employeeId, reply);
+      await recordAudit({
+        orgId: request.user!.org_id,
+        actorEmployeeId: employeeId,
+        actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+        action: 'mfa.privileged_aal2_granted',
+        targetType: 'employee',
+        targetId: String(employeeId),
+        requestId: request.id,
+        actorRole: request.user!.role
+      });
+      return { ok: true };
     }
   );
 
@@ -431,9 +497,11 @@ export async function registerMfaRoutes(app: FastifyInstance) {
       for (const c of creds) await webauthn.revokeCredential(c.id, employeeId);
       await recoveryCodes.deleteAllRecoveryCodes(employeeId);
       // Сброс MFA — тот же класс риска, что смена пароля: все активные
-      // browser-сессии отзываются, устройство с украденным/забытым вторым
-      // фактором не должно оставаться залогиненным после сброса.
+      // browser-сессии И Telegram AAL2-гранты отзываются, устройство с
+      // украденным/забытым вторым фактором не должно оставаться
+      // залогиненным/privileged-доступным после сброса (20.53.0).
       await sessionsRepo.deleteAllForEmployee(employeeId);
+      await mfaRepo.revokeAllTelegramGrants(employeeId);
 
       await recordAudit({
         orgId,

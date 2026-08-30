@@ -132,7 +132,7 @@ describe('Application-Level Envelope Encryption — support tickets (реаль�
     const replyRes = await app.inject({
       method: 'POST',
       url: `/support/tickets/${ticketId}/reply`,
-      headers: authAs(admin.telegramId),
+      headers: authAs(admin.telegramId, admin.telegramGrantToken),
       payload: { reply: 'Ответ администратора — конфиденциальный контекст сотрудника' }
     });
     expect(replyRes.statusCode).toBe(200);

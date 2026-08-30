@@ -204,7 +204,7 @@ describe('MFA — login second factor, step-up, enrollment guards', () => {
     const res = await app.inject({
       method: 'PATCH',
       url: `/employees/${target.id}/role`,
-      headers: authAs(admin.telegramId),
+      headers: authAs(admin.telegramId, admin.telegramGrantToken),
       payload: { role: 'admin' }
     });
     expect(res.statusCode).toBe(403);
@@ -219,7 +219,7 @@ describe('MFA — login second factor, step-up, enrollment guards', () => {
     const res = await app.inject({
       method: 'PATCH',
       url: `/employees/${target.id}/role`,
-      headers: authAs(admin.telegramId),
+      headers: authAs(admin.telegramId, admin.telegramGrantToken),
       payload: { role: 'manager' }
     });
     expect(res.statusCode).toBe(200);
@@ -237,7 +237,7 @@ describe('MFA — login second factor, step-up, enrollment guards', () => {
     const res = await app.inject({
       method: 'PATCH',
       url: `/employees/${target.id}/role`,
-      headers: { ...authAs(adminB.telegramId), 'x-step-up-token': headersA['x-step-up-token'] },
+      headers: { ...authAs(adminB.telegramId, adminB.telegramGrantToken), 'x-step-up-token': headersA['x-step-up-token'] },
       payload: { role: 'admin' }
     });
     expect(res.statusCode).toBe(403);

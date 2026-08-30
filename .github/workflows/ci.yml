@@ -65,6 +65,9 @@ jobs:
       - name: Dangerous JS patterns — document.write/eval/new Function/string-timer-args
         run: npm run check:dangerous-js
 
+      - name: Route auth policy — every route guarded or explicitly public
+        run: npm run check:route-auth
+
       - name: Apply migrations to test database
         run: npm run migrate
 

@@ -7,6 +7,7 @@
 import { query } from '../../src/data/db/index.js';
 import { normalizePhone } from '../../src/utils/phone.js';
 import { startTotpEnrollment, confirmTotpEnrollment } from '../../src/auth/mfa/totp.js';
+import { createTelegramGrant } from '../../src/data/repositories/mfa.js';
 import { generate as generateTotp } from 'otplib';
 
 let counter = 0;
@@ -65,7 +66,7 @@ export class TestFixtures {
   async createEmployee(
     orgId: string,
     opts: { role?: Role; fullName?: string; telegramId?: number | null; mfa?: boolean } = {}
-  ): Promise<{ id: number; telegramId: number }> {
+  ): Promise<{ id: number; telegramId: number; telegramGrantToken?: string }> {
     // telegramId: null — незанятая карточка (для тестов /me/bind); undefined —
     // сгенерировать случайный, как раньше.
     const telegramId = opts.telegramId === null
@@ -92,10 +93,18 @@ export class TestFixtures {
       );
     }
     const role = opts.role || 'employee';
+    let telegramGrantToken: string | undefined;
     if ((role === 'admin' || role === 'supervisor') && opts.mfa !== false) {
       await this.enrollTotpFor(id);
+      // 20.53.0 — having a confirmed factor is no longer sufficient for
+      // Telegram either (see auth/assurance.ts's "20.53.0 revision") — a
+      // real per-context AAL2 grant is required too. Auto-provisioned
+      // here (bypassing the HTTP verify ceremony, same principle as
+      // enrollTotpFor()) so most tests don't need to know this exists;
+      // callers that need it pass it to authAs(telegramId, telegramGrantToken).
+      telegramGrantToken = await createTelegramGrant(id);
     }
-    return { id, telegramId: telegramId as number };
+    return { id, telegramId: telegramId as number, telegramGrantToken };
   }
 
   /**

@@ -21,6 +21,7 @@ import { hashPassword } from '../../src/auth/password.js';
 import * as totp from '../../src/auth/mfa/totp.js';
 import * as webauthn from '../../src/auth/mfa/webauthn.js';
 import * as sessionsRepo from '../../src/data/repositories/sessions.js';
+import * as mfaRepo from '../../src/data/repositories/mfa.js';
 
 function uniquePhone(): string {
   return '+7906' + Math.floor(1000000 + Math.random() * 8999999);
@@ -65,17 +66,26 @@ describe('Auth Assurance Hardening (20.52.1)', () => {
       expect(enroll.statusCode).toBe(200);
     });
 
-    it('once enrolled, the same account passes the gate again', async () => {
+    it('once enrolled AND a Telegram AAL2 grant is established, the same account passes the gate again', async () => {
       const app = await getApp();
       const org = await fx.createOrg('PrivBlock Recover Org');
       const admin = await fx.createEmployee(org, { role: 'admin', mfa: false });
 
       const blocked = await app.inject({ method: 'GET', url: '/employees', headers: authAs(admin.telegramId) });
       expect(blocked.statusCode).toBe(403);
+      expect(blocked.json().error).toBe('mfa_enrollment_required');
 
       await fx.enrollTotpFor(admin.id);
 
-      const allowed = await app.inject({ method: 'GET', url: '/employees', headers: authAs(admin.telegramId) });
+      // §2/PRIV-1 (20.53.0) — having a confirmed factor is necessary but
+      // no longer sufficient for Telegram either: a real per-context AAL2
+      // grant is required too, not just "the account has a factor".
+      const stillBlocked = await app.inject({ method: 'GET', url: '/employees', headers: authAs(admin.telegramId) });
+      expect(stillBlocked.statusCode).toBe(403);
+      expect(stillBlocked.json().error).toBe('mfa_reverification_required');
+
+      const grantToken = await mfaRepo.createTelegramGrant(admin.id);
+      const allowed = await app.inject({ method: 'GET', url: '/employees', headers: authAs(admin.telegramId, grantToken) });
       expect(allowed.statusCode).toBe(200);
     });
 
@@ -425,6 +435,132 @@ describe('Auth Assurance Hardening (20.52.1)', () => {
       ]);
       const successes = [r1, r2].filter((r) => r.statusCode === 200);
       expect(successes.length).toBe(1);
+    });
+  });
+
+  // TELEGRAM-AAL2 / TELEGRAM-AAL2-SUCCESS (Full Security & Reliability
+  // Hardening, 20.53.0, P0 §2) — the core fix this pass adds: a Telegram
+  // admin/supervisor whose account merely HAS a confirmed factor is no
+  // longer treated as AAL2 — a real per-context grant is required, the
+  // same kind of concrete proof the browser channel already needed.
+  describe('P0 §2 — Telegram AAL2 grant (real HTTP flow, not bypassed)', () => {
+    it('TELEGRAM-AAL2: admin with a configured factor but no grant is rejected on a privileged route', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('TG AAL2 Reject Org');
+      // mfa:false so createEmployee doesn't auto-provision a grant either
+      // — this test enrolls the factor itself, deliberately WITHOUT ever
+      // calling /auth/mfa/telegram/verify, to prove "factor exists" alone
+      // is insufficient.
+      const admin = await fx.createEmployee(org, { role: 'admin', mfa: false });
+      await fx.enrollTotpFor(admin.id);
+
+      const res = await app.inject({ method: 'GET', url: '/employees', headers: authAs(admin.telegramId) });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('mfa_reverification_required');
+    });
+
+    it('TELEGRAM-AAL2-SUCCESS: after a real POST /auth/mfa/telegram/verify, the same admin is allowed', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('TG AAL2 Success Org');
+      const admin = await fx.createEmployee(org, { role: 'admin', mfa: false });
+      const enrollment = await totp.startTotpEnrollment(admin.id, 'tg-aal2-test');
+      await totp.confirmTotpEnrollment(admin.id, await generate({ secret: enrollment.secret }));
+
+      const blocked = await app.inject({ method: 'GET', url: '/employees', headers: authAs(admin.telegramId) });
+      expect(blocked.statusCode).toBe(403);
+
+      const verifyCode = await generate({ secret: enrollment.secret, epoch: Math.floor(Date.now() / 1000) + 30 });
+      const verify = await app.inject({
+        method: 'POST',
+        url: '/auth/mfa/telegram/verify',
+        headers: authAs(admin.telegramId),
+        payload: { method: 'totp', code: verifyCode }
+      });
+      expect(verify.statusCode).toBe(200);
+      const grantCookie = verify.cookies.find((c: any) => c.name === 't2_tg_aal2');
+      expect(grantCookie).toBeTruthy();
+      expect(grantCookie!.httpOnly).toBe(true);
+
+      const allowed = await app.inject({
+        method: 'GET',
+        url: '/employees',
+        headers: { ...authAs(admin.telegramId), cookie: `t2_tg_aal2=${grantCookie!.value}` }
+      });
+      expect(allowed.statusCode).toBe(200);
+    });
+
+    it('a wrong/garbage grant cookie does not satisfy the gate (only a real resolved grant does)', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('TG AAL2 Garbage Org');
+      const admin = await fx.createEmployee(org, { role: 'admin' }); // auto-provisioned real grant
+      const res = await app.inject({
+        method: 'GET',
+        url: '/employees',
+        headers: { ...authAs(admin.telegramId), cookie: 't2_tg_aal2=not-a-real-token' }
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('mfa_reverification_required');
+    });
+
+    it('MFA reset revokes the Telegram grant, not just browser sessions', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('TG Grant Revoke MfaReset Org');
+      const targetAdmin = await fx.createEmployee(org, { role: 'admin' });
+      const otherAdmin = await fx.createEmployee(org, { role: 'admin' });
+
+      const before = await app.inject({
+        method: 'GET',
+        url: '/employees',
+        headers: authAs(targetAdmin.telegramId, targetAdmin.telegramGrantToken)
+      });
+      expect(before.statusCode).toBe(200);
+
+      const stepUp = await setupTotpAndStepUp(otherAdmin.id, authAs(otherAdmin.telegramId));
+      const reset = await app.inject({
+        method: 'POST',
+        url: `/employees/${targetAdmin.id}/mfa/reset`,
+        headers: { ...authAs(otherAdmin.telegramId, otherAdmin.telegramGrantToken), ...stepUp }
+      });
+      expect(reset.statusCode).toBe(200);
+
+      const after = await app.inject({
+        method: 'GET',
+        url: '/employees',
+        headers: authAs(targetAdmin.telegramId, targetAdmin.telegramGrantToken)
+      });
+      expect(after.statusCode).toBe(403);
+      expect(after.json().error).toBe('mfa_enrollment_required');
+    });
+
+    it('role escalation revokes a pre-existing Telegram grant, not just browser sessions', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('TG Grant Revoke RoleEsc Org');
+      const rootAdmin = await fx.createEmployee(org, { role: 'admin' });
+      // Non-privileged employee who happens to have MFA configured
+      // optionally, and already verified a grant (e.g. tested the
+      // feature out of curiosity) BEFORE being promoted.
+      const target = await fx.createEmployee(org, { role: 'employee' });
+      await fx.enrollTotpFor(target.id);
+      const grantToken = await mfaRepo.createTelegramGrant(target.id);
+
+      const stepUp = await setupTotpAndStepUp(rootAdmin.id, authAs(rootAdmin.telegramId));
+      const promote = await app.inject({
+        method: 'PATCH',
+        url: `/employees/${target.id}/role`,
+        headers: { ...authAs(rootAdmin.telegramId, rootAdmin.telegramGrantToken), 'content-type': 'application/json', ...stepUp },
+        payload: { role: 'admin' }
+      });
+      expect(promote.statusCode).toBe(200);
+
+      // The OLD grant (established before promotion) must not silently
+      // satisfy AAL2 for the newly-privileged role.
+      const res = await app.inject({
+        method: 'GET',
+        url: '/employees',
+        headers: { ...authAs(target.telegramId), cookie: `t2_tg_aal2=${grantToken}` }
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('mfa_reverification_required');
     });
   });
 });

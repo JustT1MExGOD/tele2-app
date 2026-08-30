@@ -64,7 +64,7 @@ describe('Изоляция кассы (PUT /cash)', () => {
     const res = await app.inject({
       method: 'PUT',
       url: '/cash',
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { store_id: storeB, cash_date: '2026-06-15', cash_fact: 500, cash_1c: 400, org_id: orgB }
     });
     expect(res.statusCode).toBe(200);

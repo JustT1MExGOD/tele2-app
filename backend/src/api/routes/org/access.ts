@@ -28,6 +28,7 @@ import * as accessRequestsRepo from '../../../data/repositories/access-requests.
 import * as supervisorSectorsRepo from '../../../data/repositories/supervisor-sectors.js';
 import * as storesRepo from '../../../data/repositories/stores.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
+import * as mfaRepo from '../../../data/repositories/mfa.js';
 import { invalidate as invalidateScope } from '../../../core/shared/scope-cache.js';
 import type {
   AccessStatusResponse,
@@ -316,6 +317,15 @@ export async function registerAccessRoutes(app: FastifyInstance) {
     if (isMfaMandatoryForRole(role)) {
       await sessionsRepo.deleteAllForEmployee(employeeId).catch((e: any) =>
         console.error('revoke sessions on approve-with-privileged-role:', e?.message || e)
+      );
+      // 20.53.0 — тот же принцип для Telegram AAL2-грантов: если у
+      // сотрудника случайно остался валидный грант с ДО-privileged
+      // времени (MFA не обязателен для обычных ролей, но опционально
+      // доступен), он не должен внезапно "засчитаться" как
+      // privileged-подтверждение после эскалации без реальной
+      // повторной проверки фактора.
+      await mfaRepo.revokeAllTelegramGrants(employeeId).catch((e: any) =>
+        console.error('revoke telegram grants on approve-with-privileged-role:', e?.message || e)
       );
     }
 

@@ -33,7 +33,7 @@ describe('GET /org/stores — точки только своей сети', () =
 
   it('admin без override видит свою сеть', async () => {
     const app = await getApp();
-    const res = await app.inject({ method: 'GET', url: '/org/stores', headers: authAs(admin.telegramId) });
+    const res = await app.inject({ method: 'GET', url: '/org/stores', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
     const body = res.json();
     expect(body.org_id).toBe(orgA);
     expect(body.stores.map((s: any) => s.id).sort()).toEqual([storeA1, storeA2].sort());
@@ -44,7 +44,7 @@ describe('GET /org/stores — точки только своей сети', () =
     const res = await app.inject({
       method: 'GET',
       url: `/org/stores?org_id=${encodeURIComponent(orgB)}`,
-      headers: authAs(admin.telegramId)
+      headers: authAs(admin.telegramId, admin.telegramGrantToken)
     });
     const body = res.json();
     expect(body.org_id).toBe(orgB);

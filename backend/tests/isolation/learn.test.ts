@@ -167,7 +167,7 @@ describe('Learn — исход рекомендаций (plan_miss_projected / a
     expect(forbidden.statusCode).toBe(403);
 
     const admin = await fx.createEmployee(orgA, { role: 'admin' });
-    const res = await app.inject({ method: 'GET', url: '/alerts/effectiveness', headers: authAs(admin.telegramId) });
+    const res = await app.inject({ method: 'GET', url: '/alerts/effectiveness', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
     expect(res.statusCode).toBe(200);
 
     const summary = await getEffectivenessSummary();

@@ -38,7 +38,7 @@ describe('Дилер — владение сектором', () => {
     const res = await app.inject({
       method: 'PUT',
       url: `/admin/org/${orgA}`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { name: 'Dealer Org A', sector_id: sectorX, dealer_name: dealerNameX }
     });
     expect(res.statusCode).toBe(200);
@@ -52,7 +52,7 @@ describe('Дилер — владение сектором', () => {
 
   it('GET /orgs — обе сети сектора X показывают ОДНОГО и того же дилера (владение на уровне сектора, не сети)', async () => {
     const app = await getApp();
-    const res = await app.inject({ method: 'GET', url: '/orgs', headers: authAs(admin.telegramId) });
+    const res = await app.inject({ method: 'GET', url: '/orgs', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
     expect(res.statusCode).toBe(200);
     const orgs = res.json();
     const a = orgs.find((o: any) => o.id === orgA);
@@ -69,7 +69,7 @@ describe('Дилер — владение сектором', () => {
     await app.inject({
       method: 'PUT',
       url: `/admin/org/${orgB}`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { name: 'Dealer Org B', sector_id: sectorX, dealer_name: dealerNameX }
     });
 
@@ -82,7 +82,7 @@ describe('Дилер — владение сектором', () => {
     const res = await app.inject({
       method: 'PUT',
       url: `/admin/org/${orgA}`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { name: 'Dealer Org A', sector_id: sectorY, dealer_name: dealerNameX }
     });
     expect(res.statusCode).toBe(200);
@@ -102,7 +102,7 @@ describe('Дилер — владение сектором', () => {
     await app.inject({
       method: 'PUT',
       url: `/admin/org/${orgA}`,
-      headers: { ...authAs(admin.telegramId), 'content-type': 'application/json' },
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
       payload: { name: 'Dealer Org A', sector_id: sectorX }
     });
 

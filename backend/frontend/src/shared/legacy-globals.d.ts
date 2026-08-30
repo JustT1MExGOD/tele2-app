@@ -74,8 +74,11 @@ declare global {
     /** Не-Telegram вход (20.36) — второй способ входа уже привязан. */
     phone?: string | null;
     /** 20.52.1 (Auth Assurance Hardening) — роль требует MFA, а
-     * подтверждённого фактора нет/сессия его не проходила. */
+     * подтверждённого фактора нет вообще. */
     mfa_enrollment_required?: boolean;
+    /** 20.53.0 — фактор есть, но этот channel-контекст (browser-сессия
+     * или Telegram AAL2-грант) его ещё не подтверждал. */
+    mfa_reverification_required?: boolean;
   } | null;
 
   /** Set by src/pages/team's switchAdminOrg() — null unless admin switched
