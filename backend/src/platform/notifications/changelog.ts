@@ -1457,5 +1457,15 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Новые тесты (17 файлов/групп): tests/isolation/rate-limit.test.ts, tests/isolation/export.test.ts (CSV formula injection), tests/unit/config-validate.test.ts, tests/isolation/webauthn-challenges.test.ts, tests/isolation/backfill-support-encryption.test.ts, 7 XSS-regression тестов в 4 frontend-файлах. tsc --noEmit, vitest run (backend) — 578 проходят (те же 4 нерелевантных RU-locale теста), vitest run (frontend) — 422/422, smoke:frontend, check:no-direct-sql, check:dangerous-js, check:route-auth, npm audit --omit=dev — все зелёные',
       'Эта версия НЕ задеплоена и НЕ запушена по явному требованию владельца продукта — реализовано и протестировано только локально, ожидает подтверждения перед git push/деплоем'
     ]
+  },
+  {
+    version: '20.55.0',
+    title: 'Windows-приложение T2 Sales — для сетей, где сайт не открывается напрямую',
+    bullets: [
+      'Отдельное Windows-приложение (T2Sales.exe) поверх той же самой T2 Sales — без второго интерфейса, без нового логина. Если сеть блокирует прямой доступ, приложение само переключается на резервный маршрут через relay.vincere-mortem.ru — никаких ручных VPN/прокси',
+      'Реально проверено на живом ПК без VPN на сети, где сайт не открывается: прямое соединение не проходит (TCP timeout) → приложение само обнаруживает это → переключается на relay → вход, авторизация и рабочий экран загружаются нормально',
+      'Пароли, коды подтверждения, cookies — как в обычном браузере, без изменений; ничего не ослаблено ради этого приложения',
+      'Пока это тестовая сборка без цифровой подписи (Windows покажет предупреждение SmartScreen при установке — это ожидаемо) и без публичной ссылки на скачивание — раздаётся точечно, не для самостоятельной установки всеми сотрудниками. Общий доступ появится отдельным анонсом'
+    ]
   }
 ];
