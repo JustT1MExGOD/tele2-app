@@ -47,8 +47,9 @@ describe('verifyAuthenticodeSignature — parses PowerShell output, never shells
     (execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation((_cmd, _args, _opts, cb) => {
       cb(new Error('spawn powershell.exe ENOENT'), '', '');
     });
-    const { verifyAuthenticodeSignature } = await import('../src/main/updater/signature.js');
-    await expect(verifyAuthenticodeSignature('C:\\fake\\x.exe')).rejects.toThrow(/failed to run/);
+    const { verifyAuthenticodeSignature, AuthenticodeError } = await import('../src/main/updater/signature.js');
+    await expect(verifyAuthenticodeSignature('C:\\fake\\x.exe')).rejects.toThrow(AuthenticodeError);
+    await expect(verifyAuthenticodeSignature('C:\\fake\\x.exe')).rejects.toThrow(/Не удалось запустить проверку/);
   });
 
   it('rejects on unparseable stdout', async () => {
@@ -56,11 +57,22 @@ describe('verifyAuthenticodeSignature — parses PowerShell output, never shells
     (execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation((_cmd, _args, _opts, cb) => {
       cb(null, 'not json at all', '');
     });
-    const { verifyAuthenticodeSignature } = await import('../src/main/updater/signature.js');
-    await expect(verifyAuthenticodeSignature('C:\\fake\\x.exe')).rejects.toThrow(/unparseable/);
+    const { verifyAuthenticodeSignature, AuthenticodeError } = await import('../src/main/updater/signature.js');
+    await expect(verifyAuthenticodeSignature('C:\\fake\\x.exe')).rejects.toThrow(AuthenticodeError);
+    await expect(verifyAuthenticodeSignature('C:\\fake\\x.exe')).rejects.toThrow(/некорректный результат/);
   });
 
-  it('passes the file path as a trailing execFile ARGUMENT, never interpolated into the -Command script text', async () => {
+  // §updater-postdownload-error regression — the ORIGINAL invocation used
+  // `-Command <script> -- <path>`, on the (wrong) assumption that `--`
+  // marks the end of powershell.exe's own arguments the way it does in a
+  // POSIX shell. Confirmed on a real Windows machine that this is false:
+  // PowerShell's `-Command` mode treats every trailing argv element as
+  // MORE script text to parse, so `--` itself became a syntax error
+  // ("MissingExpressionAfterOperator") on every single real invocation —
+  // this never actually worked. `-File <script.ps1> <path>` is the mode
+  // that genuinely binds a trailing argv element to $args — confirmed
+  // the same way. These tests lock in the NEW, real shape.
+  it('invokes PowerShell with -File (not the broken -Command + -- combination), the file path as a trailing execFile ARGUMENT never interpolated into the script', async () => {
     const { execFile } = await import('node:child_process');
     let capturedArgs: string[] = [];
     (execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation((_cmd, args, _opts, cb) => {
@@ -70,13 +82,35 @@ describe('verifyAuthenticodeSignature — parses PowerShell output, never shells
     const { verifyAuthenticodeSignature } = await import('../src/main/updater/signature.js');
     const trickyPath = "C:\\fake\\$(evil); Remove-Item -Recurse C:\\`.exe";
     await verifyAuthenticodeSignature(trickyPath);
-    // The path must appear as its own argv element, AFTER the `--`
-    // separator, never concatenated into the -Command string itself.
-    const commandIndex = capturedArgs.indexOf('-Command');
-    const scriptText = capturedArgs[commandIndex + 1];
-    expect(scriptText).not.toContain(trickyPath);
+
+    expect(capturedArgs).toContain('-File');
+    expect(capturedArgs).not.toContain('-Command');
+    expect(capturedArgs).not.toContain('--'); // the broken, misinterpreted separator is gone entirely
+    // The path is the LAST argv element — a distinct entry, not woven
+    // into the -File script path or anywhere else.
     expect(capturedArgs.at(-1)).toBe(trickyPath);
-    expect(capturedArgs).toContain('--');
+    const fileIndex = capturedArgs.indexOf('-File');
+    const scriptPath = capturedArgs[fileIndex + 1];
+    expect(scriptPath).not.toBe(trickyPath);
+    expect(scriptPath.endsWith('.ps1')).toBe(true);
+  });
+
+  it('the -File script path actually exists on disk and contains Get-AuthenticodeSignature reading $args[0] — not a re-implementation drifting from what runs', async () => {
+    const { execFile } = await import('node:child_process');
+    let capturedArgs: string[] = [];
+    (execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation((_cmd, args, _opts, cb) => {
+      capturedArgs = args as string[];
+      cb(null, JSON.stringify({ status: 'NotSigned', subject: null }), '');
+    });
+    const { verifyAuthenticodeSignature } = await import('../src/main/updater/signature.js');
+    await verifyAuthenticodeSignature('C:\\fake\\x.exe');
+
+    const fs = await import('node:fs');
+    const scriptPath = capturedArgs[capturedArgs.indexOf('-File') + 1];
+    expect(fs.existsSync(scriptPath)).toBe(true);
+    const content = fs.readFileSync(scriptPath, 'utf8');
+    expect(content).toContain('Get-AuthenticodeSignature');
+    expect(content).toContain('$args[0]');
   });
 
   it('uses execFile (argv array), never exec (shell string) — confirmed by the mock never receiving a single command string', async () => {

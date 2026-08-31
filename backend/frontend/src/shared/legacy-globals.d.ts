@@ -126,8 +126,32 @@ declare global {
   function todayMoscow(): string;
   /** app/core.ts — window.location.origin, base URL for raw fetch() calls that bypass window.apiClient. */
   const API: string;
-  /** app/nav.ts — Telegram WebApp initDataUnsafe.user, or null outside Telegram. */
+  /** app/nav.ts — Telegram identity: the SDK's initDataUnsafe.user if
+   * loaded, else parsed directly from the URL's raw initData (see
+   * app/core.ts's extractRawTelegramInitData) — null outside Telegram. */
   function tgUser(): { id?: number; first_name?: string; last_name?: string; username?: string; photo_url?: string } | null;
+  /** app/core.ts — the real initData Telegram appended to the URL when
+   * opening this Mini App (hash fragment, query-string fallback), or
+   * null if absent — present from the very first document load,
+   * independent of whether telegram-web-app.js ever loads. Ready to
+   * send to the backend as-is (same shape `Telegram.WebApp.initData`
+   * exposes). */
+  function extractRawTelegramInitData(): string | null;
+  /** app/core.ts — true the instant the page loads if Telegram's own
+   * client opened it (extractRawTelegramInitData() !== null) —
+   * independent of SDK/network state. A UX signal only, never a
+   * security boundary. */
+  function isLikelyTelegramContext(): boolean;
+  /** app/core.ts — parses the `user` field out of a raw initData string
+   * (same shape tgUser() returns), without needing the SDK loaded. */
+  function parseTelegramUserFromInitData(raw: string): { id?: number; first_name?: string; last_name?: string; username?: string; photo_url?: string } | null;
+  /** app/core.ts — resolves Telegram identity without ever treating "SDK
+   * hasn't loaded yet" as "not Telegram": instant if already resolvable,
+   * waits only when Telegram context is independently confirmed via the
+   * URL but the SDK hasn't caught up, null immediately for a genuine
+   * non-Telegram web visitor. access-supervisor/index.ts's bootApp()
+   * awaits this before deciding Telegram-vs-phone/password. */
+  function resolveTelegramIdentity(): Promise<{ id?: number; first_name?: string; last_name?: string; username?: string; photo_url?: string } | null>;
   /** app/core.ts — employees picker list for the current org, shared mutable cache. */
   let employees: any[];
   /** app/core.ts — { sim: 2, mnp: 1 } multi-select state for the add-sale/correct-sale modal. */

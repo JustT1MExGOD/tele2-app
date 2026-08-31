@@ -37,6 +37,18 @@ function setupGlobals(overrides: { tgId?: number | null; role?: string } = {}) {
   vi.stubGlobal('toast', vi.fn());
   vi.stubGlobal('me', null);
   vi.stubGlobal('tgUser', () => (overrides.tgId === null ? null : { id: overrides.tgId ?? 555, first_name: 'Иван', last_name: 'Петров', username: 'ivan' }));
+  // Telegram Mini App forced-to-phone-login regression — bootApp() now
+  // awaits resolveTelegramIdentity() (app/core.ts) instead of calling
+  // tgUser() directly; this jsdom test loads access-supervisor/index.ts
+  // in isolation (never core.ts, which is what sets this up for real via
+  // window.resolveTelegramIdentity = resolveTelegramIdentity), so it
+  // needs its own stub — kept behaviorally identical to the tgUser()
+  // stub above (same overrides.tgId branching) so every existing
+  // Telegram-vs-not test scenario here is unaffected by the swap.
+  vi.stubGlobal(
+    'resolveTelegramIdentity',
+    async () => (overrides.tgId === null ? null : { id: overrides.tgId ?? 555, first_name: 'Иван', last_name: 'Петров', username: 'ivan' })
+  );
   vi.stubGlobal('canAdmin', () => overrides.role === 'admin');
   vi.stubGlobal('canManage', () => overrides.role === 'manager' || overrides.role === 'admin');
   vi.stubGlobal('canApprove', () => overrides.role === 'manager' || overrides.role === 'admin' || overrides.role === 'supervisor');

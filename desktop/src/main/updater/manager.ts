@@ -7,11 +7,12 @@
  */
 import { fetchManifest, ManifestFetchError } from './fetch-manifest.js';
 import { downloadAndVerifyInstaller, verifyFileIntegrity, DownloadError } from './downloader.js';
-import { verifyAuthenticodeSignature, evaluateSignaturePolicy } from './signature.js';
+import { verifyAuthenticodeSignature, evaluateSignaturePolicy, AuthenticodeError } from './signature.js';
 import { launchInstaller } from './install-launcher.js';
 import { isNewerVersion } from './version.js';
 import { ManifestValidationError, type UpdateManifest, type UpdateChannelName } from './manifest.js';
 import type { UpdateStatus, UpdateState } from './types.js';
+import { logger } from '../logging.js';
 
 /** A few hours, not aggressive polling (§4 of the brief) — the update
  * server is a static file host, but there is still no reason to hammer
@@ -168,7 +169,21 @@ export class UpdateManager {
 
   /** Downloads + verifies (size, SHA-256, Authenticode policy) the
    * currently-available manifest's installer. No-op if there is no
-   * available update. */
+   * available update.
+   *
+   * §updater-postdownload-error regression — this used to be one big
+   * try/catch around both the download AND the Authenticode check, and
+   * sanitizeError() only recognized DownloadError/ManifestFetchError/
+   * ManifestValidationError — any OTHER Error (which is exactly what
+   * verifyAuthenticodeSignature() threw before its own fix) collapsed to
+   * the generic "update check failed", hiding a real post-download
+   * failure (e.g. a broken PowerShell invocation) behind a message that
+   * looked identical to "the manifest check itself failed". Each stage
+   * now has its own try/catch, its own sanitized diagnostic log entry
+   * (stage + error name + duration — never a URL/path/PowerShell command
+   * line), and produces a specific, already-safe (Russian, matching the
+   * rest of the updater UI) user-facing message via each error class's
+   * own `.message`. */
   async downloadUpdate(): Promise<void> {
     if (!this.manifest || !this.allowedOrigin) return;
     // §3 of the security gate — never two concurrent downloads of the
@@ -184,8 +199,10 @@ export class UpdateManager {
     this.setState('downloading');
     this.abortController = new AbortController();
 
+    let downloadStageStartedAt = Date.now();
+    let result: { filePath: string };
     try {
-      const result = await downloadAndVerifyInstaller(manifest, this.options.updateCacheDir, {
+      result = await downloadAndVerifyInstaller(manifest, this.options.updateCacheDir, {
         timeoutMs: DOWNLOAD_TIMEOUT_MS,
         signal: this.abortController.signal,
         allowedOrigin: this.allowedOrigin,
@@ -194,30 +211,57 @@ export class UpdateManager {
           this.emit();
         }
       });
-
-      this.setState('verifying');
-      const sig = await verifyAuthenticodeSignature(result.filePath);
-      const blockReason = evaluateSignaturePolicy(this.options.channel, sig);
-      if (blockReason) {
-        this.errorMessage = blockReason;
-        this.downloadedFilePath = null;
-        this.setState('error');
-        return;
-      }
-      if (!sig.signed) {
-        this.signatureWarning = `This update is not digitally signed (${sig.status}). It was verified by SHA-256 checksum only.`;
-      }
-
-      this.downloadedFilePath = result.filePath;
-      this.errorMessage = null;
-      this.setState('ready_to_install');
     } catch (e) {
-      this.downloadedFilePath = null;
-      this.errorMessage = sanitizeError(e);
-      this.setState('error');
-    } finally {
-      this.abortController = null;
+      this.failDownload(e instanceof DownloadError ? e.stage : 'download', e, downloadStageStartedAt);
+      return;
     }
+
+    this.setState('verifying');
+    downloadStageStartedAt = Date.now();
+    let sig: Awaited<ReturnType<typeof verifyAuthenticodeSignature>>;
+    try {
+      sig = await verifyAuthenticodeSignature(result.filePath);
+    } catch (e) {
+      this.failDownload('authenticode', e, downloadStageStartedAt);
+      return;
+    }
+
+    const blockReason = evaluateSignaturePolicy(this.options.channel, sig);
+    if (blockReason) {
+      logger.warn('update_stage_failed', { stage: 'policy', errorName: 'SignaturePolicyBlocked', durationMs: Date.now() - downloadStageStartedAt });
+      this.downloadedFilePath = null;
+      this.errorMessage = blockReason;
+      this.setState('error');
+      this.abortController = null;
+      return;
+    }
+    if (!sig.signed) {
+      this.signatureWarning = `Обновление не имеет цифровой подписи (${sig.status}). Проверено только по контрольной сумме (SHA-256).`;
+    }
+
+    this.downloadedFilePath = result.filePath;
+    this.errorMessage = null;
+    this.setState('ready_to_install');
+    this.abortController = null;
+  }
+
+  /** Sanitized diagnostics only — stage name, error class name, duration.
+   * Never a URL, query string, cookie, auth header, file path, or
+   * PowerShell command line — the SAME discipline already established
+   * for relay-client.ts's `relay_handler_request_failed` logging. The
+   * user-facing `errorMessage` comes from `sanitizeError()`, which
+   * already only ever surfaces our own hand-written, short, safe error
+   * messages (never a raw exception's stack/details). */
+  private failDownload(stage: 'download' | 'sha256' | 'authenticode', e: unknown, startedAt: number): void {
+    logger.warn('update_stage_failed', {
+      stage,
+      errorName: e instanceof Error ? e.name : 'unknown',
+      durationMs: Date.now() - startedAt
+    });
+    this.downloadedFilePath = null;
+    this.errorMessage = sanitizeError(e);
+    this.setState('error');
+    this.abortController = null;
   }
 
   cancelDownload(): void {
@@ -265,7 +309,8 @@ export class UpdateManager {
     try {
       await verifyFileIntegrity(filePath, expectedSha256, expectedSize);
     } catch (e) {
-      const message = `Update install aborted — ${sanitizeError(e)}`;
+      logger.warn('update_stage_failed', { stage: 'sha256', errorName: e instanceof Error ? e.name : 'unknown', at: 'install_recheck' });
+      const message = sanitizeError(e);
       this.downloadedFilePath = null;
       this.errorMessage = message;
       this.setState('error');
@@ -273,15 +318,26 @@ export class UpdateManager {
       throw new Error(message);
     }
 
-    const sig = await verifyAuthenticodeSignature(filePath);
-    const blockReason = evaluateSignaturePolicy(channel, sig);
-    if (blockReason) {
-      const message = `Update install aborted — ${blockReason}`;
+    let sig: Awaited<ReturnType<typeof verifyAuthenticodeSignature>>;
+    try {
+      sig = await verifyAuthenticodeSignature(filePath);
+    } catch (e) {
+      logger.warn('update_stage_failed', { stage: 'authenticode', errorName: e instanceof Error ? e.name : 'unknown', at: 'install_recheck' });
+      const message = sanitizeError(e);
       this.downloadedFilePath = null;
       this.errorMessage = message;
       this.setState('error');
       this.installStarted = false;
       throw new Error(message);
+    }
+    const blockReason = evaluateSignaturePolicy(channel, sig);
+    if (blockReason) {
+      logger.warn('update_stage_failed', { stage: 'policy', errorName: 'SignaturePolicyBlocked', at: 'install_recheck' });
+      this.downloadedFilePath = null;
+      this.errorMessage = blockReason;
+      this.setState('error');
+      this.installStarted = false;
+      throw new Error(blockReason);
     }
 
     await launchInstaller(filePath);
@@ -303,7 +359,8 @@ export class UpdateManager {
  * already short, sanitized, hand-written strings, never containing
  * cookies/tokens/response bodies (§15 of the brief). */
 function sanitizeError(e: unknown): string {
-  if (e instanceof ManifestFetchError || e instanceof DownloadError || e instanceof ManifestValidationError) return e.message;
-  if (e instanceof Error) return e.name === 'Error' ? 'update check failed' : e.name;
-  return 'update check failed';
+  if (e instanceof ManifestFetchError || e instanceof DownloadError || e instanceof ManifestValidationError || e instanceof AuthenticodeError) {
+    return e.message;
+  }
+  return 'Не удалось проверить обновление';
 }

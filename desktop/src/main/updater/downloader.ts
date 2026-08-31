@@ -24,7 +24,20 @@ import crypto from 'node:crypto';
 import https from 'node:https';
 import type { UpdateManifest } from './manifest.js';
 
-export class DownloadError extends Error {}
+/** `stage` distinguishes a transport-level failure (couldn't get the
+ * bytes at all) from an integrity failure (got bytes, they don't match
+ * the manifest) — surfaced in sanitized diagnostics (manager.ts) so a
+ * real failure can be told apart from another without parsing message
+ * text. Message itself is already the short, specific, user-facing
+ * (Russian, matching the rest of the updater UI) string — never a raw
+ * URL/path/header/stack. */
+export class DownloadError extends Error {
+  readonly stage: 'download' | 'sha256';
+  constructor(message: string, stage: 'download' | 'sha256' = 'download') {
+    super(message);
+    this.stage = stage;
+  }
+}
 
 export interface DownloadProgress {
   receivedBytes: number;
@@ -53,11 +66,11 @@ export async function verifyFileIntegrity(filePath: string, expectedSha256: stri
   try {
     stat = await fs.promises.stat(filePath);
   } catch {
-    throw new DownloadError(`verified installer is missing at ${filePath}`);
+    throw new DownloadError('Файл обновления не найден перед установкой', 'sha256');
   }
-  if (!stat.isFile()) throw new DownloadError(`verified installer path is not a regular file: ${filePath}`);
+  if (!stat.isFile()) throw new DownloadError('Файл обновления повреждён (это не обычный файл)', 'sha256');
   if (stat.size !== expectedSize) {
-    throw new DownloadError(`installer size changed since verification: expected ${expectedSize}, found ${stat.size}`);
+    throw new DownloadError('Размер файла обновления изменился перед установкой', 'sha256');
   }
 
   const hash = crypto.createHash('sha256');
@@ -67,14 +80,14 @@ export async function verifyFileIntegrity(filePath: string, expectedSha256: stri
       hash.update(chunk as Buffer);
     });
     stream.on('end', () => resolve());
-    stream.on('error', (e) => reject(new DownloadError(`re-reading installer for verification failed: ${e.message}`)));
+    stream.on('error', () => reject(new DownloadError('Не удалось повторно проверить файл обновления', 'sha256')));
   });
 
   const expected = Buffer.from(expectedSha256, 'hex');
   const actual = Buffer.from(hash.digest('hex'), 'hex');
   const matches = expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
   if (!matches) {
-    throw new DownloadError('installer SHA-256 changed since verification — refusing to install a modified file');
+    throw new DownloadError('Файл обновления был изменён после проверки — установка отменена', 'sha256');
   }
 }
 
@@ -114,7 +127,7 @@ async function removeExistingFinalPath(finalPath: string): Promise<void> {
     return; // nothing there — nothing to do
   }
   if (lst.isDirectory() && !lst.isSymbolicLink()) {
-    throw new DownloadError(`refusing to overwrite a directory at the installer's target path: ${finalPath}`);
+    throw new DownloadError('Не удалось сохранить обновление — путь установки занят');
   }
   await fs.promises.unlink(finalPath);
 }
@@ -146,9 +159,9 @@ export async function downloadAndVerifyInstaller(
   }
 ): Promise<DownloadResult> {
   const url = new URL(manifest.installer.url);
-  if (url.protocol !== 'https:') throw new DownloadError(`refusing to download over ${url.protocol} — https only`);
+  if (url.protocol !== 'https:') throw new DownloadError('Небезопасный адрес сервера обновлений');
   if (url.origin !== options.allowedOrigin) {
-    throw new DownloadError(`installer URL origin "${url.origin}" does not match the allowed update origin "${options.allowedOrigin}"`);
+    throw new DownloadError('Адрес сервера обновлений не совпадает с ожидаемым');
   }
 
   await fs.promises.mkdir(updateCacheDir, { recursive: true });
@@ -162,7 +175,7 @@ export async function downloadAndVerifyInstaller(
   // same "don't trust a single check" discipline used elsewhere.
   const resolvedFinalPath = path.resolve(finalPath);
   if (resolvedFinalPath !== resolvedCacheDir && !resolvedFinalPath.startsWith(resolvedCacheDir + path.sep)) {
-    throw new DownloadError('resolved installer path escapes the update cache directory');
+    throw new DownloadError('Внутренняя ошибка проверки пути установки');
   }
 
   await cleanupStaleDownloadTemp(updateCacheDir, manifest.installer.filename);
@@ -190,13 +203,13 @@ export async function downloadAndVerifyInstaller(
       if (status >= 300 && status < 400) {
         res.resume();
         writeStream.destroy();
-        settle(() => reject(new DownloadError(`installer download got a redirect (${status}) — redirects are not followed`)));
+        settle(() => reject(new DownloadError('Сервер обновлений вернул перенаправление — загрузка отклонена')));
         return;
       }
       if (status !== 200) {
         res.resume();
         writeStream.destroy();
-        settle(() => reject(new DownloadError(`installer download failed with HTTP ${status}`)));
+        settle(() => reject(new DownloadError(`Сервер обновлений вернул ошибку (HTTP ${status})`)));
         return;
       }
 
@@ -204,7 +217,7 @@ export async function downloadAndVerifyInstaller(
       if (declaredLength !== undefined && Number.isFinite(declaredLength) && declaredLength !== manifest.installer.size) {
         res.resume();
         writeStream.destroy();
-        settle(() => reject(new DownloadError(`Content-Length (${declaredLength}) does not match manifest.installer.size (${manifest.installer.size})`)));
+        settle(() => reject(new DownloadError('Заявленный размер файла не совпадает с ожидаемым', 'sha256')));
         return;
       }
 
@@ -213,7 +226,7 @@ export async function downloadAndVerifyInstaller(
         if (received > manifest.installer.size) {
           res.destroy();
           writeStream.destroy();
-          settle(() => reject(new DownloadError(`downloaded ${received} bytes, exceeding manifest.installer.size (${manifest.installer.size})`)));
+          settle(() => reject(new DownloadError('Загрузка превысила ожидаемый размер файла — прервана', 'sha256')));
           return;
         }
         hash.update(chunk);
@@ -230,7 +243,7 @@ export async function downloadAndVerifyInstaller(
         writeStream.end(() => {
           settle(() => {
             if (received !== manifest.installer.size) {
-              reject(new DownloadError(`downloaded ${received} bytes, expected ${manifest.installer.size}`));
+              reject(new DownloadError('Размер файла обновления не совпадает с ожидаемым', 'sha256'));
               return;
             }
             const actualSha256 = hash.digest('hex');
@@ -238,25 +251,29 @@ export async function downloadAndVerifyInstaller(
             const actual = Buffer.from(actualSha256, 'hex');
             const matches = expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
             if (!matches) {
-              reject(new DownloadError('SHA-256 mismatch — downloaded file does not match manifest'));
+              reject(new DownloadError('Контрольная сумма (SHA-256) файла обновления не совпадает', 'sha256'));
               return;
             }
             resolve();
           });
         });
       });
-      res.on('error', (e) => settle(() => reject(new DownloadError(e.message))));
+      // Our own req.destroy(new DownloadError(...)) calls below (timeout/
+      // abort) surface here too, since destroy()'s reason becomes the
+      // stream's 'error' event — preserve that specific, already-safe
+      // Russian message rather than collapsing it into the generic one.
+      res.on('error', (e) => settle(() => reject(e instanceof DownloadError ? e : new DownloadError('Загрузка обновления прервана сетевой ошибкой'))));
     });
 
-    req.once('timeout', () => req.destroy(new DownloadError('installer download timed out')));
-    req.once('error', (e) => settle(() => reject(new DownloadError(e.message))));
-    writeStream.once('error', (e) => settle(() => reject(new DownloadError(`writing temp file failed: ${e.message}`))));
+    req.once('timeout', () => req.destroy(new DownloadError('Истекло время ожидания загрузки обновления')));
+    req.once('error', (e) => settle(() => reject(e instanceof DownloadError ? e : new DownloadError('Загрузка обновления прервана сетевой ошибкой'))));
+    writeStream.once('error', () => settle(() => reject(new DownloadError('Не удалось сохранить файл обновления на диск'))));
 
     if (options.signal) {
       if (options.signal.aborted) {
-        req.destroy(new DownloadError('download aborted'));
+        req.destroy(new DownloadError('Загрузка обновления отменена'));
       } else {
-        const onAbort = () => req.destroy(new DownloadError('download aborted'));
+        const onAbort = () => req.destroy(new DownloadError('Загрузка обновления отменена'));
         options.signal.addEventListener('abort', onAbort, { once: true });
         req.once('close', () => options.signal!.removeEventListener('abort', onAbort));
       }

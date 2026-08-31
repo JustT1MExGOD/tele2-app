@@ -142,7 +142,7 @@ describe('UpdateManager — download + signature policy', () => {
     const status = manager.getStatus();
     expect(status.state).toBe('ready_to_install');
     expect(status.readyToInstall).toBe(true);
-    expect(status.signatureWarning).toContain('not digitally signed');
+    expect(status.signatureWarning).toContain('не имеет цифровой подписи');
   });
 
   it('a signed installer reaches ready_to_install with no signatureWarning', async () => {
@@ -257,7 +257,7 @@ describe('UpdateManager — installUpdate() TOCTOU re-verification (security gat
     await manager.downloadUpdate();
     expect(manager.getStatus().state).toBe('ready_to_install');
 
-    await expect(manager.installUpdate()).rejects.toThrow(/could not be verified|HashMismatch/);
+    await expect(manager.installUpdate()).rejects.toThrow(/подпись повреждена или недействительна/);
     expect(launchInstallerMock).not.toHaveBeenCalled();
     expect(manager.getStatus().state).toBe('error');
   });

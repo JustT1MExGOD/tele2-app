@@ -10,15 +10,32 @@
  * involved at all, so shell metacharacters in the path are inert
  * regardless. On top of that, the path is passed as a PowerShell
  * *script argument* (bound to `$args[0]`), not concatenated into the
- * `-Command` string, so it also can't affect PowerShell's OWN parsing —
- * belt and suspenders, not relying on either layer alone. In practice
- * the path is always one this process itself constructed from a
+ * script text, so it also can't affect PowerShell's OWN parsing — belt
+ * and suspenders, not relying on either layer alone. In practice the
+ * path is always one this process itself constructed from a
  * `manifest.ts`-validated filename (`^[A-Za-z0-9][A-Za-z0-9._-]*\.exe$`,
  * no quotes/spaces/metacharacters possible), so neither layer is ever
  * actually exercised against attacker-influenced input — this is
  * defense in depth, not the only guard.
+ *
+ * §updater-postdownload-error regression — `-Command <script> -- <path>`
+ * (the original invocation) is BROKEN on real Windows PowerShell 5.1:
+ * `-Command` treats every trailing argv element as MORE script text to
+ * parse (not as `$args`) — there is no POSIX-style `--`
+ * end-of-options convention in PowerShell's own parser, so it tried to
+ * parse the literal token `--` as PowerShell syntax and failed with
+ * "MissingExpressionAfterOperator", confirmed with a real standalone
+ * run against a real unsigned installer on this machine. `-File
+ * <script.ps1> <path>` is the mode that actually binds trailing argv
+ * to `$args` — confirmed the same way. The script is now written once
+ * to a private temp file (unpredictable directory via `fs.mkdtempSync`,
+ * so a local process can't pre-plant a symlink at a guessable path) and
+ * reused for the life of this process.
  */
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 export type SignatureStatus = 'Valid' | 'NotSigned' | 'HashMismatch' | 'NotTrusted' | 'UnknownError' | 'Invalid';
 
@@ -31,11 +48,20 @@ export interface AuthenticodeResult {
   subject: string | null;
 }
 
+/** Always `stage: 'authenticode'` — lets manager.ts's sanitized
+ * diagnostics tell an Authenticode-stage failure apart from a
+ * download/sha256/policy one without parsing message text. `.message`
+ * is already the short, safe, Russian, user-facing string (matching
+ * the rest of the updater UI) — never the raw PowerShell command line,
+ * a file path, or a stack trace. */
+export class AuthenticodeError extends Error {
+  readonly stage = 'authenticode' as const;
+}
+
 // -NoProfile/-NonInteractive: don't load a user PowerShell profile or
 // prompt for anything. -ExecutionPolicy Bypass scoped to THIS single
-// process invocation only (the `-Command` flag), never a system-wide
-// policy change. The script reads the path from $args[0], never from
-// string interpolation.
+// process invocation only, never a system-wide policy change. The
+// script reads the path from $args[0], never from string interpolation.
 const POWERSHELL_SCRIPT = [
   '$ErrorActionPreference = "Stop"',
   'try {',
@@ -48,15 +74,33 @@ const POWERSHELL_SCRIPT = [
   '}'
 ].join('; ');
 
+let cachedScriptPath: string | null = null;
+
+/** Writes POWERSHELL_SCRIPT to a private, unpredictable temp file once
+ * per process and reuses it — `-File` needs a real script file (unlike
+ * the old, broken `-Command` invocation), and a fresh `mkdtempSync`
+ * directory (rather than a fixed/predictable path) means a local
+ * process can't plant a symlink there ahead of time. Content is a
+ * constant, never derived from any per-call input, so re-checking
+ * existence (survives repeated calls, not repeated processes) is safe. */
+function getScriptPath(): string {
+  if (cachedScriptPath && fs.existsSync(cachedScriptPath)) return cachedScriptPath;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't2sales-authenticode-'));
+  const scriptPath = path.join(dir, 'check-signature.ps1');
+  fs.writeFileSync(scriptPath, POWERSHELL_SCRIPT, { encoding: 'utf8' });
+  cachedScriptPath = scriptPath;
+  return scriptPath;
+}
+
 export function verifyAuthenticodeSignature(filePath: string, timeoutMs = 15_000): Promise<AuthenticodeResult> {
   return new Promise((resolve, reject) => {
     execFile(
       'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', POWERSHELL_SCRIPT, '--', filePath],
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', getScriptPath(), filePath],
       { timeout: timeoutMs, windowsHide: true, maxBuffer: 64 * 1024 },
       (error, stdout) => {
         if (error) {
-          reject(new Error(`Authenticode verification failed to run: ${error.message}`));
+          reject(new AuthenticodeError('Не удалось запустить проверку цифровой подписи'));
           return;
         }
         try {
@@ -68,7 +112,7 @@ export function verifyAuthenticodeSignature(filePath: string, timeoutMs = 15_000
             : 'UnknownError';
           resolve({ status, signed: status === 'Valid', subject: status === 'Valid' ? parsed.subject : null });
         } catch {
-          reject(new Error('Authenticode verification returned unparseable output'));
+          reject(new AuthenticodeError('Проверка цифровой подписи вернула некорректный результат'));
         }
       }
     );
@@ -112,11 +156,11 @@ export const AUTHENTICODE_POLICY: Record<'stable' | 'beta', SignaturePolicy> = {
 export function evaluateSignaturePolicy(channel: 'stable' | 'beta', result: AuthenticodeResult): string | null {
   if (result.signed) return null;
   if (result.status !== 'NotSigned') {
-    return `This build's digital signature could not be verified (${result.status}) — this is different from being unsigned and is always rejected.`;
+    return 'Цифровая подпись повреждена или недействительна — установка отменена';
   }
   const policy = AUTHENTICODE_POLICY[channel];
   if (policy === 'required') {
-    return `This build is not digitally signed, and the "${channel}" channel requires a valid signature.`;
+    return 'Сборка не подписана, а этот канал обновлений требует подписи';
   }
   return null; // 'warn' policy — caller surfaces a warning in the UI but does not block
 }

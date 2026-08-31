@@ -79,7 +79,15 @@ export function progressHTML(label: string, fact: unknown, plan: unknown): strin
 }
 
 export function tgUser(): { id?: number; first_name?: string; last_name?: string; username?: string; photo_url?: string } | null {
-  return window.tg?.initDataUnsafe?.user || null;
+  const fromSdk = window.tg?.initDataUnsafe?.user;
+  if (fromSdk) return fromSdk;
+  // Telegram Mini App forced-to-phone-login regression — the SDK may not
+  // have loaded yet (or may never, on a network where telegram.org is
+  // slow/blocked). extractRawTelegramInitData() reads the SAME identity
+  // directly from the URL Telegram itself constructed, independent of
+  // the SDK entirely — see app/core.ts's doc comment on that function.
+  const raw = extractRawTelegramInitData();
+  return raw ? parseTelegramUserFromInitData(raw) : null;
 }
 
 // ===== Theme =====

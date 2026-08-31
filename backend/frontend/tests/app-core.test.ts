@@ -332,3 +332,206 @@ describe('app/core — async Telegram bootstrap (white-screen regression)', () =
     expect(window.tg).toBeUndefined();
   });
 });
+
+/**
+ * Telegram Mini App forced-to-phone-login regression — Telegram appends
+ * the real initData to the URL itself (documented, stable platform
+ * behavior, core.telegram.org/bots/webapps) the moment it opens a Mini
+ * App, independent of the SDK ever loading. These tests exercise the
+ * fix directly: identity no longer depends on `window.Telegram` at all
+ * when the URL already carries it, and — for the rarer case where it
+ * doesn't (no `user` field in initData) — a genuinely slow SDK (well
+ * past the old 5s cutoff) is still recognized as Telegram, never
+ * silently redirected to phone/password.
+ */
+function buildRawInitData(user: Record<string, unknown> | null): string {
+  const params = new URLSearchParams();
+  if (user) params.set('user', JSON.stringify(user));
+  params.set('auth_date', '1700000000');
+  params.set('hash', 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+  return params.toString();
+}
+
+function setTelegramHash(rawInitData: string): void {
+  window.history.replaceState(null, '', '#tgWebAppData=' + encodeURIComponent(rawInitData) + '&tgWebAppVersion=7.0');
+}
+
+/** resolveTelegramIdentity() (core.ts) calls tgUser() (nav.ts) as a bare
+ * global — real integration, not a stub, since these tests are
+ * specifically about tgUser()'s own SDK->raw-URL fallback chain. */
+async function freshImportWithNav() {
+  vi.resetModules();
+  await import('../src/app/nav.js');
+  return import('../src/app/core.js');
+}
+
+describe('app/core — Telegram identity resolution (forced-to-phone-login regression)', () => {
+  const TEST_USER = { id: 123456789, first_name: 'Test', last_name: 'User', username: 'testuser' };
+
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    delete (window as any).Telegram;
+    delete (window as any).__t2TelegramScriptSettled;
+    delete (window as any).t2Desktop;
+    delete (window as any).tg;
+    window.history.replaceState(null, '', '/'); // clear any hash/search from a prior test
+  });
+
+  it('extractRawTelegramInitData: reads tgWebAppData from the URL hash, present from the very first tick — no SDK/network involved', async () => {
+    setTelegramHash(buildRawInitData(TEST_USER));
+    await freshImport();
+    const raw = window.extractRawTelegramInitData();
+    expect(raw).toContain('auth_date=1700000000');
+    expect(raw).toContain('hash=deadbeef');
+  });
+
+  it('extractRawTelegramInitData: also checks the query string, not just the hash (platform variance)', async () => {
+    window.history.replaceState(null, '', '/?tgWebAppData=' + encodeURIComponent(buildRawInitData(TEST_USER)));
+    await freshImport();
+    expect(window.extractRawTelegramInitData()).toContain('auth_date=1700000000');
+  });
+
+  it('extractRawTelegramInitData: null when no Telegram signal is in the URL at all (plain web)', async () => {
+    await freshImport();
+    expect(window.extractRawTelegramInitData()).toBeNull();
+  });
+
+  it('isLikelyTelegramContext: true iff the URL carries tgWebAppData — independent of window.Telegram entirely', async () => {
+    await freshImport();
+    expect(window.isLikelyTelegramContext()).toBe(false);
+    setTelegramHash(buildRawInitData(TEST_USER));
+    expect(window.isLikelyTelegramContext()).toBe(true); // re-checked live, no re-import needed
+  });
+
+  it('parseTelegramUserFromInitData: extracts the same shape tgUser() returns from the SDK', async () => {
+    await freshImport();
+    const raw = buildRawInitData(TEST_USER);
+    expect(window.parseTelegramUserFromInitData(raw)).toEqual(TEST_USER);
+  });
+
+  it('parseTelegramUserFromInitData: null when initData has no user field (e.g. opened without user context) — never throws', async () => {
+    await freshImport();
+    expect(window.parseTelegramUserFromInitData(buildRawInitData(null))).toBeNull();
+    expect(window.parseTelegramUserFromInitData('not=validjson&user=%7Bnotjson')).toBeNull();
+  });
+
+  it('authHeaders(): X-Telegram-Init-Data is the raw URL-extracted initData, sent as-is — independent of the SDK ever loading', async () => {
+    setTelegramHash(buildRawInitData(TEST_USER));
+    (window as any).__t2TelegramScriptSettled = Promise.resolve(false); // SDK never loads
+    await freshImport();
+    vi.stubGlobal('tgUser', () => TEST_USER);
+    const h = window.authHeaders();
+    expect(h['X-Telegram-Init-Data']).toBe(buildRawInitData(TEST_USER));
+  });
+
+  function fakeWebApp(user: Record<string, unknown> | null) {
+    // initTelegramWebApp() (core.ts) always re-reads window.Telegram
+    // unconditionally on import and calls these — a real no-op stub
+    // avoids that unrelated bootstrap crashing these identity-focused
+    // tests with "tg.ready is not a function".
+    return {
+      initDataUnsafe: { user },
+      initData: buildRawInitData(user),
+      ready: vi.fn(),
+      expand: vi.fn(),
+      setHeaderColor: vi.fn(),
+      setBackgroundColor: vi.fn(),
+      onEvent: vi.fn()
+    };
+  }
+
+  // §Test B — SDK resolves quickly -> Telegram auth (already-loaded case).
+  it('resolveTelegramIdentity: SDK already loaded with a user -> resolves immediately from window.tg, no wait', async () => {
+    (window as any).Telegram = { WebApp: fakeWebApp(TEST_USER) };
+    await freshImportWithNav();
+    const result = await window.resolveTelegramIdentity();
+    expect(result).toEqual(TEST_USER);
+  });
+
+  // §Test C (the actual regression) — a real Telegram user whose raw
+  // initData already contains `user`: resolved INSTANTLY, the SDK's own
+  // load timing becomes irrelevant to authentication entirely. This is
+  // the common, expected shape and the main fix.
+  it('resolveTelegramIdentity: URL already has the user (common case) -> resolves instantly, never waits on the SDK at all', async () => {
+    setTelegramHash(buildRawInitData(TEST_USER));
+    let neverResolves: (v: boolean) => void = () => {};
+    (window as any).__t2TelegramScriptSettled = new Promise<boolean>((r) => {
+      neverResolves = r; // deliberately never called during this test
+    });
+    await freshImportWithNav();
+    const result = await window.resolveTelegramIdentity();
+    expect(result).toEqual(TEST_USER);
+    void neverResolves; // the SDK promise is left permanently pending — proves it was never awaited
+  });
+
+  // §Test C (the rarer edge case) — URL confirms Telegram but has no
+  // `user` field: the OLD code would have already given up by 5s and
+  // shown phone/password. The fix waits for the SDK's own (patient)
+  // readiness signal instead, however long that takes, and picks up a
+  // genuinely-late (>5s) SDK resolution correctly.
+  it('resolveTelegramIdentity: Telegram confirmed via URL but no user in initData, SDK resolves well past the old 5s cutoff -> still Telegram auth, not null', async () => {
+    setTelegramHash(buildRawInitData(null)); // Telegram context confirmed, but no user field
+    let resolveSettled: (v: boolean) => void = () => {};
+    (window as any).__t2TelegramScriptSettled = new Promise<boolean>((r) => {
+      resolveSettled = r;
+    });
+    await freshImportWithNav();
+
+    const resultPromise = window.resolveTelegramIdentity();
+    // Simulate the SDK finishing well past the old hard-coded 5s bound.
+    await new Promise((r) => setTimeout(r, 20));
+    (window as any).Telegram = { WebApp: fakeWebApp(TEST_USER) };
+    resolveSettled(true);
+
+    const result = await resultPromise;
+    expect(result).toEqual(TEST_USER); // NOT null — never fell back to phone/password
+  });
+
+  // §Test E — genuinely no Telegram signal anywhere -> resolves null
+  // immediately (the only path that should ever reach phone/password),
+  // and does NOT wait on the SDK promise at all.
+  it('resolveTelegramIdentity: no Telegram signal in the URL at all -> resolves null immediately, never waits', async () => {
+    let neverResolves: (v: boolean) => void = () => {};
+    (window as any).__t2TelegramScriptSettled = new Promise<boolean>((r) => {
+      neverResolves = r; // deliberately never called
+    });
+    await freshImportWithNav();
+    const result = await window.resolveTelegramIdentity();
+    expect(result).toBeNull();
+    void neverResolves;
+  });
+
+  // §Test A — desktop: window.t2Desktop present, and (as in real desktop
+  // usage) no tgWebAppData in the URL either -> resolves null
+  // immediately, matching "desktop session/login UI immediately", not
+  // gated on anything Telegram-related.
+  it('resolveTelegramIdentity: desktop (window.t2Desktop present, no Telegram URL signal) -> resolves null immediately', async () => {
+    (window as any).t2Desktop = {};
+    await freshImportWithNav();
+    const started = Date.now();
+    const result = await window.resolveTelegramIdentity();
+    expect(result).toBeNull();
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+
+  // §Test F — a forged/manually-set window.Telegram or URL hash from
+  // devtools only ever changes what the FRONTEND displays/sends; it
+  // does not grant anything by itself. The real security boundary is
+  // unchanged and lives entirely server-side (auth's initData HMAC
+  // check, not touched by this fix) — this test only confirms the
+  // frontend-side claim: forging identity here sends exactly the forged
+  // string, verbatim, for the backend to accept or reject on its own.
+  it('a forged window.Telegram/URL hash only changes what is SENT to the backend, never bypasses anything client-side — the backend remains the sole authority', async () => {
+    const forged = { id: 999999999, first_name: 'Forged' };
+    setTelegramHash(buildRawInitData(forged));
+    await freshImport();
+    vi.stubGlobal('tgUser', () => forged);
+    const h = window.authHeaders();
+    // The forged data is sent as-is — no special "trusted" marker, no
+    // bypass of anything. It is the backend's HMAC check
+    // (backend/src/auth's initData verification, unchanged by this fix)
+    // that determines whether this string is ever honored.
+    expect(h['X-Telegram-Init-Data']).toBe(buildRawInitData(forged));
+    expect(h['X-Telegram-Id']).toBe('999999999');
+  });
+});

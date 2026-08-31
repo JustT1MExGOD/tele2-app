@@ -703,7 +703,15 @@ export async function bootApp(): Promise<void> {
   const dateEl = document.getElementById('headerDate');
   if (dateEl) dateEl.textContent = formatDateRu(todayMoscow());
 
-  const user = tgUser();
+  // Telegram Mini App forced-to-phone-login regression — resolveTelegramIdentity()
+  // (app/core.ts) never treats "SDK hasn't loaded yet" as "not Telegram":
+  // it resolves instantly if identity is already available (SDK loaded,
+  // OR the raw URL-extracted initData already has it), waits (patiently,
+  // still on this page's own splash screen — see hideSplash()'s own
+  // comment) only when Telegram context is independently confirmed via
+  // the URL but the SDK hasn't caught up yet, and resolves null
+  // immediately for a genuine non-Telegram web visitor.
+  const user = await resolveTelegramIdentity();
   if (!user?.id) {
     // Не-Telegram вход (20.37) — раньше здесь был безусловный пропуск "для
     // отладки", последний пробел, который ADR-005/20.35-20.36 оставляли

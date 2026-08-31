@@ -31,16 +31,132 @@
 import type { MetricsResponse } from '../../../src/shared/api-types.js';
 
 /**
+ * Telegram Mini App forced-to-phone-login regression (post-white-screen-
+ * fix acceptance) — Telegram appends the user's real, HMAC-signable
+ * identity to the URL itself (as a `tgWebAppData` fragment parameter)
+ * the moment it opens a Mini App. This is documented, stable Telegram
+ * platform behavior (core.telegram.org/bots/webapps), not something the
+ * telegram-web-app.js SDK invents — it's present in the URL from the
+ * very first document load, entirely independent of whether that
+ * EXTERNAL script (hosted on a different domain, telegram.org) ever
+ * finishes loading. The previous fix's 5s "SDK didn't load in time ->
+ * treat as non-Telegram" fallback conflated two different things:
+ * Telegram ENVIRONMENT detection and SDK NETWORK availability. A real
+ * Telegram user on a network where telegram.org itself is slow/blocked
+ * (a real, unsurprising case — this whole desktop/relay effort exists
+ * because SOME external resource being blocked is exactly this app's
+ * operating environment) was wrongly bounced to a phone/password screen
+ * they may not even have credentials for.
+ *
+ * Reading the raw initData directly from the URL (checked in the
+ * documented hash-fragment location, with the query string as a
+ * fallback for platform variance) fixes this at the root: identity no
+ * longer depends on the SDK loading AT ALL. The returned string, when
+ * present, IS the real initData — sent to the backend exactly as-is
+ * (the same shape `Telegram.WebApp.initData` exposes) for its own HMAC
+ * verification, completely unchanged by this fix — this only changes
+ * how the FRONTEND obtains the string, never how the backend validates
+ * it.
+ */
+function extractRawTelegramInitData(): string | null {
+  const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('tgWebAppData');
+  if (fromHash) return fromHash;
+  const fromSearch = new URLSearchParams(window.location.search).get('tgWebAppData');
+  return fromSearch || null;
+}
+
+/** True the instant the page loads if Telegram's own client opened it —
+ * independent of network/SDK-load state entirely (see
+ * extractRawTelegramInitData's doc comment above). This is a UX signal
+ * ONLY (whether to keep waiting for the SDK instead of falling back to
+ * phone/password) — never a security/auth boundary. The backend
+ * independently re-verifies the real initData's HMAC regardless
+ * (unchanged by this fix) and grants nothing based on this flag alone —
+ * a forged/absent value here can at worst cause a wrong UX choice
+ * (waiting too long, or not waiting), never an authentication bypass. */
+function isLikelyTelegramContext(): boolean {
+  return extractRawTelegramInitData() !== null;
+}
+
+/** Parses just the `user` field out of a raw initData string — the same
+ * shape nav.ts's tgUser() already returns from
+ * `Telegram.WebApp.initDataUnsafe.user`, just obtained without needing
+ * the SDK to have loaded at all. Never trusted for anything security-
+ * relevant on its own — same "unsafe" caveat the SDK's own
+ * `initDataUnsafe` already carries; only the backend's HMAC-verified
+ * copy of initData is authoritative for anything privileged. */
+function parseTelegramUserFromInitData(
+  raw: string
+): { id?: number; first_name?: string; last_name?: string; username?: string; photo_url?: string } | null {
+  try {
+    const userJson = new URLSearchParams(raw).get('user');
+    if (!userJson) return null;
+    const parsed = JSON.parse(userJson);
+    return typeof parsed === 'object' && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The identity-resolution policy this whole regression is about —
+ * Telegram ENVIRONMENT detection and SDK NETWORK availability are two
+ * different things, and only the first one may ever decide "this is/
+ * isn't a Telegram user":
+ *
+ * 1. A user is already resolvable RIGHT NOW (either the SDK already
+ *    loaded and populated window.tg, or the raw URL-extracted initData
+ *    already has a `user` field) — return it immediately, no wait at
+ *    all, regardless of the SDK's own load state.
+ * 2. Not resolvable yet, but isLikelyTelegramContext() confirms we
+ *    genuinely are in Telegram (tgWebAppData present in the URL) — this
+ *    is NOT "not Telegram", it's "Telegram, SDK not finished yet" (a
+ *    real, expected state on a slow/degraded network — the exact
+ *    scenario that regressed). Wait for the SDK's own patient,
+ *    retried readiness signal (see index.html's inline bootstrap
+ *    script), then re-check once — access-supervisor/index.ts's
+ *    bootApp() stays on its splash screen for the whole wait, never a
+ *    blank page or a premature phone/password gate.
+ * 3. Not resolvable and NOT likely Telegram at all (no signal in the
+ *    URL whatsoever) — genuinely a plain web visitor; resolves null
+ *    immediately, no wait — this is the ONLY path that reaches
+ *    phone/password without delay.
+ */
+async function resolveTelegramIdentity(): Promise<{
+  id?: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+} | null> {
+  const immediate = tgUser();
+  if (immediate?.id) return immediate;
+  if (!isLikelyTelegramContext()) return null;
+  await window.telegramReadyPromise;
+  return tgUser();
+}
+
+window.extractRawTelegramInitData = extractRawTelegramInitData;
+window.isLikelyTelegramContext = isLikelyTelegramContext;
+window.parseTelegramUserFromInitData = parseTelegramUserFromInitData;
+window.resolveTelegramIdentity = resolveTelegramIdentity;
+
+/**
  * White-screen regression (20.56.x acceptance) — index.html no longer
  * loads telegram-web-app.js as a blocking <script>, so this can no
  * longer assume `Telegram.WebApp` is already resolved by the time this
- * module runs. Awaits index.html's own bounded readiness signal first
- * (resolves false immediately on desktop — see index.html's inline
- * bootstrap script comment — or once the script settles/times out
- * everywhere else), THEN does exactly the same ready()/expand()/theme
- * bootstrap as before, unconditionally on `window.tg` — nothing here
- * changes for a real Telegram Mini App user beyond the timing of when
- * it runs, never whether it runs.
+ * module runs. Awaits index.html's own readiness signal first (resolves
+ * false immediately on desktop — see index.html's inline bootstrap
+ * script comment — or once the script settles/times out everywhere
+ * else, patiently retried when the URL confirms a real Telegram context
+ * — see index.html), THEN does exactly the same ready()/expand()/theme
+ * bootstrap as before, unconditionally on `window.tg`.
+ *
+ * Identity (tgUser()/authHeaders()'s `X-Telegram-Init-Data`) does NOT
+ * depend on this function at all — see resolveTelegramIdentity() and
+ * extractRawTelegramInitData() above, added by the forced-to-phone-
+ * login regression fix specifically so a slow/never-arriving SDK here
+ * only ever costs theme/haptics/safe-area polish, never authentication.
  *
  * `window.tg` itself is intentionally still assigned as a real global
  * (not just returned from this function) — nav.ts's tgUser()/
@@ -304,9 +420,10 @@ export function authHeaders(json = false): Record<string, string> {
     // Сырой initData — бэкенд проверяет его подпись (HMAC), только так
     // telegram_id можно доверять. Голый X-Telegram-Id легко подделать с
     // любого сайта (используется лишь как dev-фоллбэк на сервере).
-    // Live read (window.tg), not a closured local — see haptic()'s
-    // comment above.
-    'X-Telegram-Init-Data': window.tg?.initData || ''
+    // Prefer the raw URL-extracted initData (available instantly,
+    // independent of the SDK ever loading — see extractRawTelegramInitData's
+    // doc comment) over the SDK's own copy, which may not exist yet.
+    'X-Telegram-Init-Data': extractRawTelegramInitData() || window.tg?.initData || ''
   };
   if (json) h['Content-Type'] = 'application/json';
   return h;

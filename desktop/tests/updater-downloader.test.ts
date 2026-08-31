@@ -111,7 +111,7 @@ describe('downloadAndVerifyInstaller — integrity failures', () => {
     });
     const cacheDir = await tempCacheDir();
     const manifest = manifestFor(server, { size: REAL_CONTENT.length }); // claims the SMALL size, server sends more
-    await expect(download(manifest, cacheDir, server)).rejects.toThrow(/exceeding/);
+    await expect(download(manifest, cacheDir, server)).rejects.toMatchObject({ stage: 'sha256' });
     expect(await fsPromises.readdir(cacheDir).catch(() => [])).toEqual([]);
   });
 
@@ -122,7 +122,7 @@ describe('downloadAndVerifyInstaller — integrity failures', () => {
     });
     const cacheDir = await tempCacheDir();
     const manifest = manifestFor(server);
-    await expect(download(manifest, cacheDir, server)).rejects.toThrow(/Content-Length/);
+    await expect(download(manifest, cacheDir, server)).rejects.toMatchObject({ stage: 'sha256' });
   });
 });
 
@@ -139,7 +139,7 @@ describe('downloadAndVerifyInstaller — network failures', () => {
     const cacheDir = await tempCacheDir();
     const manifest = manifestFor(server);
     const started = Date.now();
-    await expect(download(manifest, cacheDir, server, { timeoutMs: 300 })).rejects.toThrow(/timed out/);
+    await expect(download(manifest, cacheDir, server, { timeoutMs: 300 })).rejects.toMatchObject({ stage: 'download' });
     expect(Date.now() - started).toBeLessThan(5000);
     expect(await fsPromises.readdir(cacheDir).catch(() => [])).toEqual([]);
   });
@@ -174,7 +174,7 @@ describe('downloadAndVerifyInstaller — network failures', () => {
     const manifest = manifestFor(server);
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 150);
-    await expect(download(manifest, cacheDir, server, { signal: controller.signal })).rejects.toThrow(/aborted/);
+    await expect(download(manifest, cacheDir, server, { signal: controller.signal })).rejects.toThrow(/отменена/);
     expect(await fsPromises.readdir(cacheDir).catch(() => [])).toEqual([]);
   }, 10000);
 
@@ -185,7 +185,7 @@ describe('downloadAndVerifyInstaller — network failures', () => {
     });
     const cacheDir = await tempCacheDir();
     const manifest = manifestFor(server);
-    await expect(download(manifest, cacheDir, server)).rejects.toThrow(/redirect/);
+    await expect(download(manifest, cacheDir, server)).rejects.toThrow(/перенаправление/);
   });
 });
 
@@ -221,20 +221,20 @@ describe('verifyFileIntegrity — TOCTOU re-check against an already-on-disk fil
     const filePath = path.join(cacheDir, 'installer.exe');
     const tampered = Buffer.alloc(REAL_CONTENT.length, 0x41); // same length, different bytes
     await fsPromises.writeFile(filePath, tampered);
-    await expect(verifyFileIntegrity(filePath, REAL_SHA256, REAL_CONTENT.length)).rejects.toThrow(/SHA-256/);
+    await expect(verifyFileIntegrity(filePath, REAL_SHA256, REAL_CONTENT.length)).rejects.toThrow(/изменён после проверки/);
   });
 
   it('rejects when the file size changed', async () => {
     const cacheDir = await tempCacheDir();
     const filePath = path.join(cacheDir, 'installer.exe');
     await fsPromises.writeFile(filePath, Buffer.concat([REAL_CONTENT, Buffer.from('extra')]));
-    await expect(verifyFileIntegrity(filePath, REAL_SHA256, REAL_CONTENT.length)).rejects.toThrow(/size changed/);
+    await expect(verifyFileIntegrity(filePath, REAL_SHA256, REAL_CONTENT.length)).rejects.toThrow(/изменился перед установкой/);
   });
 
   it('rejects when the file is missing entirely (deleted during the ready_to_install window)', async () => {
     const cacheDir = await tempCacheDir();
     const filePath = path.join(cacheDir, 'does-not-exist.exe');
-    await expect(verifyFileIntegrity(filePath, REAL_SHA256, REAL_CONTENT.length)).rejects.toThrow(/missing/);
+    await expect(verifyFileIntegrity(filePath, REAL_SHA256, REAL_CONTENT.length)).rejects.toThrow(/не найден/);
   });
 });
 
@@ -289,7 +289,7 @@ describe('downloadAndVerifyInstaller — origin/scheme enforcement (defense in d
     };
     await expect(
       downloadAndVerifyInstaller(manifest, cacheDir, { allowedOrigin: 'https://updates.vincere-mortem.ru' })
-    ).rejects.toThrow(/https only/);
+    ).rejects.toThrow(/Небезопасный адрес/);
   });
 
   it('refuses an installer URL on a different origin than allowedOrigin', async () => {
@@ -304,7 +304,7 @@ describe('downloadAndVerifyInstaller — origin/scheme enforcement (defense in d
     };
     await expect(
       downloadAndVerifyInstaller(manifest, cacheDir, { allowedOrigin: 'https://updates.vincere-mortem.ru' })
-    ).rejects.toThrow(/does not match/);
+    ).rejects.toThrow(/не совпадает с ожидаемым/);
   });
 });
 

@@ -39,31 +39,79 @@
        spoofable by a real web page) never even requests it: the app
        already has zero Telegram-identity dependency there (phone+
        password/cookie session, see access-supervisor/index.ts's
-       bootApp()). Telegram/web still fetch it, just without blocking
-       HTML parsing — app/core.ts's initTelegramWebApp() awaits
-       __t2TelegramScriptSettled (bounded, see below) before running
-       tg.ready()/expand()/theme setup, and access-supervisor's initial
-       bootApp() call awaits that same readiness before deciding
-       Telegram-vs-not — so a real Telegram Mini App user is never
-       mistaken for a logged-out web visitor just because the script
-       hadn't finished loading yet. -->
+       bootApp()).
+
+       Forced-to-phone-login regression (follow-up) — the first fix's
+       flat 5s "give up" here was itself later found to be wrong for a
+       REAL Telegram Mini App user: it conflated "the SDK script hasn't
+       loaded yet" with "this isn't Telegram", so a genuine Telegram user
+       on a network where telegram.org is slow (not even unreachable,
+       just slow — a real, unsurprising case) got kicked to a phone/
+       password screen they may not have credentials for. Two changes
+       fix this at the root: (1) app/core.ts's tgUser()/authHeaders() no
+       longer depend on this script AT ALL for identity — they read the
+       real initData Telegram already put in the URL directly (see
+       app/core.ts's extractRawTelegramInitData doc comment) — so a slow
+       SDK no longer affects auth in the first place; (2) this script
+       itself is now more patient specifically when the URL confirms a
+       real Telegram context (tgWebAppData present) — retrying instead of
+       giving up after one 5s attempt, since we have strong, independent
+       reason to believe the SDK will eventually arrive. Plain web (no
+       Telegram signal in the URL at all) keeps the original single-
+       attempt, 5s-bounded behavior unchanged — nothing to wait patiently
+       for there. -->
   <script>
     window.__t2TelegramScriptSettled = new Promise(function (resolve) {
       if (window.t2Desktop) {
         resolve(false);
         return;
       }
-      var s = document.createElement('script');
-      s.src = 'https://telegram.org/js/telegram-web-app.js';
-      s.async = true;
-      s.onload = function () { resolve(true); };
-      s.onerror = function () { resolve(false); };
-      // Bounded — a real web/Telegram context on a network that can't
-      // reach telegram.org must still boot the app (phone+password
-      // fallback), not hang forever. Matches diagnostics.ts's own
-      // DEFAULT_TIMEOUT_MS precedent.
-      setTimeout(function () { resolve(false); }, 5000);
-      document.head.appendChild(s);
+      var looksLikeTelegram = /(^|[&#])tgWebAppData=/.test(location.hash) || /(^|[&?])tgWebAppData=/.test(location.search);
+      // Plain web: exactly the original single-attempt, 5s bound — no
+      // signal here says there's anything worth waiting longer for.
+      // Real Telegram context: retry with generous per-attempt patience
+      // (6 attempts x 8s, ~48s worst case) rather than one flat 5s
+      // shot — bounded, not infinite, but no longer punishing a real
+      // user for a slow (not even broken) external CDN. Never used as
+      // the identity decision itself (app/core.ts's
+      // resolveTelegramIdentity() already resolves real identity from
+      // the URL without waiting on this at all) — this only governs
+      // tg.ready()/expand()/theme/haptics, which degrade gracefully if
+      // they never arrive.
+      var maxAttempts = looksLikeTelegram ? 6 : 1;
+      var perAttemptTimeoutMs = looksLikeTelegram ? 8000 : 5000;
+      var attempt = 0;
+
+      function tryLoad() {
+        attempt++;
+        var settled = false;
+        var s = document.createElement('script');
+        s.src = 'https://telegram.org/js/telegram-web-app.js';
+        s.async = true;
+        var timer = setTimeout(function () {
+          if (settled) return;
+          settled = true;
+          s.remove();
+          if (attempt < maxAttempts) tryLoad();
+          else resolve(false);
+        }, perAttemptTimeoutMs);
+        s.onload = function () {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(true);
+        };
+        s.onerror = function () {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          s.remove();
+          if (attempt < maxAttempts) tryLoad();
+          else resolve(false);
+        };
+        document.head.appendChild(s);
+      }
+      tryLoad();
     });
   </script>
   <link rel="stylesheet" href="/styles.css">
