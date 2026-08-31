@@ -10,14 +10,37 @@
  * existing server-side session/MFA flow, unaffected by this file.
  */
 
+/**
+ * The one canonical default for the packaged production build's relay
+ * endpoint (acceptance-hardening pass, 20.55.x). This is the ONLY place
+ * this URL is hardcoded anywhere in desktop/ — main/index.ts,
+ * network/manager.ts, and preload/network-overlay.ts all receive an
+ * already-resolved value through DesktopConfig, never this constant
+ * directly. A real, publicly reachable T2 Edge Relay
+ * (RELAY_UPSTREAM_ORIGIN=https://tele2-app-production.up.railway.app on
+ * that deployment — see relay/src/config.ts), verified reachable this
+ * pass. `T2_RELAY_URL` always overrides it (see loadDesktopConfig below)
+ * — this is a fallback default, not a forced value.
+ */
+export const DEFAULT_PRODUCTION_RELAY_URL = 'https://relay.vincere-mortem.ru';
+
 export interface DesktopConfig {
   /** Same canonical origin the backend's own MINI_APP_URL already points
    * at — the BrowserWindow navigates here directly (see main/window.ts),
    * never to a packaged copy of the frontend. */
   publicAppOrigin: string;
   /** T2 Edge Relay base URL (a separate deployment, see relay/). Only
-   * used when RELAY mode is active. */
+   * used when RELAY mode is active. Resolution order: explicit
+   * T2_RELAY_URL env var, then — ONLY for a packaged production build
+   * (see `isPackaged` param of loadDesktopConfig) — DEFAULT_PRODUCTION_RELAY_URL,
+   * then '' (no relay configured; RELAY mode simply reports unreachable). */
   relayUrl: string;
+  /** Sanitized hostname-only view of `relayUrl` (or null if unset) — safe
+   * to surface in the desktop-only diagnostics overlay (preload/
+   * network-overlay.ts): never the full URL/path/query, just the host a
+   * field-test operator would want to eyeball-confirm. Derived once here
+   * so no other file re-parses relayUrl for display purposes. */
+  relayHost: string | null;
   /** Windows packet-level compatibility layer — disabled by default per
    * §25/§74; ships as a Noop adapter this pass regardless of this flag
    * (see main/compat/noop-adapter.ts), so flipping this alone does not
@@ -70,19 +93,33 @@ function assertHttpsOrigin(value: string, fieldName: string, allowLoopbackHttp =
 }
 
 /**
- * Loads and validates config. Values come from environment variables at
- * build/package time (electron-builder's `extraMetadata`/env injection —
- * finalized in Phase 10), with dev-time defaults for `npm run desktop:dev`
- * pointing at the same production origin (there is no separate desktop
- * "backend" — see the plan's central architecture decision).
+ * Loads and validates config. Values come from environment variables read
+ * at process startup (there is no build-time config injection — a
+ * packaged installer's behavior is identical regardless of the values in
+ * effect when it was built; only the values in effect when it is
+ * LAUNCHED matter — see docs/DESKTOP-NETWORK.md).
+ *
+ * `isPackaged` — pass Electron's own `app.isPackaged` from main/index.ts.
+ * Defaults to `false` here specifically so that calling
+ * `loadDesktopConfig(env)` from a test or a dev script without thinking
+ * about this parameter can NEVER silently default to the production
+ * relay — dev/test isolation is the safe default, not an opt-out.
  */
-export function loadDesktopConfig(env: NodeJS.ProcessEnv = process.env): DesktopConfig {
+export function loadDesktopConfig(env: NodeJS.ProcessEnv = process.env, isPackaged = false): DesktopConfig {
   const publicAppOrigin = assertHttpsOrigin(
     env.T2_PUBLIC_APP_ORIGIN || 'https://tele2-app-production.up.railway.app',
     'T2_PUBLIC_APP_ORIGIN'
   );
-  const relayUrlRaw = env.T2_RELAY_URL || '';
+
+  // Precedence (§1 of the acceptance-hardening pass): explicit
+  // T2_RELAY_URL always wins; otherwise a packaged production build
+  // falls back to the real deployed acceptance relay; otherwise (dev,
+  // tests, an unpackaged run) no relay is configured at all — RELAY mode
+  // just reports unreachable rather than reaching out to production.
+  const relayUrlRaw = env.T2_RELAY_URL || (isPackaged ? DEFAULT_PRODUCTION_RELAY_URL : '');
   const relayUrl = relayUrlRaw ? assertHttpsOrigin(relayUrlRaw, 'T2_RELAY_URL', true) : '';
+  const relayHost = relayUrl ? new URL(relayUrl).hostname : null;
+
   const windowsCompatEnabled = env.T2_WINDOWS_COMPAT_ENABLED === 'true';
 
   const rawMode = env.T2_NETWORK_MODE || 'auto';
@@ -92,5 +129,5 @@ export function loadDesktopConfig(env: NodeJS.ProcessEnv = process.env): Desktop
   }
   const initialNetworkMode = rawMode as DesktopConfig['initialNetworkMode'];
 
-  return { publicAppOrigin, relayUrl, windowsCompatEnabled, initialNetworkMode };
+  return { publicAppOrigin, relayUrl, relayHost, windowsCompatEnabled, initialNetworkMode };
 }

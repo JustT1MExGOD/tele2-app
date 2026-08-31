@@ -40,6 +40,14 @@ const RELAY_LABEL: Record<string, { text: string; color: string }> = {
   unreachable: { text: 'unreachable', color: '#c62828' }
 };
 
+/** relayHost is already a validated hostname (main/config.ts derives it
+ * via `new URL(relayUrl).hostname`, which cannot contain HTML-breaking
+ * characters) — escaped anyway as cheap defense-in-depth since it's
+ * interpolated into innerHTML. */
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function layerRow(layer: string, outcome: string | undefined): string {
   const color = OUTCOME_COLOR[outcome ?? 'UNKNOWN'] ?? '#757575';
   return `<div style="display:flex;justify-content:space-between;gap:8px;">
@@ -67,6 +75,10 @@ export function render(container: { innerHTML: string }, status: NetworkStatus):
       <span>Relay</span>
       <span style="color:${relay.color};font-weight:600;">${relay.text}</span>
     </div>
+    ${status.relayHost ? `<div style="display:flex;justify-content:space-between;gap:8px;opacity:.75;">
+      <span>Relay host</span>
+      <span>${esc(status.relayHost)}</span>
+    </div>` : ''}
     <div style="opacity:.5;font-size:10px;margin-top:4px;">updated ${status.lastChangedAt}</div>
   `;
 }

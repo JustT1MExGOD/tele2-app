@@ -33,13 +33,19 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
-    const config = loadDesktopConfig();
+    // app.isPackaged is the real, Electron-native signal for "this is a
+    // genuine packaged/installed build" vs. a dev run (`electron dist/
+    // main/index.js`) — only a packaged build falls back to the
+    // production relay default when T2_RELAY_URL is unset (see
+    // config.ts's loadDesktopConfig doc comment).
+    const config = loadDesktopConfig(process.env, app.isPackaged);
     const appSession = session.fromPartition(SESSION_PARTITION);
 
     networkManager = new NetworkManager({
       session: appSession,
       canonicalOrigin: config.publicAppOrigin,
       relayUrl: config.relayUrl,
+      relayHost: config.relayHost,
       initialPreference: config.initialNetworkMode
     });
 

@@ -30,6 +30,7 @@ const baseStatus: NetworkStatus = {
     ]
   },
   lastRelayReachability: 'not_configured',
+  relayHost: null,
   lastChangedAt: '2026-08-30T12:00:01.000Z'
 };
 
@@ -90,5 +91,33 @@ describe('network-overlay render — sanitization guarantee', () => {
     expect(html).not.toContain('authorization');
     expect(html).not.toContain('employee');
     expect(html).not.toContain('?'); // no query-string-shaped content
+  });
+});
+
+// Item 3 of the "make relay.vincere-mortem.ru the default" pass — an
+// optional sanitized "Relay host" row, hostname-only, never a full URL.
+describe('network-overlay render — optional Relay host row (hostname only)', () => {
+  it('shows the relay hostname when configured', () => {
+    const container = fakeContainer();
+    render(container, { ...baseStatus, lastRelayReachability: 'reachable', relayHost: 'relay.vincere-mortem.ru' });
+    expect(container.innerHTML).toContain('Relay host');
+    expect(container.innerHTML).toContain('relay.vincere-mortem.ru');
+  });
+
+  it('omits the row entirely when no relay is configured', () => {
+    const container = fakeContainer();
+    render(container, { ...baseStatus, relayHost: null });
+    expect(container.innerHTML).not.toContain('Relay host');
+  });
+
+  it('never renders a full URL, path, or query string for the relay host — hostname only', () => {
+    const container = fakeContainer();
+    // relayHost is always derived via new URL(relayUrl).hostname in
+    // main/config.ts — this test documents/locks in that only a bare
+    // hostname ever reaches the renderer, never scheme/path/query.
+    render(container, { ...baseStatus, relayHost: 'relay.vincere-mortem.ru' });
+    expect(container.innerHTML).not.toContain('https://');
+    expect(container.innerHTML).not.toContain('/healthz');
+    expect(container.innerHTML).not.toContain('?');
   });
 });

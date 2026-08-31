@@ -12,8 +12,13 @@ installer filename, and (via `app.getVersion()`, surfaced through
 ```
 cd desktop
 npm ci
-npm run desktop:package   # tsc && electron-builder --win --x64
+npm run desktop:package   # desktop:build (tsc + preload bundling) && electron-builder --win --x64
 ```
+`desktop:build` runs `tsc` then bundles the compiled preload entry into a
+single file via esbuild (`scripts/bundle-preload.mjs`) — Electron's
+sandboxed preload cannot load multi-file `require()` output at all (found
+and fixed in the acceptance-hardening pass; see `scripts/
+verify-preload-sandbox.mjs` for the permanent regression check).
 Produces `desktop/release/T2Sales-Setup-x64-20.55.0.exe` (NSIS,
 per-user install, no admin required — see `desktop/electron-builder.yml`)
 plus a `.blockmap` file. Compute the release SHA-256 with
@@ -53,14 +58,22 @@ package (unsigned), compute SHA-256, upload as a build artifact
 + test) — kept in the same file rather than a new workflow since it's
 small and Node-only, no service containers needed.
 
-## Deployment (relay hosting) — not deployed this pass
+## Deployment (relay hosting)
 
-Per the brief's §80, this pass implements, tests, and prepares — it does
-not deploy the relay anywhere, push, tag, or sign a release. The
-**READY FOR PRODUCTION DEPLOYMENT** section of the final report lists
-exactly what a real rollout needs (relay hosting, DNS if any, Railway
-considerations, env var names) and stops there pending explicit
-confirmation.
+The T2 Edge Relay is deployed on a separate VPS at
+`https://relay.vincere-mortem.ru`, configured with `RELAY_UPSTREAM_ORIGIN=
+https://tele2-app-production.up.railway.app` — verified reachable
+(`/healthz` → 200 OK) and, separately, confirmed to correctly proxy real
+authenticated traffic during a real affected-network acceptance test (see
+docs/DESKTOP-NETWORK.md). It is a real, publicly reachable service —
+whoever controls that VPS/DNS record controls this deployment; this repo
+does not manage or deploy it.
+
+Packaged desktop builds now use this relay **automatically** when
+`T2_RELAY_URL` is not explicitly set (see docs/DESKTOP-NETWORK.md's
+"Relay endpoint configuration") — the earlier manual `.bat`-file
+workaround is no longer required for normal acceptance testing, only for
+overriding to a different relay.
 
 ## Rollback
 

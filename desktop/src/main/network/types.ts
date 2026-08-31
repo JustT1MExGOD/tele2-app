@@ -61,5 +61,9 @@ export interface NetworkStatus {
   preference: NetworkModePreference;
   lastDiagnostics: DiagnosticsReport | null;
   lastRelayReachability: RelayReachability;
+  /** Sanitized hostname-only view of the configured relay (or `null` if
+   * none configured) — see main/config.ts's `relayHost`. Never a full
+   * URL, path, or query string. */
+  relayHost: string | null;
   lastChangedAt: string;
 }

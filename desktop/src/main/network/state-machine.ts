@@ -7,9 +7,12 @@
  *
  * Three preferences, matching the brief's own naming (§5):
  *   AUTO        — the state diagram below.
- *   DIRECT_ONLY — always DIRECT, never probes/uses RELAY at all. Real
- *                 value: proves DIRECT genuinely never touches relay
- *                 (§33/§58), not just "usually doesn't."
+ *   DIRECT_ONLY — probes DIRECT (honest direct/offline reporting) but
+ *                 never probes or uses RELAY at all, regardless of the
+ *                 DIRECT outcome. Real value: proves DIRECT genuinely
+ *                 never touches relay (§33/§58), not just "usually
+ *                 doesn't" — and (acceptance-hardening pass) never lies
+ *                 about DIRECT being up when it isn't.
  *   RELAY       — forces RELAY (after an honest reachability check —
  *                 never lies and claims RELAY when the relay is
  *                 actually unreachable), and — unlike AUTO — does NOT
@@ -135,12 +138,20 @@ export class NetworkStateMachine {
 
   private async evaluate(): Promise<void> {
     if (this.preference === 'direct_only') {
-      // Real DIRECT_ONLY — never probes or touches relay availability at
-      // all. Deliberately doesn't even call isRelayAvailable(), so a
-      // network-level trace (§58) shows zero relay-bound traffic by
-      // construction, not just by the state machine's choice not to use
-      // what it found.
-      this.setState('direct');
+      // Real DIRECT_ONLY (refined in the acceptance-hardening pass) —
+      // runs ONE honest DIRECT probe so the reported state actually
+      // reflects reality (a genuine DIRECT failure reports OFFLINE, not
+      // a silent 'direct' lie), but NEVER calls isRelayAvailable() and
+      // NEVER falls back to RELAY regardless of the outcome — so a
+      // network-level trace (§58) still shows zero relay-bound traffic
+      // by construction, not just by choice not to use what it found.
+      // Deliberately a single probe, no bounded-retry confirm loop (that
+      // debounce exists for AUTO's fallback DECISION, which direct_only
+      // structurally never makes) — the honest DIRECT layer results are
+      // still visible in lastDiagnostics either way.
+      this.setState('checking');
+      const ok = await this.probeOnce();
+      this.setState(ok ? 'direct' : 'offline');
       return;
     }
 
@@ -233,6 +244,13 @@ export class NetworkStateMachine {
    * of a forced mode. */
   async retryDirectNow(): Promise<boolean> {
     const ok = await this.probeOnce();
+    if (this.preference === 'direct_only') {
+      // Unlike 'relay' below, direct_only's reported state IS the probe
+      // result (see evaluate()) — a manual retry should honestly reflect
+      // a recovered/newly-failed DIRECT, never RELAY either way.
+      this.setState(ok ? 'direct' : 'offline');
+      return ok;
+    }
     if (this.preference !== 'auto') return ok;
     if (ok && this.state !== 'direct') {
       this.consecutiveDirectSuccesses += 1;

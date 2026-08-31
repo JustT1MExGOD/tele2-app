@@ -143,24 +143,52 @@ describe('NetworkStateMachine — onStateChange/dispose', () => {
 // DIRECT_ONLY never touches relay at all; forced RELAY does an honest
 // reachability check and then stays there (no AUTO hysteresis silently
 // overriding a test/manual RELAY run).
-describe('NetworkStateMachine — forced DIRECT_ONLY (§5)', () => {
-  it('never probes DIRECT and never checks relay availability — pure forced state', async () => {
-    const deps = fakeDeps({ probeDirect: vi.fn().mockResolvedValue(report('TCP_FAILURE')) });
+//
+// Acceptance-hardening pass refinement: DIRECT_ONLY used to unconditionally
+// claim 'direct' without ever probing — that proved zero relay traffic
+// but could silently lie about DIRECT being reachable. It now runs one
+// real DIRECT probe (honest direct/offline reporting) while still NEVER
+// calling isRelayAvailable() or switching to relay under any outcome.
+describe('NetworkStateMachine — forced DIRECT_ONLY (§5, refined in the acceptance-hardening pass)', () => {
+  it('a successful DIRECT probe reports direct, and relay is never checked', async () => {
+    const deps = fakeDeps({ probeDirect: vi.fn().mockResolvedValue(report('OK')) });
     const sm = new NetworkStateMachine(deps);
     await sm.start('direct_only');
     expect(sm.getState()).toBe('direct');
     expect(sm.getPreference()).toBe('direct_only');
-    expect(deps.probeDirect).not.toHaveBeenCalled();
+    expect(deps.probeDirect).toHaveBeenCalledTimes(1);
     expect(deps.isRelayAvailable).not.toHaveBeenCalled();
   });
 
-  it('switching to direct_only from an active AUTO/relay state forces direct immediately, without a recovery probe delay', async () => {
+  it('a failed DIRECT probe (e.g. TCP timeout) reports OFFLINE, never RELAY — no fallback under direct_only', async () => {
+    const deps = fakeDeps({ probeDirect: vi.fn().mockResolvedValue(report('TIMEOUT')) });
+    const sm = new NetworkStateMachine(deps);
+    await sm.start('direct_only');
+    expect(sm.getState()).toBe('offline');
+    expect(deps.probeDirect).toHaveBeenCalledTimes(1);
+    expect(deps.isRelayAvailable).not.toHaveBeenCalled();
+  });
+
+  it('switching to direct_only from an active RELAY state re-probes DIRECT and honestly reports its real outcome — no relay fallback even though it was just active', async () => {
     const deps = fakeDeps({ probeDirect: vi.fn().mockResolvedValue(report('TCP_FAILURE')) });
     const sm = new NetworkStateMachine(deps);
     await sm.start('auto');
     expect(sm.getState()).toBe('relay');
     await sm.setPreference('direct_only');
+    expect(sm.getState()).toBe('offline'); // the mocked probeDirect still fails — honest, not a lie
+    expect(deps.isRelayAvailable).toHaveBeenCalledTimes(1); // only from the earlier AUTO run, not again
+  });
+
+  it('retryDirectNow() under direct_only updates state honestly (recovers to direct) and never touches relay', async () => {
+    const probeDirect = vi.fn().mockResolvedValueOnce(report('TCP_FAILURE')).mockResolvedValueOnce(report('OK'));
+    const deps = fakeDeps({ probeDirect });
+    const sm = new NetworkStateMachine(deps);
+    await sm.start('direct_only');
+    expect(sm.getState()).toBe('offline');
+    const ok = await sm.retryDirectNow();
+    expect(ok).toBe(true);
     expect(sm.getState()).toBe('direct');
+    expect(deps.isRelayAvailable).not.toHaveBeenCalled();
   });
 });
 

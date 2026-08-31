@@ -16,6 +16,9 @@ export interface NetworkManagerOptions {
   session: Session;
   canonicalOrigin: string;
   relayUrl: string;
+  /** Sanitized hostname-only view of relayUrl, for the diagnostics
+   * overlay — see main/config.ts's `relayHost`. */
+  relayHost?: string | null;
   /** Initial preference — defaults to 'auto'. §5 of the verification
    * pass: lets a test harness force 'relay' or 'direct_only' from
    * process startup (e.g. via T2_NETWORK_MODE env var wired in
@@ -27,6 +30,7 @@ export class NetworkManager {
   private readonly session: Session;
   private readonly canonicalOrigin: string;
   private readonly relayUrl: string;
+  private readonly relayHost: string | null;
   private readonly compat = new NoopWindowsCompatibilityAdapter();
   private readonly stateMachine: NetworkStateMachine;
   private lastDiagnostics: DiagnosticsReport | null = null;
@@ -40,6 +44,7 @@ export class NetworkManager {
     this.session = options.session;
     this.canonicalOrigin = options.canonicalOrigin;
     this.relayUrl = options.relayUrl;
+    this.relayHost = options.relayHost ?? null;
     this.initialPreference = options.initialPreference ?? 'auto';
 
     this.stateMachine = new NetworkStateMachine({
@@ -97,6 +102,7 @@ export class NetworkManager {
       preference: this.stateMachine.getPreference(),
       lastDiagnostics: this.lastDiagnostics,
       lastRelayReachability: this.lastRelayReachability,
+      relayHost: this.relayHost,
       lastChangedAt: this.lastChangedAt
     };
   }
@@ -115,10 +121,12 @@ export class NetworkManager {
   /**
    * §5 of the verification pass — this now REALLY forces the mode
    * (via NetworkStateMachine.setPreference(), see state-machine.ts),
-   * not just a UI-facing label as before. 'direct_only' never probes or
-   * installs the relay handler; 'relay' does an honest reachability
-   * check and then stays on RELAY without AUTO's background-recovery
-   * probing overriding it mid-test.
+   * not just a UI-facing label as before. 'direct_only' probes DIRECT
+   * for honest state reporting (direct/offline) but NEVER installs the
+   * relay handler or even checks relay reachability, regardless of the
+   * probe's outcome (§ acceptance-hardening pass); 'relay' does an
+   * honest reachability check and then stays on RELAY without AUTO's
+   * background-recovery probing overriding it mid-test.
    */
   async setPreference(mode: NetworkModePreference): Promise<void> {
     await this.stateMachine.setPreference(mode);

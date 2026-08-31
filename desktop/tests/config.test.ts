@@ -7,7 +7,7 @@
  * launching the built installer.
  */
 import { describe, it, expect } from 'vitest';
-import { loadDesktopConfig, DesktopConfigError } from '../src/main/config.js';
+import { loadDesktopConfig, DesktopConfigError, DEFAULT_PRODUCTION_RELAY_URL } from '../src/main/config.js';
 
 describe('loadDesktopConfig — T2_NETWORK_MODE (DIRECT_ONLY / AUTO / RELAY selection)', () => {
   it('defaults to auto when unset', () => {
@@ -57,19 +57,77 @@ describe('loadDesktopConfig — T2_PUBLIC_APP_ORIGIN (the origin the acceptance 
 });
 
 describe('loadDesktopConfig — T2_RELAY_URL (the acceptance relay to use for RELAY mode)', () => {
-  it('defaults to empty (no relay configured) when unset', () => {
+  it('defaults to empty (no relay configured) when unset and NOT packaged', () => {
     const config = loadDesktopConfig({});
     expect(config.relayUrl).toBe('');
+    expect(config.relayHost).toBeNull();
   });
 
   it('honors an explicit https relay URL', () => {
     const config = loadDesktopConfig({ T2_RELAY_URL: 'https://relay.example.com' });
     expect(config.relayUrl).toBe('https://relay.example.com');
+    expect(config.relayHost).toBe('relay.example.com');
   });
 
   it('allows http://127.0.0.1 (local relay dev/testing exception) but rejects other http hosts', () => {
     const local = loadDesktopConfig({ T2_RELAY_URL: 'http://127.0.0.1:8787' });
     expect(local.relayUrl).toBe('http://127.0.0.1:8787');
     expect(() => loadDesktopConfig({ T2_RELAY_URL: 'http://relay.example.com' })).toThrow(DesktopConfigError);
+  });
+});
+
+// Item 1/5.A of the "make relay.vincere-mortem.ru the default" pass —
+// exact precedence: explicit env wins, then packaged-production default,
+// then nothing (dev/test isolation).
+describe('loadDesktopConfig — default relay precedence (env > packaged default > none)', () => {
+  it('explicit T2_RELAY_URL wins even when packaged=true', () => {
+    const config = loadDesktopConfig({ T2_RELAY_URL: 'https://override.example.com' }, true);
+    expect(config.relayUrl).toBe('https://override.example.com');
+    expect(config.relayHost).toBe('override.example.com');
+  });
+
+  it('a packaged production build with NO T2_RELAY_URL falls back to the real deployed acceptance relay', () => {
+    const config = loadDesktopConfig({}, true);
+    expect(config.relayUrl).toBe(DEFAULT_PRODUCTION_RELAY_URL);
+    expect(config.relayUrl).toBe('https://relay.vincere-mortem.ru');
+    expect(config.relayHost).toBe('relay.vincere-mortem.ru');
+  });
+
+  it('an UNPACKAGED run (dev, or isPackaged omitted — the safe default) with no env gets NO relay at all, never the production default', () => {
+    const configOmitted = loadDesktopConfig({});
+    expect(configOmitted.relayUrl).toBe('');
+    const configExplicitFalse = loadDesktopConfig({}, false);
+    expect(configExplicitFalse.relayUrl).toBe('');
+  });
+
+  it('test isolation is predictable: calling loadDesktopConfig(env) exactly as existing tests always have never changes behavior after this pass', () => {
+    // Regression guard — this is the exact call shape every pre-existing
+    // test/tool in this repo uses; it must keep defaulting to "no relay"
+    // even though loadDesktopConfig now accepts a second parameter.
+    const config = loadDesktopConfig({ T2_NETWORK_MODE: 'relay' });
+    expect(config.relayUrl).toBe('');
+    expect(config.initialNetworkMode).toBe('relay'); // mode selection is independent of relay availability
+  });
+});
+
+// Item 5.D — the relay endpoint must never be able to influence the
+// canonical origin's own semantics (WebAuthn RP ID / CSRF Origin / cookie
+// domain all derive from publicAppOrigin, never relayUrl — see
+// main/window.ts and network/relay-client.ts's separate canonicalOrigin
+// param).
+describe('loadDesktopConfig — relay config cannot alter canonical origin semantics', () => {
+  it('publicAppOrigin is identical regardless of what T2_RELAY_URL is set to', () => {
+    const withoutRelay = loadDesktopConfig({});
+    const withRelay = loadDesktopConfig({ T2_RELAY_URL: 'https://relay.example.com' });
+    const withPackagedDefault = loadDesktopConfig({}, true);
+    expect(withoutRelay.publicAppOrigin).toBe(withRelay.publicAppOrigin);
+    expect(withoutRelay.publicAppOrigin).toBe(withPackagedDefault.publicAppOrigin);
+  });
+
+  it('T2_PUBLIC_APP_ORIGIN cannot be set via T2_RELAY_URL or any relay-related value', () => {
+    // No code path reads T2_RELAY_URL when resolving publicAppOrigin —
+    // this documents that as a locked-in invariant, not an assumption.
+    const config = loadDesktopConfig({ T2_RELAY_URL: 'https://attacker.example.com' }, true);
+    expect(config.publicAppOrigin).toBe('https://tele2-app-production.up.railway.app');
   });
 });
