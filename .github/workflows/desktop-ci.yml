@@ -59,7 +59,15 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: t2sales-desktop-installer
+          # `defaults.run.working-directory: desktop` only applies to
+          # `run:` steps — `uses:` actions (this one included) resolve
+          # paths relative to GITHUB_WORKSPACE (repo root), not the
+          # working-directory default. Found via a real CI run: every
+          # prior `run:` step (build/test/package/hash) succeeded, only
+          # this upload step failed with "No files were found" because
+          # it was looking in <repo-root>/release/ instead of
+          # <repo-root>/desktop/release/.
           path: |
-            release/T2Sales-Setup-*.exe
-            release/T2Sales-Setup-*.exe.sha256.txt
+            desktop/release/T2Sales-Setup-*.exe
+            desktop/release/T2Sales-Setup-*.exe.sha256.txt
           if-no-files-found: error

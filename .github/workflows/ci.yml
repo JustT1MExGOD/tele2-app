@@ -93,11 +93,11 @@ jobs:
   # deployable service (§16 of the desktop brief: not merged into the
   # main backend) — a second job here rather than a separate workflow
   # file, since it doesn't need Postgres/frontend build/anything the main
-  # job's service container provides. Some tests make real, read-only
-  # HTTPS calls to the live production origin and a couple of public
-  # test hosts (badssl.com, iana.org) to prove TLS/SSRF/diagnostics
-  # behavior against a real network, not just mocks — same discipline as
-  # the backend's own test suite's occasional live-origin checks.
+  # job's service container provides. `npm test` here is fully local/
+  # hermetic (ephemeral local HTTPS fixtures, injectable DNS/CA — no
+  # production or public-internet dependency); real-network checks
+  # (production /healthz, SSRF-block) live in a separate
+  # `test:network-acceptance` script, never run by CI's default job.
   relay:
     runs-on: ubuntu-latest
     defaults:
