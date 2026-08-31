@@ -1,6 +1,6 @@
 {
   "name": "t2sales-desktop",
-  "version": "20.56.0",
+  "version": "20.56.1",
   "private": true,
   "main": "dist/main/index.js",
   "scripts": {
