@@ -1315,5 +1315,13 @@ window.logoutFromMfaGate = logoutFromMfaGate;
 window.showMfaTelegramReverifyGate = showMfaTelegramReverifyGate;
 window.submitMfaTelegramReverifyCode = submitMfaTelegramReverifyCode;
 
-// init
-bootApp();
+// init — awaits app/core.ts's Telegram-readiness signal first (White-
+// screen regression, 20.56.x acceptance): the SDK script is no longer a
+// blocking <script> tag, so without this a slow (but eventually
+// successful) SDK load could race bootApp() into wrongly deciding
+// "not in Telegram" before tgUser() has anything to read. Resolves
+// immediately on desktop and for a fast Telegram/web SDK load; bounded
+// (5s) otherwise — see index.html's inline bootstrap script.
+(window.telegramReadyPromise || Promise.resolve()).then(() => {
+  bootApp();
+});

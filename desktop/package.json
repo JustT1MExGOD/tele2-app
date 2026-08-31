@@ -12,6 +12,7 @@
     "test": "vitest run",
     "verify:preload-sandbox": "node scripts/verify-preload-sandbox.mjs",
     "verify:csrf-over-relay": "node scripts/verify-csrf-over-relay.mjs",
+    "verify:network-startup": "node scripts/verify-network-startup.mjs",
     "update:prepare": "node scripts/update-prepare.mjs",
     "test:network-acceptance": "vitest run --config vitest.network-acceptance.config.mts"
   },

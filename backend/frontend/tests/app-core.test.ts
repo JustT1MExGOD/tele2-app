@@ -206,3 +206,129 @@ describe('app/core (миграция frontend/js/01-core.js)', () => {
     expect(typeof window.API).toBe('string');
   });
 });
+
+/**
+ * White-screen regression (20.56.x acceptance) — index.html no longer
+ * loads telegram-web-app.js as a blocking <script>; core.ts's
+ * initTelegramWebApp() now awaits index.html's own
+ * window.__t2TelegramScriptSettled signal first. These tests exercise
+ * that async bootstrap directly (not just "Telegram absent from the
+ * start", already covered above) — specifically the race where
+ * window.Telegram becomes available only AFTER this module's own
+ * top-level code has already run once.
+ */
+describe('app/core — async Telegram bootstrap (white-screen regression)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    delete (window as any).Telegram;
+    delete (window as any).__t2TelegramScriptSettled;
+    delete (window as any).t2Desktop;
+    // initTelegramWebApp() now assigns window.tg asynchronously (after
+    // awaiting __t2TelegramScriptSettled) rather than synchronously at
+    // freshImport() time, so — unlike window.Telegram above — it no
+    // longer self-resets on every freshImport() call within a single
+    // test; a prior test's value would otherwise leak into the pending-
+    // promise window a later test asserts against.
+    delete (window as any).tg;
+  });
+
+  it('desktop (window.t2Desktop present): window.tg stays undefined, no Telegram bootstrap runs, telegramReadyPromise still resolves', async () => {
+    (window as any).t2Desktop = {}; // stand-in for the real contextBridge-exposed API
+    (window as any).__t2TelegramScriptSettled = Promise.resolve(false); // mirrors index.html's own desktop branch
+    await freshImport();
+    await window.telegramReadyPromise;
+    expect(window.tg).toBeUndefined();
+  });
+
+  it('SDK settles to unavailable (failed/timeout/no script): telegramReadyPromise still resolves, window.tg stays undefined — no unhandled rejection, no blank-page-shaped crash', async () => {
+    (window as any).__t2TelegramScriptSettled = Promise.resolve(false);
+    await freshImport();
+    await expect(window.telegramReadyPromise).resolves.toBeUndefined();
+    expect(window.tg).toBeUndefined();
+  });
+
+  it('SDK becomes available only AFTER this module already ran (the real race): window.tg is still picked up correctly once __t2TelegramScriptSettled resolves', async () => {
+    let resolveSettled: (v: boolean) => void = () => {};
+    (window as any).__t2TelegramScriptSettled = new Promise<boolean>((r) => {
+      resolveSettled = r;
+    });
+    const fakeTg = {
+      ready: vi.fn(),
+      expand: vi.fn(),
+      setHeaderColor: vi.fn(),
+      setBackgroundColor: vi.fn(),
+      onEvent: vi.fn(),
+      initData: 'real-init-data-string',
+      initDataUnsafe: { user: { id: 42 } }
+    };
+    // Import BEFORE Telegram exists on window — initTelegramWebApp() is
+    // already awaiting __t2TelegramScriptSettled at this point, exactly
+    // like a real slow (but eventually successful) script load.
+    await freshImport();
+    expect(window.tg).toBeUndefined(); // not yet — still pending
+
+    (window as any).Telegram = { WebApp: fakeTg };
+    resolveSettled(true);
+    await window.telegramReadyPromise;
+
+    expect(window.tg).toBe(fakeTg);
+    expect(fakeTg.ready).toHaveBeenCalledOnce();
+    expect(fakeTg.expand).toHaveBeenCalledOnce();
+  });
+
+  it('haptic() and authHeaders() read window.tg LIVE — safe no-op/empty before Telegram resolves, correct once it does (not a stale closured snapshot)', async () => {
+    let resolveSettled: (v: boolean) => void = () => {};
+    (window as any).__t2TelegramScriptSettled = new Promise<boolean>((r) => {
+      resolveSettled = r;
+    });
+    const fakeTg = {
+      ready: vi.fn(),
+      expand: vi.fn(),
+      HapticFeedback: { impactOccurred: vi.fn(), notificationOccurred: vi.fn() },
+      initData: 'late-init-data',
+      initDataUnsafe: { user: { id: 7 } }
+    };
+    await freshImport();
+
+    // Before resolution: must not throw, must behave as "no Telegram".
+    expect(() => window.haptic('light')).not.toThrow();
+    expect(fakeTg.HapticFeedback.impactOccurred).not.toHaveBeenCalled();
+    vi.stubGlobal('tgUser', () => null);
+    expect(window.authHeaders()['X-Telegram-Init-Data']).toBe('');
+
+    (window as any).Telegram = { WebApp: fakeTg };
+    resolveSettled(true);
+    await window.telegramReadyPromise;
+
+    window.haptic('light');
+    expect(fakeTg.HapticFeedback.impactOccurred).toHaveBeenCalledWith('light');
+    vi.stubGlobal('tgUser', () => ({ id: 7 }));
+    expect(window.authHeaders()['X-Telegram-Init-Data']).toBe('late-init-data');
+  });
+
+  it('a throwing Telegram SDK method (setHeaderColor/onEvent) does not break the rest of bootstrap — matches the pre-existing try/catch discipline', async () => {
+    (window as any).__t2TelegramScriptSettled = Promise.resolve(true);
+    (window as any).Telegram = {
+      WebApp: {
+        ready: vi.fn(),
+        expand: vi.fn(),
+        setHeaderColor: vi.fn(() => {
+          throw new Error('unsupported in this client');
+        }),
+        setBackgroundColor: vi.fn(),
+        onEvent: vi.fn()
+      }
+    };
+    await freshImport();
+    await expect(window.telegramReadyPromise).resolves.toBeUndefined();
+    expect(window.tg.ready).toHaveBeenCalledOnce();
+  });
+
+  it('window.__t2TelegramScriptSettled missing entirely (defensive default) does not hang telegramReadyPromise', async () => {
+    // No __t2TelegramScriptSettled set at all — simulates a future/other
+    // HTML entry point that forgot the inline bootstrap script.
+    await freshImport();
+    await expect(window.telegramReadyPromise).resolves.toBeUndefined();
+    expect(window.tg).toBeUndefined();
+  });
+});

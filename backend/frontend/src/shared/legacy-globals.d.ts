@@ -58,6 +58,12 @@ declare global {
     adminViewOrgId: string | null;
     /** app/core.ts — window.Telegram?.WebApp, or undefined outside Telegram. Loosely typed (the SDK isn't modeled here) — read via `window.tg?.X` casts elsewhere, same as before migration. */
     tg: any;
+    /** app/core.ts's initTelegramWebApp() — resolves once window.tg has been assigned (either the real WebApp object, or left undefined) and any ready()/expand()/theme bootstrap has run. access-supervisor/index.ts's initial bootApp() call awaits this before reading Telegram identity, so a non-blocking (possibly still-in-flight) SDK load can't race a premature "not in Telegram" decision. */
+    telegramReadyPromise: Promise<void>;
+    /** index.html's inline bootstrap script — resolves true if the Telegram SDK script itself finished loading, false if skipped (desktop), failed, or timed out (bounded, 5s). Consumed only by app/core.ts's initTelegramWebApp(); nothing else should read this directly. */
+    __t2TelegramScriptSettled?: Promise<boolean>;
+    /** desktop/src/preload/index.ts's contextBridge — present ONLY inside the real packaged/dev Electron app (set before any page script runs); undefined in every browser/Telegram-webview context. Used purely by index.html's inline bootstrap script to skip an unreachable/unnecessary telegram.org fetch — never a security or auth boundary, and not modeled further here (the frontend never calls into it). */
+    t2Desktop?: unknown;
   }
 
   /** Set by app/core.ts after GET /me, reassigned by src/pages/my-plan's

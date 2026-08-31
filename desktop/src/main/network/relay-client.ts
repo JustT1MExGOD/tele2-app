@@ -55,6 +55,7 @@
 import type { Session, CookiesSetDetails } from 'electron';
 import https from 'node:https';
 import http from 'node:http';
+import { logger } from '../logging';
 
 /** Same request-header allowlist as relay/src/headers.ts's
  * REQUEST_HEADER_ALLOWLIST — kept as a separate literal here rather than
@@ -75,6 +76,11 @@ export interface RelayClientOptions {
   session: Session;
   canonicalOrigin: string;
   relayUrl: string;
+  /** Test-only override for the passthrough-branch timeout (default
+   * `PASSTHROUGH_TIMEOUT_MS` below) — lets a test observe the bounded
+   * behavior without a real multi-second wait. Production code
+   * (main/network/manager.ts) never passes this. */
+  passthroughTimeoutMs?: number;
 }
 
 /**
@@ -313,42 +319,96 @@ function buildResponseHeaders(nodeHeaders: http.IncomingHttpHeaders): Headers {
   return out;
 }
 
+/**
+ * §white-screen regression (post-20.56.0 acceptance) — this passthrough
+ * branch had NO timeout at all, unlike every other network call in this
+ * file (`requestRelay()`'s own 30s bound, diagnostics.ts's 5s probes).
+ * `index.html` loads `https://telegram.org/js/telegram-web-app.js` as a
+ * render-blocking `<script src>` in `<head>` (no `async`/`defer`) — a
+ * non-canonical-origin request that, by design, is NEVER routed through
+ * RELAY (relay only ever proxies its own configured upstream — routing
+ * arbitrary third-party hosts through it would make it an open proxy,
+ * exactly what it must never become). On a network that blocks
+ * telegram.org as well as the canonical origin (a real, unsurprising
+ * overlap — confirmed via a real-Electron repro reproducing the EXACT
+ * reported `net::ERR_CONNECTION_TIMED_OUT` / `SimpleURLLoaderWrapper`
+ * signature), this one blocking script tag could stall the ENTIRE page's
+ * render for however long Chromium's own internal, effectively-unbounded
+ * connection attempt takes to give up — while `mode` already correctly
+ * shows `relay` and the canonical navigation itself is fine. A bounded
+ * timeout here is the fix: any non-canonical request that can't complete
+ * quickly fails fast (a normal, browser-native "this sub-resource failed
+ * to load" outcome — confirmed by the same repro to NOT block the rest
+ * of the page once the passthrough fetch actually settles) instead of
+ * hanging indefinitely. `AbortSignal.any` combines the intercepted
+ * request's own cancellation (e.g. the page removing the script tag)
+ * with this ceiling, so neither behavior is lost.
+ */
+const PASSTHROUGH_TIMEOUT_MS = 10_000;
+
 export function installRelayProtocolHandler(options: RelayClientOptions): void {
   const { session, canonicalOrigin, relayUrl } = options;
   const canonicalOriginParsed = new URL(canonicalOrigin).origin;
   const relayForwardUrl = new URL('/forward', relayUrl);
+  const passthroughTimeoutMs = options.passthroughTimeoutMs ?? PASSTHROUGH_TIMEOUT_MS;
 
   session.protocol.handle('https', async (request) => {
     const requestUrl = new URL(request.url);
+    const isPassthrough = requestUrl.origin !== canonicalOriginParsed;
+    const operation = isPassthrough ? 'relay_passthrough' : 'relay_forward';
+    const startedAt = Date.now();
 
-    if (requestUrl.origin !== canonicalOriginParsed) {
-      // Not our origin (e.g. the external telegram.org script, or
-      // Electron's own internal requests) — pass through on the SAME
-      // session via ses.fetch's bypass option, never bare net.fetch()
-      // (which risks re-entering this same scheme-wide handler).
-      return session.fetch(request, { bypassCustomProtocolHandlers: true });
+    try {
+      if (isPassthrough) {
+        // Not our origin (e.g. the external telegram.org script, or
+        // Electron's own internal requests) — pass through on the SAME
+        // session via ses.fetch's bypass option, never bare net.fetch()
+        // (which risks re-entering this same scheme-wide handler).
+        // Bounded — see the doc comment above this function.
+        return await session.fetch(request, {
+          bypassCustomProtocolHandlers: true,
+          signal: AbortSignal.any([request.signal, AbortSignal.timeout(passthroughTimeoutMs)])
+        });
+      }
+
+      const body = request.method === 'GET' || request.method === 'HEAD' ? null : Buffer.from(await request.arrayBuffer());
+      const forwardedHeaders = pickHeaders(request.headers, FORWARDED_HEADER_ALLOWLIST);
+      const cookieHeader = await buildCookieHeader(session, request.url);
+      if (cookieHeader) forwardedHeaders['cookie'] = cookieHeader;
+      else delete forwardedHeaders['cookie'];
+      forwardedHeaders['x-t2-method'] = request.method;
+      forwardedHeaders['x-t2-path'] = requestUrl.pathname + requestUrl.search;
+      forwardedHeaders['x-t2-had-origin'] = String(request.headers.has('origin'));
+
+      // The outer call to the relay is ALWAYS POST /forward, regardless of
+      // the original request's method — that travels in the x-t2-method
+      // header (set above), matching relay/src/index.ts's wire protocol.
+      // (A real bug in an earlier draft of this rewrite passed
+      // request.method here instead — worked by coincidence for POST
+      // requests, 404'd the relay's /forward route for every GET.)
+      const relayResponse = await requestRelay(relayForwardUrl, 'POST', forwardedHeaders, body, 30_000, request.signal);
+
+      await applyRelayCookiesToCanonicalOrigin(session, canonicalOriginParsed, relayResponse.headers['set-cookie']);
+      const responseHeaders = buildResponseHeaders(relayResponse.headers);
+      return new Response(new Uint8Array(relayResponse.body), { status: relayResponse.status, headers: responseHeaders });
+    } catch (e) {
+      // Sanitized diagnostics only — operation name, allowlisted
+      // hostname (never full URL/query/body/cookies/auth headers),
+      // error category, duration. Exists to make it possible to tell,
+      // from a real user's logs, WHICH request (canonical relay-forward
+      // vs. a third-party passthrough resource) actually failed/timed
+      // out — the white-screen regression this was added for looked
+      // identical to a canonical-navigation failure until traced to a
+      // render-blocking third-party script instead.
+      logger.warn('relay_handler_request_failed', {
+        operation,
+        hostname: requestUrl.hostname,
+        method: request.method,
+        errorName: e instanceof Error ? e.name : 'unknown',
+        durationMs: Date.now() - startedAt
+      });
+      throw e;
     }
-
-    const body = request.method === 'GET' || request.method === 'HEAD' ? null : Buffer.from(await request.arrayBuffer());
-    const forwardedHeaders = pickHeaders(request.headers, FORWARDED_HEADER_ALLOWLIST);
-    const cookieHeader = await buildCookieHeader(session, request.url);
-    if (cookieHeader) forwardedHeaders['cookie'] = cookieHeader;
-    else delete forwardedHeaders['cookie'];
-    forwardedHeaders['x-t2-method'] = request.method;
-    forwardedHeaders['x-t2-path'] = requestUrl.pathname + requestUrl.search;
-    forwardedHeaders['x-t2-had-origin'] = String(request.headers.has('origin'));
-
-    // The outer call to the relay is ALWAYS POST /forward, regardless of
-    // the original request's method — that travels in the x-t2-method
-    // header (set above), matching relay/src/index.ts's wire protocol.
-    // (A real bug in an earlier draft of this rewrite passed
-    // request.method here instead — worked by coincidence for POST
-    // requests, 404'd the relay's /forward route for every GET.)
-    const relayResponse = await requestRelay(relayForwardUrl, 'POST', forwardedHeaders, body, 30_000, request.signal);
-
-    await applyRelayCookiesToCanonicalOrigin(session, canonicalOriginParsed, relayResponse.headers['set-cookie']);
-    const responseHeaders = buildResponseHeaders(relayResponse.headers);
-    return new Response(new Uint8Array(relayResponse.body), { status: relayResponse.status, headers: responseHeaders });
   });
 }
 

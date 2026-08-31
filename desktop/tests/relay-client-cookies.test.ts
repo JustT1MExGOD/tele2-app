@@ -21,7 +21,7 @@
  *    session's cookie store (session.cookies.get), never assumed to
  *    already be present on the intercepted Request.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { installRelayProtocolHandler, parseSetCookie, FORWARDED_HEADER_ALLOWLIST } from '../src/main/network/relay-client.js';
@@ -391,5 +391,98 @@ describe('relay-client — post-fix security review regressions', () => {
     await expect(
       requestRelay(url, 'POST', { 'x-t2-method': 'GET', 'x-t2-path': '/hop-by-hop-check', 'x-t2-had-origin': 'false' }, null, 30_000, undefined, 5)
     ).rejects.toThrow(/exceeded 5 bytes/);
+  });
+});
+
+/**
+ * White-screen regression (post-20.56.0 acceptance) — a real-Electron
+ * repro (see docs referenced in the final report) proved that a
+ * render-blocking third-party `<script src>` (index.html's
+ * telegram-web-app.js) routed through the PASSTHROUGH branch (non-
+ * canonical origin, `bypassCustomProtocolHandlers`) had NO timeout at
+ * all, so on a network where that third-party host is ALSO unreachable
+ * (a real, unsurprising overlap with the canonical origin being
+ * unreachable — the whole reason RELAY exists), the entire page's
+ * render blocked for however long Chromium's own internal, effectively-
+ * unbounded connection attempt took to give up — indistinguishable from
+ * a permanent white screen, even though `mode` already correctly showed
+ * `relay` and the canonical navigation itself was fine. These tests
+ * exercise the REAL passthrough branch (not a re-implementation),
+ * asserting it's bounded and that a failure there is observable via
+ * sanitized diagnostics (operation/hostname/error name/duration —
+ * never a URL, query string, cookie, or auth header).
+ */
+describe('relay-client — passthrough branch is bounded (white-screen regression)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('a passthrough request that never settles is aborted within the configured bound, not left hanging indefinitely', async () => {
+    let observedSignal: AbortSignal | undefined;
+    const session = fakeSession(
+      (_req, opts) =>
+        new Promise((_resolve, reject) => {
+          observedSignal = opts.signal;
+          opts.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'TimeoutError')));
+        })
+    );
+    installRelayProtocolHandler({ session, canonicalOrigin: CANONICAL_ORIGIN, relayUrl: 'http://127.0.0.1:1', passthroughTimeoutMs: 100 });
+
+    const started = Date.now();
+    await expect(session.getHandler()(fakeRequest('https://telegram.org/js/telegram-web-app.js', 'GET'))).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(2000); // bounded, not a real multi-second/indefinite hang
+    expect(observedSignal).toBeDefined();
+    expect(observedSignal!.aborted).toBe(true);
+  });
+
+  it('a passthrough request that resolves quickly is completely unaffected by the bound (no regression to the normal case)', async () => {
+    const session = fakeSession(async () => new Response('ok', { status: 200 }));
+    installRelayProtocolHandler({ session, canonicalOrigin: CANONICAL_ORIGIN, relayUrl: 'http://127.0.0.1:1' });
+    const res = await session.getHandler()(fakeRequest('https://telegram.org/js/telegram-web-app.js', 'GET'));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+  });
+
+  it('a failed/timed-out passthrough request logs sanitized diagnostics — operation name + hostname only, never the full URL/query', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const session = fakeSession(
+      (_req, opts) =>
+        new Promise((_resolve, reject) => {
+          opts.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'TimeoutError')));
+        })
+    );
+    installRelayProtocolHandler({ session, canonicalOrigin: CANONICAL_ORIGIN, relayUrl: 'http://127.0.0.1:1', passthroughTimeoutMs: 50 });
+
+    await expect(
+      session.getHandler()(fakeRequest('https://telegram.org/js/telegram-web-app.js?secret=shouldnotleak', 'GET'))
+    ).rejects.toThrow();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(warnSpy.mock.calls[0][0] as string);
+    expect(logged.msg).toBe('relay_handler_request_failed');
+    expect(logged.operation).toBe('relay_passthrough');
+    expect(logged.hostname).toBe('telegram.org');
+    expect(logged.errorName).toBe('TimeoutError');
+    expect(typeof logged.durationMs).toBe('number');
+    // Never the query string, never a full URL — sanitized-diagnostics discipline.
+    expect(JSON.stringify(logged)).not.toContain('shouldnotleak');
+    expect(JSON.stringify(logged)).not.toContain('telegram-web-app.js');
+  });
+
+  it('a failed canonical (relay-forward) request also logs sanitized diagnostics, distinguishable from a passthrough failure', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const session = fakeSession();
+    // No relay listening at this port — the real requestRelay() call
+    // will fail fast (connection refused), exercising the OUTER
+    // try/catch around the canonical branch.
+    installRelayProtocolHandler({ session, canonicalOrigin: CANONICAL_ORIGIN, relayUrl: 'http://127.0.0.1:1' });
+
+    await expect(session.getHandler()(fakeRequest(CANONICAL_ORIGIN + '/me', 'GET'))).rejects.toThrow();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(warnSpy.mock.calls[0][0] as string);
+    expect(logged.msg).toBe('relay_handler_request_failed');
+    expect(logged.operation).toBe('relay_forward');
+    expect(logged.hostname).toBe(new URL(CANONICAL_ORIGIN).hostname);
   });
 });

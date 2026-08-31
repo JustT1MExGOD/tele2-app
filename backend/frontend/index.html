@@ -23,7 +23,49 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="T2 Sales">
   <meta name="theme-color" content="#f2f2f7">
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- White-screen regression (20.56.x acceptance) — this used to be a
+       plain blocking <script src>, which holds up parsing of EVERYTHING
+       after it (the rest of <head>, the whole <body>) until the fetch
+       either succeeds or fails. On a network where telegram.org is also
+       unreachable (a real, unsurprising overlap with whatever else is
+       blocked — the desktop app's whole reason to exist), that blocked
+       the canonical page's render for however long the browser's own
+       internal connection attempt took to give up — desktop/src/main/
+       network/relay-client.ts's PASSTHROUGH_TIMEOUT_MS bounds that to
+       10s as defense-in-depth for ANY third-party resource, but the
+       right fix here is to not block on this ONE specific script at
+       all. Desktop (window.t2Desktop, set synchronously by the preload
+       script's contextBridge before this line ever runs — never
+       spoofable by a real web page) never even requests it: the app
+       already has zero Telegram-identity dependency there (phone+
+       password/cookie session, see access-supervisor/index.ts's
+       bootApp()). Telegram/web still fetch it, just without blocking
+       HTML parsing — app/core.ts's initTelegramWebApp() awaits
+       __t2TelegramScriptSettled (bounded, see below) before running
+       tg.ready()/expand()/theme setup, and access-supervisor's initial
+       bootApp() call awaits that same readiness before deciding
+       Telegram-vs-not — so a real Telegram Mini App user is never
+       mistaken for a logged-out web visitor just because the script
+       hadn't finished loading yet. -->
+  <script>
+    window.__t2TelegramScriptSettled = new Promise(function (resolve) {
+      if (window.t2Desktop) {
+        resolve(false);
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = 'https://telegram.org/js/telegram-web-app.js';
+      s.async = true;
+      s.onload = function () { resolve(true); };
+      s.onerror = function () { resolve(false); };
+      // Bounded — a real web/Telegram context on a network that can't
+      // reach telegram.org must still boot the app (phone+password
+      // fallback), not hang forever. Matches diagnostics.ts's own
+      // DEFAULT_TIMEOUT_MS precedent.
+      setTimeout(function () { resolve(false); }, 5000);
+      document.head.appendChild(s);
+    });
+  </script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body data-theme="light">

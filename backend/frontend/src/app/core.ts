@@ -30,9 +30,30 @@
  */
 import type { MetricsResponse } from '../../../src/shared/api-types.js';
 
-window.tg = (window as any).Telegram?.WebApp;
-const tg = window.tg;
-if (tg) {
+/**
+ * White-screen regression (20.56.x acceptance) — index.html no longer
+ * loads telegram-web-app.js as a blocking <script>, so this can no
+ * longer assume `Telegram.WebApp` is already resolved by the time this
+ * module runs. Awaits index.html's own bounded readiness signal first
+ * (resolves false immediately on desktop — see index.html's inline
+ * bootstrap script comment — or once the script settles/times out
+ * everywhere else), THEN does exactly the same ready()/expand()/theme
+ * bootstrap as before, unconditionally on `window.tg` — nothing here
+ * changes for a real Telegram Mini App user beyond the timing of when
+ * it runs, never whether it runs.
+ *
+ * `window.tg` itself is intentionally still assigned as a real global
+ * (not just returned from this function) — nav.ts's tgUser()/
+ * applyTheme() and this file's own haptic()/authHeaders() all read
+ * `window.tg` live (never a closured local) specifically so a
+ * WebApp that resolves after this function starts is still picked up
+ * correctly by every later caller.
+ */
+async function initTelegramWebApp(): Promise<void> {
+  await ((window as any).__t2TelegramScriptSettled ?? Promise.resolve(false));
+  window.tg = (window as any).Telegram?.WebApp;
+  const tg = window.tg;
+  if (!tg) return;
   tg.ready();
   tg.expand();
   try {
@@ -59,6 +80,10 @@ if (tg) {
     tg.onEvent('contentSafeAreaChanged', applyTgSafeArea);
   } catch (_) {}
 }
+// access-supervisor/index.ts's initial bootApp() call awaits this before
+// deciding Telegram-vs-not, so a real Telegram user is never mistaken
+// for a logged-out web visitor just because the SDK hadn't resolved yet.
+window.telegramReadyPromise = initTelegramWebApp();
 
 // Клиентская версия (О приложении + бейдж на главной)
 const APP_VERSION = '15.0';
@@ -90,6 +115,9 @@ export function timeMoscow(iso: string | null | undefined): string {
 
 export function haptic(type = 'light'): void {
   try {
+    // Live read, not a closured local — window.tg may resolve after this
+    // module's own top-level code already ran (see initTelegramWebApp()).
+    const tg = window.tg;
     if (!tg?.HapticFeedback) return;
     if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
     else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
@@ -276,7 +304,9 @@ export function authHeaders(json = false): Record<string, string> {
     // Сырой initData — бэкенд проверяет его подпись (HMAC), только так
     // telegram_id можно доверять. Голый X-Telegram-Id легко подделать с
     // любого сайта (используется лишь как dev-фоллбэк на сервере).
-    'X-Telegram-Init-Data': tg?.initData || ''
+    // Live read (window.tg), not a closured local — see haptic()'s
+    // comment above.
+    'X-Telegram-Init-Data': window.tg?.initData || ''
   };
   if (json) h['Content-Type'] = 'application/json';
   return h;
