@@ -7,10 +7,12 @@
  */
 import { app, type BrowserWindow, ipcMain, session } from 'electron';
 import os from 'node:os';
+import path from 'node:path';
 import { createMainWindow, SESSION_PARTITION } from './window';
 import { applyNavigationPolicy } from './navigation-policy';
 import { loadDesktopConfig } from './config';
 import { NetworkManager } from './network/manager';
+import { UpdateManager } from './updater/manager';
 import { logger } from './logging';
 import { IPC_CHANNELS } from '../shared/ipc-contract';
 import type { PlatformInfo } from '../shared/ipc-contract';
@@ -24,6 +26,7 @@ if (!gotLock) {
 } else {
   let mainWindow: BrowserWindow | null = null;
   let networkManager: NetworkManager | null = null;
+  let updateManager: UpdateManager | null = null;
 
   app.on('second-instance', () => {
     if (mainWindow) {
@@ -49,7 +52,24 @@ if (!gotLock) {
       initialPreference: config.initialNetworkMode
     });
 
-    registerIpcHandlers(networkManager);
+    // Updater control plane — deliberately independent of both the
+    // canonical origin AND the relay (§14 of the updater brief): if
+    // Railway is unreachable and RELAY is the only working transport for
+    // the application itself, the updater must still work talking
+    // directly to updates.vincere-mortem.ru, never routed through
+    // relay.vincere-mortem.ru. %LOCALAPPDATA%\T2 Sales\updates\ — Electron
+    // has no built-in localAppData path constant, so this reads the real
+    // Windows env var directly, falling back to userData only for
+    // non-Windows dev/test environments.
+    const updateCacheDir = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'T2 Sales', 'updates');
+    updateManager = new UpdateManager({
+      updateBaseUrl: config.updateBaseUrl,
+      channel: config.updateChannel,
+      currentVersion: APP_VERSION,
+      updateCacheDir
+    });
+
+    registerIpcHandlers(networkManager, updateManager);
 
     mainWindow = createMainWindow();
     applyNavigationPolicy(mainWindow, config.publicAppOrigin);
@@ -57,12 +77,16 @@ if (!gotLock) {
     networkManager.onStatusChanged((status) => {
       mainWindow?.webContents.send(IPC_CHANNELS.NETWORK_STATUS_CHANGED_EVENT, status);
     });
+    updateManager.onStatusChanged((status) => {
+      mainWindow?.webContents.send(IPC_CHANNELS.UPDATE_STATUS_CHANGED_EVENT, status);
+    });
 
     // Decide DIRECT vs RELAY BEFORE the first navigation, so the very
     // first page load already goes through whichever transport is
     // actually going to work — not "load DIRECT, discover it's broken,
     // reload."
     await networkManager.start();
+    updateManager.start();
 
     await mainWindow.loadURL(config.publicAppOrigin);
 
@@ -73,15 +97,17 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     networkManager?.dispose();
+    updateManager?.dispose();
     if (process.platform !== 'darwin') app.quit();
   });
 
   app.on('will-quit', () => {
     networkManager?.dispose();
+    updateManager?.dispose();
   });
 }
 
-function registerIpcHandlers(networkManager: NetworkManager): void {
+function registerIpcHandlers(networkManager: NetworkManager, updateManager: UpdateManager): void {
   ipcMain.handle(IPC_CHANNELS.GET_VERSION, () => APP_VERSION);
 
   ipcMain.handle(IPC_CHANNELS.GET_PLATFORM_INFO, (): PlatformInfo => ({
@@ -99,6 +125,24 @@ function registerIpcHandlers(networkManager: NetworkManager): void {
   ipcMain.handle(IPC_CHANNELS.SET_NETWORK_MODE_PREFERENCE, (_event, mode: NetworkModePreference) => {
     return networkManager.setPreference(mode);
   });
+
+  // Updater — every handler here takes NO parameters from the renderer
+  // (§9 of the updater brief): there is no IPC channel through which the
+  // renderer could supply a URL, a file path, or an install command. What
+  // gets checked/downloaded/installed is entirely this process's own
+  // UpdateManager state.
+  ipcMain.handle(IPC_CHANNELS.CHECK_FOR_UPDATES, () => updateManager.checkNow());
+  ipcMain.handle(IPC_CHANNELS.GET_UPDATE_STATUS, () => updateManager.getStatus());
+  ipcMain.handle(IPC_CHANNELS.DOWNLOAD_UPDATE, () => updateManager.downloadUpdate());
+  ipcMain.handle(IPC_CHANNELS.INSTALL_UPDATE, () =>
+    updateManager.installUpdate(() => {
+      // Give the NSIS installer window a moment to actually appear
+      // before this process (and the file locks it holds on its own
+      // installed files) goes away — matches §8's "close desktop if the
+      // installer requires it" without guessing at exact NSIS timing.
+      setTimeout(() => app.quit(), 1500).unref();
+    })
+  );
 
   logger.info('ipc_handlers_registered');
 }

@@ -13,6 +13,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS, type T2DesktopAPI } from '../shared/ipc-contract';
 import { installNetworkStatusOverlay } from './network-overlay';
+import { installUpdateNotification } from './update-notification';
 
 const api: T2DesktopAPI = {
   getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_VERSION),
@@ -25,9 +26,19 @@ const api: T2DesktopAPI = {
     const listener = (_event: IpcRendererEvent, status: Parameters<typeof cb>[0]) => cb(status);
     ipcRenderer.on(IPC_CHANNELS.NETWORK_STATUS_CHANGED_EVENT, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.NETWORK_STATUS_CHANGED_EVENT, listener);
+  },
+  checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES),
+  getUpdateStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GET_UPDATE_STATUS),
+  downloadUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOAD_UPDATE),
+  installUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.INSTALL_UPDATE),
+  onUpdateStatusChanged: (cb) => {
+    const listener = (_event: IpcRendererEvent, status: Parameters<typeof cb>[0]) => cb(status);
+    ipcRenderer.on(IPC_CHANNELS.UPDATE_STATUS_CHANGED_EVENT, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_STATUS_CHANGED_EVENT, listener);
   }
 };
 
 contextBridge.exposeInMainWorld('t2Desktop', api);
 
 installNetworkStatusOverlay(api);
+installUpdateNotification(api);

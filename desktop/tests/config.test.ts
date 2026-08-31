@@ -7,7 +7,7 @@
  * launching the built installer.
  */
 import { describe, it, expect } from 'vitest';
-import { loadDesktopConfig, DesktopConfigError, DEFAULT_PRODUCTION_RELAY_URL } from '../src/main/config.js';
+import { loadDesktopConfig, DesktopConfigError, DEFAULT_PRODUCTION_RELAY_URL, DEFAULT_PRODUCTION_UPDATE_BASE_URL } from '../src/main/config.js';
 
 describe('loadDesktopConfig — T2_NETWORK_MODE (DIRECT_ONLY / AUTO / RELAY selection)', () => {
   it('defaults to auto when unset', () => {
@@ -129,5 +129,68 @@ describe('loadDesktopConfig — relay config cannot alter canonical origin seman
     // this documents that as a locked-in invariant, not an assumption.
     const config = loadDesktopConfig({ T2_RELAY_URL: 'https://attacker.example.com' }, true);
     expect(config.publicAppOrigin).toBe('https://tele2-app-production.up.railway.app');
+  });
+});
+
+// Updater config precedence (§1 of the updater brief) — exact same
+// three-tier shape as T2_RELAY_URL, deliberately: explicit env > packaged
+// production default > disabled.
+describe('loadDesktopConfig — T2_UPDATE_BASE_URL precedence (env > packaged default > disabled)', () => {
+  it('explicit T2_UPDATE_BASE_URL wins even when packaged=true', () => {
+    const config = loadDesktopConfig({ T2_UPDATE_BASE_URL: 'https://override.example.com' }, true);
+    expect(config.updateBaseUrl).toBe('https://override.example.com');
+    expect(config.updateHost).toBe('override.example.com');
+  });
+
+  it('a packaged production build with no T2_UPDATE_BASE_URL falls back to the real deployed update server', () => {
+    const config = loadDesktopConfig({}, true);
+    expect(config.updateBaseUrl).toBe(DEFAULT_PRODUCTION_UPDATE_BASE_URL);
+    expect(config.updateBaseUrl).toBe('https://updates.vincere-mortem.ru');
+    expect(config.updateHost).toBe('updates.vincere-mortem.ru');
+  });
+
+  it('an UNPACKAGED run (dev, or isPackaged omitted — the safe default) with no env gets NO update server at all', () => {
+    expect(loadDesktopConfig({}).updateBaseUrl).toBe('');
+    expect(loadDesktopConfig({}, false).updateBaseUrl).toBe('');
+  });
+
+  it('the update server default is a genuinely separate host from the relay default — independent control planes', () => {
+    const config = loadDesktopConfig({}, true);
+    expect(config.updateBaseUrl).not.toBe(config.relayUrl);
+    expect(new URL(config.updateBaseUrl).hostname).not.toBe(new URL(config.relayUrl).hostname);
+  });
+
+  it('allows http://127.0.0.1 for local dev/test update-server testing but rejects other http hosts', () => {
+    const local = loadDesktopConfig({ T2_UPDATE_BASE_URL: 'http://127.0.0.1:9999' });
+    expect(local.updateBaseUrl).toBe('http://127.0.0.1:9999');
+    expect(() => loadDesktopConfig({ T2_UPDATE_BASE_URL: 'http://updates.example.com' })).toThrow(DesktopConfigError);
+  });
+
+  it('setting T2_RELAY_URL does not accidentally configure the update server, and vice versa', () => {
+    const relayOnly = loadDesktopConfig({ T2_RELAY_URL: 'https://relay.example.com' });
+    expect(relayOnly.updateBaseUrl).toBe('');
+    const updateOnly = loadDesktopConfig({ T2_UPDATE_BASE_URL: 'https://updates.example.com' });
+    expect(updateOnly.relayUrl).toBe('');
+  });
+});
+
+describe('loadDesktopConfig — T2_UPDATE_CHANNEL (stable / beta)', () => {
+  it('defaults to stable when unset', () => {
+    expect(loadDesktopConfig({}).updateChannel).toBe('stable');
+  });
+  it('accepts an explicit stable', () => {
+    expect(loadDesktopConfig({ T2_UPDATE_CHANNEL: 'stable' }).updateChannel).toBe('stable');
+  });
+  it('accepts beta', () => {
+    expect(loadDesktopConfig({ T2_UPDATE_CHANNEL: 'beta' }).updateChannel).toBe('beta');
+  });
+  it('rejects an unrecognized channel — fail-closed, no silent default', () => {
+    expect(() => loadDesktopConfig({ T2_UPDATE_CHANNEL: 'nightly' })).toThrow(DesktopConfigError);
+    expect(() => loadDesktopConfig({ T2_UPDATE_CHANNEL: 'Stable' })).toThrow(DesktopConfigError); // case-sensitive
+  });
+  it('channel selection is independent of whether an update server is even configured', () => {
+    const config = loadDesktopConfig({ T2_UPDATE_CHANNEL: 'beta' }); // no T2_UPDATE_BASE_URL, not packaged
+    expect(config.updateChannel).toBe('beta');
+    expect(config.updateBaseUrl).toBe('');
   });
 });

@@ -1,4 +1,4 @@
-# T2Sales-Setup-x64-20.55.0.exe build config (§51/§52 of the brief).
+# T2Sales-Setup-x64-<version>.exe build config (§51/§52 of the brief).
 #
 # Per-user install preferred, no admin required — this pass ships no
 # native/elevated component (NoopWindowsCompatibilityAdapter only), so

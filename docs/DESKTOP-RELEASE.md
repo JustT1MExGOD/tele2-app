@@ -5,7 +5,7 @@
 Single version across `desktop/package.json`, `relay/package.json`, the
 installer filename, and (via `app.getVersion()`, surfaced through
 `t2Desktop.getVersion()`) the app's own about/version display — all
-`20.55.0` this release, bumped together, never independently.
+`20.56.0` this release, bumped together, never independently.
 
 ## Build
 
@@ -19,7 +19,7 @@ single file via esbuild (`scripts/bundle-preload.mjs`) — Electron's
 sandboxed preload cannot load multi-file `require()` output at all (found
 and fixed in the acceptance-hardening pass; see `scripts/
 verify-preload-sandbox.mjs` for the permanent regression check).
-Produces `desktop/release/T2Sales-Setup-x64-20.55.0.exe` (NSIS,
+Produces `desktop/release/T2Sales-Setup-x64-20.56.0.exe` (NSIS,
 per-user install, no admin required — see `desktop/electron-builder.yml`)
 plus a `.blockmap` file. Compute the release SHA-256 with
 `Get-FileHash -Algorithm SHA256` (PowerShell) or `sha256sum` — the exact
@@ -39,14 +39,22 @@ warnings on end-user machines. The private key must never be committed
 to the repository — CI secrets only, same discipline as every other
 secret in this project.
 
-## Auto-update (§49) — architecture documented, shipped disabled
+## Updates (v1 — implemented, not yet published)
 
-`electron-builder`'s `autoUpdater` (NSIS differential updates, signed
-update packages) is the intended mechanism when this is built out — it
-requires both code signing (above) and an update feed host, neither of
-which exist yet. No auto-download-and-run-arbitrary-EXE mechanism exists
-or is planned; updates would only ever be electron-builder's own signed
-update flow.
+A custom updater (`desktop/src/main/updater/`) checks
+`https://updates.vincere-mortem.ru` — a separate control plane from both
+Railway and the relay, so it keeps working even when the application
+origin is affected-network-blocked. Full architecture, manifest schema,
+signing policy, VPS layout, and publishing workflow:
+[docs/DESKTOP-UPDATES.md](./DESKTOP-UPDATES.md). Not `electron-builder`'s
+own `autoUpdater` (that mechanism was the originally-considered default
+but was superseded by this custom implementation, which needed to satisfy
+the "independent of Railway/relay" and "explicit user confirmation, never
+silent" requirements more directly than the stock NSIS differential-update
+flow does). No auto-download-and-silently-run mechanism exists — every
+install requires an explicit user click (§8 of docs/DESKTOP-UPDATES.md).
+Not yet published to the update server this pass — see that doc's
+"Publishing workflow" for the (manual, separate) next step.
 
 ## CI (§63/§64)
 
@@ -92,3 +100,6 @@ overriding to a different relay.
 - **Web/Telegram clients** are entirely unaffected by any of the above —
   this release touches no shared backend auth/security code (verified by
   re-running the 20.54.1 regression suite unchanged).
+- **Updates**: the client never auto-downgrades (a manifest with a
+  version ≤ installed is ignored); see docs/DESKTOP-UPDATES.md's own
+  "Rollback" section for the full procedure.

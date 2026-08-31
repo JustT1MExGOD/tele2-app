@@ -1,6 +1,6 @@
 {
   "name": "t2sales-desktop",
-  "version": "20.55.0",
+  "version": "20.56.0",
   "private": true,
   "main": "dist/main/index.js",
   "scripts": {
@@ -11,6 +11,8 @@
     "desktop:package": "npm run desktop:build && electron-builder --win --x64",
     "test": "vitest run",
     "verify:preload-sandbox": "node scripts/verify-preload-sandbox.mjs",
+    "verify:csrf-over-relay": "node scripts/verify-csrf-over-relay.mjs",
+    "update:prepare": "node scripts/update-prepare.mjs",
     "test:network-acceptance": "vitest run --config vitest.network-acceptance.config.mts"
   },
   "devDependencies": {
@@ -18,6 +20,7 @@
     "electron": "^44.0.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
+    "otplib": "^13.5.0",
     "typescript": "^5.7.2",
     "vitest": "^4.1.10"
   }

@@ -24,6 +24,23 @@
  */
 export const DEFAULT_PRODUCTION_RELAY_URL = 'https://relay.vincere-mortem.ru';
 
+/**
+ * Canonical default for the packaged production build's update server —
+ * a deliberately SEPARATE host/control-plane from the relay above (§14
+ * of the updater brief): the whole reason for a relay is that Railway
+ * (the application origin) can become unreachable on an affected
+ * network — the updater must not depend on Railway being reachable
+ * either directly OR through the relay to fetch itself out of that
+ * situation. `updates.vincere-mortem.ru` is a static file host (manifest
+ * + installer artifacts only, no application logic) on the same VPS as
+ * the relay but a separate virtual host/directory — see
+ * docs/DESKTOP-UPDATES.md for the deployment layout. `T2_UPDATE_BASE_URL`
+ * always overrides it (see loadDesktopConfig below) — this is a fallback
+ * default, not a forced value. */
+export const DEFAULT_PRODUCTION_UPDATE_BASE_URL = 'https://updates.vincere-mortem.ru';
+
+export type UpdateChannel = 'stable' | 'beta';
+
 export interface DesktopConfig {
   /** Same canonical origin the backend's own MINI_APP_URL already points
    * at — the BrowserWindow navigates here directly (see main/window.ts),
@@ -58,6 +75,20 @@ export interface DesktopConfig {
    * mode, rather than racing AUTO's probing/hysteresis.
    */
   initialNetworkMode: 'auto' | 'direct_only' | 'relay';
+  /** Update server base URL — resolution mirrors relayUrl exactly (see
+   * that field's doc comment): explicit T2_UPDATE_BASE_URL env var,
+   * then — packaged production only — DEFAULT_PRODUCTION_UPDATE_BASE_URL,
+   * then '' (update checking simply disabled; never a silent fallback to
+   * production for a dev/test run). Independent of relayUrl by design —
+   * see the constant's doc comment above. */
+  updateBaseUrl: string;
+  /** Sanitized hostname-only view of `updateBaseUrl`, same rationale as
+   * `relayHost`. */
+  updateHost: string | null;
+  /** 'stable' (default) or 'beta' — which manifest path under
+   * updateBaseUrl to check (/stable/manifest.json vs /beta/manifest.json).
+   * Independent of whether updateBaseUrl is even configured. */
+  updateChannel: UpdateChannel;
 }
 
 /**
@@ -129,5 +160,32 @@ export function loadDesktopConfig(env: NodeJS.ProcessEnv = process.env, isPackag
   }
   const initialNetworkMode = rawMode as DesktopConfig['initialNetworkMode'];
 
-  return { publicAppOrigin, relayUrl, relayHost, windowsCompatEnabled, initialNetworkMode };
+  // Same precedence shape as relayUrl above, independent host: explicit
+  // env wins; packaged production falls back to the real update server;
+  // otherwise (dev/test/unpackaged) update checking is simply disabled —
+  // loadDesktopConfig(env) called the way every existing test/script
+  // already calls it (no isPackaged arg) can never silently reach a real
+  // network endpoint. `allowLoopbackHttp: true` mirrors T2_RELAY_URL —
+  // needed to point a dev run at a local static-file test server.
+  const updateBaseUrlRaw = env.T2_UPDATE_BASE_URL || (isPackaged ? DEFAULT_PRODUCTION_UPDATE_BASE_URL : '');
+  const updateBaseUrl = updateBaseUrlRaw ? assertHttpsOrigin(updateBaseUrlRaw, 'T2_UPDATE_BASE_URL', true) : '';
+  const updateHost = updateBaseUrl ? new URL(updateBaseUrl).hostname : null;
+
+  const rawChannel = env.T2_UPDATE_CHANNEL || 'stable';
+  const validChannels = new Set(['stable', 'beta']);
+  if (!validChannels.has(rawChannel)) {
+    throw new DesktopConfigError(`T2_UPDATE_CHANNEL must be one of stable/beta, got: ${rawChannel}`);
+  }
+  const updateChannel = rawChannel as UpdateChannel;
+
+  return {
+    publicAppOrigin,
+    relayUrl,
+    relayHost,
+    windowsCompatEnabled,
+    initialNetworkMode,
+    updateBaseUrl,
+    updateHost,
+    updateChannel
+  };
 }

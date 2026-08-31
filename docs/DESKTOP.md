@@ -1,15 +1,17 @@
-# T2 Sales Desktop (20.55.0)
+# T2 Sales Desktop (20.56.0)
 
-A native Windows client (`T2Sales-Setup-x64-20.55.0.exe`) that loads the
+A native Windows client (`T2Sales-Setup-x64-20.56.0.exe`) that loads the
 existing T2 Sales web app directly — not a second frontend. See
 [docs/ADR/desktop-network-transport.md](./ADR/desktop-network-transport.md)
 for why the network layer is shaped DIRECT → RELAY → optional
 WINDOWS_COMPAT, [docs/DESKTOP-NETWORK.md](./DESKTOP-NETWORK.md) for how
 that actually works, [docs/DESKTOP-SECURITY.md](./DESKTOP-SECURITY.md)
-for the security model and threat model, and
+for the security model and threat model,
 [docs/DESKTOP-TESTING.md](./DESKTOP-TESTING.md) /
 [docs/DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) for how to verify and
-ship a build.
+ship a build, and [docs/DESKTOP-UPDATES.md](./DESKTOP-UPDATES.md) for the
+self-update mechanism (a separate `updates.vincere-mortem.ru` control
+plane, independent of both the relay and Railway).
 
 **Not to be confused with** `docs/DESKTOP-DESIGN.md`/
 `docs/DESKTOP-UX-AUDIT.md` — those are about the existing responsive web
@@ -32,6 +34,8 @@ T2Sales.exe
 │         ├── DIRECT (network/direct.ts — Electron's unmodified networking)
 │         ├── RELAY client (network/relay-client.ts — protocol.handle interception)
 │         └── NoopWindowsCompatibilityAdapter (compat/noop-adapter.ts)
+│   └── UpdateManager (updater/manager.ts) — separate control plane,
+│         talks directly to updates.vincere-mortem.ru, never via relay
 │
 ├── Preload (desktop/src/preload/index.ts)
 │   └── contextBridge → window.t2Desktop (typed, minimal — shared/ipc-contract.ts)
@@ -82,3 +86,5 @@ Config is read from environment variables at runtime (dev) / build time
   comment for why that narrow exception is safe).
 - `T2_WINDOWS_COMPAT_ENABLED` — `true`/`false`, default `false`; has no
   effect this pass regardless (see the ADR).
+- `T2_UPDATE_BASE_URL` / `T2_UPDATE_CHANNEL` — the update server and
+  channel (`stable`/`beta`); see [docs/DESKTOP-UPDATES.md](./DESKTOP-UPDATES.md).
