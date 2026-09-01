@@ -91,6 +91,47 @@ export async function verifyFileIntegrity(filePath: string, expectedSha256: stri
   }
 }
 
+export interface FileDiagnosticSnapshot {
+  exists: boolean;
+  actualSize: number | null;
+  /** First 8 hex characters of the actual SHA-256 only — see
+   * diagnostic-log.ts's field discipline; never the full hash. */
+  actualSha256Prefix: string | null;
+}
+
+/** Non-throwing diagnostic snapshot of an on-disk file (§updater-
+ * diagnostic-pass item 6) — reuses the same streaming-hash technique as
+ * verifyFileIntegrity() above, but never rejects: a diagnostic read
+ * failing (file gone, permission denied, mid-write) is itself useful
+ * diagnostic information (`exists: false`), not a reason to throw. This
+ * is diagnostic metadata only — it changes no accept/reject decision;
+ * verifyFileIntegrity()/the download-time streaming check remain the
+ * only functions whose result gates whether the update proceeds. */
+export async function snapshotFileForDiagnostics(filePath: string): Promise<FileDiagnosticSnapshot> {
+  let stat: fs.Stats;
+  try {
+    stat = await fs.promises.stat(filePath);
+  } catch {
+    return { exists: false, actualSize: null, actualSha256Prefix: null };
+  }
+  if (!stat.isFile()) {
+    return { exists: false, actualSize: null, actualSha256Prefix: null };
+  }
+
+  try {
+    const hash = crypto.createHash('sha256');
+    await new Promise<void>((resolve, reject) => {
+      const stream = fs.createReadStream(filePath);
+      stream.on('data', (chunk: string | Buffer) => hash.update(chunk as Buffer));
+      stream.on('end', () => resolve());
+      stream.on('error', (e) => reject(e));
+    });
+    return { exists: true, actualSize: stat.size, actualSha256Prefix: hash.digest('hex').slice(0, 8) };
+  } catch {
+    return { exists: true, actualSize: stat.size, actualSha256Prefix: null };
+  }
+}
+
 /** Removes a stale `*.download` leftover from a previous crashed/aborted
  * run before starting a new one — each run's temp filename already gets
  * a fresh random suffix (never collides with a prior run's), so this is

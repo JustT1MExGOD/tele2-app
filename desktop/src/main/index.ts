@@ -13,6 +13,7 @@ import { applyNavigationPolicy } from './navigation-policy';
 import { loadDesktopConfig } from './config';
 import { NetworkManager } from './network/manager';
 import { UpdateManager } from './updater/manager';
+import { configureUpdaterDiagnosticLog } from './updater/diagnostic-log';
 import { logger } from './logging';
 import { IPC_CHANNELS } from '../shared/ipc-contract';
 import type { PlatformInfo } from '../shared/ipc-contract';
@@ -62,6 +63,13 @@ if (!gotLock) {
     // Windows env var directly, falling back to userData only for
     // non-Windows dev/test environments.
     const updateCacheDir = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'T2 Sales', 'updates');
+    // §updater-diagnostic-pass — a small, local, append-only diagnostic
+    // file distinct from the update cache above: one line per update
+    // stage (see diagnostic-log.ts's field discipline — never a full
+    // path/URL/secret), so a user hitting a real update failure has a
+    // single small file to send instead of console output a packaged
+    // app has no way to capture.
+    configureUpdaterDiagnosticLog(path.join(app.getPath('userData'), 'logs', 'updater.log'));
     updateManager = new UpdateManager({
       updateBaseUrl: config.updateBaseUrl,
       channel: config.updateChannel,

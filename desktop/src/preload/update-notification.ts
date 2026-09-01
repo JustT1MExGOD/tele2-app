@@ -92,8 +92,15 @@ export function renderUpdateCardHtml(status: UpdateStatus): string | null {
         <div style="opacity:.7;font-size:12px;margin-top:4px;">${p ? `${formatBytes(p.receivedBytes)} / ${formatBytes(p.totalBytes)}` : ''}</div>`;
     }
 
-    case 'verifying':
-      return `<div style="font-weight:700;">Проверка целостности файла…</div>`;
+    case 'verifying': {
+      const label =
+        status.verificationStage === 'authenticode'
+          ? 'Проверка цифровой подписи Windows…'
+          : status.verificationStage === 'sha256'
+            ? 'Проверка SHA-256…'
+            : 'Проверка целостности файла…';
+      return `<div style="font-weight:700;">${label}</div>`;
+    }
 
     case 'ready_to_install': {
       const warning = status.signatureWarning

@@ -6,13 +6,20 @@
  * tested without a real Electron process).
  */
 import { fetchManifest, ManifestFetchError } from './fetch-manifest.js';
-import { downloadAndVerifyInstaller, verifyFileIntegrity, DownloadError } from './downloader.js';
-import { verifyAuthenticodeSignature, evaluateSignaturePolicy, AuthenticodeError } from './signature.js';
+import { downloadAndVerifyInstaller, verifyFileIntegrity, snapshotFileForDiagnostics, DownloadError } from './downloader.js';
+import { verifyAuthenticodeSignature, evaluateSignaturePolicy, AuthenticodeError, categorizeAuthenticodeResult } from './signature.js';
 import { launchInstaller } from './install-launcher.js';
 import { isNewerVersion } from './version.js';
 import { ManifestValidationError, type UpdateManifest, type UpdateChannelName } from './manifest.js';
-import type { UpdateStatus, UpdateState } from './types.js';
+import type { UpdateStatus, UpdateState, UpdateErrorStage, UpdateVerificationStage } from './types.js';
 import { logger } from '../logging.js';
+import { writeUpdaterDiagnostic } from './diagnostic-log.js';
+
+/** Maps downloader.ts's own lowercase DownloadError.stage to the safe,
+ * structural UpdateErrorStage token the renderer/diagnostic log use. */
+function mapDownloadStage(stage: 'download' | 'sha256'): UpdateErrorStage {
+  return stage === 'sha256' ? 'SHA256' : 'DOWNLOAD';
+}
 
 /** A few hours, not aggressive polling (§4 of the brief) — the update
  * server is a static file host, but there is still no reason to hammer
@@ -46,6 +53,8 @@ export class UpdateManager {
   private manifest: UpdateManifest | null = null;
   private downloadedFilePath: string | null = null;
   private errorMessage: string | null = null;
+  private errorStage: UpdateErrorStage | null = null;
+  private verificationStage: UpdateVerificationStage | null = null;
   private signatureWarning: string | null = null;
   private progress: { receivedBytes: number; totalBytes: number } | null = null;
   private lastCheckedAt: string | null = null;
@@ -109,6 +118,8 @@ export class UpdateManager {
       availableManifest: this.manifest,
       progress: this.progress,
       errorMessage: this.errorMessage,
+      errorStage: this.errorStage,
+      verificationStage: this.verificationStage,
       signatureWarning: this.signatureWarning,
       lastCheckedAt: this.lastCheckedAt,
       readyToInstall: this.state === 'ready_to_install' && this.downloadedFilePath !== null
@@ -129,6 +140,15 @@ export class UpdateManager {
 
   private setState(state: UpdateState): void {
     this.state = state;
+    this.emit();
+  }
+
+  /** See UpdateVerificationStage — non-null only while displaying the
+   * 'verifying' state, so the renderer can show "Проверка SHA-256..."
+   * vs "Проверка цифровой подписи Windows..." instead of one generic
+   * message for both (§updater-diagnostic-pass item 7). */
+  private setVerificationStage(stage: UpdateVerificationStage | null): void {
+    this.verificationStage = stage;
     this.emit();
   }
 
@@ -154,15 +174,21 @@ export class UpdateManager {
       if (isNewerVersion(this.options.currentVersion, manifest.version)) {
         this.manifest = manifest;
         this.errorMessage = null;
+        this.errorStage = null;
         this.setState('update_available');
       } else {
         this.manifest = null;
         this.errorMessage = null;
+        this.errorStage = null;
         this.setState('up_to_date');
       }
     } catch (e) {
       this.lastCheckedAt = new Date().toISOString();
       this.errorMessage = sanitizeError(e);
+      // No dedicated UpdateErrorStage exists for a manifest-check failure
+      // (the 6 defined stages are all post-manifest — download/verify/
+      // install) — left null rather than mislabeling it as one of those.
+      this.errorStage = null;
       this.setState('error');
     }
   }
@@ -196,10 +222,12 @@ export class UpdateManager {
     const manifest = this.manifest;
     this.progress = { receivedBytes: 0, totalBytes: manifest.installer.size };
     this.signatureWarning = null;
+    this.errorStage = null;
+    this.verificationStage = null;
     this.setState('downloading');
     this.abortController = new AbortController();
 
-    let downloadStageStartedAt = Date.now();
+    let stageStartedAt = Date.now();
     let result: { filePath: string };
     try {
       result = await downloadAndVerifyInstaller(manifest, this.options.updateCacheDir, {
@@ -212,25 +240,68 @@ export class UpdateManager {
         }
       });
     } catch (e) {
-      this.failDownload(e instanceof DownloadError ? e.stage : 'download', e, downloadStageStartedAt);
+      const stage = mapDownloadStage(e instanceof DownloadError ? e.stage : 'download');
+      this.failDownload(stage, e, stageStartedAt, manifest);
       return;
     }
 
+    // §updater-diagnostic-pass item 6/7 — the download+its inline SHA-256
+    // check already succeeded (downloadAndVerifyInstaller doesn't resolve
+    // otherwise); this is a SEPARATE, diagnostic-only re-read of the file,
+    // purely so a real machine's updater.log captures a concrete
+    // exists/size/hash snapshot right before the step that's actually
+    // failing in the field (Authenticode) — it changes no accept/reject
+    // decision.
     this.setState('verifying');
-    downloadStageStartedAt = Date.now();
+    this.setVerificationStage('sha256');
+    stageStartedAt = Date.now();
+    const snapshot = await snapshotFileForDiagnostics(result.filePath);
+    const expectedSha256Prefix = manifest.installer.sha256.slice(0, 8);
+    const sha256DiagMismatch = snapshot.actualSha256Prefix !== null && snapshot.actualSha256Prefix !== expectedSha256Prefix;
+    writeUpdaterDiagnostic({
+      stage: 'SHA256',
+      currentVersion: this.options.currentVersion,
+      targetVersion: manifest.version,
+      channel: this.options.channel,
+      expectedSize: manifest.installer.size,
+      receivedSize: snapshot.actualSize ?? undefined,
+      expectedSha256Prefix,
+      actualSha256Prefix: sha256DiagMismatch ? (snapshot.actualSha256Prefix ?? undefined) : undefined,
+      fileExists: snapshot.exists
+    });
+
+    this.setVerificationStage('authenticode');
+    stageStartedAt = Date.now();
     let sig: Awaited<ReturnType<typeof verifyAuthenticodeSignature>>;
     try {
       sig = await verifyAuthenticodeSignature(result.filePath);
     } catch (e) {
-      this.failDownload('authenticode', e, downloadStageStartedAt);
+      this.failDownload('AUTHENTICODE', e, stageStartedAt, manifest);
       return;
     }
+    writeUpdaterDiagnostic({
+      stage: 'AUTHENTICODE',
+      currentVersion: this.options.currentVersion,
+      targetVersion: manifest.version,
+      channel: this.options.channel,
+      authenticodeStatus: categorizeAuthenticodeResult(sig.status)
+    });
 
     const blockReason = evaluateSignaturePolicy(this.options.channel, sig);
     if (blockReason) {
-      logger.warn('update_stage_failed', { stage: 'policy', errorName: 'SignaturePolicyBlocked', durationMs: Date.now() - downloadStageStartedAt });
+      logger.warn('update_stage_failed', { stage: 'policy', errorName: 'SignaturePolicyBlocked', durationMs: Date.now() - stageStartedAt });
+      writeUpdaterDiagnostic({
+        stage: 'SIGNATURE_POLICY',
+        errorName: 'SignaturePolicyBlocked',
+        currentVersion: this.options.currentVersion,
+        targetVersion: manifest.version,
+        channel: this.options.channel,
+        authenticodeStatus: categorizeAuthenticodeResult(sig.status)
+      });
       this.downloadedFilePath = null;
       this.errorMessage = blockReason;
+      this.errorStage = 'SIGNATURE_POLICY';
+      this.verificationStage = null;
       this.setState('error');
       this.abortController = null;
       return;
@@ -241,6 +312,8 @@ export class UpdateManager {
 
     this.downloadedFilePath = result.filePath;
     this.errorMessage = null;
+    this.errorStage = null;
+    this.verificationStage = null;
     this.setState('ready_to_install');
     this.abortController = null;
   }
@@ -251,15 +324,29 @@ export class UpdateManager {
    * for relay-client.ts's `relay_handler_request_failed` logging. The
    * user-facing `errorMessage` comes from `sanitizeError()`, which
    * already only ever surfaces our own hand-written, short, safe error
-   * messages (never a raw exception's stack/details). */
-  private failDownload(stage: 'download' | 'sha256' | 'authenticode', e: unknown, startedAt: number): void {
-    logger.warn('update_stage_failed', {
+   * messages (never a raw exception's stack/details). Also writes a
+   * local updater.log entry (diagnostic-log.ts) with the same
+   * discipline, plus the AuthenticodeError's fine-grained `.category`
+   * when present — this is what turns a real machine's next failure
+   * into a reportable category instead of a dead end. */
+  private failDownload(stage: UpdateErrorStage, e: unknown, startedAt: number, manifest: UpdateManifest | null): void {
+    const errorName = e instanceof Error ? e.name : 'unknown';
+    logger.warn('update_stage_failed', { stage, errorName, durationMs: Date.now() - startedAt });
+    writeUpdaterDiagnostic({
       stage,
-      errorName: e instanceof Error ? e.name : 'unknown',
-      durationMs: Date.now() - startedAt
+      errorName,
+      currentVersion: this.options.currentVersion,
+      targetVersion: manifest?.version,
+      channel: this.options.channel,
+      expectedSize: manifest?.installer.size,
+      receivedSize: this.progress?.receivedBytes,
+      expectedSha256Prefix: manifest?.installer.sha256.slice(0, 8),
+      powershellExitCategory: e instanceof AuthenticodeError ? e.category : undefined
     });
     this.downloadedFilePath = null;
     this.errorMessage = sanitizeError(e);
+    this.errorStage = stage;
+    this.verificationStage = null;
     this.setState('error');
     this.abortController = null;
   }
@@ -302,17 +389,29 @@ export class UpdateManager {
     // mutating this.manifest/this.downloadedFilePath partway through
     // must not change what this specific install call verifies/launches.
     const filePath = this.downloadedFilePath;
-    const expectedSha256 = this.manifest.installer.sha256;
-    const expectedSize = this.manifest.installer.size;
+    const manifest = this.manifest;
+    const expectedSha256 = manifest.installer.sha256;
+    const expectedSize = manifest.installer.size;
     const channel = this.options.channel;
 
     try {
       await verifyFileIntegrity(filePath, expectedSha256, expectedSize);
     } catch (e) {
-      logger.warn('update_stage_failed', { stage: 'sha256', errorName: e instanceof Error ? e.name : 'unknown', at: 'install_recheck' });
+      const errorName = e instanceof Error ? e.name : 'unknown';
+      logger.warn('update_stage_failed', { stage: 'sha256', errorName, at: 'install_recheck' });
+      writeUpdaterDiagnostic({
+        stage: 'INSTALL_RECHECK_SHA256',
+        errorName,
+        currentVersion: this.options.currentVersion,
+        targetVersion: manifest.version,
+        channel,
+        expectedSize,
+        expectedSha256Prefix: expectedSha256.slice(0, 8)
+      });
       const message = sanitizeError(e);
       this.downloadedFilePath = null;
       this.errorMessage = message;
+      this.errorStage = 'INSTALL_RECHECK_SHA256';
       this.setState('error');
       this.installStarted = false;
       throw new Error(message);
@@ -322,10 +421,20 @@ export class UpdateManager {
     try {
       sig = await verifyAuthenticodeSignature(filePath);
     } catch (e) {
-      logger.warn('update_stage_failed', { stage: 'authenticode', errorName: e instanceof Error ? e.name : 'unknown', at: 'install_recheck' });
+      const errorName = e instanceof Error ? e.name : 'unknown';
+      logger.warn('update_stage_failed', { stage: 'authenticode', errorName, at: 'install_recheck' });
+      writeUpdaterDiagnostic({
+        stage: 'INSTALL_RECHECK_AUTHENTICODE',
+        errorName,
+        currentVersion: this.options.currentVersion,
+        targetVersion: manifest.version,
+        channel,
+        powershellExitCategory: e instanceof AuthenticodeError ? e.category : undefined
+      });
       const message = sanitizeError(e);
       this.downloadedFilePath = null;
       this.errorMessage = message;
+      this.errorStage = 'INSTALL_RECHECK_AUTHENTICODE';
       this.setState('error');
       this.installStarted = false;
       throw new Error(message);
@@ -333,8 +442,17 @@ export class UpdateManager {
     const blockReason = evaluateSignaturePolicy(channel, sig);
     if (blockReason) {
       logger.warn('update_stage_failed', { stage: 'policy', errorName: 'SignaturePolicyBlocked', at: 'install_recheck' });
+      writeUpdaterDiagnostic({
+        stage: 'SIGNATURE_POLICY',
+        errorName: 'SignaturePolicyBlocked',
+        currentVersion: this.options.currentVersion,
+        targetVersion: manifest.version,
+        channel,
+        authenticodeStatus: categorizeAuthenticodeResult(sig.status)
+      });
       this.downloadedFilePath = null;
       this.errorMessage = blockReason;
+      this.errorStage = 'SIGNATURE_POLICY';
       this.setState('error');
       this.installStarted = false;
       throw new Error(blockReason);

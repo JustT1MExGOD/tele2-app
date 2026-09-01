@@ -177,6 +177,177 @@ describe('UpdateManager — download + signature policy', () => {
   });
 });
 
+describe('UpdateManager — §updater-diagnostic-pass: errorStage/verificationStage distinguish the real failing sub-step', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // B. wrong SHA -> explicit SHA256 errorStage (not a generic "update
+  // check failed" — this is exactly the regression the diagnostic pass
+  // exists to make distinguishable).
+  it('B. a SHA-256 mismatch surfaces errorStage SHA256, distinct from a transport-level DOWNLOAD failure', async () => {
+    // downloadAndVerifyInstallerMock resolves normally until we swap it
+    // to reject, via a DownloadError imported AFTER freshManager() (same
+    // post-resetModules module graph — see the TOCTOU tests' own comment
+    // on why this ordering matters for `instanceof DownloadError`).
+    const downloadAndVerifyInstallerMock = vi.fn();
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { downloadAndVerifyInstaller: downloadAndVerifyInstallerMock });
+    const { DownloadError } = await import('../src/main/updater/downloader.js');
+    downloadAndVerifyInstallerMock.mockRejectedValue(new DownloadError('Контрольная сумма (SHA-256) файла обновления не совпадает', 'sha256'));
+
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    const status = manager.getStatus();
+    expect(status.state).toBe('error');
+    expect(status.errorStage).toBe('SHA256');
+  });
+
+  // C. wrong size -> same SHA256 stage (downloader.ts's size checks and
+  // hash check share the 'sha256' DownloadError stage — both are
+  // integrity failures, distinct from a pure transport/DOWNLOAD failure).
+  it('C. a declared/received size mismatch also surfaces errorStage SHA256', async () => {
+    const downloadAndVerifyInstallerMock = vi.fn();
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { downloadAndVerifyInstaller: downloadAndVerifyInstallerMock });
+    const { DownloadError } = await import('../src/main/updater/downloader.js');
+    downloadAndVerifyInstallerMock.mockRejectedValue(new DownloadError('Размер файла обновления не совпадает с ожидаемым', 'sha256'));
+
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    const status = manager.getStatus();
+    expect(status.state).toBe('error');
+    expect(status.errorStage).toBe('SHA256');
+  });
+
+  it('a pure transport failure (never got bytes at all) surfaces errorStage DOWNLOAD, not SHA256', async () => {
+    const manager = await freshManager(
+      { currentVersion: '20.55.0' },
+      { downloadAndVerifyInstaller: vi.fn().mockRejectedValue(new Error('ECONNRESET')) }
+    );
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    const status = manager.getStatus();
+    expect(status.state).toBe('error');
+    expect(status.errorStage).toBe('DOWNLOAD');
+  });
+
+  it('an Authenticode-stage failure surfaces errorStage AUTHENTICODE, distinct from DOWNLOAD/SHA256 — the exact ambiguity this pass exists to remove', async () => {
+    const { AuthenticodeError } = await import('../src/main/updater/signature.js');
+    const manager = await freshManager(
+      { currentVersion: '20.55.0' },
+      { verifyAuthenticodeSignature: vi.fn().mockRejectedValue(new AuthenticodeError('Не удалось запустить проверку цифровой подписи Windows', 'powershell_execution_failed')) }
+    );
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    const status = manager.getStatus();
+    expect(status.state).toBe('error');
+    expect(status.errorStage).toBe('AUTHENTICODE');
+  });
+
+  // I. UnknownError (the Authenticode check ran but couldn't conclude) is
+  // ALWAYS policy-rejected, regardless of channel — never treated as
+  // equivalent to "known unsigned". errorStage must read SIGNATURE_POLICY,
+  // not AUTHENTICODE (the check itself didn't throw — it returned a
+  // result, which the POLICY then rejected).
+  it('I. UnknownError Authenticode result is policy-rejected with errorStage SIGNATURE_POLICY', async () => {
+    const manager = await freshManager(
+      { currentVersion: '20.55.0' },
+      { verifyAuthenticodeSignature: vi.fn().mockResolvedValue({ status: 'UnknownError', signed: false, subject: null }) }
+    );
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    const status = manager.getStatus();
+    expect(status.state).toBe('error');
+    expect(status.errorStage).toBe('SIGNATURE_POLICY');
+  });
+
+  // J. NotSigned on the beta channel is explicitly ALLOWED under the
+  // 'warn' policy (never becomes an error) — confirms the diagnostic
+  // pass's new stage-tracking doesn't accidentally tighten this.
+  it('J. NotSigned on beta channel warns and still reaches ready_to_install — never SIGNATURE_POLICY-rejected', async () => {
+    const manager = await freshManager(
+      { currentVersion: '20.55.0', channel: 'beta' },
+      { verifyAuthenticodeSignature: vi.fn().mockResolvedValue({ status: 'NotSigned', signed: false, subject: null }) }
+    );
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    const status = manager.getStatus();
+    expect(status.state).toBe('ready_to_install');
+    expect(status.errorStage).toBeNull();
+    expect(status.signatureWarning).toContain('не имеет цифровой подписи');
+  });
+
+  it('verificationStage passes through sha256 then authenticode while verifying, and is cleared to null once ready_to_install', async () => {
+    let resolveAuthenticode: (v: unknown) => void = () => {};
+    const verifyAuthenticodeSignatureMock = vi.fn(() => new Promise((resolve) => (resolveAuthenticode = resolve)));
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { verifyAuthenticodeSignature: verifyAuthenticodeSignatureMock });
+    await manager.checkNow();
+    const downloadPromise = manager.downloadUpdate();
+    await vi.waitFor(() => expect(verifyAuthenticodeSignatureMock).toHaveBeenCalled());
+    expect(manager.getStatus().state).toBe('verifying');
+    expect(manager.getStatus().verificationStage).toBe('authenticode');
+
+    resolveAuthenticode({ status: 'NotSigned', signed: false, subject: null });
+    await downloadPromise;
+    expect(manager.getStatus().state).toBe('ready_to_install');
+    expect(manager.getStatus().verificationStage).toBeNull();
+  });
+
+  it('verificationStage is cleared to null on a download-stage failure (never shown while state is error)', async () => {
+    const manager = await freshManager(
+      { currentVersion: '20.55.0' },
+      { downloadAndVerifyInstaller: vi.fn().mockRejectedValue(new Error('ECONNRESET')) }
+    );
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().verificationStage).toBeNull();
+  });
+
+  it('errorStage is reset to null at the start of a fresh downloadUpdate() retry after a prior failure', async () => {
+    const downloadAndVerifyInstallerMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('ECONNRESET'))
+      .mockResolvedValue({ filePath: 'C:\\fake\\T2Sales-Setup-x64-20.99.0.exe' });
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { downloadAndVerifyInstaller: downloadAndVerifyInstallerMock });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().errorStage).toBe('DOWNLOAD');
+
+    await manager.downloadUpdate(); // retry
+    expect(manager.getStatus().state).toBe('ready_to_install');
+    expect(manager.getStatus().errorStage).toBeNull();
+  });
+
+  // INSTALL_RECHECK_* — the pre-install TOCTOU re-verification gets its
+  // OWN distinct error stages from the download-time ones, even though
+  // both ultimately call the same verifyFileIntegrity/
+  // verifyAuthenticodeSignature functions.
+  it('a TOCTOU SHA-256 re-check failure at install time surfaces errorStage INSTALL_RECHECK_SHA256', async () => {
+    const verifyFileIntegrityMock = vi.fn().mockResolvedValue(undefined);
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { verifyFileIntegrity: verifyFileIntegrityMock });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+
+    const { DownloadError } = await import('../src/main/updater/downloader.js');
+    verifyFileIntegrityMock.mockRejectedValueOnce(new DownloadError('Файл обновления был изменён после проверки — установка отменена', 'sha256'));
+    await expect(manager.installUpdate()).rejects.toThrow();
+    expect(manager.getStatus().errorStage).toBe('INSTALL_RECHECK_SHA256');
+  });
+
+  it('a TOCTOU Authenticode re-check failure at install time surfaces errorStage INSTALL_RECHECK_AUTHENTICODE', async () => {
+    const { AuthenticodeError } = await import('../src/main/updater/signature.js');
+    const verifyAuthenticodeSignatureMock = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 'NotSigned', signed: false, subject: null })
+      .mockRejectedValueOnce(new AuthenticodeError('Проверка цифровой подписи Windows превысила время ожидания', 'powershell_timeout'));
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { verifyAuthenticodeSignature: verifyAuthenticodeSignatureMock });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+
+    await expect(manager.installUpdate()).rejects.toThrow();
+    expect(manager.getStatus().errorStage).toBe('INSTALL_RECHECK_AUTHENTICODE');
+  });
+});
+
 describe('UpdateManager — installUpdate() (§8/§9 security boundary)', () => {
   afterEach(() => vi.restoreAllMocks());
 

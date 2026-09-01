@@ -4,7 +4,7 @@ import fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { downloadAndVerifyInstaller, verifyFileIntegrity, DownloadError } from '../src/main/updater/downloader.js';
+import { downloadAndVerifyInstaller, verifyFileIntegrity, snapshotFileForDiagnostics, DownloadError } from '../src/main/updater/downloader.js';
 import { startLocalHttpsServer, TEST_CA_CERT, type LocalHttpsServer } from './helpers/local-https-server.js';
 import type { UpdateManifest } from '../src/main/updater/manifest.js';
 
@@ -235,6 +235,45 @@ describe('verifyFileIntegrity — TOCTOU re-check against an already-on-disk fil
     const cacheDir = await tempCacheDir();
     const filePath = path.join(cacheDir, 'does-not-exist.exe');
     await expect(verifyFileIntegrity(filePath, REAL_SHA256, REAL_CONTENT.length)).rejects.toThrow(/не найден/);
+  });
+});
+
+describe('snapshotFileForDiagnostics — §updater-diagnostic-pass item 6 (diagnostic-only, never throws, never gates)', () => {
+  it('reports exists/size/actualSha256Prefix for a real on-disk file', async () => {
+    const cacheDir = await tempCacheDir();
+    const filePath = path.join(cacheDir, 'installer.exe');
+    await fsPromises.writeFile(filePath, REAL_CONTENT);
+    const snapshot = await snapshotFileForDiagnostics(filePath);
+    expect(snapshot.exists).toBe(true);
+    expect(snapshot.actualSize).toBe(REAL_CONTENT.length);
+    expect(snapshot.actualSha256Prefix).toBe(REAL_SHA256.slice(0, 8));
+    // Never the full hash — only an 8-char prefix, matching diagnostic-
+    // log.ts's field discipline.
+    expect(snapshot.actualSha256Prefix?.length).toBe(8);
+  });
+
+  it('reports exists:false for a missing file, without throwing', async () => {
+    const cacheDir = await tempCacheDir();
+    const filePath = path.join(cacheDir, 'does-not-exist.exe');
+    await expect(snapshotFileForDiagnostics(filePath)).resolves.toEqual({ exists: false, actualSize: null, actualSha256Prefix: null });
+  });
+
+  it('reports exists:false for a directory (not a regular file), without throwing', async () => {
+    const cacheDir = await tempCacheDir();
+    const dirPath = path.join(cacheDir, 'a-directory');
+    await fsPromises.mkdir(dirPath);
+    await expect(snapshotFileForDiagnostics(dirPath)).resolves.toEqual({ exists: false, actualSize: null, actualSha256Prefix: null });
+  });
+
+  it('a tampered file (content changed) reports its OWN actual hash — different from the original — still without throwing', async () => {
+    const cacheDir = await tempCacheDir();
+    const filePath = path.join(cacheDir, 'installer.exe');
+    const tampered = Buffer.alloc(REAL_CONTENT.length, 0x42);
+    await fsPromises.writeFile(filePath, tampered);
+    const snapshot = await snapshotFileForDiagnostics(filePath);
+    expect(snapshot.exists).toBe(true);
+    expect(snapshot.actualSize).toBe(REAL_CONTENT.length);
+    expect(snapshot.actualSha256Prefix).not.toBe(REAL_SHA256.slice(0, 8));
   });
 });
 
