@@ -148,10 +148,6 @@ function registerIpcHandlers(networkManager: NetworkManager, updateManager: Upda
       // before this process (and the file locks it holds on its own
       // installed files) goes away — matches §8's "close desktop if the
       // installer requires it" without guessing at exact NSIS timing.
-      // §updater-install-lifecycle — this delay was never the cause of
-      // the real install-doesn't-complete bug (a real Windows repro
-      // reproduced the failure with this exact same delay); the fix was
-      // install-launcher.ts's launch mechanism, not this timing.
       writeUpdaterDiagnostic({ stage: 'APP_QUIT_REQUESTED', currentVersion: APP_VERSION });
       setTimeout(() => app.quit(), 1500).unref();
     })

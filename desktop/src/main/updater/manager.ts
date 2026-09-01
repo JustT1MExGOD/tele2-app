@@ -32,6 +32,14 @@ const DEFAULT_INITIAL_DELAY_MS = 15_000;
 const MANIFEST_TIMEOUT_MS = 10_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
+/** `'manual'` — an explicit human action (the `CHECK_FOR_UPDATES` IPC
+ * channel, always renderer/user-triggered) — the default, so every
+ * existing bare `checkNow()` call site keeps its exact prior behavior.
+ * `'automatic'` — the periodic background timer. `'startup'` — the
+ * one-time delayed check `start()` schedules after launch. See
+ * `checkNow()`'s own doc comment for why the distinction exists. */
+export type UpdateCheckTrigger = 'manual' | 'automatic' | 'startup';
+
 export interface UpdateManagerOptions {
   updateBaseUrl: string; // '' — checking disabled entirely
   channel: UpdateChannelName;
@@ -101,11 +109,11 @@ export class UpdateManager {
     if (this.initialTimer) this.clearTimeoutFn(this.initialTimer);
     if (this.intervalTimer) this.clearIntervalFn(this.intervalTimer);
     this.initialTimer = this.setTimeoutFn(() => {
-      this.checkNow().catch(() => {}); // errors already land in state via checkNow's own try/catch
+      this.checkNow('startup').catch(() => {}); // errors already land in state via checkNow's own try/catch
     }, this.options.initialCheckDelayMs);
     this.initialTimer.unref?.();
     this.intervalTimer = this.setIntervalFn(() => {
-      this.checkNow().catch(() => {});
+      this.checkNow('automatic').catch(() => {});
     }, this.options.checkIntervalMs);
     this.intervalTimer.unref?.();
   }
@@ -157,8 +165,38 @@ export class UpdateManager {
    * the caller to mishandle into a crash/blocking dialog; every failure
    * path lands in `state: 'error'` with a short, sanitized message
    * (never a raw exception object/stack/response body — §15).
+   *
+   * §updater-ready-to-install-race — `ready_to_install` deliberately has
+   * no timeout (§1 of the security gate: the app waits on an UNBOUNDED
+   * human click). Before this fix, the periodic background timer (and
+   * the one-time startup check) could fire during that wait and silently
+   * invalidate it: on success this method always overwrote `this.manifest`
+   * (to a new manifest, or to `null`) while never touching
+   * `this.downloadedFilePath` — leaving a downloaded-and-verified file on
+   * disk paired with either no manifest at all or a manifest describing a
+   * DIFFERENT target, a real state inconsistency `installUpdate()`'s own
+   * guard (`!this.manifest || !this.downloadedFilePath`) would eventually
+   * have caught, but only after the UI had already shown something
+   * incoherent.
+   *
+   * Fix, by `trigger`: `'automatic'`/`'startup'` (never a direct human
+   * action) are a straight no-op while `ready_to_install` — the pending,
+   * already-verified install is left completely alone, nothing fetched,
+   * nothing overwritten. `'manual'` (the default — an explicit
+   * `CHECK_FOR_UPDATES` IPC call, always human-triggered) is still
+   * allowed through, with its own well-defined outcome: if the server
+   * still reports the SAME target version already staged,
+   * `downloadedFilePath` is left intact and `ready_to_install` is
+   * preserved (not reset to `update_available` — the file genuinely is
+   * still there and already verified); if the server now reports a
+   * DIFFERENT target (newer or not), the stale file reference is cleared
+   * in the SAME synchronous step as the manifest update — `manifest` and
+   * `downloadedFilePath` can never be observed describing different
+   * targets. Never deletes the file itself from disk — only this
+   * in-memory pointer to it; `isNewerVersion()`'s own comparison is
+   * untouched, so this can never downgrade.
    */
-  async checkNow(): Promise<void> {
+  async checkNow(trigger: UpdateCheckTrigger = 'manual'): Promise<void> {
     if (!this.options.updateBaseUrl || !this.allowedOrigin) return; // not_configured — checkNow is a deliberate no-op, not an error
     // §3 of the security gate — a check already in flight, or an active
     // download/verify, must not be clobbered by a second concurrent
@@ -167,17 +205,32 @@ export class UpdateManager {
     // no-op rather than hijacking the visible state away from progress
     // that is genuinely still happening in the background.
     if (this.state === 'checking' || this.state === 'downloading' || this.state === 'verifying') return;
+    if (this.state === 'ready_to_install' && trigger !== 'manual') return;
     this.setState('checking');
+    writeUpdaterDiagnostic({ stage: 'CHECK', currentVersion: this.options.currentVersion, channel: this.options.channel, trigger });
     try {
       const manifest = await fetchManifest(this.options.updateBaseUrl, this.options.channel, MANIFEST_TIMEOUT_MS);
       this.lastCheckedAt = new Date().toISOString();
+      writeUpdaterDiagnostic({
+        stage: 'MANIFEST',
+        currentVersion: this.options.currentVersion,
+        targetVersion: manifest.version,
+        channel: this.options.channel,
+        installerBasename: manifest.installer.filename,
+        expectedSize: manifest.installer.size,
+        expectedSha256Prefix: manifest.installer.sha256.slice(0, 8)
+      });
       if (isNewerVersion(this.options.currentVersion, manifest.version)) {
+        if (this.downloadedFilePath && this.manifest?.version !== manifest.version) {
+          this.downloadedFilePath = null; // stale file for a different target — never paired with the new manifest
+        }
         this.manifest = manifest;
         this.errorMessage = null;
         this.errorStage = null;
-        this.setState('update_available');
+        this.setState(this.downloadedFilePath ? 'ready_to_install' : 'update_available');
       } else {
         this.manifest = null;
+        this.downloadedFilePath = null; // server no longer offers anything newer — nothing stays "ready"
         this.errorMessage = null;
         this.errorStage = null;
         this.setState('up_to_date');
@@ -226,6 +279,14 @@ export class UpdateManager {
     this.verificationStage = null;
     this.setState('downloading');
     this.abortController = new AbortController();
+    writeUpdaterDiagnostic({
+      stage: 'DOWNLOAD',
+      currentVersion: this.options.currentVersion,
+      targetVersion: manifest.version,
+      channel: this.options.channel,
+      installerBasename: manifest.installer.filename,
+      expectedSize: manifest.installer.size
+    });
 
     let stageStartedAt = Date.now();
     let result: { filePath: string };
@@ -316,6 +377,12 @@ export class UpdateManager {
     this.verificationStage = null;
     this.setState('ready_to_install');
     this.abortController = null;
+    writeUpdaterDiagnostic({
+      stage: 'READY_TO_INSTALL',
+      currentVersion: this.options.currentVersion,
+      targetVersion: manifest.version,
+      channel: this.options.channel
+    });
   }
 
   /** Sanitized diagnostics only — stage name, error class name, duration.
@@ -458,18 +525,18 @@ export class UpdateManager {
       throw new Error(blockReason);
     }
 
-    // §updater-install-lifecycle — INSTALL_LAUNCH_START/INSTALL_PROCESS_
-    // STARTED bracket the actual OS-level launch call, so updater.log can
-    // show whether a real failure happened BEFORE this point (SHA/
-    // Authenticode/policy — already covered above) or AT the launch
-    // itself. There is deliberately no "installer exited early" stage —
-    // observing the installer's own later lifecycle would require this
-    // process to keep a live handle to it, which is exactly the
-    // dependency that caused the original bug (see install-launcher.ts's
-    // module doc comment); INSTALL_PROCESS_STARTED is the strongest safe
-    // signal obtainable without reintroducing that dependency — it means
-    // the OS confirmed the launch request was accepted, not that the
-    // installer will still be running a second later.
+    // INSTALL_LAUNCH_START/INSTALL_PROCESS_STARTED bracket the actual
+    // OS-level launch call, so updater.log can show whether a real
+    // failure happened BEFORE this point (SHA/Authenticode/policy —
+    // already covered above) or AT the launch itself. There is
+    // deliberately no "installer exited early" stage — observing the
+    // installer's own later lifecycle would require this process to keep
+    // a live handle to it, which launchInstaller()'s own module doc
+    // comment explains why this codebase deliberately avoids;
+    // INSTALL_PROCESS_STARTED is the strongest safe signal obtainable
+    // without that dependency — it means the OS confirmed the launch
+    // request was accepted, not that the installer will still be running
+    // a second later.
     writeUpdaterDiagnostic({
       stage: 'INSTALL_LAUNCH_START',
       currentVersion: this.options.currentVersion,

@@ -28,11 +28,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export interface UpdaterDiagnosticEntry {
-  /** DOWNLOAD | SHA256 | AUTHENTICODE | SIGNATURE_POLICY |
-   * INSTALL_RECHECK_SHA256 | INSTALL_RECHECK_AUTHENTICODE, or a
-   * confirmation-only stage name — always a short fixed token, never
-   * free text. */
+  /** CHECK | MANIFEST | DOWNLOAD | SHA256 | AUTHENTICODE |
+   * SIGNATURE_POLICY | READY_TO_INSTALL | INSTALL_RECHECK_SHA256 |
+   * INSTALL_RECHECK_AUTHENTICODE | INSTALL_LAUNCH_START |
+   * INSTALL_PROCESS_STARTED, or a confirmation-only stage name — always
+   * a short fixed token, never free text. */
   stage: string;
+  /** 'manual' | 'automatic' | 'startup' — see manager.ts's
+   * `UpdateCheckTrigger`. Only present on the `CHECK` stage. */
+  trigger?: string;
   /** Fine-grained failure/result category — e.g. powershell_timeout,
    * authenticode_valid — see signature.ts. Omitted for a pure
    * confirmation entry that isn't reporting a failure. */
@@ -51,6 +55,9 @@ export interface UpdaterDiagnosticEntry {
   expectedSha256Prefix?: string;
   actualSha256Prefix?: string;
   fileExists?: boolean;
+  /** Filename only, never a directory component — e.g.
+   * "T2Sales-Setup-x64-20.56.4.exe". Never a full path. */
+  installerBasename?: string;
   authenticodeStatus?: string;
   /** ENOENT / non-zero exit / timeout / ok — see signature.ts's own
    * execFile error categorization; never the raw error message. */

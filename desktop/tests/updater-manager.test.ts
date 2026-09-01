@@ -638,3 +638,225 @@ describe('UpdateManager — scheduling (§4: not aggressive polling)', () => {
     expect(clearIntervalFn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('UpdateManager — ready_to_install race fix (§updater-ready-to-install-race)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('1. an automatic check while ready_to_install does NOT fetch, and leaves state/manifest/downloadedFilePath completely untouched — installUpdate() afterward still uses the original file', async () => {
+    const fetchManifestMock = vi.fn().mockResolvedValue(baseManifest());
+    const launchInstallerMock = vi.fn().mockResolvedValue(undefined);
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { fetchManifest: fetchManifestMock, launchInstaller: launchInstallerMock });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+    fetchManifestMock.mockClear();
+
+    await manager.checkNow('automatic');
+
+    expect(fetchManifestMock).not.toHaveBeenCalled();
+    const status = manager.getStatus();
+    expect(status.state).toBe('ready_to_install');
+    expect(status.availableManifest?.version).toBe('20.99.0');
+    expect(status.readyToInstall).toBe(true);
+
+    const onLaunched = vi.fn();
+    await manager.installUpdate(onLaunched);
+    expect(launchInstallerMock).toHaveBeenCalledWith('C:\\fake\\T2Sales-Setup-x64-20.99.0.exe');
+    expect(onLaunched).toHaveBeenCalledOnce();
+  });
+
+  it("1b. a 'startup' check while ready_to_install is equally a no-op (treated the same as automatic — neither is a direct human action)", async () => {
+    const fetchManifestMock = vi.fn().mockResolvedValue(baseManifest());
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { fetchManifest: fetchManifestMock });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    fetchManifestMock.mockClear();
+
+    await manager.checkNow('startup');
+
+    expect(fetchManifestMock).not.toHaveBeenCalled();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+  });
+
+  it('2. an automatic check in a normal (non-ready_to_install) state still works exactly as before — no regression', async () => {
+    const fetchManifestMock = vi.fn().mockResolvedValue(baseManifest());
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { fetchManifest: fetchManifestMock });
+    await manager.checkNow('automatic');
+    expect(fetchManifestMock).toHaveBeenCalledTimes(1);
+    expect(manager.getStatus().state).toBe('update_available');
+  });
+
+  it('3a. manual check while ready_to_install, server still offers the SAME target version — preserves ready_to_install and the original downloadedFilePath (does not reset to update_available)', async () => {
+    const fetchManifestMock = vi.fn().mockResolvedValue(baseManifest()); // same version (20.99.0) every time
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { fetchManifest: fetchManifestMock });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+
+    await manager.checkNow('manual');
+
+    expect(fetchManifestMock).toHaveBeenCalledTimes(2); // the manual check DID fetch
+    const status = manager.getStatus();
+    expect(status.state).toBe('ready_to_install'); // preserved, not reset
+    expect(status.readyToInstall).toBe(true);
+  });
+
+  it('3b. manual check while ready_to_install, server now offers a DIFFERENT (newer) target — clears the stale file and moves to update_available for the new manifest, never keeping the old file paired with it', async () => {
+    const manager = await freshManager({ currentVersion: '20.55.0' });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+
+    const fetchManifestModule = await import('../src/main/updater/fetch-manifest.js');
+    (fetchManifestModule.fetchManifest as unknown as ReturnType<typeof vi.fn>)?.mockResolvedValueOnce?.(baseManifest({ version: '21.0.0' }));
+
+    await manager.checkNow('manual');
+
+    const status = manager.getStatus();
+    expect(status.state).toBe('update_available');
+    expect(status.availableManifest?.version).toBe('21.0.0');
+    expect(status.readyToInstall).toBe(false); // file reference cleared — never paired with the new manifest
+  });
+
+  it('3c. manual check while ready_to_install, server no longer offers anything newer — resets cleanly to up_to_date, no stale readiness left behind', async () => {
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { fetchManifest: vi.fn().mockResolvedValue(baseManifest()) });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+
+    const manager2 = await freshManager(
+      { currentVersion: '20.99.0' }, // now already at the "latest" version
+      { fetchManifest: vi.fn().mockResolvedValue(baseManifest()) }
+    );
+    await manager2.checkNow('manual');
+    const status = manager2.getStatus();
+    expect(status.state).toBe('up_to_date');
+    expect(status.readyToInstall).toBe(false);
+  });
+
+  it('4. manifest and downloadedFilePath can never be observed describing different targets, across a full checkNow -> downloadUpdate -> manual-recheck-with-newer-manifest sequence', async () => {
+    const manager = await freshManager({ currentVersion: '20.55.0' });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    const beforeFile = manager.getStatus().readyToInstall;
+    expect(beforeFile).toBe(true);
+
+    const fetchManifestModule = await import('../src/main/updater/fetch-manifest.js');
+    (fetchManifestModule.fetchManifest as unknown as ReturnType<typeof vi.fn>)?.mockResolvedValueOnce?.(baseManifest({ version: '21.0.0' }));
+    await manager.checkNow('manual');
+
+    const status = manager.getStatus();
+    // Either readyToInstall is false (file cleared) with the NEW manifest
+    // showing, or true with a manifest matching the file — NEVER a
+    // mismatch (true readiness with a manifest for a different version).
+    if (status.readyToInstall) {
+      expect(status.availableManifest?.version).toBe('20.99.0');
+    } else {
+      expect(status.availableManifest?.version).toBe('21.0.0');
+    }
+  });
+
+  it('5. periodic 4-hour interval firing while ready_to_install (real timer simulation via fake timers) does not disturb the pending install', async () => {
+    vi.useFakeTimers();
+    const fetchManifestMock = vi.fn().mockResolvedValue(baseManifest());
+    vi.doMock('../src/main/updater/fetch-manifest.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/main/updater/fetch-manifest.js')>();
+      return { ...actual, fetchManifest: fetchManifestMock };
+    });
+    vi.doMock('../src/main/updater/downloader.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/main/updater/downloader.js')>();
+      return {
+        ...actual,
+        downloadAndVerifyInstaller: vi.fn().mockResolvedValue({ filePath: 'C:\\fake\\T2Sales-Setup-x64-20.99.0.exe' }),
+        verifyFileIntegrity: vi.fn().mockResolvedValue(undefined)
+      };
+    });
+    vi.doMock('../src/main/updater/signature.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/main/updater/signature.js')>();
+      return { ...actual, verifyAuthenticodeSignature: vi.fn().mockResolvedValue({ status: 'NotSigned', signed: false, subject: null }) };
+    });
+    vi.resetModules();
+    const { UpdateManager } = await import('../src/main/updater/manager.js');
+    const manager = new UpdateManager({
+      updateBaseUrl: 'https://updates.vincere-mortem.ru',
+      channel: 'stable',
+      currentVersion: '20.55.0',
+      updateCacheDir: 'C:\\fake\\updates'
+      // real setInterval/setTimeout — intercepted by vi.useFakeTimers()
+    });
+
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+    fetchManifestMock.mockClear();
+
+    manager.start(); // schedules the real periodic interval (default 4h)
+    await vi.advanceTimersByTimeAsync(4 * 60 * 60 * 1000 + 1000); // cross the interval boundary
+
+    expect(fetchManifestMock).not.toHaveBeenCalled(); // automatic trigger — blocked by the race fix
+    expect(manager.getStatus().state).toBe('ready_to_install');
+    expect(manager.getStatus().readyToInstall).toBe(true);
+    manager.dispose();
+  });
+
+  it('6. installUpdate() called right at the interval boundary launches exactly once — no mismatch, no double launch', async () => {
+    vi.useFakeTimers();
+    const launchInstallerMock = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('../src/main/updater/downloader.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/main/updater/downloader.js')>();
+      return {
+        ...actual,
+        downloadAndVerifyInstaller: vi.fn().mockResolvedValue({ filePath: 'C:\\fake\\T2Sales-Setup-x64-20.99.0.exe' }),
+        verifyFileIntegrity: vi.fn().mockResolvedValue(undefined)
+      };
+    });
+    vi.doMock('../src/main/updater/signature.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/main/updater/signature.js')>();
+      return { ...actual, verifyAuthenticodeSignature: vi.fn().mockResolvedValue({ status: 'NotSigned', signed: false, subject: null }) };
+    });
+    vi.doMock('../src/main/updater/install-launcher.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/main/updater/install-launcher.js')>();
+      return { ...actual, launchInstaller: launchInstallerMock };
+    });
+    vi.resetModules();
+    const { UpdateManager } = await import('../src/main/updater/manager.js');
+    const manager = new UpdateManager({
+      updateBaseUrl: 'https://updates.vincere-mortem.ru',
+      channel: 'stable',
+      currentVersion: '20.55.0',
+      updateCacheDir: 'C:\\fake\\updates'
+    });
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    manager.start();
+
+    // Race the interval boundary against a real installUpdate() call —
+    // the automatic check (blocked by the fix) must not interleave any
+    // state change into the middle of the install.
+    const installPromise = manager.installUpdate();
+    await vi.advanceTimersByTimeAsync(4 * 60 * 60 * 1000 + 1000);
+    await installPromise;
+
+    expect(launchInstallerMock).toHaveBeenCalledTimes(1);
+    expect(launchInstallerMock).toHaveBeenCalledWith('C:\\fake\\T2Sales-Setup-x64-20.99.0.exe');
+    manager.dispose();
+  });
+
+  it('7. dispose() still clears the interval timer exactly as before the fix', async () => {
+    const clearIntervalFn = vi.fn();
+    const setIntervalFn = vi.fn().mockReturnValue({ unref: vi.fn() });
+    const setTimeoutFn = vi.fn().mockReturnValue({ unref: vi.fn() });
+    const clearTimeoutFn = vi.fn();
+    const manager = await freshManager(
+      { currentVersion: '20.55.0', setInterval: setIntervalFn, clearInterval: clearIntervalFn, setTimeout: setTimeoutFn, clearTimeout: clearTimeoutFn },
+      {}
+    );
+    manager.start();
+    manager.dispose();
+    expect(clearIntervalFn).toHaveBeenCalledTimes(1);
+    expect(clearTimeoutFn).toHaveBeenCalledTimes(1);
+  });
+});

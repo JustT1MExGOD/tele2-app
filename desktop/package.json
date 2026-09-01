@@ -1,6 +1,6 @@
 {
   "name": "t2sales-desktop",
-  "version": "20.56.4",
+  "version": "20.56.5",
   "private": true,
   "main": "dist/main/index.js",
   "scripts": {
@@ -13,7 +13,7 @@
     "verify:preload-sandbox": "node scripts/verify-preload-sandbox.mjs",
     "verify:csrf-over-relay": "node scripts/verify-csrf-over-relay.mjs",
     "verify:network-startup": "node scripts/verify-network-startup.mjs",
-    "verify:installer-lifecycle": "node scripts/verify-installer-lifecycle.mjs",
+    "verify:installer-lifecycle": "electron scripts/verify-installer-lifecycle.mjs && node scripts/verify-installer-lifecycle-check-result.mjs",
     "update:prepare": "node scripts/update-prepare.mjs",
     "test:network-acceptance": "vitest run --config vitest.network-acceptance.config.mts"
   },
