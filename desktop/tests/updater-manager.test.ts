@@ -378,6 +378,78 @@ describe('UpdateManager — installUpdate() (§8/§9 security boundary)', () => 
   });
 });
 
+describe('UpdateManager — installUpdate() launch-failure handling (§updater-install-lifecycle)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // "callback app quit только после confirmed process start" — onLaunched
+  // (which main/index.ts wires to app.quit()) must never fire unless
+  // launchInstaller() itself actually resolved.
+  it('does NOT call onLaunched when launchInstaller() rejects — the app must never quit on a failed/unconfirmed launch', async () => {
+    const launchInstallerMock = vi.fn();
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { launchInstaller: launchInstallerMock });
+    // Imported AFTER freshManager() — same post-resetModules module graph
+    // manager.ts itself uses, same reasoning as the TOCTOU tests' own
+    // DownloadError import ordering above.
+    const { InstallLaunchError } = await import('../src/main/updater/install-launcher.js');
+    launchInstallerMock.mockRejectedValue(new InstallLaunchError('installer launch helper exited with code 1'));
+
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+
+    const onLaunched = vi.fn();
+    await expect(manager.installUpdate(onLaunched)).rejects.toThrow();
+    expect(onLaunched).not.toHaveBeenCalled();
+  });
+
+  it('a launch failure lands in state error with a safe, sanitized message — never a raw path/command-embedding InstallLaunchError message', async () => {
+    const launchInstallerMock = vi.fn();
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { launchInstaller: launchInstallerMock });
+    const { InstallLaunchError } = await import('../src/main/updater/install-launcher.js');
+    launchInstallerMock.mockRejectedValue(
+      new InstallLaunchError('installer file not found at C:\\Users\\someone\\AppData\\Local\\T2 Sales\\updates\\T2Sales-Setup-x64-20.56.3.exe')
+    );
+
+    await manager.checkNow();
+    await manager.downloadUpdate();
+
+    await expect(manager.installUpdate()).rejects.toThrow();
+    const status = manager.getStatus();
+    expect(status.state).toBe('error');
+    expect(status.errorMessage).not.toContain('C:\\');
+    expect(status.errorMessage).not.toContain('AppData');
+    // Specifically the InstallLaunchError -> fixed-safe-message mapping
+    // (sanitizeError's dedicated branch), not just the generic fallback —
+    // both are safe, but this confirms the actual code path taken.
+    expect(status.errorMessage).toBe('Не удалось запустить установщик обновления');
+  });
+
+  it('a launch failure resets installStarted so a fresh download+install cycle can retry — never a permanent silent no-op lockout', async () => {
+    const launchInstallerMock = vi.fn();
+    const manager = await freshManager({ currentVersion: '20.55.0' }, { launchInstaller: launchInstallerMock });
+    const { InstallLaunchError } = await import('../src/main/updater/install-launcher.js');
+    launchInstallerMock.mockRejectedValueOnce(new InstallLaunchError('installer launch helper exited with code 1')).mockResolvedValue(undefined);
+
+    await manager.checkNow();
+    await manager.downloadUpdate();
+    await expect(manager.installUpdate()).rejects.toThrow();
+    expect(manager.getStatus().state).toBe('error');
+
+    // A launch failure clears downloadedFilePath (same TOCTOU-safety
+    // discipline as the SHA/Authenticode recheck failures above it) — a
+    // real retry re-downloads+re-verifies first, exactly like a user
+    // clicking "Скачать" again after an error. The property under test
+    // is narrower: installStarted must NOT still be stuck `true` from the
+    // failed attempt, or this second real cycle would silently no-op.
+    await manager.downloadUpdate();
+    expect(manager.getStatus().state).toBe('ready_to_install');
+    const onLaunched = vi.fn();
+    await manager.installUpdate(onLaunched);
+    expect(launchInstallerMock).toHaveBeenCalledTimes(2);
+    expect(onLaunched).toHaveBeenCalledOnce();
+  });
+});
+
 describe('UpdateManager — installUpdate() TOCTOU re-verification (security gate §1)', () => {
   afterEach(() => vi.restoreAllMocks());
 

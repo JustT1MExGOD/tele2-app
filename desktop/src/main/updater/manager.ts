@@ -8,7 +8,7 @@
 import { fetchManifest, ManifestFetchError } from './fetch-manifest.js';
 import { downloadAndVerifyInstaller, verifyFileIntegrity, snapshotFileForDiagnostics, DownloadError } from './downloader.js';
 import { verifyAuthenticodeSignature, evaluateSignaturePolicy, AuthenticodeError, categorizeAuthenticodeResult } from './signature.js';
-import { launchInstaller } from './install-launcher.js';
+import { launchInstaller, InstallLaunchError } from './install-launcher.js';
 import { isNewerVersion } from './version.js';
 import { ManifestValidationError, type UpdateManifest, type UpdateChannelName } from './manifest.js';
 import type { UpdateStatus, UpdateState, UpdateErrorStage, UpdateVerificationStage } from './types.js';
@@ -458,7 +458,43 @@ export class UpdateManager {
       throw new Error(blockReason);
     }
 
-    await launchInstaller(filePath);
+    // §updater-install-lifecycle — INSTALL_LAUNCH_START/INSTALL_PROCESS_
+    // STARTED bracket the actual OS-level launch call, so updater.log can
+    // show whether a real failure happened BEFORE this point (SHA/
+    // Authenticode/policy — already covered above) or AT the launch
+    // itself. There is deliberately no "installer exited early" stage —
+    // observing the installer's own later lifecycle would require this
+    // process to keep a live handle to it, which is exactly the
+    // dependency that caused the original bug (see install-launcher.ts's
+    // module doc comment); INSTALL_PROCESS_STARTED is the strongest safe
+    // signal obtainable without reintroducing that dependency — it means
+    // the OS confirmed the launch request was accepted, not that the
+    // installer will still be running a second later.
+    writeUpdaterDiagnostic({
+      stage: 'INSTALL_LAUNCH_START',
+      currentVersion: this.options.currentVersion,
+      targetVersion: manifest.version,
+      channel
+    });
+    try {
+      await launchInstaller(filePath);
+    } catch (e) {
+      const errorName = e instanceof Error ? e.name : 'unknown';
+      logger.warn('update_stage_failed', { stage: 'install_launch', errorName });
+      writeUpdaterDiagnostic({ stage: 'INSTALL_LAUNCH_START', errorName, currentVersion: this.options.currentVersion, targetVersion: manifest.version, channel });
+      this.downloadedFilePath = null;
+      this.errorMessage = sanitizeError(e);
+      this.errorStage = null; // no dedicated UpdateErrorStage for this — see types.ts's 6 defined stages
+      this.setState('error');
+      this.installStarted = false;
+      throw e;
+    }
+    writeUpdaterDiagnostic({
+      stage: 'INSTALL_PROCESS_STARTED',
+      currentVersion: this.options.currentVersion,
+      targetVersion: manifest.version,
+      channel
+    });
     onLaunched?.();
   }
 
@@ -475,10 +511,21 @@ export class UpdateManager {
  * beyond what's useful — but DOES keep our OWN thrown error messages
  * (ManifestFetchError/DownloadError/ManifestValidationError), which are
  * already short, sanitized, hand-written strings, never containing
- * cookies/tokens/response bodies (§15 of the brief). */
+ * cookies/tokens/response bodies (§15 of the brief).
+ *
+ * InstallLaunchError is deliberately NOT given the same `e.message`
+ * passthrough — unlike the classes above, its internal messages are
+ * plain-English assertion text for a condition that should never occur
+ * in production (a bad path/filename this process itself constructed),
+ * and two of its variants embed the full installer filesystem path —
+ * never meant to reach the user. A fixed, safe, already-Russian message
+ * is returned instead. */
 function sanitizeError(e: unknown): string {
   if (e instanceof ManifestFetchError || e instanceof DownloadError || e instanceof ManifestValidationError || e instanceof AuthenticodeError) {
     return e.message;
+  }
+  if (e instanceof InstallLaunchError) {
+    return 'Не удалось запустить установщик обновления';
   }
   return 'Не удалось проверить обновление';
 }
