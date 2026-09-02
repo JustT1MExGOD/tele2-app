@@ -93,7 +93,14 @@ const CLEAN_FILES = [
   'src/cron/alerts.ts',
   'src/cron/reports.ts',
   'src/integrations/ai/client.ts',
-  'src/platform/notifications/release-announce.ts'
+  'src/platform/notifications/release-announce.ts',
+  'src/api/routes/chat/messages.ts',
+  'src/api/routes/chat/attachments.ts',
+  'src/api/routes/chat/ws.ts',
+  'src/core/chat/service.ts',
+  'src/core/chat/realtime-registry.ts',
+  'src/core/chat/attachment-validation.ts',
+  'src/core/chat/storage.ts'
 ];
 
 // withTransaction() — оркестрация (BEGIN/COMMIT/ROLLBACK), не сам SQL: сами

@@ -40,6 +40,7 @@ import { registerEmployeeProfileRoutes } from './profiles/employee.js';
 import { registerAvatarRoutes } from './me/avatar.js';
 import { registerAuditRoutes } from './audit.js';
 import { registerDealersRoutes } from './org/dealers.js';
+import { registerChatRoutes } from './chat/index.js';
 
 const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Plans', registerPlansRoutes],
@@ -76,7 +77,8 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Employee Profile', registerEmployeeProfileRoutes],
   ['Avatar', registerAvatarRoutes],
   ['Audit', registerAuditRoutes],
-  ['Dealers/Sectors', registerDealersRoutes]
+  ['Dealers/Sectors', registerDealersRoutes],
+  ['Chat (внутренний чат сотрудников)', registerChatRoutes]
 ];
 
 /**

@@ -33,7 +33,7 @@ Everything updater-related lives in `desktop/src/main/updater/`:
 | `fetch-manifest.ts` | Fetches + validates one channel's manifest.json |
 | `downloader.ts` | Streams + verifies (size, SHA-256) one installer to disk |
 | `signature.ts` | Authenticode verification + signing policy |
-| `install-launcher.ts` | Launches the verified installer (`execFile`, no shell, no args) |
+| `install-launcher.ts` | Launches the verified installer (`shell.openPath()` — no shell/command-line boundary at all, exact-filename-pin regex, fail-closed TOCTOU re-verification just before launch) |
 | `manager.ts` | `UpdateManager` — orchestrates check/download/install, owns state |
 
 `main/config.ts::loadDesktopConfig()` is the single canonical source for
@@ -250,7 +250,10 @@ talks to a different host entirely (`updates.vincere-mortem.ru`, never
   verification → SHA-256 verification → signature policy check →
   **explicit user click** on "Установить сейчас".
 - No silent install, ever, in v1 — the real NSIS installer UI always
-  runs (`execFile(installerPath, [])`, zero arguments, no `/S`).
+  runs (`shell.openPath(installerPath)`, no arguments passed at all —
+  v1 never builds a command line from manifest data, see
+  `install-launcher.ts`'s own module doc comment for the full traced
+  origin/security reasoning).
 - `mandatory: true` in v1: shown with a visible "ВАЖНОЕ ОБНОВЛЕНИЕ" badge
   in the UI, nothing more — no force-install, no force-kill of the
   running app, no blocking the rest of the UI. A future version may
@@ -274,8 +277,14 @@ talks to a different host entirely (`updates.vincere-mortem.ru`, never
     T2Sales-Setup-x64-20.56.0-beta.1.exe
 ```
 
-**Not deployed by this pass** — the layout and Caddy config below are
-documentation/templates only.
+**Historical note**: this layout/Caddy config was originally written as
+documentation/templates only, not yet deployed. It has since been
+deployed for real — the production `stable` update host is live,
+20.56.5 is published on it, and a real production update (20.56.4 →
+20.56.5) was accepted on an affected PC through this exact
+infrastructure (see `docs/DESKTOP-RELEASE.md#updates-v1--implemented-published-accepted`).
+The layout/Caddy example below still documents the real, current
+structure — kept as-is, not a stale claim about deployment status.
 
 ### Caddy example
 

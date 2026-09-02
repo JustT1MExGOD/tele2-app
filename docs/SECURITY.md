@@ -118,7 +118,7 @@ Defense-in-depth: ни один отдельный уровень не един�
 | 6 | Целостность данных | UNIQUE-constraints, compare-and-swap, транзакции | миграции + `data/db/index.ts` |
 | 7 | Audit Trail | Кто/что/когда/над кем, транзакционно с мутацией | `data/repositories/audit.ts` |
 | 8 | Обработка ошибок | Единый формат, без утечки внутренностей | `app.ts::setErrorHandler`, `shared/errors.ts` |
-| 9 | Frontend | Экранирование вывода, CSP, typed-контракт | `frontend/js/*.js`, `frontend/src/api-client.ts` |
+| 9 | Frontend | Экранирование вывода, CSP, typed-контракт | `frontend/src/*` (`frontend/js/` не существует с 20.30.0) |
 | 10 | Cryptographic Data Protection | Application-level envelope encryption (Level 2) на чувствительных полях; E2EE (Level 3) — NOT IMPLEMENTED, см. ADR-008 | `security/crypto/*`, `data/repositories/support.ts` |
 | 11 | Multi-Factor Authentication + step-up | WebAuthn/TOTP/recovery codes; channel-agnostic step-up ticket на опасные действия; last-factor removal guard | `auth/mfa/*`, `auth/step-up.ts`, `api/routes/auth/mfa.ts` |
 
@@ -506,10 +506,12 @@ manager). Новый CI-gate (`scripts/check-dangerous-js-patterns.mjs`,
 API-клиент (`api-client.ts`, 91 функция) сознательно бросает на не-ok/
 сетевой ошибке, сам не глотает и не подставляет фолбэк. Общий контракт
 (`shared/api-types.ts`) даёт компилируемую гарантию, что реализация роута и
-тип ответа не разойдутся. Формат Vite-сборки — **iife** (не es/umd):
-легаси-файлы `frontend/js/*.js` — классические синхронные
-`<script src=...>`, ожидающие общую глобальную область к моменту
-выполнения; IIFE сохраняет ту же семантику загрузки.
+тип ответа не разойдутся. Формат Vite-сборки — **iife** (не es/umd): `index.html` по-прежнему
+подключает каждый бандл классическим синхронным `<script src=...>` (не
+`type="module"`), ожидающим общую глобальную область к моменту
+выполнения — IIFE сохраняет ту же семантику загрузки, что была у
+исходных `frontend/js/*.js` (директория не существует с 20.30.0, но
+паттерн подключения бандлов в `index.html` — тот же).
 
 ### 10. Cryptographic Data Protection
 
@@ -802,6 +804,60 @@ enrollment, recovery codes once) — WebAuthn-регистрация/аутен�
 в браузере сознательно отложена (требует полноценной ceremony-логики,
 TOTP уже полностью закрывает mandatory-политику без риска лишить
 доступа существующих admin/supervisor).
+
+---
+
+### 12. Internal Chat (20.57.0)
+
+Новый attack surface — общий чат сотрудников внутри organization/network
+(`docs/CHAT.md` — полное описание, здесь только security-инварианты).
+
+- **Только authenticated active employee** — тот же `requireActive()`,
+  что и весь остальной API, ни одного отдельного auth-механизма для чата.
+- **Org scope — только из principal** (`request.user.org_id`), никогда из
+  тела/query запроса. Нет admin cross-org view override для чата — в
+  отличие от аналитики/планов (`resolveViewOrgId()`), своя сеть без
+  исключений ни для одной роли.
+- **Прямой доступ по чужому id — reject/not found, не raw-ошибка**:
+  запрос сообщения/вложения другой сети получает тот же ответ, что и
+  несуществующий ресурс (404), не отличимый снаружи от "не существует
+  вообще" — не даёт enumerate чужие id.
+- **Вложения — та же org-граница**, что и сообщения; prepared (ещё не
+  отправленное) вложение видно только загрузившему, не всей сети, до
+  реальной привязки к сообщению.
+- **CSRF не отключён** для мутирующих чат-роутов (browser-сессия) — тот
+  же глобальный `requireCsrf()` hook, без точечного исключения.
+- **Идемпотентность** — `clientMessageId` + `UNIQUE`-constraint,
+  устойчиво к честному retry и к настоящей конкурентной гонке
+  одновременно (не только "неповторяющийся id", а доказано тестом на
+  реальный `Promise.all()`).
+- **WS-аутентификация** — до апгрейда соединения (`preHandler`), не
+  "открылось, потом отклонили".
+- **WS-ре-валидация принципала** — на каждый heartbeat (30с), не только
+  один раз при подключении; деактивированный/переведённый в другую сеть
+  сотрудник теряет соединение в пределах одного интервала.
+- **Connection cap** — 8 одновременных WS-соединений на сотрудника,
+  защита от исчерпания registry одним аккаунтом.
+- **Safe text rendering** — тело сообщения экранируется (`esc()`) до
+  любой вставки в DOM, линкификация URL работает на уже экранированной
+  строке (не создаёт новую инъекционную поверхность); никогда `innerHTML
+  = message.body` сырым.
+- **File allowlist** — три независимых сигнала (extension + заявленный
+  MIME + magic bytes), не доверие ни одному по отдельности; точный список
+  разрешённых типов — `docs/CHAT.md#attachments`.
+- **Size limits** — 20MB/файл (DB `CHECK`, не только application-слой),
+  5 вложений/сообщение.
+- **Orphan cleanup** — просроченные непривязанные вложения удаляются
+  физически (метаданные и bytea-блоб), никогда не трогает уже привязанное
+  вложение.
+- **No content logging** — ни тело сообщения, ни байты файла никогда не
+  попадают в application-логи; допустимые поля — id/employee/org/событие/
+  категория ошибки, тот же принцип, что и остальной backend (см. §7
+  Audit Trail и Observability выше).
+- **E2EE — не реализовано.** Сервер сегодня видит plaintext body и
+  plaintext вложения целиком — см. `docs/CHAT.md#privacy` и
+  [ADR/010](./ADR/010-chat-e2ee-future-direction.md) (направление на
+  будущее, Proposed/Planned, ничего не решено окончательно).
 
 ---
 

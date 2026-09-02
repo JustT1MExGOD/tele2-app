@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Браузер/PWA · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.56.0-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.57.0--rc-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-1311%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя, либо браузер несёт cookie-сессию (телефон+пароль) → сервер на Fastify проверяет identity и права через общий шов (`auth/principal.ts`) → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная версия клиента:** `20.56.0` · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная выпущенная версия:** `20.56.0` · **Release candidate на review:** `20.57.0` (внутренний чат — Phase 1-10 реализован и протестирован, ещё не задеплоен, см. §21) · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 
@@ -493,6 +493,7 @@ Menu Button → URL `https://<service>.up.railway.app/`
 | **20.54.0** | Security Hardening & Defense in Depth — Часть 2 (P1): третий security-бриф (58 разделов), приоритет P1-A первым, честный P2 вместо частичных фиксов везде. Закрыто полностью, с тестами: распределённый Postgres-backed rate-лимит слой на login/MFA/reset; CSV formula injection (`csvSafeCell()`); офлайн-очередь не чистилась при logout на общем устройстве (`OfflineQueue.clear()`); `MINI_APP_URL` теперь обязателен в проде (раньше тихо отключал CSRF Origin-слой); WebAuthn-аудит (тест-покрытие закрыто, кода-бага не найдено); tenant/supervisor IDOR-аудит (подтвердил: sector-scope сегодня — только dashboard-агрегаты, не confidentiality-граница, задокументировано с владельцем продукта); encryption backfill+key-rotation tooling для support-тикетов (реальные 10 plaintext-строк в проде найдены read-only проверкой, инструмент готов, не запущен на проде); 8 XSS-фиксов (`shift_text`/`store_name`/`full_name`/`mask`) + попутный фикс тестовой инфраструктуры (3 jsdom-теста стабили `esc()` как no-op). CSP tightening и весь P2 сознательно НЕ тронуты — см. `docs/security/20.54-baseline.md`. `MINI_APP_URL` выставлен в Railway перед пушем, задеплоено |
 | **20.54.1** | Хотфикс: миграция `0025_security_rate_limit.sql` не была схема-квалифицирована (`public.`), в отличие от каждой другой миграции проекта — прошла на уже существующей локальной test-БД, но упала в CI на свежем контейнере Postgres 18 (`no schema selected to create in`). Воспроизведено локально на свежей БД той же версии перед фиксом |
 | **20.55.0** | Windows-приложение T2 Sales (`desktop/`, `T2Sales-Setup-x64.exe`) — та же самая T2 Sales, без второго интерфейса/логина, для сетей где прямой доступ к сайту заблокирован. `DIRECT → RELAY → OFFLINE`: приложение само пробует прямое HTTPS-соединение, при неудаче переключается на резервный маршрут через отдельный T2 Edge Relay (`relay/`, деплой на `relay.vincere-mortem.ru`) — без ручных VPN/прокси, без единого ослабления auth/CSRF/cookie-модели. Реально проверено на живом ПК на сети без VPN, где сайт не открывается напрямую: DNS OK → прямой TCP timeout → переключение на relay → вход/MFA/рабочий экран загружаются нормально. Тестовая сборка без цифровой подписи (ожидаемый SmartScreen при установке), без публичной ссылки на скачивание |
+| **20.57.0** (RC, не задеплоено) | Внутренний чат сотрудников — один общий чат на organization/network, server-authoritative identity (sender/org/timestamp никогда из тела запроса), keyset-история, идемпотентная отправка (`clientMessageId`), realtime WebSocket в DIRECT + bounded HTTP-polling fallback (relay остаётся fixed-upstream HTTP-релеем, WS через него не проходит — ожидаемо, не баг), вложения (20MB/5 на сообщение, allowlist-валидация, orphan cleanup, org-scoped IDOR-защита), Postgres-based `StorageAdapter`. E2EE не реализовано — `docs/ADR/010`. 624/624 backend + 461/461 frontend + 69/69 relay, Browser/Electron DIRECT manual acceptance PASS; Telegram/Electron RELAY production smoke и Railway-миграция — PENDING. Полная документация — `docs/CHAT.md` |
 | **20.56.0** | Два независимых куска работы над Windows-приложением. (1) Реальная проверка на живой сети нашла баг: чтение работало через RELAY, а сохранение (например добавление продажи) — нет, `"CSRF-токен отсутствует или неверен"`. Причина — три независимых особенности Electron (`session.protocol.handle`/`session.fetch`): cookie от ответа применялись не к canonical origin, несколько `Set-Cookie` схлопывались в одну строку через запятую, `Cookie`-заголовок входящего запроса всегда был `null`. Транспорт RELAY переписан на `node:https`/`node:http` напрямую (тот же паттерн, что уже в `relay/src/forward.ts`) с явным чтением/записью cookie через `session.cookies`, без единого изменения CSRF/SameSite/Secure/HttpOnly/TLS-проверки — отдельный security-ревью после фикса добавил hard cap на буферизацию ответа, forwarding `AbortSignal`, явный strip hop-by-hop заголовков. (2) Реализован (и протестирован, включая финальный security/reliability gate) механизм автообновления `desktop/src/main/updater/` — отдельный control plane (`updates.vincere-mortem.ru`), независимый от Railway и от relay, скачивание+SHA-256+Authenticode-проверка потоково с hard cap, повторная проверка целостности файла непосредственно перед запуском инсталлятора (закрыт TOCTOU-разрыв между verification и запуском), явное подтверждение пользователем перед установкой — ничего не ставится тихо. Сервер обновлений пока не опубликован, возможность технически готова, но не активна ни для одной установленной копии |
 
 ---
@@ -1439,6 +1440,6 @@ Protection) — **[docs/SECURITY.md](docs/SECURITY.md)**. Какие данны�
 
 [📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
 
-*README · актуально на v20.56.0 · август 2026*
+*README · актуально на v20.56.0 (выпущено) · v20.57.0 в статусе release candidate · сентябрь 2026*
 
 </div>

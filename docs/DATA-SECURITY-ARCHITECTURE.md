@@ -7,7 +7,9 @@
 > (как устроено технически) и [THREAT-MODEL.md](./THREAT-MODEL.md) (от
 > чего защищаемся). Архитектурное решение и альтернативы —
 > [ADR/007](./ADR/007-application-level-envelope-encryption.md),
-> [ADR/008](./ADR/008-e2ee-not-implemented.md).
+> [ADR/008](./ADR/008-e2ee-not-implemented.md),
+> [ADR/010](./ADR/010-chat-e2ee-future-direction.md) (внутренний чат —
+> направление к будущему E2EE, Proposed/Planned, не текущая защита).
 
 ## Принцип
 
@@ -34,8 +36,19 @@ read-доступом к диску, а не к работающему прил�
 | `ai_audit.prompt`/`response` | Да (AI Copilot сам генерирует и логирует) | Нет | — | Обычный backup | Бессрочно (диагностика AI-поведения) |
 | `support_tickets.message`/`admin_reply`, `support_messages.body` | Да, ПО ЗАПРОСУ (owner/admin читают на лету — это функция поддержки) | **Level 2 — application-level envelope encryption** (AES-256-GCM, DEK per-object, wrapped KEK) — см. [ADR/007](./ADR/007-application-level-envelope-encryption.md) | Backend (KEK в `ENCRYPTION_KEKS`, вне PostgreSQL) | KEK потерян → эти записи невосстановимы (честно, не скрытый мастер-ключ «для удобства» — см. §31 инвариант) | Как обычные тикеты (не удаляются автоматически) |
 | `channels`/`channel_messages`, `task_comments`, `announcements`, `shift_sessions.handover_note` | Да (team/org-wide broadcast — видимость команде это и есть фича) | Нет — не приватные данные по дизайну, см. [ADR/008](./ADR/008-e2ee-not-implemented.md) | — | Обычный backup | Бессрочно |
+| `chat_messages.body`, `chat_attachments`/`chat_attachment_blobs` (внутренний чат, 20.57.0) | **Да, целиком plaintext** — server-authoritative для confidentiality: тело сообщения читается/валидируется сервером как есть, содержимое вложения целиком проходит через magic-byte/MIME-валидацию на сервере до сохранения | **Нет — E2EE не реализован.** Та же категория, что строка выше (org-wide broadcast — весь чат сети видит любой активный сотрудник этой сети, не 1:1), см. [ADR/008](./ADR/008-e2ee-not-implemented.md). `chat_messages.encryption_version` существует в схеме как нейтральный задел под будущее (см. [ADR/010](./ADR/010-chat-e2ee-future-direction.md)), но не используется никаким кодом сегодня — это НЕ текущая защита | — | Обычный backup | Бессрочно |
 | `BOT_TOKEN`/`DATABASE_URL`/`GROQ_API_KEY` | Не данные, секреты рантайма | Вне кода/БД — Railway env | Владелец продукта (Railway dashboard) | Ротация — [RUNBOOK.md](./RUNBOOK.md) | Пока не скомпрометирован |
 | Приватная переписка сотрудник↔сотрудник (E2EE, Level 3) | **Не существует как фича** | Не реализовано | — | — | — |
+
+**Внутренний чат — детали к строке выше** (полное описание —
+[docs/CHAT.md](./CHAT.md)): tenant isolation держится на
+`request.user.org_id` (единственный authority, никогда из тела запроса);
+метаданные каждого сообщения — `sender_employee_id`/`org_id`/
+`created_at`, всегда server-generated. Backend сегодня — доверенная
+сторона для confidentiality чата целиком (как и для всех broadcast-типов
+данных в таблице выше) — это архитектурный факт, не временный недосмотр;
+меняется только если/когда направление из [ADR/010](./ADR/010-chat-e2ee-future-direction.md)
+перейдёт из Planned в реализацию.
 
 ## Почему не E2EE «на всякий случай»
 

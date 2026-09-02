@@ -13,6 +13,7 @@ import multipart from '@fastify/multipart';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
+import websocket from '@fastify/websocket';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -86,6 +87,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   // (providers/phone.ts). Секрет не нужен: значение cookie — непрозрачный
   // случайный токен, в БД хранится только его sha256, не подпись.
   await app.register(cookie);
+  // Внутренний чат (20.57.0) — единственный потребитель WS в проекте
+  // сейчас; connectSrc: ["'self'"] в CSP ниже уже покрывает same-origin
+  // wss:// без отдельного изменения директивы (см. итоговый отчёт чата).
+  await app.register(websocket);
 
   // Заголовки безопасности. CSP собрана под реальную структуру фронтенда
   // (без CSP-соответствующей автоматической проверки один раз в начале):

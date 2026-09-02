@@ -26,19 +26,47 @@ describe('GET /employees/:id/profile', () => {
     employeeA = await fx.createEmployee(orgA, { role: 'employee', fullName: 'Тестовый Сотрудник' });
 
     const month = todayMoscow().slice(0, 7) + '-01';
-    // Только план по sim ненулевой — pct для health.plan становится
-    // однозначным (7 факт / 10 план = 70%), не усредняется по 13 метрикам.
-    await query(
-      `INSERT INTO employee_month_plans (employee_id, month, sim, mnp, pa, combo)
-       VALUES ($1, $2, 10, 0, 0, 0)`,
-      [employeeA.id, month]
-    );
 
+    // 20.57.1 — было: план захардкожен sim=10, ожидание 7 факт/10 план=70%,
+    // подразумевая, что все 7 "последних дней" попадают в ТЕКУЩИЙ месяц.
+    // Ложь при today = 1-7 число: calculateEmployeeBFQ (core/bfq/service.ts
+    // ::getEmployeeFacts) считает факт СТРОГО по календарному месяцу
+    // (sale_date BETWEEN month-01 AND конец месяца), а days=7-окно ниже —
+    // по скользящим последним 7 дням от todayMoscow() (routes/profiles/
+    // employee.ts) — это два РАЗНЫХ, намеренно разных скоупа по дизайну
+    // production-кода (план — месячный, явка/ideal_rate — по окну), не
+    // баг. У начала месяца скользящее окно закономерно пересекает границу
+    // месяца, часть из 7 вставленных продаж физически не попадает в план
+    // текущего месяца — тест был написан в предположении, которое НЕ
+    // всегда верно, а не production сломан.
+    //
+    // Фикс — тест-only, без единого предположения о конкретной дате:
+    // считаем РЕАЛЬНОЕ число дней из 7 последних, которые попадают в
+    // текущий календарный месяц (inCurrentMonthCount, минимум 1 — сегодня
+    // само всегда в текущем месяце), и подбираем план как ровно 2×N —
+    // тогда plan% = N сделанных продаж-в-месяце / 2N плана = 50% ВСЕГДА,
+    // при любом today (1 число, конец месяца, смена года). Продажи
+    // вставляются на все 7 дней как и раньше (те, что физически попадают
+    // в прошлый месяц, просто не влияют на bfq.fact — это ожидаемо, не
+    // ошибка вставки).
     const todayStr0 = todayMoscow();
+    const currentMonthPrefix = todayStr0.slice(0, 7);
+    const dates: string[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(todayStr0 + 'T12:00:00');
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().slice(0, 10);
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    const inCurrentMonthCount = dates.filter((d) => d.startsWith(currentMonthPrefix)).length;
+
+    await query(
+      `INSERT INTO employee_month_plans (employee_id, month, sim, mnp, pa, combo)
+       VALUES ($1, $2, $3, 0, 0, 0)`,
+      [employeeA.id, month, 2 * inCurrentMonthCount]
+    );
+
+    for (let i = 0; i < 7; i++) {
+      const dateStr = dates[i];
       await query(
         `INSERT INTO schedules (employee_id, store_id, work_date, hours) VALUES ($1,$2,$3,8)`,
         [employeeA.id, storeA, dateStr]
@@ -50,6 +78,8 @@ describe('GET /employees/:id/profile', () => {
       // Только 5 из 7 запланированных дней реально отработаны (закрытая
       // смена) — 2 дня отсутствуют, явка должна получиться 5/7 ≈ 71%.
       // Из 5 отработанных 3 идеальные — ideal_rate должен получиться 60%.
+      // Это окно (в отличие от plan) скользящее по дням, не по месяцу —
+      // границу месяца не пересекает как проблему, дата не важна.
       if (i < 5) {
         await query(
           `INSERT INTO shift_sessions (employee_id, store_id, work_date, status, opened_at, closed_at, score, ideal_shift, mood)
@@ -122,7 +152,8 @@ describe('GET /employees/:id/profile', () => {
     );
     expect(weightSum).toBeCloseTo(1, 5);
 
-    expect(body.health.components.plan.value).toBe(70);
+    // 2×N план / N факт-в-месяце = 50% всегда, см. комментарий в beforeAll.
+    expect(body.health.components.plan.value).toBe(50);
     expect(body.health.components.attendance.value).toBe(71);
     expect(body.health.components.ideal_shift_rate.value).toBe(60);
     expect(body.health.components.momentum.value).toBe(100);

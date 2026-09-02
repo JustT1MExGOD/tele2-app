@@ -256,6 +256,9 @@ export function loadPage(name: string): void {
   if (name === 'dealers') {
     loadDealersAdmin();
   }
+  if (name === 'chat') {
+    loadChatPage();
+  }
 }
 
 export async function refreshAll(): Promise<void> {

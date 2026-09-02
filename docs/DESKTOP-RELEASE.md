@@ -2,10 +2,34 @@
 
 ## Versioning (§53)
 
-Single version across `desktop/package.json`, `relay/package.json`, the
-installer filename, and (via `app.getVersion()`, surfaced through
-`t2Desktop.getVersion()`) the app's own about/version display — all
-`20.56.0` this release, bumped together, never independently.
+**Historical note**: §53 of the original brief called for a single
+version bumped together across `desktop/package.json`,
+`relay/package.json`, and the installer filename. That model did not
+survive contact with real independent release cadences — `desktop/`
+shipped four patch hotfixes (20.56.1 → 20.56.5) for updater-specific
+fixes with zero corresponding backend/relay changes, and the backend's
+20.57.0 (internal chat, release candidate) touches neither `desktop/`
+nor `relay/`'s production code at all. Forcing a version bump on an
+untouched package to preserve a "single number" fiction would itself be
+the anti-pattern this project avoids elsewhere (never change code "just
+to sync a version").
+
+**Actual model, as of 20.57.0**: each package (`backend`, `desktop`,
+`relay`) carries its own independent MAJOR.MINOR.PATCH, following the
+same convention as everywhere else in this repo (MAJOR = epoch, MINOR =
+feature, PATCH = hotfix) — just evaluated per package, not project-wide.
+A package's version only moves when that package's own production code
+changes. Current state:
+
+| Package | Version | Why |
+|---|---|---|
+| `backend`/`frontend` | `20.57.0` (release candidate) | Internal employee chat — see `docs/CHAT.md`, `CHANGELOG.md` |
+| `desktop` | `20.56.5` | Stable, accepted — updater P0 closed; untouched by the chat release |
+| `relay` | `20.56.0` | Unchanged — chat's REST traffic passes through relay's existing `POST /forward` unmodified, proven by `relay/tests/relay-chat-acceptance.test.ts`; no relay code changed |
+
+`app.getVersion()` / `t2Desktop.getVersion()` continue to report the
+Electron app's own `desktop/package.json` version — that has not changed
+and still correctly reflects what's actually installed.
 
 ## Build
 
@@ -19,7 +43,7 @@ single file via esbuild (`scripts/bundle-preload.mjs`) — Electron's
 sandboxed preload cannot load multi-file `require()` output at all (found
 and fixed in the acceptance-hardening pass; see `scripts/
 verify-preload-sandbox.mjs` for the permanent regression check).
-Produces `desktop/release/T2Sales-Setup-x64-20.56.0.exe` (NSIS,
+Produces `desktop/release/T2Sales-Setup-x64-<version>.exe` (NSIS,
 per-user install, no admin required — see `desktop/electron-builder.yml`)
 plus a `.blockmap` file. Compute the release SHA-256 with
 `Get-FileHash -Algorithm SHA256` (PowerShell) or `sha256sum` — the exact
@@ -39,7 +63,7 @@ warnings on end-user machines. The private key must never be committed
 to the repository — CI secrets only, same discipline as every other
 secret in this project.
 
-## Updates (v1 — implemented, not yet published)
+## Updates (v1 — implemented, published, accepted)
 
 A custom updater (`desktop/src/main/updater/`) checks
 `https://updates.vincere-mortem.ru` — a separate control plane from both
@@ -53,8 +77,15 @@ the "independent of Railway/relay" and "explicit user confirmation, never
 silent" requirements more directly than the stock NSIS differential-update
 flow does). No auto-download-and-silently-run mechanism exists — every
 install requires an explicit user click (§8 of docs/DESKTOP-UPDATES.md).
-Not yet published to the update server this pass — see that doc's
-"Publishing workflow" for the (manual, separate) next step.
+
+**Current status**: the production stable update host is live, 20.56.5
+is published on the `stable` channel, and a real production update
+(20.56.4 → 20.56.5) was accepted on an affected PC through the real
+stable/beta update infrastructure — the updater P0 investigation from
+earlier in this desktop epoch is closed. This is a fact about the
+**desktop updater specifically**, unrelated to the backend's 20.57.0
+chat release candidate below — see [DESKTOP-TESTING.md](./DESKTOP-TESTING.md)
+for why these two are tracked separately, not blended into one status.
 
 ## CI (§63/§64)
 

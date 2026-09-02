@@ -1,6 +1,6 @@
-# T2 Sales Desktop (20.56.0)
+# T2 Sales Desktop (current stable: 20.56.5)
 
-A native Windows client (`T2Sales-Setup-x64-20.56.0.exe`) that loads the
+A native Windows client (`T2Sales-Setup-x64-20.56.5.exe`) that loads the
 existing T2 Sales web app directly — not a second frontend. See
 [docs/ADR/desktop-network-transport.md](./ADR/desktop-network-transport.md)
 for why the network layer is shaped DIRECT → RELAY → optional
@@ -12,6 +12,11 @@ for the security model and threat model,
 ship a build, and [docs/DESKTOP-UPDATES.md](./DESKTOP-UPDATES.md) for the
 self-update mechanism (a separate `updates.vincere-mortem.ru` control
 plane, independent of both the relay and Railway).
+
+**Versioning is independent per package, not a single shared number** —
+see [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md#versioning) for why and for
+each package's current version. Desktop's own updater (below) is closed
+and stable at 20.56.5 regardless of what version the backend is on.
 
 **Not to be confused with** `docs/DESKTOP-DESIGN.md`/
 `docs/DESKTOP-UX-AUDIT.md` — those are about the existing responsive web

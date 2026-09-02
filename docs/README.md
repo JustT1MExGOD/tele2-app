@@ -12,10 +12,17 @@
 | **[DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md)** | Таблица данных проекта — кто должен видеть plaintext, что зашифровано, кто владеет ключом | Перед добавлением нового чувствительного поля/фичи |
 | **[THREAT-MODEL.md](./THREAT-MODEL.md)** | Кто может навредить, чему и как, включая криптографический слой | Перед security-ревью, при онбординге в контекст рисков |
 | **[API.md](./API.md)** | Все HTTP-эндпоинты с уровнем доступа, формат ошибок | Интеграция с бэкендом, фронтенд-разработка |
+| **[CHAT.md](./CHAT.md)** | Внутренний чат сотрудников (20.57.0) — tenant boundary, endpoints, realtime/polling, вложения, privacy | Перед правкой чата; понять текущие границы и что НЕ реализовано (E2EE) |
 | **[FEATURES.md](./FEATURES.md)** | Что умеет приложение — по каждому экрану, метрики, формулы | Понять продукт, не только код |
 | **[DEVELOPMENT.md](./DEVELOPMENT.md)** | Локальный запуск, тесты, env-переменные | Первый запуск проекта локально |
 | **[DESKTOP-UX-AUDIT.md](./DESKTOP-UX-AUDIT.md)** | Полная инвентаризация страниц фронтенда — доступ, данные, текущий UI-паттерн, покрытие desktop-CSS | Перед любой desktop-адаптацией страницы |
 | **[DESKTOP-DESIGN.md](./DESKTOP-DESIGN.md)** | Desktop IA, design-система, responsive-стратегия, staged roadmap по страницам | Перед desktop-редизайном конкретной страницы |
+| **[DESKTOP.md](./DESKTOP.md)** | Native Windows-клиент (Electron, `desktop/`) — не путать с DESKTOP-UX-AUDIT/DESKTOP-DESIGN (те про адаптивную вёрстку сайта) | Первый файл перед правкой `desktop/` |
+| **[DESKTOP-NETWORK.md](./DESKTOP-NETWORK.md)** | DIRECT/RELAY/OFFLINE — сетевой слой Electron-клиента | Перед правкой network/relay-кода |
+| **[DESKTOP-SECURITY.md](./DESKTOP-SECURITY.md)** | Security-модель и threat model Electron-приложения | Перед security-ревью desktop-кода |
+| **[DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md)** | Versioning, сборка, подпись, CI, деплой relay, rollback | Перед сборкой/релизом desktop |
+| **[DESKTOP-TESTING.md](./DESKTOP-TESTING.md)** | Automated/manual acceptance, honesty levels, что реально проверено | Перед заявлением "проверено на affected-сети" |
+| **[DESKTOP-UPDATES.md](./DESKTOP-UPDATES.md)** | Self-update: control plane, manifest, подпись, publishing workflow | Перед правкой/публикацией обновлений |
 | **[REPORT_IMAGE.md](./REPORT_IMAGE.md)** | Пайплайн рендера PNG-отчётов | Точечная правка одного модуля |
 | **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** | Симптом → причина/действие | Что-то не работает, ищешь быстрый ответ |
 | **[RUNBOOK.md](./RUNBOOK.md)** | Операционные процедуры — ротация токена, восстановление доступа, работа с миграциями | Реальный инцидент на проде |
@@ -40,6 +47,8 @@
 | [006](./ADR/006-frontend-iife-bundle-not-full-vite-migration.md) | Typed API-клиент как отдельный iife-бандл, не полная миграция на Vite | принято, суперсед частично в 20.12.0+ (см. ADR сам файл) |
 | [007](./ADR/007-application-level-envelope-encryption.md) | Application-Level Envelope Encryption (Level 2) для support-тикетов | принято, реализовано |
 | [008](./ADR/008-e2ee-not-implemented.md) | E2EE/device identity/ratchet/post-quantum — почему НЕ реализовано | рассмотрено, PLANNED |
+| [009](./ADR/009-mfa-step-up.md) | MFA Step-Up | принято, реализовано |
+| [010](./ADR/010-chat-e2ee-future-direction.md) | Внутренний чат: направление к E2EE — дополняет 008 только для этого скоупа | Proposed/Planned, не реализовано |
 
 ## Архив
 

@@ -59,6 +59,54 @@ export interface PromoActionResponse {
   used: boolean;
 }
 
+// ===== Внутренний чат сотрудников (20.57.0) =====
+
+export interface ChatSender {
+  id: number;
+  displayName: string;
+  role: string;
+}
+
+export interface ChatAttachment {
+  id: string;
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  clientMessageId: string;
+  body: string | null;
+  createdAt: string;
+  sender: ChatSender;
+  attachments: ChatAttachment[];
+}
+
+export interface ChatMessagesListResponse {
+  items: ChatMessage[];
+  nextCursor: string | null;
+}
+
+export interface CreateChatMessageRequest {
+  clientMessageId: string;
+  body?: string | null;
+  attachmentIds?: string[];
+}
+
+export interface PreparedChatAttachmentResponse {
+  id: string;
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+  expiresAt: string;
+}
+
+export interface ChatWsMessageEvent {
+  type: 'message';
+  message: ChatMessage;
+}
+
 export interface CashTableEntry {
   cash_fact: number;
   cash_1c: number;

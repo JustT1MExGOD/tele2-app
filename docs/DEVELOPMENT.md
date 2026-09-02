@@ -38,7 +38,10 @@ flowchart LR
 ```
 
 `tsc` ловит TS-ошибки бэкенда, `smoke:frontend` — `ReferenceError` от
-неправильного порядка `frontend/js/*.js`, тесты — регресс авторизации/
+неправильного порядка подключения `dist/*.bundle.js` в `index.html`
+(классические `<script>`-теги делят одну глобальную область, как и раньше
+с `frontend/js/*.js` до 20.30.0 — сама проверка та же, изменился только
+объект проверки), тесты — регресс авторизации/
 изоляции сети/бизнес-корректности/security. Тот же путь `build → migrate →
 start` выполняет CI (`.github/workflows/ci.yml`) на каждый push — Postgres
 поднимается в одноразовом контейнере, схема накатывается тем же
@@ -117,12 +120,12 @@ npx vitest run tests/adversarial/cross-tenant-write.test.ts
       собственным `query()`; CI (`npm run check:no-direct-sql`) ловит откат
 - [ ] Один bot polling (`BOT_POLLING=false` для второй локальной копии)
 - [ ] Не коммитить `.env`
-- [ ] Frontend-файл, переехавший на TypeScript (`frontend/src/`) — настоящий
-      ES-модуль (`import`/`export`), собирается Vite'ом в IIFE-бандл
+- [ ] Новый/правленый frontend-файл — настоящий ES-модуль (`frontend/src/`,
+      `import`/`export`), собирается Vite'ом в IIFE-бандл
       (`npm run build:frontend`), контракт с бэкендом — через
-      `backend/src/shared/api-types.ts`, не заново описанные типы. Файлы, ещё
-      не переехавшие, остаются в `frontend/js/` классическими скриптами без
-      изменений
+      `backend/src/shared/api-types.ts`, не заново описанные типы.
+      `frontend/js/` как директория не существует с 20.30.0 — миграция
+      закрыта полностью, писать в неё уже нечего
 - [ ] Версионирование — MINOR на каждую сущностную правку (фича, фикс,
       рефактор), changelog-запись в `src/platform/notifications/changelog.ts`
       только для эпиков, не хотфиксов ([CHANGELOG.md](../CHANGELOG.md) —

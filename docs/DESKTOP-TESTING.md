@@ -36,9 +36,19 @@ qualifies — confirmed `win32` — but is not the same as the affected-network
 case below).
 **TESTED FROM AFFECTED NETWORK** — §71's real acceptance test, on a real
 Windows PC on a network where the production origin is actually currently
-blocked, VPN off. **Not performed this pass** — this environment has no
-such machine/network available. Do not claim "the block is fixed" or
-"works on all Russian networks" until this level is actually reached.
+blocked, VPN off. Not available inside this sandboxed development
+environment by itself — reaching this level requires a human with access
+to the actual affected hardware/network, coordinated separately from a
+normal coding session. **This level HAS since been reached for the
+desktop DIRECT→RELAY transport and the updater** (real DIRECT failure →
+RELAY fallback → login/MFA → a real 20.56.4→20.56.5 update, all on a real
+affected PC without VPN — see `docs/DESKTOP-RELEASE.md`) — that specific
+result does not automatically extend to every feature added afterward.
+Each new feature (e.g. the internal chat, 20.57.0) needs its own
+affected-network pass before the same claim can be made for it — see
+["Internal chat" below](#internal-chat-20570--a-separate-new-acceptance-item-not-a-re-run-of-71).
+Do not claim "the block is fixed" or "works on all Russian networks" for
+anything that hasn't itself actually reached this level.
 
 ## A real environment gotcha, worth documenting once
 
@@ -131,3 +141,31 @@ affected hardware/network:
 Until this specific test has actually been run and passed, do not write
 "blocked networks are fixed" or "works on all Russian networks" anywhere
 in release notes or announcements.
+
+## Internal chat (20.57.0) — a separate, NEW acceptance item, not a re-run of §71
+
+The §71 test above and the desktop updater acceptance
+(`docs/DESKTOP-RELEASE.md#updates-v1--implemented-published-accepted`)
+were performed **before the chat feature existed** — they prove
+DIRECT→RELAY network transport and the updater work on a real
+affected-network machine, nothing about chat specifically. Do not cite
+either as evidence that chat works over RELAY; they are closed, unrelated
+facts, not blanket coverage for every new feature added afterward.
+
+Current status for chat, honestly per the levels above:
+
+- **Electron DIRECT chat acceptance**: TESTED LOCALLY (manual run against
+  a real backend, real send/receive/attachment round-trip) — PASS.
+- **Electron RELAY chat production smoke**: **PENDING** — not yet run on
+  a real affected network without VPN. Relay's REST-forwarding
+  compatibility for chat's specific endpoints is proven at the
+  INTEGRATION level (`relay/tests/relay-chat-acceptance.test.ts`, 5/5,
+  same mocked-`forwardToUpstream` boundary as the rest of this file's
+  INTEGRATION tier) — that is evidence the wiring is correct, not a
+  substitute for TESTED FROM AFFECTED NETWORK. Expected behavior to
+  verify on that real run: DIRECT unavailable → RELAY active → WebSocket
+  connection attempt fails/times out (relay has no upgrade handler, see
+  `docs/CHAT.md`) → frontend's `RealtimeTransport` falls back to bounded
+  HTTP polling (`GET /chat/messages?after=`) → message send/receive and
+  attachment upload/download still work over `POST /forward`, unmodified.
+  Do not mark this checklist item done from a DIRECT-only pass.

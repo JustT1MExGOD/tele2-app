@@ -10,6 +10,33 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { query } from '../../src/data/db/index.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 
+/**
+ * 20.57.1 — было `.rejects.toThrow(/foreign key/i)`, что проверяло
+ * ЛОКАЛИЗОВАННЫЙ текст ошибки pg (`error.message`), а не сам факт FK-
+ * нарушения. На сервере с русской локалью Postgres (реальный кейс этого
+ * окружения) message приходит как "нарушает ограничение внешнего ключа"
+ * — regex падал, хотя FK-constraint реально сработал правильно (false
+ * negative: тест врал о регрессии, которой не было).
+ *
+ * Правильная, locale-independent проверка — структурные поля, которые pg
+ * (node-postgres) всегда возвращает как стабильные идентификаторы, не
+ * зависящие от `lc_messages`:
+ *   - `code` — SQLSTATE, стандартизованный код ошибки Postgres
+ *     ('23503' = foreign_key_violation, не текст, не переводится);
+ *   - `constraint` — точное имя constraint'а из схемы (сами имена
+ *     constraint'ов — идентификаторы SQL, не человекочитаемый текст,
+ *     локаль на них не влияет никогда);
+ *   - `table` — имя таблицы, та же природа.
+ * Смысл теста не ослаблен: assertion стал СТРОЖЕ, чем был — раньше любая
+ * ошибка с словом "foreign key" в тексте (на английской локали) прошла
+ * бы, включая, например, нарушение вообще ДРУГОГО FK на той же таблице;
+ * теперь проверяется КОНКРЕТНОЕ имя constraint'а, т.е. именно та колонка,
+ * которую тест заявляет проверить.
+ */
+function expectForeignKeyViolation(constraintName: string, tableName: string) {
+  return { code: '23503', constraint: constraintName, table: tableName };
+}
+
 describe('FK-целостность org-scoping колонок', () => {
   const fx = new TestFixtures();
 
@@ -23,7 +50,7 @@ describe('FK-целостность org-scoping колонок', () => {
         `INSERT INTO employees (full_name, role, access_status, is_active, org_id)
          VALUES ('FK Test', 'employee', 'active', true, 'nonexistent_org_xyz')`
       )
-    ).rejects.toThrow(/foreign key/i);
+    ).rejects.toMatchObject(expectForeignKeyViolation('employees_org_id_fkey', 'employees'));
   });
 
   it('stores.org_id — INSERT с несуществующей сетью падает', async () => {
@@ -32,7 +59,7 @@ describe('FK-целостность org-scoping колонок', () => {
         `INSERT INTO stores (id, code, name, short_name, hours, close_time_weekday, org_id)
          VALUES ('fk_test_store', 'fk_test_store', 'FK Test', 'FK', 12, '21:00', 'nonexistent_org_xyz')`
       )
-    ).rejects.toThrow(/foreign key/i);
+    ).rejects.toMatchObject(expectForeignKeyViolation('stores_org_id_fkey', 'stores'));
   });
 
   it('announcements.org_id — INSERT с несуществующей сетью падает', async () => {
@@ -40,7 +67,7 @@ describe('FK-целостность org-scoping колонок', () => {
       query(
         `INSERT INTO announcements (org_id, title, body) VALUES ('nonexistent_org_xyz', 'x', 'x')`
       )
-    ).rejects.toThrow(/foreign key/i);
+    ).rejects.toMatchObject(expectForeignKeyViolation('announcements_org_id_fkey', 'announcements'));
   });
 
   it('channels.org_id и channels.store_id — INSERT с несуществующими родителями падает', async () => {
@@ -48,7 +75,7 @@ describe('FK-целостность org-scoping колонок', () => {
       query(
         `INSERT INTO channels (id, org_id, kind, title) VALUES ('fk_test_ch', 'nonexistent_org_xyz', 'sales', 'x')`
       )
-    ).rejects.toThrow(/foreign key/i);
+    ).rejects.toMatchObject(expectForeignKeyViolation('channels_org_id_fkey', 'channels'));
 
     const org = await fx.createOrg('FK Channel Org');
     await expect(
@@ -56,7 +83,7 @@ describe('FK-целостность org-scoping колонок', () => {
         `INSERT INTO channels (id, org_id, kind, store_id, title) VALUES ('fk_test_ch2', $1, 'sales', 'nonexistent_store_xyz', 'x')`,
         [org]
       )
-    ).rejects.toThrow(/foreign key/i);
+    ).rejects.toMatchObject(expectForeignKeyViolation('channels_store_id_fkey', 'channels'));
   });
 
   it('org_id IS NULL по-прежнему разрешён (COALESCE(org_id, \'default\') — существующая конвенция)', async () => {

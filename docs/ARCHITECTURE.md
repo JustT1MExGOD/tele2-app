@@ -62,6 +62,36 @@ flowchart TB
 логика ниже `auth/` не знает, каким каналом пришёл запрос. Подробности
 слоя доверия (CSRF, cookie, session lifecycle) — [SECURITY.md](./SECURITY.md#2-аутентификация).
 
+### Три клиентские поверхности, один backend (с 20.55.0)
+
+Диаграмма выше не показывает Electron — добавлено отдельно, чтобы не
+раздувать основной flowchart, не потому что Electron менее важен:
+
+```text
+Browser (t2_session + CSRF) ──┐
+Telegram Mini App (initData) ─┼──► Fastify backend ──► PostgreSQL
+Electron DIRECT (unmodified   │      (тот же backend/src,
+  BrowserWindow → canonical   │       никакого отдельного API
+  origin, session cookie)    ─┘       для Electron)
+
+Electron RELAY (DIRECT недоступен) ──► T2 Edge Relay (relay/,
+  session.protocol.handle перехват,     отдельный деплой, fixed-
+  POST /forward, request/response)      upstream HTTP-relay, НЕ
+                                          generic proxy) ──► тот же
+                                          canonical origin выше
+```
+
+Electron **не** второй frontend — тот же `backend/frontend/*`, тот же
+`BrowserWindow.loadURL(canonical origin)`, без пакетной копии. RELAY —
+transport-уровневый фолбэк (DIRECT недоступен → relay проксирует REST
+`POST /forward`), не отдельная auth/CSRF-модель — тот же
+`t2_session`/`t2_csrf`, что и обычный браузер, просто идёт через
+дополнительный HTTP-хоп. Relay **не проксирует WebSocket** — только
+request/response REST, что напрямую определяет поведение чата через
+RELAY (`docs/CHAT.md#realtime-direct--websocket-иначе--polling`) и любой
+другой будущей realtime-фичи. Полная архитектура — [docs/DESKTOP.md](./DESKTOP.md),
+сетевой слой — [docs/DESKTOP-NETWORK.md](./DESKTOP-NETWORK.md).
+
 Клиент **не** ходит в БД напрямую — только через API. «Сегодня» всегда
 через `todayMoscow()` (`Europe/Moscow`), не UTC контейнера. AI Copilot
 (`integrations/ai/client.ts`) не в горячем пути запросов — вызывается
@@ -78,8 +108,10 @@ tele2-app/
 ├── README.md
 ├── CHANGELOG.md               (полная построчная история версий — README держит только последние)
 ├── CONTRIBUTING.md
-├── docs/                      (этот файл + API.md/DEVELOPMENT.md/SECURITY.md/FEATURES.md/ADR/archive/…)
+├── docs/                      (этот файл + API.md/DEVELOPMENT.md/SECURITY.md/CHAT.md/FEATURES.md/ADR/archive/…)
 ├── sql/                       (исторические ручные SQL-снимки, не источник схемы — см. sql/README.md)
+├── desktop/                   (20.55.0+ — Electron Windows-клиент, отдельный package.json/версия, см. docs/DESKTOP.md)
+├── relay/                     (20.55.0+ — T2 Edge Relay, отдельный package.json/версия/деплой, см. docs/DESKTOP-NETWORK.md)
 └── backend/                  ← Root Directory на Railway
     ├── package.json
     ├── tsconfig.json
@@ -114,13 +146,16 @@ tele2-app/
     │   │   ├── org/           (employees.ts · stores.ts · access.ts — заявки/секторы · branding.ts — сети/пикер точек)
     │   │   ├── analytics/     (stats · forecast · insights · live · what-if · heatmap · command-center · supervisor)
     │   │   ├── ops/            (tasks · support · comms · reports · export · alerts)
-    │   │   └── profiles/       (store.ts · employee.ts — Store/Employee Intelligence, Health Score)
+    │   │   ├── profiles/       (store.ts · employee.ts — Store/Employee Intelligence, Health Score)
+    │   │   └── chat/           (20.57.0 — messages.ts · attachments.ts · ws.ts, см. docs/CHAT.md)
     │   │
     │   ├── core/<domain>/                (бизнес-логика — из бывшего services/, теперь сгруппирована по домену)
     │   │   ├── sales/nlp.ts · shifts/pace.ts · plans/service.ts · bfq/service.ts
     │   │   ├── alerts/service.ts · employees/gamification.ts
     │   │   ├── analytics/     (forecast · anomaly · insights · heatmap · live-map · supervisor · network-digest · what-if)
     │   │   ├── reports/       (image.ts — SVG/PNG-рендер; svg-pool.ts — worker-пул)
+    │   │   ├── chat/          (20.57.0 — service.ts · realtime-registry.ts · attachment-validation.ts ·
+    │   │   │                    storage.ts/StorageAdapter, сейчас PostgresBlobStorageAdapter — см. docs/CHAT.md)
     │   │   └── shared/        (tenant.ts — брендинг/сети; scope-cache.ts — Supervisor Scope Cache; metrics-catalog.ts)
     │   │
     │   ├── data/                         (Full Data Access Layer, 19.22.0→20.8.0 — единственное место с прямым SQL)
@@ -136,7 +171,8 @@ tele2-app/
     │   ├── integrations/
     │   │   ├── telegram/                  (bot.ts — Grammy-инстанс, notifyChat/notifyAdmin; messages.ts — шаблоны сообщений)
     │   │   └── ai/client.ts               (Groq — AI Copilot)
-    │   ├── cron/                         (alerts.ts · digest.ts · reports.ts · job-logger.ts — структурные pino-логи задач)
+    │   ├── cron/                         (alerts.ts · digest.ts · reports.ts · job-logger.ts — структурные pino-логи задач;
+    │   │                                    chat-attachment-cleanup.ts — 20.57.0, часовой orphan cleanup)
     │   ├── workers/svg-render.worker.ts  (resvg SVG→PNG в отдельном потоке)
     │   ├── shared/                       (api-types.ts — контракт бэк↔фронт; errors.ts — serverError(), бывший utils/http-errors.ts)
     │   └── utils/date.ts                 (todayMoscow() и другие МСК-хелперы)
@@ -156,7 +192,8 @@ tele2-app/
         │   ├── pages/            (router.ts-страницы и все остальные: reports/, alerts/,
         │   │                       employee-profile/, store-profile/, tasks/, cash-metrics/,
         │   │                       command-center/, support/, team/, home/, plans-bfq/, schedule/,
-        │   │                       my-plan/, shift/, network-admin/, access-supervisor/)
+        │   │                       my-plan/, shift/, network-admin/, access-supervisor/,
+        │   │                       chat/ — 20.57.0, index.ts + realtime-transport.ts)
         │   ├── features/         (НЕ router.ts-страницы — send-network-digest/, promos/, add-sale/, tutorial/)
         │   └── shared/legacy-globals.d.ts     (ambient-типы для общих глобалов — me, canManage(), toast() и т.д.)
         └── offline-queue.js

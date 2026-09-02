@@ -233,6 +233,9 @@
         <button class="nav-item" data-page="team" onclick="switchPage('team')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /> </svg></span>Команда
         </button>
+        <button class="nav-item" data-page="chat" onclick="switchPage('chat')">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> </svg></span>Чат
+        </button>
       </div>
 
       <div class="sidebar-section" id="sidebarSectionAnalytics" style="display:none">
@@ -1103,6 +1106,37 @@
     <div id="page-reports" class="page">
       <div id="reportsPageBody"><div class="skeleton"></div></div>
     </div>
+
+    <div id="page-chat" class="page chat-page">
+      <div class="chat-scroll-box" id="chatScrollBox">
+        <div class="chat-feed" id="chatFeed"><div class="skeleton"></div></div>
+      </div>
+      <button class="chat-new-messages" id="chatNewMessagesIndicator" style="display:none" onclick="jumpToChatBottom()">
+        Новые сообщения ↓
+      </button>
+      <div class="chat-composer">
+        <div class="chat-composer-files" id="chatComposerFiles" style="display:none"></div>
+        <div class="chat-composer-row">
+          <button class="icon-btn chat-attach-btn" title="Прикрепить файл" onclick="document.getElementById('chatFileInput').click()">
+            <svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <input type="file" id="chatFileInput" style="display:none" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,.doc,.docx,.xls,.xlsx" onchange="onChatAttachmentPicked(this)">
+          <textarea
+            id="chatComposerInput"
+            class="chat-composer-input"
+            placeholder="Написать сообщение…"
+            rows="1"
+            oninput="onChatComposerInput()"
+            onkeydown="onChatComposerKeydown(event)"
+            oncompositionstart="onChatComposerCompositionStart()"
+            oncompositionend="onChatComposerCompositionEnd()"
+          ></textarea>
+          <button class="chat-send-btn" id="chatSendBtn" disabled onclick="sendChatMessage()" aria-label="Отправить">
+            <svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 3 9-3 9 19-9Z"/><path d="M6 12h16"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
     </div>
   </div>
@@ -1125,6 +1159,9 @@
     </button>
     <button class="nav-item" data-page="team" onclick="switchPage('team')">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /> </svg></span>Команда
+    </button>
+    <button class="nav-item" data-page="chat" onclick="switchPage('chat')">
+      <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> </svg></span>Чат
     </button>
   </nav>
 
@@ -1177,6 +1214,7 @@
        критичен, но держим рядом с network-admin по смыслу страницы. -->
   <script src="/dist/pages/dealers.bundle.js"></script>
   <script src="/dist/features/tutorial.bundle.js"></script>
+  <script src="/dist/pages/chat.bundle.js"></script>
   <!-- access-supervisor.bundle.js calls bootApp() at load time — must load
        LAST so every window.* function it may synchronously reach for
        (applyBranding, loadHome, maybeOfferTutorial, ...) is already defined,
