@@ -21,7 +21,13 @@ const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 const HISTORY_PAGE_SIZE = 50;
 const LOAD_MORE_SCROLL_THRESHOLD = 80;
 
-type PendingStatus = 'sending' | 'failed';
+// 'unknown' — POST outcome ambiguous (fetch/network/response-parse failure,
+// server acceptance NOT ruled out) vs 'failed' — server actually answered
+// with a real HTTP rejection (definitive, see api-client.ts's .definitive
+// flag). Hotfix 20.57.2 AMBIGUOUS DELIVERY RECONCILIATION — конкретно
+// против ложного "Не отправлено", когда сервер сообщение уже принял, а
+// потерян только сам HTTP-ответ на POST.
+type PendingStatus = 'sending' | 'failed' | 'unknown';
 
 interface PendingEntry {
   clientMessageId: string;
@@ -149,19 +155,22 @@ function roleLabel(role: string): string {
 }
 
 function pendingMessageHtml(p: PendingEntry): string {
-  const statusLabel = p.status === 'sending' ? 'Отправка…' : 'Не отправлено';
+  const statusLabel = p.status === 'sending' ? 'Отправка…' : p.status === 'unknown' ? 'Статус неизвестен' : 'Не отправлено';
   const retryBtn =
-    p.status === 'failed' ? `<button class="chat-retry-btn" onclick="retryChatMessage('${p.clientMessageId}')">Повторить</button>` : '';
+    p.status === 'failed' || p.status === 'unknown'
+      ? `<button class="chat-retry-btn" onclick="retryChatMessage('${p.clientMessageId}')">Повторить</button>`
+      : '';
   const filesHtml = p.files.length
     ? `<div class="chat-attachments">${p.files.map((f) => `<span class="chat-attachment-name">${esc(f.name)}</span>`).join('')}</div>`
     : '';
   const bodyHtml = p.body ? `<div class="chat-bubble-text">${renderMessageBody(p.body)}</div>` : '';
+  const statusClass = p.status === 'failed' ? 'chat-pending-failed' : p.status === 'unknown' ? 'chat-pending-unknown' : '';
   return `
     <div class="chat-message chat-message-mine chat-message-pending" data-client-message-id="${p.clientMessageId}">
       <div class="chat-bubble">
         ${bodyHtml}
         ${filesHtml}
-        <div class="chat-bubble-time chat-pending-status ${p.status === 'failed' ? 'chat-pending-failed' : ''}">${statusLabel} ${retryBtn}</div>
+        <div class="chat-bubble-time chat-pending-status ${statusClass}">${statusLabel} ${retryBtn}</div>
       </div>
     </div>`;
 }
@@ -204,9 +213,61 @@ function upsertCanonicalMessage(m: ChatMessage): void {
   // Дедупликация по canonical id (§22 брифа) — WS push, polling catch-up и
   // собственный POST-response вполне могут доставить один и тот же id.
   if (messages.some((x) => x.id === m.id)) return;
+  cancelReconciliation(m.clientMessageId); // нашли canonical другим путём (realtime/history) — своя сверка больше не нужна
   pendingByClientId.delete(m.clientMessageId);
   messages.push(m);
   messages.sort((a, b) => Number(a.id) - Number(b.id));
+}
+
+// 20.57.2 AMBIGUOUS DELIVERY RECONCILIATION — ограниченная (не бесконечная)
+// сверка через уже существующий history API (getChatMessages), когда исход
+// POST неоднозначен (сеть/парсинг ответа оборвались, но сервер мог уже
+// принять сообщение — см. .definitive в api-client.ts). Тот же
+// clientMessageId, никогда не генерируется новый — только он позволяет
+// найти canonical-сообщение по этому конкретному отправлению (идемпотентность
+// уже доказана тестами backend/tests/isolation/chat-messages.test.ts).
+const RECONCILE_DELAYS_MS = [0, 1000, 2500, 5000]; // 4 попытки: сразу + ограниченный backoff, не polling до бесконечности
+const reconcileTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function cancelReconciliation(clientMessageId: string): void {
+  const t = reconcileTimers.get(clientMessageId);
+  if (t !== undefined) {
+    clearTimeout(t);
+    reconcileTimers.delete(clientMessageId);
+  }
+}
+
+/** Одна попытка сверки: последние сообщения сети по history API, ищем
+ * canonical с тем же clientMessageId. true — нашли и заменили pending. */
+async function reconcileOnce(clientMessageId: string): Promise<boolean> {
+  try {
+    const res = await window.apiClient.getChatMessages(authHeaders(), undefined, HISTORY_PAGE_SIZE);
+    const found = res.items.find((m) => m.clientMessageId === clientMessageId);
+    if (found) {
+      upsertCanonicalMessage(found);
+      renderFeed(null);
+      return true;
+    }
+  } catch {
+    // Транзиентная ошибка самой сверки — не эскалируем в 'failed' (мы уже
+    // не знаем итог POST'а точнее, чем знали); следующая запланированная
+    // попытка (или случайный realtime push) попробует снова.
+  }
+  return false;
+}
+
+function scheduleReconciliation(clientMessageId: string, attempt: number): void {
+  cancelReconciliation(clientMessageId);
+  if (attempt >= RECONCILE_DELAYS_MS.length) return; // граница — оставляем "Статус неизвестен" + Retry, не заявляем ложный отказ
+  const timer = setTimeout(() => {
+    reconcileTimers.delete(clientMessageId);
+    const entry = pendingByClientId.get(clientMessageId);
+    if (!entry || entry.status !== 'unknown') return; // resolved/retried под руку — цепочка обрывается сама
+    void reconcileOnce(clientMessageId).then((resolved) => {
+      if (!resolved) scheduleReconciliation(clientMessageId, attempt + 1);
+    });
+  }, RECONCILE_DELAYS_MS[attempt]);
+  reconcileTimers.set(clientMessageId, timer);
 }
 
 function onRealtimeMessage(m: ChatMessage): void {
@@ -404,7 +465,7 @@ async function submitChatMessage(clientMessageId: string): Promise<void> {
       renderFeed(null);
       return;
     }
-    const canonical = await window.apiClient.postChatMessage(authHeaders(), { clientMessageId, body: entry.body, attachmentIds });
+    const canonical = await window.apiClient.postChatMessage(authHeaders(true), { clientMessageId, body: entry.body, attachmentIds });
     upsertCanonicalMessage(canonical);
     renderFeed(null);
     scrollToBottom();
@@ -417,7 +478,23 @@ async function submitChatMessage(clientMessageId: string): Promise<void> {
     if (e?.code === 'invalid_attachment') {
       entry.attachmentIds = entry.attachmentIds.map(() => null);
     }
-    entry.status = 'failed';
+    if (e?.definitive === true) {
+      // Сервер реально ответил HTTP-отказом (api-client.ts: получен res,
+      // !res.ok) — доказано тестами (chat-messages.test.ts,
+      // chat-realtime.test.ts), что это ноль строк/broadcast'ов. Безопасно
+      // заявить окончательный отказ.
+      entry.status = 'failed';
+      cancelReconciliation(clientMessageId);
+    } else {
+      // Неоднозначный транспортный исход (сетевой fetch-reject или парсинг
+      // ответа на УЖЕ успешный статус оборвался) — .definitive отсутствует
+      // именно и только в этих случаях (api-client.ts::request()). Сервер
+      // мог уже принять сообщение — НЕ заявляем "Не отправлено": статус
+      // 'unknown' + ограниченная сверка по history API, тот же
+      // clientMessageId (20.57.2 AMBIGUOUS DELIVERY RECONCILIATION).
+      entry.status = 'unknown';
+      scheduleReconciliation(clientMessageId, 0);
+    }
     renderFeed(null);
     toast(e?.message || 'Не удалось отправить сообщение', 'err');
   }
@@ -426,6 +503,7 @@ async function submitChatMessage(clientMessageId: string): Promise<void> {
 export async function retryChatMessage(clientMessageId: string): Promise<void> {
   const entry = pendingByClientId.get(clientMessageId);
   if (!entry) return;
+  cancelReconciliation(clientMessageId); // ручной retry реиспользует тот же clientMessageId — своя сверка отменяется, submitChatMessage сам решит исход заново
   entry.status = 'sending';
   renderFeed(null);
   await submitChatMessage(clientMessageId);

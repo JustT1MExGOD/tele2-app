@@ -2720,7 +2720,11 @@
 }
 
 /* ===== Чат сотрудников (20.57.0) ===== */
-.chat-page {
+/* .chat-page.active, не .chat-page — иначе эта декларация display:flex
+   (специфичность 0,1,0) перебивает .page{display:none} по порядку в
+   файле независимо от класса .active, который переключает .page.
+   switchPage() (nav.ts) управляет только .active. */
+.chat-page.active {
   display: flex;
   flex-direction: column;
   height: calc(100vh - var(--app-safe-top, 0px));
@@ -2791,6 +2795,9 @@
 }
 .chat-pending-failed {
   color: var(--danger);
+}
+.chat-pending-unknown {
+  color: var(--text-secondary);
 }
 .chat-retry-btn {
   border: none;

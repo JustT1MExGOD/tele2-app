@@ -249,4 +249,103 @@ describe('Внутренний чат — сообщения', () => {
     expect(res.statusCode).toBe(200);
     messageIds.push(res.json().id);
   });
+
+  // Регрессия 20.57.1: fetch() без явного Content-Type отправляет тело как
+  // text/plain — Fastify не парсит его в объект, TypeBox падает с
+  // FST_ERR_VALIDATION, клиент видит "Некорректные данные запроса", хотя
+  // JSON-полезная нагрузка валидна. Воспроизводит ровно этот сценарий.
+  it('без заголовка Content-Type (тело как text/plain) — 400 validation_failed, "Некорректные данные запроса"', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Chat NoCT Org');
+    const emp = await fx.createEmployee(org, { role: 'employee' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(emp.telegramId), 'content-type': 'text/plain;charset=UTF-8' },
+      payload: JSON.stringify({ clientMessageId: crypto.randomUUID(), body: 'no content-type' })
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('validation_failed');
+    expect(res.json().message).toBe('Некорректные данные запроса');
+  });
+
+  // 20.57.2 BLOCKER — доказать message delivery semantics, не только
+  // Content-Type: ни одна ветка отказа не должна оставлять "ghost" строку
+  // в chat_messages — ни на уровне схемы (FST_ERR_VALIDATION), ни на
+  // уровне бизнес-валидации (пусто/слишком длинно/слишком много вложений).
+  describe('Delivery semantics: отказ (400) НЕ создаёт запись в chat_messages', () => {
+    it('schema-level 400 (text/plain Content-Type) — ни одной новой строки в chat_messages', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('Chat NoCT Count Org');
+      const emp = await fx.createEmployee(org, { role: 'employee' });
+      const before = await query(`SELECT count(*)::int as n FROM chat_messages WHERE sender_employee_id = $1`, [emp.id]);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/chat/messages',
+        headers: { ...authAs(emp.telegramId), 'content-type': 'text/plain;charset=UTF-8' },
+        payload: JSON.stringify({ clientMessageId: crypto.randomUUID(), body: 'ghost check' })
+      });
+      expect(res.statusCode).toBe(400);
+      const after = await query(`SELECT count(*)::int as n FROM chat_messages WHERE sender_employee_id = $1`, [emp.id]);
+      expect(after.rows[0].n).toBe(before.rows[0].n);
+    });
+
+    it('business-level 400 (пустое сообщение) — транзакция откатывается, ни одной новой строки', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('Chat Empty Count Org');
+      const emp = await fx.createEmployee(org, { role: 'employee' });
+      const before = await query(`SELECT count(*)::int as n FROM chat_messages WHERE sender_employee_id = $1`, [emp.id]);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/chat/messages',
+        headers: { ...authAs(emp.telegramId), 'content-type': 'application/json' },
+        payload: { clientMessageId: crypto.randomUUID(), body: '' }
+      });
+      expect(res.statusCode).toBe(400);
+      const after = await query(`SELECT count(*)::int as n FROM chat_messages WHERE sender_employee_id = $1`, [emp.id]);
+      expect(after.rows[0].n).toBe(before.rows[0].n);
+    });
+  });
+
+  // 20.57.2 BLOCKER — "потерянный response после реального успеха на
+  // сервере": сообщение УЖЕ создано (первый POST), но клиент как будто
+  // никогда не получил ответ и делает retry с тем же clientMessageId.
+  // Идемпотентность на этом же clientMessageId должна вернуть ТОТ ЖЕ
+  // канонический ряд, а не создать вторую "призрачную" строку.
+  it('retry после "потерянного" успешного ответа — ровно одна строка, тот же canonical id, тело не изменилось', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Chat LostResponse Org');
+    const emp = await fx.createEmployee(org, { role: 'employee' });
+    const clientMessageId = crypto.randomUUID();
+
+    // "Сервер принял" — реальный POST, успешно создаёт строку. Frontend
+    // в реальном сценарии этот успешный ответ не увидел бы (оборвавшаяся
+    // сеть/потерянный response), но по факту сообщение уже в БД.
+    const accepted = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(emp.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId, body: 'lost response' }
+    });
+    expect(accepted.statusCode).toBe(200);
+    messageIds.push(accepted.json().id);
+
+    // Retry с тем же clientMessageId — единственный сигнал, который есть у
+    // frontend после "неопределённого" исхода.
+    const retry = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(emp.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId, body: 'lost response' }
+    });
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json().id).toBe(accepted.json().id);
+    expect(retry.json().body).toBe('lost response');
+
+    const count = await query(`SELECT count(*)::int as n FROM chat_messages WHERE sender_employee_id = $1 AND client_message_id = $2`, [
+      emp.id,
+      clientMessageId
+    ]);
+    expect(count.rows[0].n).toBe(1);
+  });
 });

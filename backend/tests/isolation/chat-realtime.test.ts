@@ -100,6 +100,84 @@ describe('Внутренний чат — realtime (WS)', () => {
     ws.terminate();
   });
 
+  // 20.57.2 BLOCKER — "ghost send": подтвердить, что отклонённый (400)
+  // POST НЕ доходит до других клиентов сети как broadcast — ни при
+  // schema-level (text/plain), ни при business-level (пустое сообщение)
+  // отказе. Симметрично bcast-тесту выше ("ровно один broadcast" для
+  // успешного случая) — здесь "ровно ноль".
+  it('400 (validation) — слушатель сети НЕ получает broadcast (ни schema-level, ни business-level)', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('WS NoBroadcast Org');
+    const sender = await fx.createEmployee(org, { role: 'employee' });
+    const listener = await fx.createEmployee(org, { role: 'employee' });
+    const ws = await connect(authAs(listener.telegramId) as Record<string, string>);
+
+    let received = false;
+    ws.on('message', () => {
+      received = true;
+    });
+
+    const schemaLevel = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(sender.telegramId), 'content-type': 'text/plain;charset=UTF-8' },
+      payload: JSON.stringify({ clientMessageId: crypto.randomUUID(), body: 'should never broadcast' })
+    });
+    expect(schemaLevel.statusCode).toBe(400);
+
+    const businessLevel = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(sender.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId: crypto.randomUUID(), body: '' }
+    });
+    expect(businessLevel.statusCode).toBe(400);
+
+    await new Promise((r) => setTimeout(r, 300));
+    expect(received).toBe(false);
+    ws.terminate();
+  });
+
+  // 20.57.2 BLOCKER — retry на том же clientMessageId после того, как
+  // сервер УЖЕ принял сообщение (deduplicated=true во второй раз) не
+  // должен породить второй broadcast — иначе слушатель увидел бы
+  // сообщение дважды ("ghost duplicate" на стороне получателя).
+  it('retry с тем же clientMessageId — ровно один broadcast (второй POST не переотправляет)', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('WS RetryBroadcast Org');
+    const sender = await fx.createEmployee(org, { role: 'employee' });
+    const listener = await fx.createEmployee(org, { role: 'employee' });
+    const ws = await connect(authAs(listener.telegramId) as Record<string, string>);
+    const clientMessageId = crypto.randomUUID();
+
+    let receivedCount = 0;
+    ws.on('message', () => {
+      receivedCount++;
+    });
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(sender.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId, body: 'retry broadcast once' }
+    });
+    expect(first.statusCode).toBe(200);
+    messageIds.push(first.json().id);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(sender.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId, body: 'retry broadcast once' }
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().id).toBe(first.json().id);
+
+    await new Promise((r) => setTimeout(r, 300));
+    expect(receivedCount).toBe(1);
+    ws.terminate();
+  });
+
   it('сеть B не получает broadcast сети A', async () => {
     const app = await getApp();
     const orgA = await fx.createOrg('WS Isolation Org A');

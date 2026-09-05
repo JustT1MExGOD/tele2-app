@@ -45,7 +45,11 @@ function setupGlobals(meEmployeeId = 1) {
       .replace(/'/g, '&#39;')
   );
   vi.stubGlobal('toast', vi.fn());
-  vi.stubGlobal('authHeaders', () => ({}));
+  // json=true должен добавлять Content-Type: application/json — иначе
+  // fetch() шлёт тело как text/plain и backend не парсит JSON (регрессия
+  // 20.57.1, "Некорректные данные запроса"). Не no-op-стаб, чтобы тесты
+  // ниже могли различить authHeaders() от authHeaders(true).
+  vi.stubGlobal('authHeaders', (json?: boolean) => (json ? { 'Content-Type': 'application/json' } : {}));
   vi.stubGlobal('me', { employee_id: meEmployeeId });
   (window as any).me = { employee_id: meEmployeeId };
 
@@ -180,10 +184,220 @@ describe('Внутренний чат — frontend (src/pages/chat)', () => {
     expect(html.match(/Привет всем/g)?.length).toBe(1); // ровно одно вхождение — не задвоилось
   });
 
-  it('неудачная отправка — показывает "Не отправлено" с retry, повторный retry использует тот же clientMessageId', async () => {
+  // Регрессия 20.57.1: POST /chat/messages шёл с authHeaders() вместо
+  // authHeaders(true) — тело уходило как text/plain, backend отвечал 400
+  // "Некорректные данные запроса" (см. backend/tests/isolation/chat-messages.test.ts
+  // для доказательства на уровне HTTP-контракта).
+  it('POST /chat/messages шлёт заголовки с Content-Type: application/json (finding — "Некорректные данные запроса")', async () => {
     const { getChatMessages, postChatMessage } = setupGlobals();
     getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
-    postChatMessage.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(msg({ id: '5', body: 'retry me' }));
+    postChatMessage.mockResolvedValue(msg({ id: '1' }));
+    await import('../src/pages/chat/index.js');
+    (window as any).loadChatPage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ta = document.getElementById('chatComposerInput') as HTMLTextAreaElement;
+    ta.value = 'проверка content-type';
+    (window as any).sendChatMessage();
+    await Promise.resolve();
+
+    expect(postChatMessage.mock.calls[0][0]).toEqual({ 'Content-Type': 'application/json' });
+  });
+
+  // 20.57.2 GHOST SEND — тест A: НАСТОЯЩИЙ отказ сервера (api-client.ts
+  // ставит .definitive=true, когда получен реальный HTTP-ответ и res.ok
+  // false — доказано backend-тестами: ноль строк/broadcast'ов). Это
+  // единственный случай, когда безопасно сразу писать "Не отправлено".
+  it('A. definitive HTTP-отказ (400) — сразу "Не отправлено", НЕ уходит в сверку', async () => {
+    const { getChatMessages, postChatMessage } = setupGlobals();
+    getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
+    postChatMessage.mockRejectedValue(
+      Object.assign(new Error('Некорректные данные запроса'), { code: 'validation_failed', definitive: true })
+    );
+    await import('../src/pages/chat/index.js');
+    (window as any).loadChatPage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ta = document.getElementById('chatComposerInput') as HTMLTextAreaElement;
+    ta.value = 'отклонённое сообщение';
+    (window as any).sendChatMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const html = document.getElementById('chatFeed')!.innerHTML;
+    expect(html).toContain('Не отправлено');
+    expect(html).not.toContain('Статус неизвестен');
+    // Сверка (getChatMessages) не запускалась для definitive-отказа — только начальная загрузка истории.
+    expect(getChatMessages).toHaveBeenCalledTimes(1);
+  });
+
+  // 20.57.2 AMBIGUOUS DELIVERY RECONCILIATION — тест C: ответ на POST
+  // потерян (fetch throws без .definitive — сервер мог уже принять), но
+  // realtime доставляет canonical с тем же clientMessageId раньше, чем
+  // успевает сработать сверка через history API — "Статус неизвестен"
+  // должен исчезнуть, дубликата быть не должно.
+  it('C. ambiguous исход (ответ потерян) + realtime доставляет canonical — "Статус неизвестен" реконсилируется в sent, без дублей', async () => {
+    vi.useFakeTimers();
+    try {
+      const { getChatMessages, postChatMessage } = setupGlobals();
+      getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
+      postChatMessage.mockRejectedValue(new Error('response lost')); // сетевая/парсинг-ошибка — без .definitive
+      await import('../src/pages/chat/index.js');
+      (window as any).loadChatPage();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const ta = document.getElementById('chatComposerInput') as HTMLTextAreaElement;
+      ta.value = 'сервер принял, ответ потерян';
+      (window as any).sendChatMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Неоднозначно — НЕ "Не отправлено", а "Статус неизвестен" (§B требования).
+      let html = document.getElementById('chatFeed')!.innerHTML;
+      expect(html).toContain('Статус неизвестен');
+      expect(html).not.toContain('Не отправлено');
+      const clientMessageId = postChatMessage.mock.calls[0][1].clientMessageId;
+
+      // Сервер на самом деле создал сообщение и разослал его всем, включая
+      // этого же отправителя (тот же clientMessageId в canonical) — realtime.
+      expect(capturedTransportOpts).toBeTruthy();
+      capturedTransportOpts.onMessage(msg({ id: '501', body: 'сервер принял, ответ потерян', clientMessageId }));
+      await Promise.resolve();
+
+      html = document.getElementById('chatFeed')!.innerHTML;
+      expect(html).not.toContain('Статус неизвестен');
+      expect(html).not.toContain('Не отправлено');
+      expect(html.match(/сервер принял, ответ потерян/g)?.length).toBe(1); // не задвоилось
+
+      // Запланированная сверка больше не должна ничего менять (таймер отменён upsertCanonicalMessage).
+      await vi.advanceTimersByTimeAsync(10000);
+      html = document.getElementById('chatFeed')!.innerHTML;
+      expect(html.match(/сервер принял, ответ потерян/g)?.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // 20.57.2 AMBIGUOUS DELIVERY RECONCILIATION — тест D: ответ потерян,
+  // realtime не доставил ничего, но history API (getChatMessages) уже
+  // содержит canonical с тем же clientMessageId — ограниченная сверка сама
+  // находит его и заменяет "Статус неизвестен" на sent.
+  it('D. ambiguous исход + realtime недоступен, но история уже содержит clientMessageId — сверка находит и реконсилирует', async () => {
+    vi.useFakeTimers();
+    try {
+      const { getChatMessages, postChatMessage } = setupGlobals();
+      getChatMessages.mockResolvedValueOnce({ items: [], nextCursor: null }); // начальная история — пусто
+      postChatMessage.mockRejectedValue(new Error('response lost'));
+      await import('../src/pages/chat/index.js');
+      (window as any).loadChatPage();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const ta = document.getElementById('chatComposerInput') as HTMLTextAreaElement;
+      ta.value = 'найдётся через сверку истории';
+      (window as any).sendChatMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const clientMessageId = postChatMessage.mock.calls[0][1].clientMessageId;
+      expect(document.getElementById('chatFeed')!.innerHTML).toContain('Статус неизвестен');
+
+      // Со следующего вызова getChatMessages (собственно сверка) — сервер
+      // УЖЕ принял сообщение, оно есть в истории под тем же clientMessageId.
+      getChatMessages.mockResolvedValue({
+        items: [msg({ id: '502', body: 'найдётся через сверку истории', clientMessageId })],
+        nextCursor: null
+      });
+
+      // Первая попытка сверки запланирована с задержкой 0 — прогоняем таймеры.
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const html = document.getElementById('chatFeed')!.innerHTML;
+      expect(html).not.toContain('Статус неизвестен');
+      expect(html.match(/найдётся через сверку истории/g)?.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // 20.57.2 AMBIGUOUS DELIVERY RECONCILIATION — тест E: запрос реально НЕ
+  // дошёл до сервера (настоящий network failure) — history API никогда не
+  // содержит этот clientMessageId. После исчерпания ограниченного числа
+  // попыток сверки статус остаётся "Статус неизвестен" (с Retry) — НИКОГДА
+  // не превращается в ложный "sent" (никакого phantom-sent).
+  it('E. настоящий network failure (запрос не дошёл) — история никогда не содержит clientMessageId, статус остаётся "неизвестен", без phantom-sent', async () => {
+    vi.useFakeTimers();
+    try {
+      const { getChatMessages, postChatMessage } = setupGlobals();
+      getChatMessages.mockResolvedValue({ items: [], nextCursor: null }); // ни разу не содержит наш clientMessageId
+      postChatMessage.mockRejectedValue(new TypeError('Failed to fetch'));
+      await import('../src/pages/chat/index.js');
+      (window as any).loadChatPage();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const ta = document.getElementById('chatComposerInput') as HTMLTextAreaElement;
+      ta.value = 'никогда не дошло до сервера';
+      (window as any).sendChatMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(document.getElementById('chatFeed')!.innerHTML).toContain('Статус неизвестен');
+
+      // Прогоняем ВСЕ запланированные (ограниченные) попытки сверки целиком.
+      await vi.advanceTimersByTimeAsync(20000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const html = document.getElementById('chatFeed')!.innerHTML;
+      // Ограниченно — не бесконечно: не более 4 попыток сверки суммарно.
+      expect(getChatMessages.mock.calls.length).toBeLessThanOrEqual(5); // 1 начальная история + до 4 сверок
+      expect(html).toContain('Статус неизвестен');
+      expect(html).not.toContain('Не отправлено'); // никогда не заявляем ложный definitive-отказ
+      expect(html.match(/никогда не дошло до сервера/g)?.length).toBe(1); // никакого phantom-дубля
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // 20.57.2 BLOCKER — свежая загрузка страницы (перезагрузка/повторный
+  // вход в чат) не должна показывать "призрачное" pending-сообщение,
+  // которого больше нет в локальной памяти (сброшена перезагрузкой) — вся
+  // видимая история приходит заново с сервера, только то, что реально там есть.
+  it('H. после reload/новой загрузки истории видно ТОЛЬКО серверное состояние — никаких унаследованных pending-статусов', async () => {
+    const { getChatMessages } = setupGlobals();
+    // Pending-состояние из предыдущей сессии — не персистентная память
+    // браузера (module-level Map), новый импорт эмулирует полную перезагрузку.
+    getChatMessages.mockResolvedValue({
+      items: [msg({ id: '501', body: 'сервер принял, ответ потерян' })],
+      nextCursor: null
+    });
+    await import('../src/pages/chat/index.js');
+    (window as any).loadChatPage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const html = document.getElementById('chatFeed')!.innerHTML;
+    expect(html).not.toContain('Не отправлено');
+    expect(html).not.toContain('Статус неизвестен');
+    expect(html.match(/сервер принял, ответ потерян/g)?.length).toBe(1);
+  });
+
+  it('A/F. definitive-отказ — "Не отправлено" с retry, повторный retry использует тот же clientMessageId', async () => {
+    const { getChatMessages, postChatMessage } = setupGlobals();
+    getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
+    postChatMessage
+      .mockRejectedValueOnce(Object.assign(new Error('validation'), { code: 'validation_failed', definitive: true }))
+      .mockResolvedValueOnce(msg({ id: '5', body: 'retry me' }));
     await import('../src/pages/chat/index.js');
     (window as any).loadChatPage();
     await Promise.resolve();
@@ -206,6 +420,92 @@ describe('Внутренний чат — frontend (src/pages/chat)', () => {
 
     expect(postChatMessage.mock.calls[1][1].clientMessageId).toBe(firstCallId);
     expect(document.getElementById('chatFeed')!.innerHTML).toContain('retry me');
+  });
+
+  // 20.57.2 — тест F (ambiguous → retry): ручной retry из "Статус неизвестен"
+  // (не только из "Не отправлено") тоже переиспользует тот же clientMessageId
+  // и отменяет уже запланированную сверку (не гонится параллельно с retry).
+  it('F. ручной retry из "Статус неизвестен" переиспользует тот же clientMessageId, отменяет запланированную сверку', async () => {
+    vi.useFakeTimers();
+    try {
+      const { getChatMessages, postChatMessage } = setupGlobals();
+      getChatMessages.mockResolvedValue({ items: [], nextCursor: null }); // сверка ничего не найдёт, если вдруг сработает
+      postChatMessage
+        .mockRejectedValueOnce(new Error('response lost'))
+        .mockResolvedValueOnce(msg({ id: '6', body: 'retry from unknown' }));
+      await import('../src/pages/chat/index.js');
+      (window as any).loadChatPage();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const ta = document.getElementById('chatComposerInput') as HTMLTextAreaElement;
+      ta.value = 'retry from unknown';
+      (window as any).sendChatMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(document.getElementById('chatFeed')!.innerHTML).toContain('Статус неизвестен');
+      const firstCallId = postChatMessage.mock.calls[0][1].clientMessageId;
+      const reconcileCallsBeforeRetry = getChatMessages.mock.calls.length;
+
+      (window as any).retryChatMessage(firstCallId);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(postChatMessage.mock.calls[1][1].clientMessageId).toBe(firstCallId);
+      expect(document.getElementById('chatFeed')!.innerHTML).toContain('retry from unknown');
+
+      // Отменённая сверка не должна больше дёргать getChatMessages за пределами того, что уже случилось до retry.
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(getChatMessages.mock.calls.length).toBe(reconcileCallsBeforeRetry);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // 20.57.2 — тест G: и realtime, и запланированная сверка независимо
+  // находят один и тот же canonical id — не должно возникнуть дубля в DOM.
+  it('G. повторная (гоночная) сверка через realtime и через history API не создаёт дубль в DOM', async () => {
+    vi.useFakeTimers();
+    try {
+      const { getChatMessages, postChatMessage } = setupGlobals();
+      getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
+      postChatMessage.mockRejectedValue(new Error('response lost'));
+      await import('../src/pages/chat/index.js');
+      (window as any).loadChatPage();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const ta = document.getElementById('chatComposerInput') as HTMLTextAreaElement;
+      ta.value = 'гонка realtime и сверки';
+      (window as any).sendChatMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const clientMessageId = postChatMessage.mock.calls[0][1].clientMessageId;
+      const canonical = msg({ id: '503', body: 'гонка realtime и сверки', clientMessageId });
+
+      // История ТОЖЕ теперь содержит его (на случай, если сверка успеет сработать первой).
+      getChatMessages.mockResolvedValue({ items: [canonical], nextCursor: null });
+
+      // Сверка срабатывает первой (задержка 0).
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // ...а следом всё равно прилетает и realtime-push с тем же id.
+      capturedTransportOpts.onMessage(canonical);
+      await Promise.resolve();
+
+      const html = document.getElementById('chatFeed')!.innerHTML;
+      expect(html.match(/гонка realtime и сверки/g)?.length).toBe(1); // ровно одно вхождение
+      expect(html).not.toContain('Статус неизвестен');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('composer: Enter отправляет, Shift+Enter — нет; во время IME-композиции Enter не отправляет', async () => {
@@ -326,7 +626,8 @@ describe('Внутренний чат — frontend (src/pages/chat)', () => {
       await Promise.resolve();
 
       expect(uploadChatAttachment).toHaveBeenCalledTimes(1);
-      expect(document.getElementById('chatFeed')!.innerHTML).toContain('Не отправлено');
+      // Ambiguous (network lost, без .definitive) — "Статус неизвестен", не "Не отправлено" (20.57.2).
+      expect(document.getElementById('chatFeed')!.innerHTML).toContain('Статус неизвестен');
 
       const firstCallId = postChatMessage.mock.calls[0][1].clientMessageId;
       (window as any).retryChatMessage(firstCallId);
@@ -347,7 +648,7 @@ describe('Внутренний чат — frontend (src/pages/chat)', () => {
       getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
       uploadChatAttachment.mockResolvedValueOnce({ id: 'att-stale-1' }).mockResolvedValueOnce({ id: 'att-fresh-2' });
       postChatMessage
-        .mockRejectedValueOnce(Object.assign(new Error('Вложение недоступно'), { code: 'invalid_attachment' }))
+        .mockRejectedValueOnce(Object.assign(new Error('Вложение недоступно'), { code: 'invalid_attachment', definitive: true }))
         .mockResolvedValueOnce(msg({ id: '78', body: null }));
       await import('../src/pages/chat/index.js');
       (window as any).loadChatPage();

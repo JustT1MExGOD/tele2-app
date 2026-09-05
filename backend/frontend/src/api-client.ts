@@ -180,7 +180,13 @@ async function request<T>(
     // .code — машиночитаемый error-код ответа (напр. invalid_attachment,
     // hotfix 20.57.1 PASS 2, finding #4/#3) — .message остаётся человеко-
     // читаемым текстом для toast(), существующие вызывающие не затронуты.
-    throw Object.assign(new Error(message), { code: data.error as string | undefined });
+    // .definitive=true — сервер реально ответил (получен HTTP-статус,
+    // прошёл до валидации), т.е. это настоящий отказ, а не потерянный
+    // транспорт (hotfix 20.57.2 AMBIGUOUS DELIVERY). Ошибка от самого
+    // fetch() (сеть недоступна) или от парсинга res.json() ниже (ответ на
+    // успешный статус потерян/повреждён) этот флаг не несёт — это
+    // единственный надёжный различитель.
+    throw Object.assign(new Error(message), { code: data.error as string | undefined, definitive: true });
   }
   return res.json() as Promise<T>;
 }
