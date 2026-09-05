@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "20.57.2",
+  "version": "20.57.3",
   "type": "module",
   "engines": {
     "node": "22.x"

@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>T2 Sales</title>
   <!-- iPhone Safari / Home Screen Web App layer (21.x) — минимальный набор
        metadata, без manifest/service worker/полноценной PWA-инфраструктуры
@@ -188,9 +188,16 @@
     </div>
   </div>
 
+  <!-- 20.58 Phase 2 §5 — единая модалка на всё приложение (add-sale,
+       schedule/team edit, admin-диалоги и т.д., см. closeModal() в
+       features/add-sale/index.ts). role="dialog"/aria-modal/aria-labelledby
+       + видимая кнопка закрытия — раньше закрыть можно было только тапом
+       по backdrop или свайпом вниз, ни то ни другое не доступно с
+       клавиатуры/скринридера. -->
   <div id="overlay" class="overlay">
-    <div class="sheet-modal">
+    <div class="sheet-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
       <div class="grab"></div>
+      <button type="button" class="modal-close-btn" id="modalCloseBtn" onclick="closeModal()" aria-label="Закрыть">✕</button>
       <div class="modal-title" id="modalTitle">Добавить продажу</div>
       <div id="modalBody"></div>
     </div>
@@ -622,7 +629,7 @@
           <div class="row-icon">ℹ️</div>
           <div class="row-body">
             <div class="row-title">О приложении</div>
-            <div class="row-sub">T2 Sales v20.57.2</div>
+            <div class="row-sub">T2 Sales v20.57.3</div>
           </div>
           <div class="row-chevron">›</div>
         </button>

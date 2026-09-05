@@ -59,6 +59,7 @@ function setupGlobals(overrides: { tgId?: number | null; role?: string } = {}) {
   vi.stubGlobal('todayMoscow', () => '2026-08-25');
   vi.stubGlobal('formatDateRu', (iso: string) => iso.split('-').reverse().join('.'));
   vi.stubGlobal('applyTheme', vi.fn());
+  vi.stubGlobal('initTheme', vi.fn());
   vi.stubGlobal('applyBranding', vi.fn().mockResolvedValue(undefined));
   vi.stubGlobal('maybeOfferTutorial', vi.fn());
   vi.stubGlobal('loadHome', vi.fn());

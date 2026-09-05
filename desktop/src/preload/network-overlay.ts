@@ -21,6 +21,7 @@
  */
 import type { T2DesktopAPI } from '../shared/ipc-contract';
 import type { NetworkStatus, LayerResult } from '../main/network/types';
+import { FONT_STACK, RADIUS_CARD, SHADOW_CARD, ensureVisualTokenStyle } from './electron-visual-tokens';
 
 const OUTCOME_COLOR: Record<string, string> = {
   OK: '#2e7d32',
@@ -89,14 +90,31 @@ export function render(container: { innerHTML: string }, status: NetworkStatus):
  * tab loading the same production site. */
 export function installNetworkStatusOverlay(api: T2DesktopAPI): void {
   const mount = () => {
+    ensureVisualTokenStyle();
     const badge = document.createElement('div');
     badge.id = 't2desktop-network-status';
+    badge.className = 't2desktop-card';
+    // Not bottom:8px;right:8px — that's where the real page's own FAB
+    // (.fab, right:32/bottom:32, 58x58) and update-card (bottom:8/left:8)
+    // live. Also NOT a bare top:8px;right:8px (20.58 Phase 1 first
+    // attempt) — Electron's minWidth:960 keeps the app always on the
+    // desktop-shell breakpoint (>=860px), whose .app-header-top row
+    // (avatar + theme-toggle + refresh icon buttons) sits right there,
+    // confirmed colliding in Phase 2 review. Anchored just BELOW the real
+    // header instead, via the same --app-header-height custom property
+    // Phase 1 already exposes on document.body (core.ts, ResizeObserver) —
+    // preload has real DOM/CSSOM access to the loaded page, so this value
+    // is live and correct even if header height ever changes (DPI, fonts),
+    // with a sane fallback for the split second before core.ts sets it.
+    // Colors come from the .t2desktop-card class (electron-visual-tokens.ts)
+    // — light/dark via prefers-color-scheme — everything else (position,
+    // spacing, radius/shadow rhythm matching the app's own card look)
+    // stays inline since it's specific to this badge's placement.
     badge.style.cssText =
-      'position:fixed;bottom:8px;right:8px;z-index:2147483647;' +
-      'background:rgba(20,20,20,0.92);color:#f0f0f0;' +
-      'font:11px/1.4 -apple-system,Segoe UI,sans-serif;' +
-      'padding:8px 10px;border-radius:6px;min-width:170px;' +
-      'box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:pointer;user-select:none;';
+      `position:fixed;top:calc(var(--app-header-height, 56px) + 8px);right:8px;z-index:2147483647;` +
+      `font:11px/1.4 ${FONT_STACK};` +
+      `padding:8px 10px;border-radius:${RADIUS_CARD};min-width:170px;` +
+      `box-shadow:${SHADOW_CARD};cursor:pointer;user-select:none;`;
     const body = document.createElement('div');
     badge.appendChild(body);
 

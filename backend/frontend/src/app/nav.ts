@@ -91,9 +91,16 @@ export function tgUser(): { id?: number; first_name?: string; last_name?: string
 }
 
 // ===== Theme =====
-export function applyTheme(theme: string): void {
+// setThemeVisual — только применяет тему к DOM, НИЧЕГО не пишет в
+// localStorage. applyTheme (ниже) добавляет персист и остаётся тем, что
+// вызывает явное действие пользователя (toggleTheme). Разделение нужно
+// для initTheme(): чтобы можно было применить дефолт/Telegram-цветовую
+// схему на старте, не создавая при этом ложную запись "пользователь уже
+// выбрал тему" — раньше applyTheme() писал в localStorage при КАЖДОМ
+// вызове, включая самый первый дефолтный в bootApp(), из-за чего было
+// невозможно отличить "юзер ещё не выбирал" от "выбрал light".
+function setThemeVisual(theme: string): void {
   document.body.setAttribute('data-theme', theme);
-  localStorage.setItem('t2_theme', theme);
   if (window.tg) {
     try {
       window.tg.setBackgroundColor(theme === 'dark' ? '#000000' : '#f2f2f7');
@@ -107,9 +114,41 @@ export function applyTheme(theme: string): void {
   if (themeColorMeta) themeColorMeta.setAttribute('content', theme === 'dark' ? '#000000' : '#f2f2f7');
 }
 
+export function applyTheme(theme: string): void {
+  setThemeVisual(theme);
+  localStorage.setItem('t2_theme', theme);
+}
+
 export function toggleTheme(): void {
   const cur = document.body.getAttribute('data-theme') || 'light';
   applyTheme(cur === 'light' ? 'dark' : 'light');
+}
+
+// initTheme — вызывается один раз из bootApp(). Сразу (синхронно)
+// применяет сохранённую тему или light по умолчанию — без ожидания
+// telegramReadyPromise, чтобы не было FOUC. Затем, только если
+// пользователь ЕЩЁ НИ РАЗУ явно не выбирал тему (нет t2_theme в
+// localStorage), дожидается telegramReadyPromise и применяет
+// tg.colorScheme, плюс слушает themeChanged с той же проверкой на
+// каждое срабатывание (пользователь мог успеть выбрать тему вручную
+// уже после первого запуска). Явный выбор пользователя (toggleTheme)
+// всегда сохраняется через applyTheme() и после этого более никогда не
+// переопределяется автоматически.
+export async function initTheme(): Promise<void> {
+  const saved = localStorage.getItem('t2_theme');
+  setThemeVisual(saved || 'light');
+  await window.telegramReadyPromise;
+  const tg = window.tg;
+  if (!tg) return;
+  const applyFromTelegram = () => {
+    if (localStorage.getItem('t2_theme')) return;
+    const scheme = tg.colorScheme;
+    if (scheme === 'light' || scheme === 'dark') setThemeVisual(scheme);
+  };
+  applyFromTelegram();
+  try {
+    tg.onEvent('themeChanged', applyFromTelegram);
+  } catch (_) {}
 }
 
 // ===== Navigation =====
@@ -472,6 +511,7 @@ window.progressHTML = progressHTML;
 window.tgUser = tgUser;
 window.applyTheme = applyTheme;
 window.toggleTheme = toggleTheme;
+window.initTheme = initTheme;
 window.goBack = goBack;
 window.switchPage = switchPage;
 window.loadPage = loadPage;

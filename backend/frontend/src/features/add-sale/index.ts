@@ -427,6 +427,61 @@ export function initModalSwipeClose(): void {
 document.getElementById('overlay')?.addEventListener('click', (e) => {
   if ((e.target as HTMLElement).id === 'overlay') closeModal();
 });
+
+/* 20.58 Phase 2 (§5) — minimal, centralized modal a11y wiring. #overlay's
+ * 'show' class is toggled directly (classList.add/remove) from ~30 call
+ * sites across the app (team/schedule/network-admin/plans/shift/etc.) —
+ * rewriting every call site to funnel through openModal()/closeModal()
+ * would be exactly the "new modal framework" the task explicitly says not
+ * to build. A single MutationObserver on #overlay's own class attribute
+ * covers all of them for free, since they all mutate the SAME DOM node. */
+(function initModalA11y() {
+  const overlay = document.getElementById('overlay');
+  const sheet = document.querySelector('.sheet-modal') as HTMLElement | null;
+  if (!overlay || !sheet) return;
+  // Same window-scoped idempotency guard as core.ts's observeAppHeaderHeight
+  // (20.58 Phase 2 §0A) — production only ever runs this module once, but
+  // jsdom test suites vi.resetModules()+re-import this file many times per
+  // run, and document (unlike module-scope state) survives that, so a
+  // fresh keydown listener would otherwise accumulate on every re-import.
+  const w = window as unknown as { __t2DisposeModalA11y?: () => void };
+  w.__t2DisposeModalA11y?.();
+  let previouslyFocused: HTMLElement | null = null;
+
+  const onKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && overlay.classList.contains('show')) closeModal();
+  };
+  document.addEventListener('keydown', onKeydown);
+
+  const observer = new MutationObserver(() => {
+    const isOpen = overlay.classList.contains('show');
+    if (isOpen && document.activeElement !== previouslyFocused) {
+      // Только на переходе closed→open — иначе повторные мутации класса,
+      // пока модалка уже открыта (например повторный classList.add('show')
+      // от того же вызова), затирали бы previouslyFocused текущим фокусом
+      // внутри самой модалки.
+      if (!sheet.contains(document.activeElement)) {
+        previouslyFocused = document.activeElement as HTMLElement | null;
+        // .sheet-modal само tabindex="-1" — фокусируемо программно, не
+        // попадает в обычный Tab-порядок. Первый реальный интерактивный
+        // элемент формы (select/input/button) предпочтительнее, если он
+        // уже есть в modalBody на момент открытия.
+        const firstField = sheet.querySelector<HTMLElement>(
+          '#modalBody select, #modalBody input, #modalBody textarea, #modalBody button'
+        );
+        (firstField || sheet).focus();
+      }
+    } else if (!isOpen && previouslyFocused) {
+      previouslyFocused.focus?.();
+      previouslyFocused = null;
+    }
+  });
+  observer.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+  w.__t2DisposeModalA11y = () => {
+    document.removeEventListener('keydown', onKeydown);
+    observer.disconnect();
+  };
+})();
 initModalSwipeClose();
 
 declare global {

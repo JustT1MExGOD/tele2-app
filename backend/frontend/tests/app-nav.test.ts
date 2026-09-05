@@ -5,7 +5,7 @@
  * dispatches every page's load function and owns switchPage()/loadPage(),
  * so a mistake here is maximally visible (every tab).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { esc } from '../src/app/core.js';
 
 function setupDom() {
@@ -242,9 +242,67 @@ describe('app/nav (миграция frontend/js/02-nav-utils.js)', () => {
 
   it('window.* мост — весь публичный набор функций реально функции', async () => {
     const mod = await freshImport();
-    for (const name of ['applyAvatarImg', 'formatDateRu', 'toast', 'pctTone', 'progressHTML', 'tgUser', 'applyTheme', 'toggleTheme', 'goBack', 'switchPage', 'loadPage', 'refreshAll', 'initSwipePanels']) {
+    for (const name of ['applyAvatarImg', 'formatDateRu', 'toast', 'pctTone', 'progressHTML', 'tgUser', 'applyTheme', 'toggleTheme', 'initTheme', 'goBack', 'switchPage', 'loadPage', 'refreshAll', 'initSwipePanels']) {
       expect(typeof (window as any)[name]).toBe('function');
       expect((window as any)[name]).toBe((mod as any)[name]);
     }
+  });
+
+  // 20.58 (visual-correction pass, §9) — initTheme() должен слушаться Telegram
+  // colorScheme только пока пользователь ни разу явно не выбирал тему сам.
+  describe('initTheme (Telegram colorScheme, §9)', () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+    afterEach(() => {
+      delete (window as any).tg;
+      delete (window as any).telegramReadyPromise;
+    });
+
+    it('без Telegram и без сохранённого выбора остаётся на светлой теме по умолчанию', async () => {
+      const { initTheme } = await freshImport();
+      (window as any).telegramReadyPromise = Promise.resolve();
+      await initTheme();
+      expect(document.body.getAttribute('data-theme')).toBe('light');
+    });
+
+    it('первый запуск в Telegram без сохранённого выбора — следует tg.colorScheme', async () => {
+      const { initTheme } = await freshImport();
+      (window as any).telegramReadyPromise = Promise.resolve();
+      (window as any).tg = { colorScheme: 'dark', setBackgroundColor: vi.fn(), onEvent: vi.fn() };
+      await initTheme();
+      expect(document.body.getAttribute('data-theme')).toBe('dark');
+    });
+
+    it('если пользователь уже явно выбрал тему — Telegram colorScheme её не переопределяет', async () => {
+      const { initTheme, applyTheme } = await freshImport();
+      applyTheme('light'); // явный выбор пользователя, персистится
+      (window as any).telegramReadyPromise = Promise.resolve();
+      (window as any).tg = { colorScheme: 'dark', setBackgroundColor: vi.fn(), onEvent: vi.fn() };
+      await initTheme();
+      expect(document.body.getAttribute('data-theme')).toBe('light');
+    });
+
+    it('themeChanged применяется только пока нет явного выбора пользователя', async () => {
+      const { initTheme, applyTheme } = await freshImport();
+      (window as any).telegramReadyPromise = Promise.resolve();
+      let themeChangedHandler: (() => void) | undefined;
+      (window as any).tg = {
+        colorScheme: 'light',
+        setBackgroundColor: vi.fn(),
+        onEvent: (event: string, cb: () => void) => {
+          if (event === 'themeChanged') themeChangedHandler = cb;
+        }
+      };
+      await initTheme();
+      expect(document.body.getAttribute('data-theme')).toBe('light');
+      (window as any).tg.colorScheme = 'dark';
+      themeChangedHandler?.();
+      expect(document.body.getAttribute('data-theme')).toBe('dark');
+      applyTheme('light'); // юзер вручную переключил — явный, персистится
+      (window as any).tg.colorScheme = 'dark';
+      themeChangedHandler?.();
+      expect(document.body.getAttribute('data-theme')).toBe('light'); // больше не переопределяется
+    });
   });
 });

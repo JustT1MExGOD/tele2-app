@@ -222,8 +222,10 @@ declare global {
   function openComboCalc(): void;
   /** features/add-sale — opens the "Добавить продажу" modal, optionally preset to an employee. */
   function openAddSale(presetEmployeeId?: number | string): Promise<void>;
-  /** app/nav.ts — applies 'light'/'dark' theme to <body data-theme>. */
+  /** app/nav.ts — applies 'light'/'dark' theme to <body data-theme> AND persists it as the user's explicit choice. */
   function applyTheme(theme: string): void;
+  /** app/nav.ts — applies saved/default theme immediately, then (only if the user has no explicit saved choice) follows Telegram's colorScheme. Call once from bootApp(). */
+  function initTheme(): Promise<void>;
   /** app/core.ts — canManage() || isSupervisor(), approve-access shorthand. */
   function canApprove(): boolean;
   /** src/pages/home — loads the Главная page. */

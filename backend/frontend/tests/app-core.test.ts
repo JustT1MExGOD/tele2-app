@@ -535,3 +535,61 @@ describe('app/core — Telegram identity resolution (forced-to-phone-login regre
     expect(h['X-Telegram-Id']).toBe('999999999');
   });
 });
+
+// 20.58 Phase 2 (§0A/§10A) — observeAppHeaderHeight() lifecycle. Production
+// only ever runs this once (single <script> load per real page), but jsdom
+// test suites vi.resetModules()+re-import core.ts many times for isolation,
+// and jsdom has no global ResizeObserver — every re-import used to fall
+// back to window.addEventListener('resize', set), leaking one listener per
+// import onto the shared window (module-scope guards don't survive
+// resetModules()). Proves the window-level dispose guard actually prevents
+// that leak, and that a real height change still updates the CSS variable.
+describe('app/core — --app-header-height observer lifecycle (idempotency, §0A)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function setupHeaderDom(heightPx = 64) {
+    document.body.innerHTML = '<div class="app-header" style="height:64px"></div>';
+    // jsdom не делает реальный layout — getBoundingClientRect() всегда
+    // вернёт 0 для любых CSS-размеров, поэтому подменяем её напрямую,
+    // как единственный способ проверить, что реальная высота действительно
+    // попадает в CSS-переменную.
+    const header = document.querySelector('.app-header')!;
+    header.getBoundingClientRect = () => ({ height: heightPx } as DOMRect);
+  }
+
+  it('repeated re-imports do not accumulate window resize listeners (fallback path, no ResizeObserver in jsdom)', async () => {
+    expect(typeof (globalThis as any).ResizeObserver).toBe('undefined'); // сама предпосылка бага
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
+    setupHeaderDom();
+    await freshImport();
+    setupHeaderDom();
+    await freshImport();
+    setupHeaderDom();
+    await freshImport();
+    const resizeAdds = addSpy.mock.calls.filter((c) => c[0] === 'resize').length;
+    const resizeRemoves = removeSpy.mock.calls.filter((c) => c[0] === 'resize').length;
+    // 3 re-imports → 3 installs, но каждый новый снимает предыдущий —
+    // после третьего в живых остаётся ровно один слушатель, не три.
+    expect(resizeAdds).toBe(3);
+    expect(resizeRemoves).toBe(2);
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  it('sets --app-header-height on document.body from the real .app-header height', async () => {
+    setupHeaderDom();
+    await freshImport();
+    expect(document.body.style.getPropertyValue('--app-header-height')).toBe('64px');
+  });
+
+  it('missing .app-header (page not yet in DOM) does not throw and installs no listener', async () => {
+    document.body.innerHTML = '';
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    await expect(freshImport()).resolves.toBeTruthy();
+    expect(addSpy.mock.calls.filter((c) => c[0] === 'resize').length).toBe(0);
+    addSpy.mockRestore();
+  });
+});

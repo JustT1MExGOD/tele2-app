@@ -9,8 +9,13 @@
  * unexpected extra property on the status object ever reaches the DOM.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { render } from '../src/preload/network-overlay.js';
 import type { NetworkStatus } from '../src/main/network/types.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function fakeContainer() {
   return { innerHTML: '' };
@@ -119,5 +124,26 @@ describe('network-overlay render — optional Relay host row (hostname only)', (
     expect(container.innerHTML).not.toContain('https://');
     expect(container.innerHTML).not.toContain('/healthz');
     expect(container.innerHTML).not.toContain('?');
+  });
+});
+
+// 20.58 (visual-correction pass, §3, hardened in Phase 2 §0B) — the
+// overlay badge used to sit at bottom:8/right:8, the same corner as the
+// real page's .fab (right:32/bottom:32, 58x58) — collision confirmed.
+// Moving it to a bare top:8/right:8 was ALSO confirmed colliding (Phase 2
+// review) with .app-header-top's own avatar/theme-toggle/refresh icon
+// buttons, since Electron's minWidth:960 always renders the desktop-shell
+// breakpoint. Anchored below the real (ResizeObserver-measured) header
+// height instead — collides with neither.
+describe('network-overlay badge position — no FAB / header collision (20.58 Phase 2)', () => {
+  it('mounts below --app-header-height at right:8px, not at a bare top:8px or bottom:8px', () => {
+    const source = readFileSync(path.join(__dirname, '..', 'src', 'preload', 'network-overlay.ts'), 'utf8');
+    const idx = source.indexOf("badge.style.cssText =");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const cssText = source.slice(idx, idx + 400);
+    expect(cssText).toContain('top:calc(var(--app-header-height');
+    expect(cssText).toContain('right:8px');
+    expect(cssText).not.toContain('top:8px;right:8px');
+    expect(cssText).not.toContain('bottom:8px;right:8px');
   });
 });

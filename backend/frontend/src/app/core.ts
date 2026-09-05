@@ -201,13 +201,78 @@ async function initTelegramWebApp(): Promise<void> {
 // for a logged-out web visitor just because the SDK hadn't resolved yet.
 window.telegramReadyPromise = initTelegramWebApp();
 
+/**
+ * 20.58 (visual-correction pass) — .chat-page.active used to compute its
+ * own height as `100vh - --app-safe-top`, silently assuming it starts at
+ * the very top of the viewport. It doesn't: .app-header (avatar/theme/
+ * store-pill/date) always renders directly above it — switchPage() never
+ * hides the header for any page, chat included — so that formula was
+ * always short exactly one .app-header's worth of height, pushing the
+ * composer/bottom of the chat page below the viewport and creating a
+ * spurious document-level scroll. The desktop breakpoint's own attempted
+ * fix (a hardcoded `140px` magic number) never even applied — `.chat-page`
+ * (specificity 0,1,0) can't win against `.chat-page.active` (0,2,0)
+ * regardless of media-query order, so it was dead code (removed in
+ * styles.css together with this fix).
+ *
+ * Measuring the header's REAL rendered height (ResizeObserver, not a
+ * constant) and exposing it as `--app-header-height` lets one CSS rule
+ * work correctly at every breakpoint/platform — mobile header height,
+ * desktop header height (different padding), Telegram's extra safe-area
+ * padding baked into the header itself, font-load reflow — all already
+ * reflected automatically, no second magic number to keep in sync.
+ */
+function observeAppHeaderHeight(): void {
+  const header = document.querySelector('.app-header');
+  if (!header) return;
+  let lastPx = '';
+  const set = () => {
+    const px = header.getBoundingClientRect().height + 'px';
+    // Пропускаем запись, если значение не изменилось — ResizeObserver и
+    // так вызывает set() только при реальном изменении box size, но
+    // первый вызов (из observeAppHeaderHeight() напрямую) и 'resize'-
+    // fallback могут срабатывать при неизменной высоте хедера.
+    if (px === lastPx) return;
+    lastPx = px;
+    document.body.style.setProperty('--app-header-height', px);
+  };
+  // Idempotency guard (20.58 Phase 2, §0A) — in production this module-level
+  // call only ever runs once (one <script> load per real page load), so this
+  // guard is defensive, not load-bearing there. It IS load-bearing for
+  // jsdom test suites that vi.resetModules() + re-import core.ts for
+  // isolation: each fresh import re-executes this function, and jsdom has
+  // no global ResizeObserver, so every re-import fell through to
+  // window.addEventListener('resize', set) — leaking one listener per
+  // import onto the shared window, since module-scope state does not
+  // survive resetModules(). The guard has to live on window itself (the
+  // one thing that DOES survive) to actually be idempotent across re-inits.
+  const w = window as unknown as { __t2DisposeHeaderObserver?: () => void };
+  w.__t2DisposeHeaderObserver?.();
+  set();
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(set);
+    ro.observe(header);
+    w.__t2DisposeHeaderObserver = () => ro.disconnect();
+  } else {
+    // Электрон/современные браузеры имеют ResizeObserver безусловно — этот
+    // путь чисто defensive, не рассчитан на реальное срабатывание в проде.
+    window.addEventListener('resize', set);
+    w.__t2DisposeHeaderObserver = () => window.removeEventListener('resize', set);
+  }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', observeAppHeaderHeight, { once: true });
+} else {
+  observeAppHeaderHeight();
+}
+
 // Клиентская версия (О приложении + бейдж на главной)
 // Hotfix 20.57.1 PASS 3, finding #4 — was hardcoded '15.0', stale since
 // v15.x. Kept in sync with package.json's version by `npm run
 // check:frontend-version` (scripts/check-frontend-version.mjs) rather than
 // a build-time injection — 24 separate Vite bundle configs make wiring a
 // real single-source define() a build-system refactor out of scope here.
-const APP_VERSION = '20.57.2';
+const APP_VERSION = '20.57.3';
 const API = window.location.origin;
 
 export function todayMoscow(): string {

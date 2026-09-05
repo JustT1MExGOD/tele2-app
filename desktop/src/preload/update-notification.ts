@@ -21,6 +21,7 @@
  */
 import type { T2DesktopAPI } from '../shared/ipc-contract';
 import type { UpdateStatus } from '../main/updater/types';
+import { FONT_STACK, RADIUS_CARD, SHADOW_CARD, ensureVisualTokenStyle } from './electron-visual-tokens';
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -38,16 +39,20 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
+// Position/spacing stay inline (specific to this card's placement);
+// color now comes from the .t2desktop-card class (electron-visual-tokens.ts,
+// prefers-color-scheme aware) instead of a hardcoded dark-only background.
 const CARD_STYLE =
-  'position:fixed;bottom:8px;left:8px;z-index:2147483646;' +
-  'background:#1a1a1a;color:#f0f0f0;font:13px/1.5 -apple-system,Segoe UI,sans-serif;' +
-  'padding:14px 16px;border-radius:8px;max-width:320px;' +
-  'box-shadow:0 4px 16px rgba(0,0,0,.5);';
+  `position:fixed;bottom:8px;left:8px;z-index:2147483646;` +
+  `font:13px/1.5 ${FONT_STACK};` +
+  `padding:14px 16px;border-radius:${RADIUS_CARD};max-width:320px;` +
+  `box-shadow:${SHADOW_CARD};`;
 
-const BUTTON_STYLE_PRIMARY =
-  'background:#2AABEE;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600;';
-const BUTTON_STYLE_SECONDARY =
-  'background:transparent;color:#aaa;border:none;padding:7px 10px;font-size:13px;cursor:pointer;';
+// Buttons use the shared .t2desktop-btn-primary/-secondary classes now —
+// kept as class-name strings (not inline style strings) so a future
+// light/dark tweak lives in electron-visual-tokens.ts, not duplicated here.
+const BUTTON_CLASS_PRIMARY = 't2desktop-btn-primary';
+const BUTTON_CLASS_SECONDARY = 't2desktop-btn-secondary';
 
 /** Exported for testing — pure function producing the card's inner HTML
  * (or null when nothing should be shown), given a status and the
@@ -76,8 +81,8 @@ export function renderUpdateCardHtml(status: UpdateStatus): string | null {
         <div style="opacity:.7;font-size:12px;">Размер: ${formatBytes(m.installer.size)}</div>
         ${notes}
         <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
-          <button data-t2-action="later" style="${BUTTON_STYLE_SECONDARY}">Позже</button>
-          <button data-t2-action="download" style="${BUTTON_STYLE_PRIMARY}">Скачать</button>
+          <button data-t2-action="later" class="${BUTTON_CLASS_SECONDARY}">Позже</button>
+          <button data-t2-action="download" class="${BUTTON_CLASS_PRIMARY}">Скачать</button>
         </div>`;
     }
 
@@ -110,8 +115,8 @@ export function renderUpdateCardHtml(status: UpdateStatus): string | null {
         <div style="font-weight:700;margin-bottom:4px;">Обновление готово к установке</div>
         ${warning}
         <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
-          <button data-t2-action="later" style="${BUTTON_STYLE_SECONDARY}">Позже</button>
-          <button data-t2-action="install" style="${BUTTON_STYLE_PRIMARY}">Установить сейчас</button>
+          <button data-t2-action="later" class="${BUTTON_CLASS_SECONDARY}">Позже</button>
+          <button data-t2-action="install" class="${BUTTON_CLASS_PRIMARY}">Установить сейчас</button>
         </div>`;
     }
 
@@ -120,7 +125,7 @@ export function renderUpdateCardHtml(status: UpdateStatus): string | null {
         <div style="font-weight:700;color:#c62828;margin-bottom:4px;">Ошибка обновления</div>
         <div style="opacity:.8;font-size:12px;">${esc(status.errorMessage ?? 'Неизвестная ошибка')}</div>
         <div style="margin-top:10px;display:flex;justify-content:flex-end;">
-          <button data-t2-action="later" style="${BUTTON_STYLE_SECONDARY}">Скрыть</button>
+          <button data-t2-action="later" class="${BUTTON_CLASS_SECONDARY}">Скрыть</button>
         </div>`;
 
     default:
@@ -130,8 +135,10 @@ export function renderUpdateCardHtml(status: UpdateStatus): string | null {
 
 export function installUpdateNotification(api: T2DesktopAPI): void {
   const mount = () => {
+    ensureVisualTokenStyle();
     const card = document.createElement('div');
     card.id = 't2desktop-update-notification';
+    card.className = 't2desktop-card';
     card.style.cssText = CARD_STYLE;
     card.style.display = 'none';
     document.body.appendChild(card);

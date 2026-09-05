@@ -699,7 +699,7 @@ export async function submitMfaTelegramReverifyCode(): Promise<void> {
 }
 
 export async function bootApp(): Promise<void> {
-  applyTheme(localStorage.getItem('t2_theme') || 'light');
+  initTheme();
   const dateEl = document.getElementById('headerDate');
   if (dateEl) dateEl.textContent = formatDateRu(todayMoscow());
 
