@@ -7,6 +7,8 @@ import { getApp, authAs as authAsBase } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import { sweepExpiredChatAttachments } from '../../src/cron/chat-attachment-cleanup.js';
+import { hashPassword } from '../../src/auth/password.js';
+import * as sessionsRepo from '../../src/data/repositories/sessions.js';
 
 /** app.ts::rateLimit ключует по request.ip (trustProxy: 1 — уважает
  * X-Forwarded-For одного хопа); этот файл намеренно бьёт по /chat/
@@ -239,23 +241,97 @@ describe('Внутренний чат — вложения', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('чужое prepared-вложение не подставляется в сообщение (ownership)', async () => {
+  // Hotfix 20.57.1 PASS 2, finding #3 — раньше чужое вложение молча
+  // отфильтровывалось и сообщение всё равно создавалось (body-only, без
+  // единого вложения) — отправитель не узнавал, что вложение не долетело.
+  // Теперь весь запрос отклоняется целиком (fail-closed), сообщение НЕ
+  // создаётся вообще.
+  it('чужое (foreign) вложение — весь запрос отклонён, сообщение НЕ создаётся (fail-closed)', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Attach Ownership Org');
     const empA = await fx.createEmployee(org, { role: 'employee' });
     const empB = await fx.createEmployee(org, { role: 'employee' });
     const up = await upload(app, empA.telegramId, 'not-yours.txt', 'text/plain', REAL_TXT);
     attachmentIds.push(up.json().id);
+    const clientMessageId = crypto.randomUUID();
 
     const res = await app.inject({
       method: 'POST',
       url: '/chat/messages',
       headers: { ...authAs(empB.telegramId), 'content-type': 'application/json' },
-      payload: { clientMessageId: crypto.randomUUID(), body: 'угнать чужое вложение', attachmentIds: [up.json().id] }
+      payload: { clientMessageId, body: 'угнать чужое вложение', attachmentIds: [up.json().id] }
     });
-    expect(res.statusCode).toBe(200);
-    messageIds.push(res.json().id);
-    expect(res.json().attachments).toHaveLength(0);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_attachment');
+    const check = await query(`SELECT 1 FROM chat_messages WHERE client_message_id = $1`, [clientMessageId]);
+    expect(check.rows).toHaveLength(0);
+  });
+
+  it('валидное + чужое (foreign) вложение вперемешку — весь запрос отклонён, ни одно вложение не привязывается', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Attach Mixed Foreign Org');
+    const empA = await fx.createEmployee(org, { role: 'employee' });
+    const empB = await fx.createEmployee(org, { role: 'employee' });
+    const foreign = await upload(app, empA.telegramId, 'foreign.txt', 'text/plain', REAL_TXT);
+    const own = await upload(app, empB.telegramId, 'own.txt', 'text/plain', REAL_TXT);
+    attachmentIds.push(foreign.json().id, own.json().id);
+    const clientMessageId = crypto.randomUUID();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(empB.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId, body: 'mixed', attachmentIds: [own.json().id, foreign.json().id] }
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_attachment');
+    const check = await query(`SELECT 1 FROM chat_messages WHERE client_message_id = $1`, [clientMessageId]);
+    expect(check.rows).toHaveLength(0);
+    // "own" вложение осталось prepared (не привязано ни к какому сообщению) —
+    // не потеряно, доступно для повторной отправки.
+    const ownRow = await query(`SELECT message_id FROM chat_attachments WHERE id = $1`, [own.json().id]);
+    expect(ownRow.rows[0].message_id).toBeNull();
+  });
+
+  it('дубликат id одного и того же валидного вложения в attachmentIds — отклонён (fail-closed), не задваивается', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Attach Dup Id Org');
+    const emp = await fx.createEmployee(org, { role: 'employee' });
+    const up = await upload(app, emp.telegramId, 'dup-id.txt', 'text/plain', REAL_TXT);
+    attachmentIds.push(up.json().id);
+    const clientMessageId = crypto.randomUUID();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(emp.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId, body: null, attachmentIds: [up.json().id, up.json().id] }
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_attachment');
+    const check = await query(`SELECT 1 FROM chat_messages WHERE client_message_id = $1`, [clientMessageId]);
+    expect(check.rows).toHaveLength(0);
+  });
+
+  it('body-less сообщение только с невалидным (просроченным) вложением — отклонено, не "empty_message"', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Attach OnlyInvalid Org');
+    const emp = await fx.createEmployee(org, { role: 'employee' });
+    const up = await upload(app, emp.telegramId, 'only-invalid.txt', 'text/plain', REAL_TXT);
+    attachmentIds.push(up.json().id);
+    await query(`UPDATE chat_attachments SET expires_at = now() - interval '1 minute' WHERE id = $1`, [up.json().id]);
+    const clientMessageId = crypto.randomUUID();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(emp.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId, body: null, attachmentIds: [up.json().id] }
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_attachment');
+    const check = await query(`SELECT 1 FROM chat_messages WHERE client_message_id = $1`, [clientMessageId]);
+    expect(check.rows).toHaveLength(0);
   });
 
   it('prepared upload: TTL ровно 1 час (expiresAt ~ now + 1h, допуск ±60с)', async () => {
@@ -341,22 +417,110 @@ describe('Внутренний чат — вложения', () => {
     expect(rowAfter.rows[0].message_id).toBe(msgRes.json().id);
   });
 
-  it('истёкшее prepared-вложение не подставляется в сообщение', async () => {
+  // Hotfix 20.57.1 PASS 2, finding #3 — раньше истёкшее вложение молча
+  // отфильтровывалось, а сообщение с текстом всё равно создавалось без
+  // единого вложения. Теперь весь запрос отклоняется целиком.
+  it('истёкшее prepared-вложение — весь запрос отклонён, сообщение НЕ создаётся (fail-closed)', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Attach Expired Org');
     const emp = await fx.createEmployee(org, { role: 'employee' });
     const up = await upload(app, emp.telegramId, 'expired.txt', 'text/plain', REAL_TXT);
     await query(`UPDATE chat_attachments SET expires_at = now() - interval '1 minute' WHERE id = $1`, [up.json().id]);
+    const clientMessageId = crypto.randomUUID();
 
     const res = await app.inject({
       method: 'POST',
       url: '/chat/messages',
       headers: { ...authAs(emp.telegramId), 'content-type': 'application/json' },
-      payload: { clientMessageId: crypto.randomUUID(), body: 'с истёкшим вложением', attachmentIds: [up.json().id] }
+      payload: { clientMessageId, body: 'с истёкшим вложением', attachmentIds: [up.json().id] }
     });
-    expect(res.statusCode).toBe(200);
-    messageIds.push(res.json().id);
-    expect(res.json().attachments).toHaveLength(0);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_attachment');
+    const check = await query(`SELECT 1 FROM chat_messages WHERE client_message_id = $1`, [clientMessageId]);
+    expect(check.rows).toHaveLength(0);
     attachmentIds.push(up.json().id);
+  });
+
+  it('валидное + просроченное (expired) вложение вперемешку — весь запрос отклонён', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Attach Mixed Expired Org');
+    const emp = await fx.createEmployee(org, { role: 'employee' });
+    const expired = await upload(app, emp.telegramId, 'expired2.txt', 'text/plain', REAL_TXT);
+    const valid = await upload(app, emp.telegramId, 'valid2.txt', 'text/plain', REAL_TXT);
+    attachmentIds.push(expired.json().id, valid.json().id);
+    await query(`UPDATE chat_attachments SET expires_at = now() - interval '1 minute' WHERE id = $1`, [expired.json().id]);
+    const clientMessageId = crypto.randomUUID();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/chat/messages',
+      headers: { ...authAs(emp.telegramId), 'content-type': 'application/json' },
+      payload: { clientMessageId, body: null, attachmentIds: [valid.json().id, expired.json().id] }
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_attachment');
+    const check = await query(`SELECT 1 FROM chat_messages WHERE client_message_id = $1`, [clientMessageId]);
+    expect(check.rows).toHaveLength(0);
+    const validRow = await query(`SELECT message_id FROM chat_attachments WHERE id = $1`, [valid.json().id]);
+    expect(validRow.rows[0].message_id).toBeNull();
+  });
+
+  // Hotfix 20.57.1, finding #1 — requireCsrf (auth/csrf.ts) — глобальный
+  // preHandler без исключения для /chat/attachments. requestUpload()
+  // (frontend api-client.ts) раньше никогда не отправлял X-CSRF-Token —
+  // браузерная/Electron cookie-сессия получала 403 на КАЖДОЙ загрузке
+  // вложения. Эти тесты доказывают серверную половину контракта, который
+  // теперь клиент фактически выполняет: правильный токен нужен, его
+  // отсутствие блокирует, Telegram-путь (без t2_session) не затронут.
+  describe('CSRF (cookie-сессия) на POST /chat/attachments', () => {
+    async function makePhoneSessionEmployee() {
+      const org = await fx.createOrg('Attach CSRF Org');
+      const passwordHash = await hashPassword('attach-csrf-pass');
+      const phone = '+7906' + Math.floor(1000000 + Math.random() * 8999999);
+      const { id } = await fx.createPhoneEmployee(org, phone, passwordHash, { fullName: 'Attach CSRF Target' });
+      const token = await sessionsRepo.createSession(id);
+      return token;
+    }
+
+    it('cookie-сессия БЕЗ X-CSRF-Token — 403 csrf_mismatch, вложение не создаётся', async () => {
+      const app = await getApp();
+      const token = await makePhoneSessionEmployee();
+      const { contentType, body } = buildMultipart('file', 'x.txt', 'text/plain', REAL_TXT);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/chat/attachments',
+        headers: { cookie: `t2_session=${token}`, 'content-type': contentType },
+        payload: body
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('csrf_mismatch');
+    });
+
+    it('cookie-сессия с СОВПАДАЮЩИМ X-CSRF-Token — проходит (proves frontend fix contract)', async () => {
+      const app = await getApp();
+      const token = await makePhoneSessionEmployee();
+      const { contentType, body } = buildMultipart('file', 'x.txt', 'text/plain', REAL_TXT);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/chat/attachments',
+        headers: {
+          cookie: `t2_session=${token}; t2_csrf=matching-token`,
+          'x-csrf-token': 'matching-token',
+          'content-type': contentType
+        },
+        payload: body
+      });
+      expect(res.statusCode).toBe(200);
+      attachmentIds.push(res.json().id);
+    });
+
+    it('Telegram-путь (без t2_session cookie) — CSRF не применяется, загрузка проходит без X-CSRF-Token', async () => {
+      const app = await getApp();
+      const org = await fx.createOrg('Attach CSRF Telegram Org');
+      const emp = await fx.createEmployee(org, { role: 'employee' });
+      const up = await upload(app, emp.telegramId, 'telegram-path.txt', 'text/plain', REAL_TXT);
+      expect(up.statusCode).toBe(200);
+      attachmentIds.push(up.json().id);
+    });
   });
 });

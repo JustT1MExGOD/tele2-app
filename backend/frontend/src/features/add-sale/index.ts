@@ -128,10 +128,13 @@ export function onEmpChange(): void {
 export function renderSaleMetrics(): void {
   const grid = document.getElementById('metricGrid');
   if (!grid) return;
+  // esc(m.label) — метка кастомной метрики (GET /metrics) не валидируется на
+  // формат на бэкенде (только id — [a-z0-9_], m.id ниже безопасен как есть);
+  // раньше вставлялась без экранирования (hotfix 20.57.1, finding #5).
   grid.innerHTML = METRICS.map(
     (m) => `
         <button type="button" class="mchip ${saleSelection[m.id] != null ? 'on' : ''}" data-m="${m.id}"
-          onclick="toggleSaleMetric('${m.id}')">${m.label}</button>
+          onclick="toggleSaleMetric('${m.id}')">${esc(m.label)}</button>
       `
   ).join('');
   renderSaleQtyList();
@@ -159,7 +162,7 @@ export function renderSaleQtyList(): void {
       const m = METRICS.find((x) => x.id === key) || { label: key, unit: '' };
       return `
           <div class="qty-row">
-            <div class="qty-label">${m.label}<small>${(m as any).unit || ''}</small></div>
+            <div class="qty-label">${esc(m.label)}<small>${(m as any).unit || ''}</small></div>
             <input type="number" min="0" step="1" inputmode="decimal"
               value="${saleSelection[key]}"
               oninput="saleSelection['${key}'] = Number(String(this.value).replace(',','.')) || 0" />

@@ -102,15 +102,26 @@ export async function countWorkedInRange(employeeId: number, start: string, end:
   return Number(res.rows[0]?.cnt) || 0;
 }
 
-/** GET /schedules — своя запись видна всегда, даже вне своей сети (подмена). */
+/** GET /schedules — своя запись видна всегда, даже вне своей сети (подмена).
+ * LEFT JOIN на stores, не JOIN — store_id у schedules nullable (переходное
+ * состояние без точки, см. findByMonthForOrgOrSelf ниже, тот же паттерн);
+ * INNER JOIN здесь молча вырезал бы такие смены из дневного графика, хотя
+ * findByMonthForOrgOrSelf их уже показывает — та же строка данных исчезала
+ * или появлялась в зависимости от того, дневной или месячный вид открыт
+ * (hotfix 20.57.1, finding #7). Org-фильтр для этого случая — COALESCE(st.org_id,
+ * e.org_id, 'default'): та же authority, что уже использует DELETE /schedules
+ * (assertEmployeeInOrg) для store_id IS NULL — своя сеть СОТРУДНИКА, а не
+ * голый 'default'-sentinel (иначе storeless-смена была видна только сети,
+ * буквально названной 'default' — реальный дефект, найденный прогоном
+ * регрессионного теста на localhost Postgres, PASS 1 verification). */
 export async function findByDayForOrgOrSelf(workDate: string, orgId: string, employeeId: number | null): Promise<any[]> {
   const res = await query(
     `SELECT sch.*, e.full_name, COALESCE(st.display_name, st.name) as store_name, st.short_name as store_short
      FROM schedules sch
      JOIN employees e ON e.id = sch.employee_id
-     JOIN stores st ON st.id = sch.store_id
+     LEFT JOIN stores st ON st.id = sch.store_id
      WHERE sch.work_date::date = $1::date
-       AND (COALESCE(st.org_id, 'default') = $2 OR sch.employee_id = $3)
+       AND (COALESCE(st.org_id, e.org_id, 'default') = $2 OR sch.employee_id = $3)
      ORDER BY st.hours, e.full_name`,
     [workDate, orgId, employeeId]
   );
@@ -118,7 +129,9 @@ export async function findByDayForOrgOrSelf(workDate: string, orgId: string, emp
 }
 
 /** GET /schedules/month — тот же self-inclusion принцип, LEFT JOIN на
- * stores (смена может быть без точки на переходный период). */
+ * stores (смена может быть без точки на переходный период), тот же
+ * COALESCE(st.org_id, e.org_id, 'default') fallback, что и в
+ * findByDayForOrgOrSelf выше. */
 export async function findByMonthForOrgOrSelf(
   start: string, end: string, orgId: string, employeeId: number | null
 ): Promise<any[]> {
@@ -130,7 +143,7 @@ export async function findByMonthForOrgOrSelf(
      JOIN employees e ON e.id = sch.employee_id
      LEFT JOIN stores st ON st.id = sch.store_id
      WHERE sch.work_date >= $1 AND sch.work_date < $2
-       AND (COALESCE(st.org_id, 'default') = $3 OR sch.employee_id = $4)
+       AND (COALESCE(st.org_id, e.org_id, 'default') = $3 OR sch.employee_id = $4)
      ORDER BY e.full_name, sch.work_date`,
     [start, end, orgId, employeeId]
   );
@@ -185,9 +198,20 @@ export async function findAnyScheduledStoreId(employeeId: number, date: string):
   return res.rows[0]?.store_id ?? null;
 }
 
-export async function findStoreIdFor(employeeId: number, workDate: string): Promise<string | null> {
+/**
+ * DELETE /schedules — раньше это была `findStoreIdFor`, возвращавшая
+ * просто `store_id ?? null`: "смены вообще нет" и "смена есть, но
+ * store_id IS NULL" (легитимное переходное состояние — см. комментарий у
+ * findByMonthForOrgOrSelf, LEFT JOIN на stores) были неотличимы на
+ * вызывающей стороне, из-за чего org-scope проверка молча пропускалась
+ * целиком во втором случае — manager чужой сети мог удалить чужую
+ * storeless-смену (hotfix 20.57.1, finding #6). `exists` разделяет эти
+ * два случая явно.
+ */
+export async function findScheduleForDelete(employeeId: number, workDate: string): Promise<{ exists: boolean; storeId: string | null }> {
   const res = await query(`SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2`, [employeeId, workDate]);
-  return res.rows[0]?.store_id ?? null;
+  if (!res.rows.length) return { exists: false, storeId: null };
+  return { exists: true, storeId: res.rows[0].store_id ?? null };
 }
 
 export async function deleteOne(employeeId: number, workDate: string): Promise<void> {

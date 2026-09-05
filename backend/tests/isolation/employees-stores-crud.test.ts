@@ -122,6 +122,45 @@ describe('Изоляция CRUD сотрудников и точек (PATCH/DELE
     expect(res.statusCode).toBe(200);
   });
 
+  // Регрессия (hotfix 20.57.1, finding #5): color раньше принимался как
+  // произвольная строка — фронтенд (storeColor()) подставляет её без
+  // экранирования в несколько inline style="..." (XSS через
+  // style-attribute breakout). Формат-контракт на бэкенде исключает это
+  // в источнике, вместо экранирования на каждой точке рендера.
+  it('PATCH /stores/:id — color: не-hex значение отклоняется (400)', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/stores/${storeA}`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { color: 'red;background:url(javascript:alert(1))' }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('PATCH /stores/:id — валидный hex color по-прежнему принимается', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/stores/${storeA}`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { color: '#a1b2c3' }
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().color).toBe('#a1b2c3');
+  });
+
+  it('POST /stores — color: не-hex значение отклоняется (400)', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stores',
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { id: 'color_test_store', name: 'Color Test', color: '"><script>alert(1)</script>' }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   // Та же логика, что при увольнении сотрудника: закрытие точки не должно
   // оставлять сотрудников висеть в её будущем графике, но прошлая история
   // (кто реально работал на этой точке) должна остаться нетронутой.

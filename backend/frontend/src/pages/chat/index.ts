@@ -27,6 +27,13 @@ interface PendingEntry {
   clientMessageId: string;
   body: string | null;
   files: File[];
+  // Параллельно files — id уже успешно подготовленного (загруженного)
+  // вложения, или null пока файл ещё не загружен/загрузка провалилась.
+  // Хранится здесь, а не пересоздаётся заново, именно затем, чтобы retry
+  // (см. retryChatMessage/submitChatMessage) переиспользовал уже готовые
+  // id вместо повторной загрузки тех же байтов с нуля (hotfix 20.57.1
+  // PASS 2, finding #4 — "retry / orphan blobs").
+  attachmentIds: (string | null)[];
   status: PendingStatus;
 }
 
@@ -89,9 +96,19 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
+/**
+ * data-* атрибуты + делегирование (onAttachmentClick/onFeedClick ниже), не
+ * inline onclick="...('${originalFilename}')": esc() экранирует для HTML-
+ * атрибута, но браузер HTML-декодирует атрибут ДО компиляции его как JS для
+ * inline-обработчика — `&#39;` снова становится `'` в момент выполнения, и
+ * escaped-строка ломает JS-строковый контекст (stored XSS через имя файла
+ * вложения). Обычный HTML-атрибут (data-*) такой проблеме не подвержен —
+ * значение читается как текст, не компилируется как код (hotfix 20.57.1,
+ * finding #4).
+ */
 function attachmentHtml(a: ChatAttachment): string {
   return `
-    <button class="chat-attachment" onclick="downloadChatAttachment('${a.id}', '${esc(a.originalFilename).replace(/'/g, '&#39;')}')">
+    <button class="chat-attachment" data-attachment-id="${esc(a.id)}" data-attachment-filename="${esc(a.originalFilename)}">
       <span class="chat-attachment-name">${esc(a.originalFilename)}</span>
       <span class="chat-attachment-size">${formatSize(a.sizeBytes)}</span>
     </button>`;
@@ -347,57 +364,86 @@ export async function sendChatMessage(): Promise<void> {
   setComposerFiles([]);
   updateSendButtonState();
 
-  await submitChatMessage(clientMessageId, body || null, files);
-}
-
-async function submitChatMessage(clientMessageId: string, body: string | null, files: File[]): Promise<void> {
-  pendingByClientId.set(clientMessageId, { clientMessageId, body, files, status: 'sending' });
+  pendingByClientId.set(clientMessageId, {
+    clientMessageId,
+    body: body || null,
+    files,
+    attachmentIds: files.map(() => null),
+    status: 'sending'
+  });
   renderFeed(null);
   scrollToBottom();
+  await submitChatMessage(clientMessageId);
+}
+
+/**
+ * Тот же clientMessageId — сервер идемпотентен (§23 брифа), повторный POST
+ * после неизвестного network outcome (потерян ответ на успешный POST)
+ * безопасен: insertMessageIfAbsent вернёт уже существующее сообщение.
+ *
+ * Уже загруженные вложения (entry.attachmentIds[i] уже заполнен) НЕ
+ * загружаются повторно — только файлы, для которых предыдущая попытка ещё
+ * не получила id (первая отправка ИЛИ сама загрузка байт оборвалась), что
+ * и покрывает "неопределённый результат POST": байты вложения могли уже
+ * долететь и остаться prepared на сервере, а вот ответ на сам POST
+ * /chat/messages — нет (hotfix 20.57.1 PASS 2, finding #4).
+ */
+async function submitChatMessage(clientMessageId: string): Promise<void> {
+  const entry = pendingByClientId.get(clientMessageId);
+  if (!entry) return;
 
   try {
-    const attachmentIds: string[] = [];
-    for (const file of files) {
-      const id = await uploadOneAttachment(file);
-      if (id) attachmentIds.push(id);
+    for (let i = 0; i < entry.files.length; i++) {
+      if (entry.attachmentIds[i]) continue; // уже подготовлено предыдущей попыткой — переиспользуем id, не льём байты заново
+      entry.attachmentIds[i] = await uploadOneAttachment(entry.files[i]);
     }
-    if (!body && !attachmentIds.length) {
+    const attachmentIds = entry.attachmentIds.filter((id): id is string => !!id);
+    if (!entry.body && !attachmentIds.length) {
       // Все вложения не прошли валидацию, текста нет — нечего отправлять.
       pendingByClientId.delete(clientMessageId);
       renderFeed(null);
       return;
     }
-    const canonical = await window.apiClient.postChatMessage(authHeaders(), { clientMessageId, body, attachmentIds });
+    const canonical = await window.apiClient.postChatMessage(authHeaders(), { clientMessageId, body: entry.body, attachmentIds });
     upsertCanonicalMessage(canonical);
     renderFeed(null);
     scrollToBottom();
   } catch (e: any) {
-    const entry = pendingByClientId.get(clientMessageId);
-    if (entry) {
-      entry.status = 'failed';
-      renderFeed(null);
+    // invalid_attachment (fail-closed, finding #3) — сервер только что
+    // проверил ИМЕННО ЭТИ id и хотя бы один реально недоступен (истёк/чужой/
+    // уже привязан) — это не "сеть моргнула", закешированные id по-настоящему
+    // протухли. Сбрасываем их, чтобы следующий retry залил байты заново, а
+    // не бесконечно слал те же протухшие id.
+    if (e?.code === 'invalid_attachment') {
+      entry.attachmentIds = entry.attachmentIds.map(() => null);
     }
+    entry.status = 'failed';
+    renderFeed(null);
     toast(e?.message || 'Не удалось отправить сообщение', 'err');
   }
 }
 
-/** Тот же clientMessageId — сервер идемпотентен (§23 брифа), повторный
- * POST после неизвестного network outcome безопасен. */
 export async function retryChatMessage(clientMessageId: string): Promise<void> {
   const entry = pendingByClientId.get(clientMessageId);
   if (!entry) return;
   entry.status = 'sending';
   renderFeed(null);
-  await submitChatMessage(clientMessageId, entry.body, entry.files);
+  await submitChatMessage(clientMessageId);
 }
 
 export async function downloadChatAttachment(id: string, filename: string): Promise<void> {
   try {
     const blob = await window.apiClient.getChatAttachment(authHeaders(), id);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = filename;
     a.click();
+    // Отложенный revoke (hotfix 20.57.1 PASS 2, finding #5) — некоторые
+    // браузеры инициируют сохранение файла асинхронно после click(),
+    // немедленный revokeObjectURL мог бы оборвать ещё не начавшуюся
+    // загрузку; сам object URL раньше не освобождался вообще (утечка).
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   } catch {
     toast('Не удалось скачать файл', 'err');
   }
@@ -410,12 +456,25 @@ function onScroll(): void {
   if (isNearBottom()) hideNewMessagesIndicator();
 }
 
+/** Делегирование кликов по вложениям (см. attachmentHtml — data-* вместо
+ * inline onclick, finding #4). closest() ищет ближайшую .chat-attachment
+ * кнопку от фактической точки клика (учитывает клики по дочерним <span>). */
+function onFeedClick(event: MouseEvent): void {
+  const target = event.target as HTMLElement | null;
+  const btn = target?.closest<HTMLElement>('.chat-attachment[data-attachment-id]');
+  if (!btn) return;
+  const id = btn.dataset.attachmentId;
+  const filename = btn.dataset.attachmentFilename;
+  if (id && filename !== undefined) void downloadChatAttachment(id, filename);
+}
+
 async function initChatPageOnce(): Promise<void> {
   if (initialized) return;
   initialized = true;
 
   const box = scrollBox();
   box?.addEventListener('scroll', onScroll);
+  feedEl()?.addEventListener('click', onFeedClick);
 
   await loadInitialHistory();
 

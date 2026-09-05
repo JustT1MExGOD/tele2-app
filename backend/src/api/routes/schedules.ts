@@ -156,11 +156,18 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     // Раньше без проверки — manager любой сети мог удалить смену вообще
     // любого сотрудника на любую дату (та же дыра, что была в POST /schedules
     // до его собственного фикса — только тут вообще без чека).
-    const existingStoreId = await schedulesRepo.findStoreIdFor(Number(employee_id), work_date);
-    if (existingStoreId) {
-      const orgId = resolveViewOrgId(request.user!, org_id);
-      if (!(await assertStoreInOrg(existingStoreId, orgId))) {
-        return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    const orgId = resolveViewOrgId(request.user!, org_id);
+    const existing = await schedulesRepo.findScheduleForDelete(Number(employee_id), work_date);
+    if (existing.exists) {
+      if (existing.storeId !== null) {
+        if (!(await assertStoreInOrg(existing.storeId, orgId))) {
+          return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+        }
+      } else if (!(await assertEmployeeInOrg(Number(employee_id), orgId))) {
+        // store_id IS NULL (переходное состояние без точки) — точку
+        // проверить не на что, единственная оставшаяся authority — своя
+        // ли сеть у сотрудника (finding #6).
+        return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
       }
     }
     await schedulesRepo.deleteOne(Number(employee_id), work_date);

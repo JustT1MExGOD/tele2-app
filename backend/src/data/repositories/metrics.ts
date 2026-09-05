@@ -28,9 +28,13 @@ export async function listNumericSalesColumns(): Promise<string[]> {
   return res.rows.map((r: any) => String(r.column_name));
 }
 
-/** table/col уже провалидированы вызывающим кодом (regex на id). */
-export async function ensureColumn(table: string, col: string): Promise<void> {
-  await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} numeric DEFAULT 0`);
+/** table/col уже провалидированы вызывающим кодом (regex на id). q — см.
+ * withTransaction в db/index.ts; по умолчанию пул, но роут (finding #6,
+ * hotfix 20.57.1 PASS 2) обязан передавать клиент одной транзакции вместе
+ * с upsert() ниже — ALTER TABLE в Postgres транзакционен, поэтому неудача
+ * здесь откатывает и upsert(), а не оставляет активную метрику без колонки. */
+export async function ensureColumn(table: string, col: string, q: typeof query = query): Promise<void> {
+  await q(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} numeric DEFAULT 0`);
 }
 
 export async function nextSortOrder(): Promise<number> {
@@ -38,9 +42,9 @@ export async function nextSortOrder(): Promise<number> {
   return Number(res.rows[0]?.s) || 200;
 }
 
-export async function upsert(id: string, label: string, short: string, unit: string, sort: number): Promise<void> {
+export async function upsert(id: string, label: string, short: string, unit: string, sort: number, q: typeof query = query): Promise<void> {
   try {
-    await query(
+    await q(
       `INSERT INTO plan_metrics (id, label, short_label, unit, is_active, sort_order)
        VALUES ($1, $2, $3, $4, true, $5)
        ON CONFLICT (id) DO UPDATE SET
@@ -54,7 +58,7 @@ export async function upsert(id: string, label: string, short: string, unit: str
   } catch (e: any) {
     // create table if missing
     if (String(e?.message || e).includes('plan_metrics')) {
-      await query(`
+      await q(`
         CREATE TABLE IF NOT EXISTS plan_metrics (
           id text PRIMARY KEY,
           label text NOT NULL,
@@ -63,7 +67,7 @@ export async function upsert(id: string, label: string, short: string, unit: str
           is_active boolean DEFAULT true,
           sort_order int DEFAULT 100
         )`);
-      await query(
+      await q(
         `INSERT INTO plan_metrics (id, label, short_label, unit, is_active, sort_order)
          VALUES ($1,$2,$3,$4,true,$5)
          ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, is_active = true`,

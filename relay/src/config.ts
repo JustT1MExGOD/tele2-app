@@ -59,7 +59,15 @@ export function loadRelayConfig(env: NodeJS.ProcessEnv = process.env): RelayConf
     port: intFromEnv(env.PORT, 8787, 'PORT'),
     trustProxyHops: intFromEnv(env.RELAY_TRUST_PROXY_HOPS, 1, 'RELAY_TRUST_PROXY_HOPS'),
     maxHeaderBytes: intFromEnv(env.RELAY_MAX_HEADER_BYTES, 16 * 1024, 'RELAY_MAX_HEADER_BYTES'),
-    maxBodyBytes: intFromEnv(env.RELAY_MAX_BODY_BYTES, 10 * 1024 * 1024, 'RELAY_MAX_BODY_BYTES'),
+    // 25 MiB, не 10 — backend/src/core/chat/attachment-validation.ts
+    // (MAX_ATTACHMENT_BYTES) допускает вложения до 20 MiB; в RELAY-режиме
+    // (desktop, session.protocol.handle-перехват) именно этот bodyLimit
+    // применяется к тому же multipart-телу ДО того, как оно вообще
+    // доходит до backend — с прежним 10 MiB дефолтом каждое вложение
+    // 10–20 MiB отклонялось самим relay (Fastify FST_ERR_CTP_BODY_TOO_LARGE),
+    // хотя backend был готов его принять. 25 MiB = 20 MiB файл + запас на
+    // multipart boundary/per-part заголовки (hotfix 20.57.1, finding #2).
+    maxBodyBytes: intFromEnv(env.RELAY_MAX_BODY_BYTES, 25 * 1024 * 1024, 'RELAY_MAX_BODY_BYTES'),
     requestTimeoutMs: intFromEnv(env.RELAY_REQUEST_TIMEOUT_MS, 30_000, 'RELAY_REQUEST_TIMEOUT_MS'),
     maxConcurrentRequests: intFromEnv(env.RELAY_MAX_CONCURRENT_REQUESTS, 200, 'RELAY_MAX_CONCURRENT_REQUESTS'),
     perIpRequestsPerMinute: intFromEnv(env.RELAY_PER_IP_RPM, 300, 'RELAY_PER_IP_RPM')

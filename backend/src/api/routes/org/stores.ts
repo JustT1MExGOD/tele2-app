@@ -24,7 +24,13 @@ const StoreWriteFields = {
   display_name: Type.Optional(Type.Union([Type.Null(), Type.String()])),
   work_time: Type.Optional(Type.String()),
   hours: Type.Optional(Type.Number()),
-  color: Type.Optional(Type.String()),
+  // Строгий формат вместо экранирования на каждой точке рендера — color
+  // подставляется без esc() в несколько inline style="..." на фронтенде
+  // (schedule/index.ts, plans-bfq/index.ts) через storeColor(); формат-
+  // контракт тут исключает style-attribute breakout в самом источнике,
+  // а не полагается на то, что каждый потребитель не забудет экранировать
+  // (hotfix 20.57.1, finding #5).
+  color: Type.Optional(Type.String({ pattern: '^#[0-9a-fA-F]{6}$' })),
   is_active: Type.Optional(Type.Boolean()),
   micro_report_times: Type.Optional(Type.Array(Type.String())),
   skip_sunday_micro_times: Type.Optional(Type.Array(Type.String())),

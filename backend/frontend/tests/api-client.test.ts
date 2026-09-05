@@ -58,7 +58,8 @@ import {
   getDealersTree,
   renameDealer,
   renameSector,
-  assignSupervisorSector
+  assignSupervisorSector,
+  uploadChatAttachment
 } from '../src/api-client.js';
 
 function fetchOk(body: unknown) {
@@ -69,9 +70,17 @@ function fetchOk(body: unknown) {
   })) as unknown as typeof fetch;
 }
 
+function setCsrfCookie(value: string) {
+  document.cookie = `t2_csrf=${value}; path=/`;
+}
+function clearCsrfCookie() {
+  document.cookie = 't2_csrf=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+}
+
 describe('api-client', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchOk({}));
+    clearCsrfCookie();
   });
 
   it('getOrgStores — верный URL и заголовки, без org_id-квери', async () => {
@@ -768,6 +777,58 @@ describe('api-client', () => {
     );
 
     await expect(uploadAvatar({}, new FormData())).rejects.toThrow('Файл слишком большой');
+  });
+
+  // Hotfix 20.57.1, finding #1 — requestUpload() раньше никогда не читал
+  // t2_csrf cookie и не выставлял X-CSRF-Token, в отличие от request():
+  // браузерная/Electron cookie-сессия получала 403 csrf_mismatch на КАЖДОЙ
+  // загрузке (requireCsrf — глобальный preHandler без исключений для
+  // /me/avatar и /chat/attachments, см. backend/src/app.ts).
+
+  it('uploadAvatar — cookie-сессия с t2_csrf: добавляет X-CSRF-Token тем же значением', async () => {
+    setCsrfCookie('csrf-token-abc');
+    const fetchMock = fetchOk({ ok: true, avatar_url: '/x.png' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+    const form = new FormData();
+
+    await uploadAvatar(headers, form);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/me/avatar`, {
+      method: 'POST',
+      headers: { ...headers, 'X-CSRF-Token': 'csrf-token-abc' },
+      body: form
+    });
+  });
+
+  it('uploadAvatar — без t2_csrf cookie (Telegram initData) не добавляет заголовок вообще', async () => {
+    clearCsrfCookie();
+    const fetchMock = fetchOk({ ok: true, avatar_url: '/x.png' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+    const form = new FormData();
+
+    await uploadAvatar(headers, form);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/me/avatar`, {
+      method: 'POST', headers, body: form
+    });
+  });
+
+  it('uploadChatAttachment — та же исправленная логика: cookie-сессия получает X-CSRF-Token', async () => {
+    setCsrfCookie('csrf-token-xyz');
+    const fetchMock = fetchOk({ id: 'att1', expires_at: '2026-01-01' });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+    const form = new FormData();
+
+    await uploadChatAttachment(headers, form);
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/chat/attachments`, {
+      method: 'POST',
+      headers: { ...headers, 'X-CSRF-Token': 'csrf-token-xyz' },
+      body: form
+    });
   });
 
   it('exportCsv — GET, возвращает Blob вместо JSON', async () => {

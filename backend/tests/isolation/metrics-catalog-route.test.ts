@@ -10,9 +10,11 @@
  * test asserts the actual JSON catalog shape, which alone would have
  * caught the original bug (it was returning Prometheus text/plain instead).
  */
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
+import { query } from '../../src/data/db/index.js';
+import * as metricsRepo from '../../src/data/repositories/metrics.js';
 
 describe('Business metrics catalog (GET/POST/DELETE /metrics)', () => {
   const fx = new TestFixtures();
@@ -78,6 +80,61 @@ describe('Business metrics catalog (GET/POST/DELETE /metrics)', () => {
     });
     expect(del.statusCode).toBe(200);
     expect(del.json()).toEqual({ ok: true, id, active: false });
+  });
+
+  // Hotfix 20.57.1 PASS 2, finding #6 — "custom metric partial DDL": раньше
+  // upsert() в plan_metrics коммитился сразу, а неудача ALTER TABLE на любой
+  // из 3 таблиц лишь логировалась — метрика оставалась активной без нужной
+  // колонки. Теперь upsert() + все 3 ensureColumn() выполняются в одной
+  // транзакции; искусственный сбой на 2-м шаге должен откатить и вставку в
+  // plan_metrics — ни метрики в каталоге, ни колонки в первой (успешной)
+  // таблице цикла не должно остаться.
+  it('искусственный сбой ALTER TABLE на 2-м шаге — весь POST откатывается, метрика НЕ появляется в каталоге, колонка из 1-го (успешного) шага тоже откатывается', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Metrics Partial DDL Org');
+    const manager = await fx.createEmployee(org, { role: 'manager' });
+    const label = `Partial DDL Metric ${Date.now()}`;
+
+    const realEnsureColumn = metricsRepo.ensureColumn;
+    let callCount = 0;
+    const spy = vi.spyOn(metricsRepo, 'ensureColumn').mockImplementation(async (table, col, q) => {
+      callCount++;
+      if (callCount === 2) throw new Error('simulated DDL failure on step 2 (artificial)');
+      return realEnsureColumn(table, col, q as any);
+    });
+
+    try {
+      const create = await app.inject({
+        method: 'POST',
+        url: '/metrics',
+        headers: authAs(manager.telegramId),
+        payload: { label }
+      });
+      expect(create.statusCode).toBe(500);
+      expect(create.json().error).toBe('db_error');
+
+      // Ни одна из трёх ALTER TABLE не должна была реально закоммититься —
+      // включая ту, что "успела" пройти до искусственного сбоя (шаг 1),
+      // поскольку весь набор выполняется в одной транзакции.
+      expect(callCount).toBe(2);
+
+      const list = await app.inject({ method: 'GET', url: '/metrics' });
+      const items = list.json().items as Array<{ label: string }>;
+      expect(items.some((m) => m.label === label)).toBe(false);
+
+      const row = await query(`SELECT 1 FROM plan_metrics WHERE label = $1`, [label]);
+      expect(row.rows.length).toBe(0);
+
+      const col = await query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'sales' AND column_name = (
+           SELECT id FROM plan_metrics WHERE label = $1
+         )`,
+        [label]
+      );
+      expect(col.rows.length).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('DELETE /metrics/:id refuses to remove a locked base metric', async () => {

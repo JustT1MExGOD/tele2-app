@@ -15,6 +15,7 @@
  * the way back either.
  */
 import { pathToFileURL } from 'node:url';
+import http from 'node:http';
 import Fastify from 'fastify';
 import { loadRelayConfig } from './config.js';
 import { createUpstreamAgent, forwardToUpstream, InvalidRelayPathError } from './forward.js';
@@ -39,7 +40,15 @@ export async function buildRelay() {
     // installed version's stricter TypeScript union.
     trustProxy: (_address: string, hop: number) => hop <= config.trustProxyHops,
     bodyLimit: config.maxBodyBytes,
-    requestTimeout: config.requestTimeoutMs
+    requestTimeout: config.requestTimeoutMs,
+    // maxHeaderBytes was previously read from RELAY_MAX_HEADER_BYTES but
+    // never applied anywhere — FastifyServerOptions has no maxHeaderSize
+    // field at all, so the config value was silently dead (hotfix 20.57.1
+    // PASS 2, finding #8). Node's own http.Server DOES support this (as
+    // `maxHeaderSize`, since Node 13.3), so it's wired up via serverFactory
+    // — the documented Fastify mechanism for handing Node's http.createServer
+    // options that Fastify's own options object doesn't expose.
+    serverFactory: (handler) => http.createServer({ maxHeaderSize: config.maxHeaderBytes }, handler)
   });
 
   // Binary-safe by construction: capture the raw body for every content

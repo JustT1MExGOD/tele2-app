@@ -1,7 +1,7 @@
 /**
  * 21.x (Frontend rewrite continuation, batch of 13) — replacing
  * frontend/js/06c-support-tickets.js file-for-file. История продаж, FAQ/
- * тикеты поддержки, копирование графика на неделю, CSV-экспорты.
+ * тикеты поддержки, CSV-экспорты.
  *
  * historyEmployeeFilter is written from OUTSIDE this module (index.html's
  * inline onclick, and frontend/js/05-my-plan.js's onclick template string:
@@ -10,11 +10,11 @@
  * read within their own file), this one stays a real window property so
  * those still-legacy onclick handlers keep working unmodified.
  *
- * copyScheduleWeek() intentionally stays a raw fetch(), not window.apiClient
- * — found during the 20.7.0 typed-client migration that POST
- * /schedules/copy-week doesn't exist on the backend (always 404s). Not
- * fixing it here: that's a new feature with real schedule-conflict-semantics
- * questions, not a mechanical migration.
+ * copyScheduleWeek() (a raw fetch() to POST /schedules/copy-week) was
+ * removed in hotfix 20.57.1 PASS 2, finding #7 — that backend route never
+ * existed (always 404'd), so the "Копировать график на неделю" button in
+ * index.html was dead UI. Also removed with it: mondayOf(), which had no
+ * other caller.
  */
 import type {
   AdminTicketsListResponse,
@@ -65,34 +65,6 @@ export async function loadHistory(): Promise<void> {
   } catch {
     box.innerHTML = '<div class="empty">Нужна привязка Telegram</div>';
   }
-}
-
-export function mondayOf(d: string): string {
-  const x = new Date(d + 'T12:00:00');
-  const day = x.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  x.setDate(x.getDate() + diff);
-  return x.toISOString().slice(0, 10);
-}
-
-export async function copyScheduleWeek(): Promise<void> {
-  if (!canManage()) return;
-  const from = mondayOf(todayMoscow());
-  const toD = new Date(from + 'T12:00:00');
-  toD.setDate(toD.getDate() + 7);
-  const to = toD.toISOString().slice(0, 10);
-  if (!confirm(`Скопировать график ${from} → неделя с ${to}?`)) return;
-  const res = await fetch(API + '/schedules/copy-week', {
-    method: 'POST',
-    headers: authHeaders(true),
-    body: JSON.stringify({ from_monday: from, to_monday: to })
-  });
-  if (!res.ok) {
-    toast('Ошибка', 'err');
-    return;
-  }
-  const data = await res.json();
-  toast('Скопировано смен: ' + (data.copied || 0), 'ok');
 }
 
 export async function loadSupport(): Promise<void> {
@@ -290,7 +262,6 @@ export async function exportCSV(type: string): Promise<void> {
 declare global {
   interface Window {
     loadHistory: typeof loadHistory;
-    copyScheduleWeek: typeof copyScheduleWeek;
     loadSupport: typeof loadSupport;
     replyTicketPrompt: typeof replyTicketPrompt;
     sendSupport: typeof sendSupport;
@@ -300,7 +271,6 @@ declare global {
   }
 }
 window.loadHistory = loadHistory;
-window.copyScheduleWeek = copyScheduleWeek;
 window.loadSupport = loadSupport;
 window.replyTicketPrompt = replyTicketPrompt;
 window.sendSupport = sendSupport;

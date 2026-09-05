@@ -7,6 +7,7 @@
 import { FastifyInstance } from 'fastify';
 import * as chatRepo from '../../../data/repositories/chat.js';
 import { requireActive } from '../../../auth/guards.js';
+import { employeeAwareKeyGenerator } from '../../../security/rate-limit.js';
 import { chatStorage } from '../../../core/chat/storage.js';
 import {
   validateAttachment,
@@ -21,7 +22,18 @@ export async function registerChatAttachmentRoutes(app: FastifyInstance) {
     '/chat/attachments',
     // Загрузка дороже отправки текста (диск/БД-нагрузка) — жёстче лимит,
     // тем же принципом, что me/avatar.ts (10/мин против 30/мин на чтение).
-    { config: { rateLimit: { max: 15, timeWindow: '1 minute' } } },
+    // Ключ по employee_id, не IP — см. messages.ts / hotfix 20.57.1 PASS 2
+    // finding #1 (desktop RELAY делит один IP на всех сотрудников).
+    {
+      config: {
+        rateLimit: {
+          max: 15,
+          timeWindow: '1 minute',
+          hook: 'preHandler',
+          keyGenerator: employeeAwareKeyGenerator('chat_attach_upload')
+        }
+      }
+    },
     async (request, reply) => {
       if (!requireActive(request, reply)) return;
       const data = await request.file({ limits: { fileSize: MAX_ATTACHMENT_BYTES } }).catch(() => null);
@@ -69,7 +81,16 @@ export async function registerChatAttachmentRoutes(app: FastifyInstance) {
   // авторизации (не передаётся клиенту вообще, GET идёт по id вложения).
   app.get(
     '/chat/attachments/:id',
-    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    {
+      config: {
+        rateLimit: {
+          max: 60,
+          timeWindow: '1 minute',
+          hook: 'preHandler',
+          keyGenerator: employeeAwareKeyGenerator('chat_attach_download')
+        }
+      }
+    },
     async (request, reply) => {
       if (!requireActive(request, reply)) return;
       const { id } = request.params as { id: string };

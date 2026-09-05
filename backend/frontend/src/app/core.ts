@@ -202,7 +202,12 @@ async function initTelegramWebApp(): Promise<void> {
 window.telegramReadyPromise = initTelegramWebApp();
 
 // Клиентская версия (О приложении + бейдж на главной)
-const APP_VERSION = '15.0';
+// Hotfix 20.57.1 PASS 3, finding #4 — was hardcoded '15.0', stale since
+// v15.x. Kept in sync with package.json's version by `npm run
+// check:frontend-version` (scripts/check-frontend-version.mjs) rather than
+// a build-time injection — 24 separate Vite bundle configs make wiring a
+// real single-source define() a build-system refactor out of scope here.
+const APP_VERSION = '20.57.1';
 const API = window.location.origin;
 
 export function todayMoscow(): string {

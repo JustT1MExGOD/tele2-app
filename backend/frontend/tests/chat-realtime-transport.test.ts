@@ -104,6 +104,18 @@ describe('RealtimeTransport', () => {
     t.stop();
   });
 
+  it('пустая лента (getLastKnownId === null) + WS не открывается — polling всё равно опрашивает (сентинел "0"), первое сообщение доставляется (hotfix 20.57.1, finding #3)', async () => {
+    const onMessage = vi.fn();
+    const fetchAfter = vi.fn().mockResolvedValue([{ id: '1', body: 'first ever message' }]);
+    const t = new RealtimeTransport({ onMessage, getLastKnownId: () => null, fetchAfter });
+    t.start();
+
+    await vi.advanceTimersByTimeAsync(6001); // WS_CONNECT_TIMEOUT_MS
+    expect(fetchAfter).toHaveBeenCalledWith('0');
+    expect(onMessage).toHaveBeenCalledWith({ id: '1', body: 'first ever message' });
+    t.stop();
+  });
+
   it('stop() закрывает соединение и останавливает все таймеры', async () => {
     const onMessage = vi.fn();
     const fetchAfter = vi.fn().mockResolvedValue([]);

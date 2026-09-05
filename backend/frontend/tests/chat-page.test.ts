@@ -117,6 +117,40 @@ describe('Внутренний чат — frontend (src/pages/chat)', () => {
     expect(html).not.toContain('javascript:');
   });
 
+  it('XSS: вредоносное имя файла вложения не может выполнить JS через inline-обработчик (hotfix 20.57.1, finding #4)', async () => {
+    const { getChatMessages, getChatAttachment } = setupGlobals();
+    const maliciousFilename = `x'); window.__attachXss=1; //.txt`;
+    getChatMessages.mockResolvedValue({
+      items: [
+        msg({
+          body: null,
+          attachments: [{ id: 'att-1', originalFilename: maliciousFilename, sizeBytes: 123 }]
+        })
+      ],
+      nextCursor: null
+    });
+    await import('../src/pages/chat/index.js');
+    (window as any).loadChatPage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const feed = document.getElementById('chatFeed')!;
+    expect(feed.innerHTML).not.toContain('onclick=');
+    const btn = feed.querySelector('.chat-attachment') as HTMLElement;
+    expect(btn).toBeTruthy();
+    expect(btn.dataset.attachmentFilename).toBe(maliciousFilename);
+    expect((window as any).__attachXss).toBeUndefined();
+
+    getChatAttachment.mockResolvedValue(new Blob(['data']));
+    (window as any).URL.createObjectURL = vi.fn().mockReturnValue('blob:fake');
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect((window as any).__attachXss).toBeUndefined();
+    expect(getChatAttachment).toHaveBeenCalledWith(expect.anything(), 'att-1');
+  });
+
   it('отправка: optimistic pending → canonical после успешного POST, дедуп по clientMessageId', async () => {
     const { getChatMessages, postChatMessage } = setupGlobals();
     getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
@@ -259,5 +293,117 @@ describe('Внутренний чат — frontend (src/pages/chat)', () => {
     setupGlobals();
     await import('../src/pages/chat/index.js');
     expect(typeof (window as any).loadChatPage).toBe('function');
+  });
+
+  // Hotfix 20.57.1 PASS 2, finding #4 — "retry / orphan blobs": retry
+  // раньше перезаливал ИСХОДНЫЙ File[] с нуля, создавая дубликат/orphan
+  // блоб на каждую попытку, даже если сама загрузка байт уже успешно
+  // прошла и не хватало только ответа на POST /chat/messages.
+  describe('retry — переиспользует уже загруженные вложения, не льёт байты заново (finding #4)', () => {
+    function attachFile(name = 'report.txt'): File {
+      const file = new File(['content'], name, { type: 'text/plain' });
+      const input = document.createElement('input');
+      Object.defineProperty(input, 'files', { value: [file] });
+      (window as any).onChatAttachmentPicked(input);
+      return file;
+    }
+
+    it('"неопределённый результат POST" — ответ на успешную загрузку вложения потерян вместе с ответом на сам POST; retry НЕ перезаливает файл повторно', async () => {
+      const { getChatMessages, postChatMessage, uploadChatAttachment } = setupGlobals();
+      getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
+      uploadChatAttachment.mockResolvedValue({ id: 'att-uncertain-1' });
+      postChatMessage.mockRejectedValueOnce(new Error('network lost')).mockResolvedValueOnce(msg({ id: '77', body: null }));
+      await import('../src/pages/chat/index.js');
+      (window as any).loadChatPage();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      attachFile();
+      (window as any).sendChatMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(uploadChatAttachment).toHaveBeenCalledTimes(1);
+      expect(document.getElementById('chatFeed')!.innerHTML).toContain('Не отправлено');
+
+      const firstCallId = postChatMessage.mock.calls[0][1].clientMessageId;
+      (window as any).retryChatMessage(firstCallId);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Байты вложения НЕ перезалиты — второй вызов postChatMessage несёт
+      // тот же attachmentId, что и первый (переиспользован, не создан заново).
+      expect(uploadChatAttachment).toHaveBeenCalledTimes(1);
+      expect(postChatMessage.mock.calls[1][1].attachmentIds).toEqual(['att-uncertain-1']);
+      expect(postChatMessage.mock.calls[1][1].clientMessageId).toBe(firstCallId);
+    });
+
+    it('сервер отвечает invalid_attachment (реально протухшее вложение) — retry ПЕРЕЗАЛИВАЕТ файл заново', async () => {
+      const { getChatMessages, postChatMessage, uploadChatAttachment } = setupGlobals();
+      getChatMessages.mockResolvedValue({ items: [], nextCursor: null });
+      uploadChatAttachment.mockResolvedValueOnce({ id: 'att-stale-1' }).mockResolvedValueOnce({ id: 'att-fresh-2' });
+      postChatMessage
+        .mockRejectedValueOnce(Object.assign(new Error('Вложение недоступно'), { code: 'invalid_attachment' }))
+        .mockResolvedValueOnce(msg({ id: '78', body: null }));
+      await import('../src/pages/chat/index.js');
+      (window as any).loadChatPage();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      attachFile();
+      (window as any).sendChatMessage();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(uploadChatAttachment).toHaveBeenCalledTimes(1);
+      const firstCallId = postChatMessage.mock.calls[0][1].clientMessageId;
+
+      (window as any).retryChatMessage(firstCallId);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Протухший id отброшен — файл реально перезалит, второй POST несёт
+      // НОВЫЙ attachmentId, не старый.
+      expect(uploadChatAttachment).toHaveBeenCalledTimes(2);
+      expect(postChatMessage.mock.calls[1][1].attachmentIds).toEqual(['att-fresh-2']);
+    });
+  });
+
+  // Hotfix 20.57.1 PASS 2, finding #5 — object URL created for download was
+  // never released (leak). URL.revokeObjectURL() must be called after the
+  // download has been initiated.
+  it('downloadChatAttachment — освобождает object URL после инициации скачивания (finding #5)', async () => {
+    const { getChatMessages, getChatAttachment } = setupGlobals();
+    getChatMessages.mockResolvedValue({
+      items: [msg({ body: null, attachments: [{ id: 'att-1', originalFilename: 'file.txt', sizeBytes: 10 }] })],
+      nextCursor: null
+    });
+    await import('../src/pages/chat/index.js');
+    (window as any).loadChatPage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    getChatAttachment.mockResolvedValue(new Blob(['data']));
+    const createObjectURL = vi.fn().mockReturnValue('blob:fake-url');
+    const revokeObjectURL = vi.fn();
+    (window as any).URL.createObjectURL = createObjectURL;
+    (window as any).URL.revokeObjectURL = revokeObjectURL;
+
+    const btn = document.getElementById('chatFeed')!.querySelector('.chat-attachment') as HTMLElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
   });
 });

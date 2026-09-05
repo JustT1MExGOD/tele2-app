@@ -7,6 +7,7 @@
  * carries no product risk worth a synthetic touch-event harness here.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { esc } from '../src/app/core.js';
 
 function setupGlobals(overrides: { role?: string; empId?: number } = {}) {
   document.body.innerHTML = `
@@ -87,6 +88,30 @@ describe('Добавить продажу (миграция frontend/js/07-add-s
     const { setAllQty } = await import('../src/features/add-sale/index.js');
     setAllQty(5);
     expect((globalThis as any).saleSelection).toEqual({ sim: 5, mnp: 5 });
+  });
+
+  // Регрессия (hotfix 20.57.1, finding #5): m.label (кастомная метрика,
+  // GET /metrics) подставлялся без esc() в grid.innerHTML/list.innerHTML.
+  // Этот файл обычно стабит esc() как no-op-стрингификатор (см. setupGlobals
+  // выше) — здесь подменяем на настоящую реализацию, иначе тест не поймал
+  // бы регрессию.
+  it('renderSaleMetrics/renderSaleQtyList: вредоносная метка метрики не создаёт реальный <img>/не исполняет JS', async () => {
+    setupGlobals();
+    vi.stubGlobal('esc', esc);
+    document.body.innerHTML += '<div id="metricGrid"></div><div id="saleQtyList"></div>';
+    const payload = `<img src=x onerror="window.__addSaleLabelXss=1">`;
+    vi.stubGlobal('METRICS', [{ id: 'sim', label: payload, short_label: 'SIM', unit: 'count' }]);
+    const { renderSaleMetrics, toggleSaleMetric } = await import('../src/features/add-sale/index.js');
+    renderSaleMetrics();
+
+    expect(document.querySelectorAll('img').length).toBe(0);
+    expect((window as any).__addSaleLabelXss).toBeUndefined();
+    expect(document.getElementById('metricGrid')!.innerHTML).toContain('&lt;img');
+
+    toggleSaleMetric('sim'); // re-renders saleQtyList too
+    expect(document.querySelectorAll('img').length).toBe(0);
+    expect((window as any).__addSaleLabelXss).toBeUndefined();
+    expect(document.getElementById('saleQtyList')!.innerHTML).toContain('&lt;img');
   });
 
   it('submitSale: без сотрудника/точки — toast err, API не вызывается', async () => {

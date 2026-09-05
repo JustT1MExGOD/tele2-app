@@ -146,6 +146,135 @@ describe('График (миграция frontend/js/04-schedule.js → src/page
     expect(cell?.getAttribute('title')).toContain(payload);
   });
 
+  // Регрессия (hotfix 20.57.1, finding #5): store_short/store_name
+  // подставлялись в текст ячейки без esc() — соседняя renderSummarySchedule()
+  // в этом же файле уже экранировала ту же самую пару полей.
+  it('loadMonthSchedule: вредоносный store_short не создаёт реальный <img>/не исполняет JS', async () => {
+    const { getEmployees, getScheduleMonth } = setupGlobals();
+    getEmployees.mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
+    const payload = `<img src=x onerror="window.__shortXss=1">`;
+    getScheduleMonth.mockResolvedValue({
+      month: '2026-08', start: '', end: '',
+      items: [{ work_date: '2026-08-01', shift_text: 'День', hours: 8, store_id: 's1', employee_id: 1, full_name: 'Иван', store_name: 'Точка А', store_short: payload }]
+    });
+    const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+    await loadMonthSchedule();
+
+    expect(document.querySelectorAll('img').length).toBe(0);
+    expect((window as any).__shortXss).toBeUndefined();
+    const cell = document.querySelector('.sch-cell.work .s') as HTMLElement | null;
+    expect(cell?.innerHTML).toContain('&lt;img');
+  });
+
+  // Регрессия (hotfix 20.57.1, finding #5): emp.name (full_name) подставлялся
+  // без esc() в заголовок строки сотрудника месячного графика.
+  it('loadMonthSchedule: вредоносный full_name сотрудника не исполняет JS', async () => {
+    const { getEmployees, getScheduleMonth } = setupGlobals();
+    const payload = `<img src=x onerror="window.__nameXss=1">`;
+    getEmployees.mockResolvedValue([{ id: 1, full_name: payload, short_name: null, is_active: true, role: 'employee' }]);
+    getScheduleMonth.mockResolvedValue({
+      month: '2026-08', start: '', end: '',
+      items: [{ work_date: '2026-08-01', shift_text: 'День', hours: 8, store_id: 's1', employee_id: 1, full_name: payload, store_name: 'Точка А', store_short: 'A' }]
+    });
+    const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+    await loadMonthSchedule();
+
+    expect(document.querySelectorAll('img').length).toBe(0);
+    expect((window as any).__nameXss).toBeUndefined();
+    const head = document.querySelector('.sch-emp-head span') as HTMLElement | null;
+    expect(head?.innerHTML).toContain('&lt;img');
+  });
+
+  // Регрессия (hotfix 20.57.1, finding #5): editDay() рендерил store name/id
+  // в <option> без esc() — атрибут-breakout (value="...") и тег-инъекция
+  // (текст опции) оба были возможны.
+  it('editDay: вредоносное имя/id точки не разрывает <option> и не исполняет JS', async () => {
+    setupGlobals({ role: 'manager' });
+    const payload = `s1"><script>window.__optXss=1</script>`;
+    (globalThis as any).stores = [{ id: payload, name: `Точка"><img src=x onerror="window.__optXss2=1">` }];
+    const { editDay } = await import('../src/pages/schedule/index.js');
+    await editDay(1, '2026-08-25', payload, 8);
+
+    expect((window as any).__optXss).toBeUndefined();
+    expect((window as any).__optXss2).toBeUndefined();
+    expect(document.querySelectorAll('script').length).toBe(0);
+    expect(document.querySelectorAll('img').length).toBe(0);
+    const select = document.getElementById('schStore') as HTMLSelectElement | null;
+    expect(select?.options.length).toBe(1);
+  });
+
+  // Hotfix 20.57.1 PASS 3, finding #1 — production "Ошибка загрузки графика"
+  // incident (04.09.2026) investigation: getScheduleMonth() used to have a
+  // .catch(() => empty response), masking any transport/API failure as a
+  // valid empty month ("Нет данных"), indistinguishable from a real empty
+  // schedule. Each fetch stage now fails loudly with its own message/log tag.
+  describe('loadMonthSchedule — раздельные стадии ошибок (finding #1, PASS 3)', () => {
+    it('getScheduleMonth падает — показывает ошибку, НЕ "Нет данных" (раньше маскировалось .catch())', async () => {
+      const { getScheduleMonth } = setupGlobals();
+      getScheduleMonth.mockRejectedValue(new Error('api_error:/schedules/month:500'));
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+      await loadMonthSchedule();
+      const html = document.getElementById('monthBoard')!.innerHTML;
+      expect(html).toContain('Ошибка загрузки графика');
+      expect(html).not.toContain('Нет данных');
+      expect(errSpy).toHaveBeenCalledWith('[schedule] SCHEDULE_MONTH_FETCH_FAILED', expect.any(Error));
+      errSpy.mockRestore();
+    });
+
+    it('fetchOrgStores падает — показывает ошибку точек', async () => {
+      setupGlobals();
+      (globalThis as any).stores = [];
+      (globalThis as any).fetchOrgStores = vi.fn().mockRejectedValue(new Error('network'));
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+      await loadMonthSchedule();
+      expect(document.getElementById('monthBoard')!.innerHTML).toContain('не удалось получить точки');
+      expect(errSpy).toHaveBeenCalledWith('[schedule] SCHEDULE_STORES_FETCH_FAILED', expect.any(Error));
+      errSpy.mockRestore();
+    });
+
+    it('getEmployees падает — показывает ошибку сотрудников (правдоподобный кандидат на реальный production-инцидент: getScheduleMonth не имеет такого catch)', async () => {
+      const { getEmployees } = setupGlobals();
+      getEmployees.mockRejectedValue(new Error('api_error:/employees:401'));
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+      await loadMonthSchedule();
+      expect(document.getElementById('monthBoard')!.innerHTML).toContain('не удалось получить сотрудников');
+      expect(errSpy).toHaveBeenCalledWith('[schedule] SCHEDULE_EMPLOYEES_FETCH_FAILED', expect.any(Error));
+      errSpy.mockRestore();
+    });
+
+    it('успешные ответы, но рендеринг бросает исключение — показывает "Ошибка отображения графика", не роняет страницу', async () => {
+      const { getEmployees, getScheduleMonth } = setupGlobals();
+      getEmployees.mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
+      getScheduleMonth.mockResolvedValue({
+        month: '2026-08', start: '', end: '',
+        items: [{ work_date: '2026-08-01', shift_text: 'День', hours: 8, store_id: 's1', employee_id: 1, full_name: 'Иван', store_name: 'Точка А', store_short: 'A' }]
+      });
+      // Симулируем реальное исключение при рендере (напр. malformed data),
+      // не полагаясь на конкретную внутреннюю причину.
+      (globalThis as any).storeColor = () => {
+        throw new Error('simulated render failure (artificial, PASS 3 test)');
+      };
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+      await loadMonthSchedule();
+      expect(document.getElementById('monthBoard')!.innerHTML).toContain('Ошибка отображения графика');
+      expect(errSpy).toHaveBeenCalledWith('[schedule] SCHEDULE_RENDER_FAILED', expect.any(Error));
+      errSpy.mockRestore();
+    });
+
+    it('пустой месяц БЕЗ ошибок — по-прежнему честно показывает "Нет данных" (не регрессия на нормальный путь)', async () => {
+      const { getEmployees, getScheduleMonth } = setupGlobals();
+      getEmployees.mockResolvedValue([]);
+      getScheduleMonth.mockResolvedValue({ month: '2026-08', start: '', end: '', items: [] });
+      const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+      await loadMonthSchedule();
+      expect(document.getElementById('monthBoard')!.innerHTML).toContain('Нет данных');
+    });
+  });
+
   it('loadMonthSchedule: сотрудник — сводный график скрыт; manager — показан', async () => {
     const { getEmployees, getScheduleMonth } = setupGlobals({ role: 'employee' });
     getEmployees.mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);

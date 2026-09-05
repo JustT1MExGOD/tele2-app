@@ -185,16 +185,19 @@ export class RealtimeTransport {
       this.schedulePoll();
       return;
     }
-    const afterId = this.opts.getLastKnownId();
-    if (afterId) {
-      try {
-        const items = await this.opts.fetchAfter(afterId);
-        for (const item of items) this.opts.onMessage(item);
-        this.pollDelay = POLL_INTERVAL_MS; // успех — сбрасываем backoff
-      } catch {
-        // Bounded backoff — не долбим сервер чаще при недоступности сети.
-        this.pollDelay = Math.min(this.pollDelay * 2, POLL_BACKOFF_MAX_MS);
-      }
+    // '0' — валидный keyset-курсор (chat_messages.id — bigserial, начинается
+    // с 1), означает "всё с начала", тот же bounded LIMIT, что и обычный
+    // afterId. Без этого сентинела пустая лента (getLastKnownId() === null)
+    // никогда не опрашивалась вообще — первое сообщение не появлялось до
+    // ручного перезагрузки страницы (hotfix 20.57.1, finding #3).
+    const afterId = this.opts.getLastKnownId() ?? '0';
+    try {
+      const items = await this.opts.fetchAfter(afterId);
+      for (const item of items) this.opts.onMessage(item);
+      this.pollDelay = POLL_INTERVAL_MS; // успех — сбрасываем backoff
+    } catch {
+      // Bounded backoff — не долбим сервер чаще при недоступности сети.
+      this.pollDelay = Math.min(this.pollDelay * 2, POLL_BACKOFF_MAX_MS);
     }
     if (this.pollingActive && !this.isRealtimeConnected) this.schedulePoll();
   }

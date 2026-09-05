@@ -247,7 +247,11 @@ function calendarCellsHtml(emp: EmpMonth, y: number, m: number, total: number, e
     const hours = row?.hours || 0;
     const click = editable ? `onclick="editDay(${emp.id}, '${key}', '${storeId}', ${hours})"` : '';
     if (row) {
-      const short = (row.store_short || row.store_name || '').slice(0, 4);
+      // esc() — store_short/store_name с бэкенда не валидируются на формат
+      // (произвольная строка), уже правильно экранируются в соседнем
+      // renderSummarySchedule() ниже; тут раньше экранирования не было
+      // (hotfix 20.57.1, finding #5).
+      const short = esc((row.store_short || row.store_name || '').slice(0, 4));
       const col = storeColor(row.store_id);
       cells += `<div class="sch-cell work" ${click} title="${esc(`${row.store_name || ''} ${row.shift_text || ''}`)}"
             style="background:${col}22;color:${col};border-color:${col}">
@@ -269,20 +273,53 @@ export async function loadMonthSchedule(): Promise<void> {
   const box = document.getElementById('monthBoard');
   if (!box) return;
   box.innerHTML = '<div class="skeleton"></div>';
-  try {
-    const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
-    const data: ScheduleMonthResponse = await window.apiClient.getScheduleMonth(authHeaders(), scheduleMonth, orgParam).catch(() => ({ month: '', start: '', end: '', items: [] }));
-    const items = data.items || [];
 
+  // Hotfix 20.57.1 PASS 3, finding #1 — раньше getScheduleMonth() имел
+  // .catch(() => ({items: []})): любая транспортная/API-ошибка (5xx, сеть,
+  // истёкшая сессия) молча превращалась в валидный "пустой месяц" и
+  // рендерилась как "Нет данных" — неотличимо от настоящего пустого
+  // графика, и НЕ то, что показывал production-скриншот ("Ошибка загрузки
+  // графика" — этот текст мог прийти только из getEmployees()/рендеринга
+  // ниже, единственных мест без такого маскирующего catch). Каждый шаг
+  // теперь падает явно, с отдельным sanitized-тегом стадии в консоли (без
+  // PII — логируется только Error, не тела ответа/данные сотрудников) —
+  // так следующий подобный инцидент можно будет диагностировать по логам,
+  // а не гадать по скриншоту.
+  const orgParam = me?.role === 'admin' && adminViewOrgId ? '&org_id=' + encodeURIComponent(adminViewOrgId) : '';
+  let data: ScheduleMonthResponse;
+  try {
+    data = await window.apiClient.getScheduleMonth(authHeaders(), scheduleMonth, orgParam);
+  } catch (e) {
+    console.error('[schedule] SCHEDULE_MONTH_FETCH_FAILED', e);
+    box.innerHTML = '<div class="empty">Ошибка загрузки графика — не удалось получить смены</div>';
+    return;
+  }
+  const items = data.items || [];
+
+  try {
     if (!stores.length) {
       stores = await fetchOrgStores();
     }
+  } catch (e) {
+    console.error('[schedule] SCHEDULE_STORES_FETCH_FAILED', e);
+    box.innerHTML = '<div class="empty">Ошибка загрузки графика — не удалось получить точки</div>';
+    return;
+  }
 
-    // Всегда полный список сотрудников, смены накладываем поверх — та же
-    // сеть, что и месячный график выше, иначе строки грида у admin при
-    // просмотре чужой сети — его СОБСТВЕННАЯ команда.
-    const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
-    const emps: EmployeeListItem[] = await window.apiClient.getEmployees(authHeaders(), empParam);
+  // Всегда полный список сотрудников, смены накладываем поверх — та же
+  // сеть, что и месячный график выше, иначе строки грида у admin при
+  // просмотре чужой сети — его СОБСТВЕННАЯ команда.
+  const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
+  let emps: EmployeeListItem[];
+  try {
+    emps = await window.apiClient.getEmployees(authHeaders(), empParam);
+  } catch (e) {
+    console.error('[schedule] SCHEDULE_EMPLOYEES_FETCH_FAILED', e);
+    box.innerHTML = '<div class="empty">Ошибка загрузки графика — не удалось получить сотрудников</div>';
+    return;
+  }
+
+  try {
     const byEmp: Record<string, EmpMonth> = {};
     (emps || []).forEach((e) => {
       byEmp[e.id] = { id: e.id, name: e.full_name, days: {} };
@@ -309,10 +346,13 @@ export async function loadMonthSchedule(): Promise<void> {
         .map((emp) => {
           const workCount = Object.keys(emp.days).length;
           const cells = calendarCellsHtml(emp, gy, gm, total, editable);
+          // esc(emp.name) — full_name не валидируется на формат на бэкенде;
+          // раньше тут вставлялось без экранирования (hotfix 20.57.1,
+          // finding #5).
           return `
             <div class="sch-emp">
               <div class="sch-emp-head">
-                <span>${emp.name}</span>
+                <span>${esc(emp.name)}</span>
                 <span class="cnt">${workCount} смен</span>
               </div>
               <div class="sch-grid">${cells}</div>
@@ -320,8 +360,8 @@ export async function loadMonthSchedule(): Promise<void> {
         })
         .join('') || '<div class="empty">Нет данных</div>');
   } catch (e) {
-    console.error(e);
-    box.innerHTML = '<div class="empty">Ошибка загрузки графика</div>';
+    console.error('[schedule] SCHEDULE_RENDER_FAILED', e);
+    box.innerHTML = '<div class="empty">Ошибка отображения графика</div>';
   }
 }
 
@@ -414,7 +454,7 @@ export async function editDay(employeeId: number, dateStr: string, currentStoreI
         <div class="field">
           <label>Точка</label>
           <select id="schStore">
-            ${(stores || []).map((s) => `<option value="${s.id}" ${s.id === currentStoreId ? 'selected' : ''}>${s.name}</option>`).join('')}
+            ${(stores || []).map((s) => `<option value="${esc(s.id)}" ${s.id === currentStoreId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
           </select>
         </div>
         <div class="field">

@@ -432,10 +432,13 @@ export async function editEmployeeMonthPlan(employeeId: number, name?: string): 
   const p: any = await window.apiClient.getEmployeeMonthPlan(authHeaders(), employeeId, month).catch(() => ({}));
   const modalTitle = document.getElementById('modalTitle');
   if (modalTitle) modalTitle.textContent = 'План: ' + (name || employeeId);
+  // esc(m.label) — метка кастомной метрики не валидируется на формат на
+  // бэкенде; уже правильно экранируется на "своей" странице (cash-metrics),
+  // но раньше не тут (hotfix 20.57.1, finding #5).
   const fields = METRICS.map((m) => {
     let val = p[m.id];
     if (val == null && m.id === 'credit_issued') val = p.credit;
-    return '<div class="field"><label>' + m.label + ((m as any).unit ? ' (' + (m as any).unit + ')' : '') + '</label>' + '<input type="number" id="mp_' + m.id + '" value="' + (Number(val) || 0) + '"></div>';
+    return '<div class="field"><label>' + esc(m.label) + ((m as any).unit ? ' (' + esc((m as any).unit) + ')' : '') + '</label>' + '<input type="number" id="mp_' + m.id + '" value="' + (Number(val) || 0) + '"></div>';
   }).join('');
   const modalBody = document.getElementById('modalBody');
   if (modalBody) {
@@ -526,10 +529,12 @@ export async function editStoreMonthPlan(storeId: string): Promise<void> {
   const p: any = await window.apiClient.getStoreMonthPlan(authHeaders(), storeId, month).catch(() => ({}));
   const modalTitle = document.getElementById('modalTitle');
   if (modalTitle) modalTitle.textContent = 'План точки: ' + name;
+  // esc(m.label) — та же метка, что и в editEmployeeMonthPlan() выше
+  // (hotfix 20.57.1, finding #5).
   const fields = METRICS.map((m) => {
     let val = p[m.id];
     if (val == null && m.id === 'credit_issued') val = p.credit;
-    return '<div class="field"><label>' + m.label + ((m as any).unit ? ' (' + (m as any).unit + ')' : '') + '</label>' + '<input type="number" id="smp_' + m.id + '" value="' + (Number(val) || 0) + '"></div>';
+    return '<div class="field"><label>' + esc(m.label) + ((m as any).unit ? ' (' + esc((m as any).unit) + ')' : '') + '</label>' + '<input type="number" id="smp_' + m.id + '" value="' + (Number(val) || 0) + '"></div>';
   }).join('');
   const modalBody = document.getElementById('modalBody');
   if (modalBody) {

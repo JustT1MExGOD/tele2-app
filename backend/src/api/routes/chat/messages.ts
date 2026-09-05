@@ -11,6 +11,7 @@ import { Type, Static } from '@sinclair/typebox';
 import { requireActive } from '../../../auth/guards.js';
 import * as chatService from '../../../core/chat/service.js';
 import { broadcastToOrg } from '../../../core/chat/realtime-registry.js';
+import { employeeAwareKeyGenerator } from '../../../security/rate-limit.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -44,7 +45,17 @@ type PostMessageBody = Static<typeof PostMessageBody>;
 export async function registerChatMessageRoutes(app: FastifyInstance) {
   app.get(
     '/chat/messages',
-    { schema: { querystring: GetMessagesQuery }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    {
+      schema: { querystring: GetMessagesQuery },
+      config: {
+        rateLimit: {
+          max: 120,
+          timeWindow: '1 minute',
+          hook: 'preHandler',
+          keyGenerator: employeeAwareKeyGenerator('chat_get')
+        }
+      }
+    },
     async (request, reply) => {
       if (!requireActive(request, reply)) return;
       const { cursor, after, limit: limitRaw } = request.query as GetMessagesQuery;
@@ -78,13 +89,25 @@ export async function registerChatMessageRoutes(app: FastifyInstance) {
   app.post(
     '/chat/messages',
     // Спам-защита отправки сообщений — отдельно от глобального IP-лимита
-    // (app.ts), ключ по IP (тот же keyGenerator по умолчанию) сознательно
-    // недостаточен сам по себе (сотрудники сети могут сидеть за одним
-    // NAT/офисным IP, §14 брифа) — почему это ok для MVP-объёма см.
-    // итоговый отчёт (раздел O): 20/мин с одного IP уже покрывает и
-    // "весь офис долбит чат", DB unique(client_message_id) отдельно не
-    // даёт задвоить сообщения при повторных попытках.
-    { schema: { body: PostMessageBody }, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    // (app.ts). Ключ по employee_id (employeeAwareKeyGenerator,
+    // security/rate-limit.ts), не по IP — сотрудники, подключённые через
+    // desktop RELAY, делили бы один IP (сам relay) и, следовательно, один
+    // quota на всех, если бы ключ остался IP-based (hotfix 20.57.1 PASS 2,
+    // finding #1; раньше это было сознательно принятое ограничение для
+    // office-NAT случая, но relay сделал его намного шире одного офиса).
+    // DB unique(client_message_id) отдельно не даёт задвоить сообщения при
+    // повторных попытках — это не меняется.
+    {
+      schema: { body: PostMessageBody },
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: '1 minute',
+          hook: 'preHandler',
+          keyGenerator: employeeAwareKeyGenerator('chat_post')
+        }
+      }
+    },
     async (request, reply) => {
       if (!requireActive(request, reply)) return;
       const body = request.body as PostMessageBody;

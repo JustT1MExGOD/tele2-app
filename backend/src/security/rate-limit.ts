@@ -19,7 +19,39 @@
  * storage/complexity cost of a sliding-window log isn't justified for
  * this threat model.
  */
+import type { FastifyRequest } from 'fastify';
 import { query } from '../data/db/index.js';
+
+/**
+ * @fastify/rate-limit keyGenerator for authenticated-only routes reachable
+ * through the desktop RELAY (relay/src/forward.ts — the relay calls this
+ * backend from its own single outbound connection and deliberately never
+ * forwards X-Forwarded-For/X-Real-IP from the original desktop client, see
+ * that file's header comment). Without this, every employee using the
+ * desktop app through one relay instance would collide on the same
+ * IP-keyed per-route quota (hotfix 20.57.1 PASS 2, finding #1).
+ *
+ * Requires `hook: 'preHandler'` on the route's own `config.rateLimit` —
+ * authPlugin (app.ts, global preHandler) must already have resolved
+ * request.user, which has not happened yet on the default 'onRequest'
+ * hook (confirmed empirically during this investigation: on 'onRequest',
+ * both request.body and request.user are still unset — this is also why
+ * the existing /auth/login phone-based keyGenerator, which does NOT
+ * override the hook, never actually reads a phone and silently always
+ * falls back to req.ip; that is a separate pre-existing issue, out of
+ * scope for this pass).
+ *
+ * Unauthenticated traffic (request.user null/undefined) keeps the exact
+ * previous IP-based behavior — this only gives authenticated employees an
+ * identity-based key instead, it does not remove or weaken any existing
+ * protection.
+ */
+export function employeeAwareKeyGenerator(prefix: string) {
+  return (req: FastifyRequest): string => {
+    const employeeId = req.user?.employee_id;
+    return employeeId ? `${prefix}:emp:${employeeId}` : `${prefix}:ip:${req.ip}`;
+  };
+}
 
 export interface RateLimitDimension {
   /** Fully-qualified counter key, e.g. `mfa_verify:acct:123`. */

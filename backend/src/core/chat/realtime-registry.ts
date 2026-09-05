@@ -30,12 +30,18 @@ export function registerConnection(orgId: string, employeeId: number, socket: We
   connectionCountByEmployee.set(employeeId, connectionCountForEmployee(employeeId) + 1);
 }
 
+// Идемпотентно: ws.ts вешает cleanup() на оба события 'close' И 'error' одного
+// сокета — при обрыве соединения обычно летят ОБА (error, затем close), и без
+// охраны ниже счётчик per-employee декрементировался бы дважды за одно реальное
+// отключение, постепенно уходя в минус относительно фактического числа
+// открытых соединений (hotfix 20.57.1 PASS 2, finding #2). Set.delete()
+// возвращает true только при первом вызове для данного сокета — это и есть
+// сигнал "уже отменена регистрация", а не отдельный флаг на сокете.
 export function unregisterConnection(orgId: string, employeeId: number, socket: WebSocket): void {
   const set = connectionsByOrg.get(orgId);
-  if (set) {
-    set.delete(socket);
-    if (set.size === 0) connectionsByOrg.delete(orgId);
-  }
+  const wasRegistered = set ? set.delete(socket) : false;
+  if (set && set.size === 0) connectionsByOrg.delete(orgId);
+  if (!wasRegistered) return;
   const count = connectionCountForEmployee(employeeId) - 1;
   if (count <= 0) connectionCountByEmployee.delete(employeeId);
   else connectionCountByEmployee.set(employeeId, count);

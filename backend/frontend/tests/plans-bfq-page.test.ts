@@ -353,6 +353,34 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
     expect(document.getElementById('modalBody')!.innerHTML).toContain('mp_sim');
   });
 
+  // Регрессия (hotfix 20.57.1, finding #5): m.label (кастомная метрика,
+  // GET /metrics) подставлялся без esc() в modalBody.innerHTML — та же
+  // метка уже правильно экранируется на "своей" странице (cash-metrics).
+  it('editEmployeeMonthPlan: вредоносная метка метрики не создаёт реальный <img>/не исполняет JS', async () => {
+    setupGlobals({ role: 'manager' });
+    const payload = `<img src=x onerror="window.__labelXss=1">`;
+    vi.stubGlobal('METRICS', [{ id: 'sim', label: payload, short_label: 'SIM', unit: 'count' }]);
+    const { editEmployeeMonthPlan } = await import('../src/pages/plans-bfq/index.js');
+    await editEmployeeMonthPlan(1, 'Иван');
+
+    expect(document.querySelectorAll('img').length).toBe(0);
+    expect((window as any).__labelXss).toBeUndefined();
+    expect(document.getElementById('modalBody')!.innerHTML).toContain('&lt;img');
+  });
+
+  it('editStoreMonthPlan: вредоносная метка метрики не создаёт реальный <img>/не исполняет JS', async () => {
+    const { getStoreMonthPlan } = setupGlobals({ role: 'manager' });
+    const payload = `<img src=x onerror="window.__labelXss2=1">`;
+    vi.stubGlobal('METRICS', [{ id: 'sim', label: payload, short_label: 'SIM', unit: 'count' }]);
+    getStoreMonthPlan.mockResolvedValue({});
+    const { editStoreMonthPlan } = await import('../src/pages/plans-bfq/index.js');
+    await editStoreMonthPlan('s1');
+
+    expect(document.querySelectorAll('img').length).toBe(0);
+    expect((window as any).__labelXss2).toBeUndefined();
+    expect(document.getElementById('modalBody')!.innerHTML).toContain('&lt;img');
+  });
+
   it('saveEmployeeMonthPlan: успех — сохраняет и закрывает модалку', async () => {
     const { saveEmployeeMonthPlan } = setupGlobals({ role: 'manager' });
     document.body.innerHTML += '<input id="mp_sim" value="7"><input id="mp_mnp" value="2">';

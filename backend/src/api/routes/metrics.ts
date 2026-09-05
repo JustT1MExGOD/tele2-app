@@ -10,6 +10,7 @@ import { requireManager } from '../../auth/guards.js';
 import { invalidateMetricsCache, getMetricDefs } from '../../core/shared/metrics-catalog.js';
 import { serverError } from '../../shared/errors.js';
 import * as metricsRepo from '../../data/repositories/metrics.js';
+import { withTransaction } from '../../data/db/index.js';
 import type { MetricsResponse, CreateMetricResponse, DeleteMetricResponse } from '../../shared/api-types.js';
 
 const PostMetricBody = Type.Object({
@@ -85,19 +86,25 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
       sort = await metricsRepo.nextSortOrder();
     } catch (_) {}
 
+    // Атомарно, не best-effort (hotfix 20.57.1 PASS 2, finding #6): раньше
+    // upsert() коммитился сразу и делал метрику активной ДО того, как все
+    // 3 ALTER TABLE успевали пройти — ошибка любого из них лишь логировалась
+    // (console.warn), а активная метрика без соответствующей колонки в
+    // sales/store_plans/employee_month_plans приводила бы к рантайм-ошибке
+    // при первой же попытке записать по ней продажу/план. ALTER TABLE в
+    // Postgres транзакционен, поэтому upsert() и весь цикл ensureColumn()
+    // теперь выполняются в одной transaction (withTransaction) — неудача
+    // любого шага откатывает и уже вставленную/обновлённую строку plan_metrics.
     try {
-      await metricsRepo.upsert(id, label, short, unit, sort);
+      await withTransaction(async (q) => {
+        await metricsRepo.upsert(id, label, short, unit, sort, q);
+        // колонки в основных таблицах — чтобы план/продажи/точки работали
+        for (const table of ['sales', 'store_plans', 'employee_month_plans']) {
+          await metricsRepo.ensureColumn(table, id, q);
+        }
+      });
     } catch (e: any) {
       return serverError(request, reply, 'db_error', e);
-    }
-
-    // колонки в основных таблицах — чтобы план/продажи/точки работали
-    for (const table of ['sales', 'store_plans', 'employee_month_plans']) {
-      try {
-        await metricsRepo.ensureColumn(table, id);
-      } catch (e: any) {
-        console.warn(`ALTER ${table}.${id}:`, e?.message || e);
-      }
     }
 
     invalidateMetricsCache();

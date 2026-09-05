@@ -109,6 +109,18 @@ export async function createMessage(
       ? await chatRepo.lockOwnedUnattachedAttachments(attachmentIds, orgId, senderEmployeeId, q)
       : [];
 
+    // Fail-closed, не best-effort (hotfix 20.57.1 PASS 2, finding #3):
+    // раньше несовпадающее число (просрочено/чужая сеть/чужой uploader/уже
+    // привязано/дубликат id в запросе — lockOwnedUnattachedAttachments молча
+    // не возвращает такую строку) приводило к тому, что сообщение всё равно
+    // создавалось с ТОЛЬКО валидным подмножеством вложений — отправитель не
+    // мог узнать, что часть вложений отвалилась. ANY($1) не размножает
+    // строку на дубликаты id во входном массиве, так что дубликат тоже ловится
+    // этой же проверкой (2 id в запросе, 1 совпавшая строка).
+    if (attachmentIds.length && lockedAttachments.length !== attachmentIds.length) {
+      throw Object.assign(new Error('invalid_attachment'), { chatValidation: true, chatError: 'invalid_attachment' });
+    }
+
     if (!normalizedBody && lockedAttachments.length === 0) {
       // Откатываем — withTransaction ловит throw и делает ROLLBACK.
       throw Object.assign(new Error('empty_message'), { chatValidation: true });
@@ -120,11 +132,18 @@ export async function createMessage(
 
     return { kind: 'created' as const, id: inserted.id };
   }).catch((e: any) => {
-    if (e?.chatValidation) return { kind: 'invalid' as const, id: null };
+    if (e?.chatValidation) return { kind: 'invalid' as const, id: null, error: e.chatError as string | undefined };
     throw e;
   });
 
   if (result.kind === 'invalid') {
+    if (result.error === 'invalid_attachment') {
+      return {
+        ok: false,
+        error: 'invalid_attachment',
+        message: 'Одно или несколько вложений недоступны (истекли, не найдены или принадлежат другому пользователю/сети)'
+      };
+    }
     return { ok: false, error: 'empty_message', message: 'Сообщение не может быть пустым' };
   }
   if (!result.id) {

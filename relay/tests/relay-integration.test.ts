@@ -61,6 +61,72 @@ describe('relay /forward — body size limits (RELAY-12/13)', () => {
   });
 });
 
+describe('relay /forward — default bodyLimit vs 20 MiB chat attachments (hotfix 20.57.1, finding #2)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.RELAY_MAX_BODY_BYTES;
+  });
+
+  // backend/src/core/chat/attachment-validation.ts::MAX_ATTACHMENT_BYTES —
+  // relay is a separate package (no dependency on backend), so the
+  // real attachment ceiling is duplicated here deliberately, not imported.
+  const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+  it('a just-under-20MiB multipart body (default RELAY_MAX_BODY_BYTES, unset) is accepted, not rejected by the relay', async () => {
+    const forwardSpy = vi.fn().mockResolvedValue({ status: 200, headers: new Headers(), body: Buffer.from('ok') });
+    vi.doMock('../src/forward.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/forward.js')>();
+      return { ...actual, forwardToUpstream: forwardSpy };
+    });
+    const app = await freshApp(); // no RELAY_MAX_BODY_BYTES override — real production default
+    const payload = 'x'.repeat(MAX_ATTACHMENT_BYTES - 1024); // file content + a little multipart overhead headroom
+    const res = await app.inject({
+      method: 'POST',
+      url: '/forward',
+      headers: { 'x-t2-method': 'POST', 'x-t2-path': '/chat/attachments', 'x-t2-had-origin': 'true', 'content-type': 'multipart/form-data; boundary=x' },
+      payload
+    });
+    expect(res.statusCode).toBe(200);
+    expect(forwardSpy).toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('a body far above any real attachment size is still rejected — relay stays a bounded fixed-upstream proxy, not unbounded', async () => {
+    const forwardSpy = vi.fn().mockResolvedValue({ status: 200, headers: new Headers(), body: Buffer.from('ok') });
+    vi.doMock('../src/forward.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/forward.js')>();
+      return { ...actual, forwardToUpstream: forwardSpy };
+    });
+    const app = await freshApp(); // real production default
+    const payload = 'x'.repeat(60 * 1024 * 1024); // 60 MiB — well above any legitimate chat attachment
+    const res = await app.inject({
+      method: 'POST',
+      url: '/forward',
+      headers: { 'x-t2-method': 'POST', 'x-t2-path': '/chat/attachments', 'x-t2-had-origin': 'true', 'content-type': 'multipart/form-data; boundary=x' },
+      payload
+    });
+    expect(res.statusCode).toBe(413);
+    expect(forwardSpy).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('a small JSON payload is unaffected by the raised default (no regression for ordinary requests)', async () => {
+    const forwardSpy = vi.fn().mockResolvedValue({ status: 200, headers: new Headers({ 'content-type': 'application/json' }), body: Buffer.from('{"ok":true}') });
+    vi.doMock('../src/forward.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/forward.js')>();
+      return { ...actual, forwardToUpstream: forwardSpy };
+    });
+    const app = await freshApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/forward',
+      headers: { 'x-t2-method': 'GET', 'x-t2-path': '/me', 'x-t2-had-origin': 'false' }
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+});
+
 describe('relay /forward — concurrency cap with real backpressure (RELAY-16)', () => {
   afterEach(() => {
     vi.restoreAllMocks();

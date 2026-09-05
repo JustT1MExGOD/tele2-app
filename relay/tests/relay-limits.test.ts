@@ -70,6 +70,12 @@ describe('loadRelayConfig — fail-closed on missing/invalid config (RELAY-12/13
     expect(config.maxConcurrentRequests).toBeGreaterThan(0);
   });
 
+  it('default maxBodyBytes comfortably exceeds MAX_ATTACHMENT_BYTES (backend/src/core/chat/attachment-validation.ts) — hotfix 20.57.1, finding #2', () => {
+    const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // duplicated on purpose — relay has no dependency on backend
+    const config = loadRelayConfig({ RELAY_UPSTREAM_ORIGIN: 'https://example.com' });
+    expect(config.maxBodyBytes).toBeGreaterThan(MAX_ATTACHMENT_BYTES);
+  });
+
   it('respects overrides for size/timeout/concurrency limits', () => {
     const config = loadRelayConfig({
       RELAY_UPSTREAM_ORIGIN: 'https://example.com',

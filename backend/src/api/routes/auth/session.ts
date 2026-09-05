@@ -194,6 +194,19 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           // через много IP (raw-номер не течёт в rate-limit internals как
           // PII). Работает ВМЕСТЕ с уже существующим глобальным per-IP
           // лимитом (app.ts, 300/min), не вместо него.
+          //
+          // Hotfix 20.57.1 PASS 3, finding #2 — этот keyGenerator читает
+          // req.body, но @fastify/rate-limit по умолчанию вызывает hook на
+          // 'onRequest' — ДО парсинга тела (Fastify lifecycle: onRequest →
+          // preParsing → Parsing → preValidation → preHandler → handler).
+          // req.body был всегда undefined здесь, keyGenerator молча
+          // фолбэчился на req.ip на каждый вызов — телефон-based ключ
+          // никогда реально не работал, несмотря на код и комментарий выше.
+          // hook: 'preHandler' — тело уже распарсено к этому моменту.
+          // Confirmed: @fastify/rate-limit's RateLimitHook type supports
+          // 'preHandler'; per-route hook overrides the global default
+          // (node_modules/@fastify/rate-limit/index.js: `params.hook`).
+          hook: 'preHandler',
           keyGenerator: (req: any) => {
             const raw = req.body?.phone;
             const norm = raw ? normalizePhone(String(raw)) : null;

@@ -56,12 +56,6 @@ describe('Поддержка/история (миграция frontend/js/06c-su
     vi.unstubAllGlobals();
   });
 
-  it('mondayOf: понедельник недели для произвольной даты', async () => {
-    setupGlobals();
-    const { mondayOf } = await import('../src/pages/support/index.js');
-    expect(mondayOf('2026-08-25')).toBe('2026-08-24');
-  });
-
   it('loadHistory: пусто — сообщение "Нет продаж за период"', async () => {
     setupGlobals();
     const { loadHistory } = await import('../src/pages/support/index.js');
@@ -91,24 +85,14 @@ describe('Поддержка/история (миграция frontend/js/06c-su
     expect(document.getElementById('historyList')!.textContent).toContain('Нужна привязка Telegram');
   });
 
-  it('copyScheduleWeek: не-manager — no-op (fetch не вызывается)', async () => {
-    setupGlobals({ role: 'employee' });
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const { copyScheduleWeek } = await import('../src/pages/support/index.js');
-    await copyScheduleWeek();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('copyScheduleWeek: manager, подтверждено — POST на /schedules/copy-week (не apiClient)', async () => {
-    setupGlobals({ role: 'manager' });
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({ copied: 5 })
-    } as any);
-    const { copyScheduleWeek } = await import('../src/pages/support/index.js');
-    await copyScheduleWeek();
-    expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('/schedules/copy-week'), expect.objectContaining({ method: 'POST' }));
-    expect((globalThis as any).toast).toHaveBeenCalledWith('Скопировано смен: 5', 'ok');
+  // Hotfix 20.57.1 PASS 2, finding #7 — "dead copy-week UI": copyScheduleWeek()
+  // called a POST /schedules/copy-week route that never existed on the
+  // backend (always 404'd); removed together with its now-dead UI button.
+  it('copyScheduleWeek больше не экспортируется и не выставлен на window (мёртвый UI удалён, finding #7)', async () => {
+    setupGlobals();
+    const mod: any = await import('../src/pages/support/index.js');
+    expect(mod.copyScheduleWeek).toBeUndefined();
+    expect((window as any).copyScheduleWeek).toBeUndefined();
   });
 
   it('loadSupport: FAQ пуст, тикетов нет, не-admin — блок админ-тикетов скрыт', async () => {
@@ -205,12 +189,11 @@ describe('Поддержка/история (миграция frontend/js/06c-su
     expect(apiReply).not.toHaveBeenCalled();
   });
 
-  it('window.* мост — все 8 функций', async () => {
+  it('window.* мост — все 7 функций', async () => {
     setupGlobals();
     await import('../src/pages/support/index.js');
     for (const name of [
       'loadHistory',
-      'copyScheduleWeek',
       'loadSupport',
       'replyTicketPrompt',
       'sendSupport',

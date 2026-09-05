@@ -63,11 +63,26 @@ export async function registerAvatarRoutes(app: FastifyInstance) {
     }
   );
 
-  // Публичный (не requireActive) — <img src> не может передать Authorization.
-  // employeeId сам по себе не перечисляемый список, тот же уровень защиты,
-  // что уже есть у других некритичных публичных полей (store.color и т.п.).
-  // Жёсткий лимит — публичный эндпоинт без auth, единственная защита от
-  // перебора id — ограничение скорости запросов с одного IP.
+  // Публичный (не requireActive) — <img src> не может передать Authorization
+  // или Telegram initData-заголовок, а Telegram-канал (основной канал этого
+  // приложения) резолвит identity ИСКЛЮЧИТЕЛЬНО по заголовку
+  // (resolveTelegramIdentity), не по cookie — requireActive() здесь 401'ил
+  // бы каждую аватарку, загруженную из Telegram Mini App.
+  //
+  // Hotfix 20.57.1 PASS 3, finding #6 — исправлена вводящая в заблуждение
+  // формулировка выше: employees.id — обычный SERIAL (migrations/
+  // 0001_baseline.sql), т.е. ПОСЛЕДОВАТЕЛЬНЫЙ и полностью перечисляемый
+  // (1, 2, 3, ...), а не непредсказуемый идентификатор — раньше комментарий
+  // ошибочно утверждал обратное. Реальная защита сейчас — только rate-limit
+  // per-IP ниже, этого недостаточно против медленного полного перебора.
+  // Браузер/desktop-канал (phone-провайдер, cookie-сессия) технически МОГ
+  // бы получить auth здесь бесплатно — cookie летит на same-origin <img>
+  // автоматически — но условной авторизации "только для не-Telegram
+  // канала" тут нет: закрыть дыру по-настоящему для основного (Telegram)
+  // канала требует отдельного транспорта (напр. короткоживущий подписанный
+  // токен в query string, проверяемый на сервере отдельно от полной
+  // сессии) — не однострочный фикс в рамках hotfix-прохода. DEFERRED,
+  // см. PASS 3 finding #6 в финальном отчёте.
   app.get('/avatars/:employeeId', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     const { employeeId } = request.params as { employeeId: string };
     const row = await employeesRepo.getAvatar(Number(employeeId));

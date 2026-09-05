@@ -62,7 +62,17 @@ export async function buildApp(): Promise<FastifyInstance> {
     // хопом; доверяем ровно ему (не `true`, который принял бы любую цепочку
     // X-Forwarded-For) — иначе request.ip не соответствует реальному
     // клиенту, что подрывает точность IP-based rate-limit (app.ts ниже).
-    trustProxy: 1,
+    //
+    // Hotfix 20.57.1 PASS 3, finding #3 — the fastify@5.12.x dependency
+    // patch (GHSA-3m5p-2c4r-xxw2: X-Forwarded-* spoofing under
+    // trustProxy hop-count) tightened @fastify/proxy-addr's trustProxy
+    // type, no longer accepting a bare number; a bare `1` also silently
+    // failed the `Fastify()` overload resolution entirely, which is what
+    // caused `app` below to wrongly infer an Http2SecureServer generic
+    // instead of the real Node http.Server. Same exact-hop-count
+    // semantics as before, just expressed as the function form (identical
+    // pattern already used in relay/src/index.ts for the same purpose).
+    trustProxy: (_address: string, hop: number) => hop <= 1,
     logger: {
       // initData/токены никогда не должны попасть в логи — сериализаторы
       // pino по умолчанию и так не включают headers, redact здесь просто

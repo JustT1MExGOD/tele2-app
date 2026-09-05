@@ -177,7 +177,10 @@ async function request<T>(
   if (!res.ok) {
     const data = await res.json().catch(() => ({}) as Record<string, unknown>);
     const message = (data.message as string) || (data.error as string) || `api_error:${path}:${res.status}`;
-    throw new Error(message);
+    // .code — машиночитаемый error-код ответа (напр. invalid_attachment,
+    // hotfix 20.57.1 PASS 2, finding #4/#3) — .message остаётся человеко-
+    // читаемым текстом для toast(), существующие вызывающие не затронуты.
+    throw Object.assign(new Error(message), { code: data.error as string | undefined });
   }
   return res.json() as Promise<T>;
 }
@@ -189,13 +192,26 @@ async function requestBlob(path: string, headers: Record<string, string>): Promi
   return res.blob();
 }
 
-/** Загрузка аватарки (multipart/form-data) — тело нельзя JSON.stringify. */
+/**
+ * Загрузка файла (multipart/form-data) — тело нельзя JSON.stringify.
+ * Всегда POST, то есть всегда mutating (см. request() выше) — CSRF-токен
+ * обязателен на тех же условиях, иначе браузерная/Electron cookie-сессия
+ * получает 403 csrf_mismatch на КАЖДОЙ загрузке (requireCsrf — глобальный
+ * preHandler, backend/src/app.ts, исключений для /chat/attachments и
+ * /me/avatar нет). Content-Type НЕ выставляется вручную — fetch сам
+ * генерирует multipart/form-data с boundary для FormData-тела.
+ */
 async function requestUpload<T>(path: string, headers: Record<string, string>, form: FormData): Promise<T> {
-  const res = await fetch(window.location.origin + path, { method: 'POST', headers, body: form });
+  const csrf = readCsrfCookie();
+  const res = await fetch(window.location.origin + path, {
+    method: 'POST',
+    headers: csrf ? { ...headers, 'X-CSRF-Token': csrf } : headers,
+    body: form
+  });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}) as Record<string, unknown>);
     const message = (data.message as string) || (data.error as string) || `api_error:${path}:${res.status}`;
-    throw new Error(message);
+    throw Object.assign(new Error(message), { code: data.error as string | undefined });
   }
   return res.json() as Promise<T>;
 }
