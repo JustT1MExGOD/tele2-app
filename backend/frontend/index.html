@@ -888,6 +888,14 @@
           </table>
         </div>
       </div>
+      <div class="section" id="employeePlanDraftSection" style="display:none">
+        <div class="section-title">Автоматический расчёт планов на следующий месяц</div>
+        <div style="padding:0 16px 12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn-main" onclick="generateEmployeePlanDrafts()" id="planDraftGenerateBtn">Рассчитать планы на следующий месяц</button>
+          <button type="button" class="btn-main" onclick="applyEmployeePlanDraft()" id="planDraftApplyBtn" style="display:none">Применить планы</button>
+        </div>
+        <div id="employeePlanDraftBody"><div class="empty" style="padding:0 16px 12px">Черновик ещё не рассчитан.</div></div>
+      </div>
       <div class="section" id="storeDailyPlanSection">
         <div class="section-title">Дневные планы точек сегодня</div>
         <div id="storeDailyPlans"><div class="skeleton"></div></div>

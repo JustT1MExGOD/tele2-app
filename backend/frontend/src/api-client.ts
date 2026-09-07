@@ -65,6 +65,10 @@ import type {
   SaveMonthPlanRequest,
   StoreDailyPlansResponse,
   StoreMonthPlanResponse,
+  GenerateEmployeeMonthPlanDraftRequest,
+  GenerateEmployeeMonthPlanDraftResponse,
+  EmployeeMonthPlanDraftViewResponse,
+  ApplyEmployeeMonthPlanDraftResponse,
   BfqListResponse,
   BfqEmployeeResponse,
   SaveBfqManualRequest,
@@ -474,6 +478,37 @@ export async function saveStoreMonthPlan(
   body: SaveMonthPlanRequest
 ): Promise<StoreMonthPlanResponse> {
   return request(`/plans/stores/${storeId}/month`, headers, { method: 'PUT', body });
+}
+
+export async function generateEmployeeMonthPlanDrafts(
+  headers: Record<string, string>,
+  body: GenerateEmployeeMonthPlanDraftRequest
+): Promise<GenerateEmployeeMonthPlanDraftResponse> {
+  return request('/plans/employees/month-drafts', headers, { method: 'POST', body });
+}
+
+export async function getLatestEmployeeMonthPlanDraft(
+  headers: Record<string, string>,
+  month: string,
+  orgQuery: string
+): Promise<EmployeeMonthPlanDraftViewResponse> {
+  return request(`/plans/employees/month-drafts/latest?month=${month}${orgQuery}`, headers);
+}
+
+export async function getEmployeeMonthPlanDraftById(
+  headers: Record<string, string>,
+  draftId: number,
+  orgQuery: string
+): Promise<EmployeeMonthPlanDraftViewResponse> {
+  return request(`/plans/employees/month-drafts/${draftId}${orgQuery}`, headers);
+}
+
+export async function applyEmployeeMonthPlanDraft(
+  headers: Record<string, string>,
+  draftId: number,
+  body: { org_id?: string }
+): Promise<ApplyEmployeeMonthPlanDraftResponse> {
+  return request(`/plans/employees/month-drafts/${draftId}/apply`, headers, { method: 'POST', body });
 }
 
 export async function getBfqList(
@@ -1003,6 +1038,10 @@ declare global {
       getStoreDailyPlans: typeof getStoreDailyPlans;
       getStoreMonthPlan: typeof getStoreMonthPlan;
       saveStoreMonthPlan: typeof saveStoreMonthPlan;
+      generateEmployeeMonthPlanDrafts: typeof generateEmployeeMonthPlanDrafts;
+      getLatestEmployeeMonthPlanDraft: typeof getLatestEmployeeMonthPlanDraft;
+      getEmployeeMonthPlanDraftById: typeof getEmployeeMonthPlanDraftById;
+      applyEmployeeMonthPlanDraft: typeof applyEmployeeMonthPlanDraft;
       getBfqList: typeof getBfqList;
       getBfqEmployee: typeof getBfqEmployee;
       saveBfqManual: typeof saveBfqManual;
@@ -1124,6 +1163,10 @@ window.apiClient = {
   getStoreDailyPlans,
   getStoreMonthPlan,
   saveStoreMonthPlan,
+  generateEmployeeMonthPlanDrafts,
+  getLatestEmployeeMonthPlanDraft,
+  getEmployeeMonthPlanDraftById,
+  applyEmployeeMonthPlanDraft,
   getBfqList,
   getBfqEmployee,
   saveBfqManual,

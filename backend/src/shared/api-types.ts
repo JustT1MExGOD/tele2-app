@@ -558,6 +558,73 @@ export type StoreMonthPlanResponse = MetricValues & {
 
 export type PlansTemplateResponse = Array<{ store_id: string; plan_date: string | null } & MetricValues>;
 
+// ---------- /plans/employees/month-drafts(+:id, +:id/apply) ----------
+export type EmployeeMonthPlanDraftStatus = 'draft' | 'applied' | 'stale';
+
+export interface EmployeeMonthPlanDraftBlockingError {
+  store_id: string;
+  store_name: string;
+  message: string;
+}
+
+export interface EmployeeMonthPlanDraftStoreBreakdown {
+  store_id: string;
+  store_name: string;
+  future_shifts: number;
+  tier: 'employee_store' | 'store_avg' | 'org_avg' | 'no_history';
+  historical_months: { month: string; shifts: number; weight: number }[];
+  productivity: MetricValues;
+  raw_contribution: MetricValues;
+  normalized_share: MetricValues;
+  metric_fallback: Record<string, 'proportional_shifts'>;
+  final_plan: MetricValues;
+}
+
+export interface EmployeeMonthPlanDraftItem {
+  employee_id: number;
+  full_name: string;
+  total_shifts: number;
+  by_store: EmployeeMonthPlanDraftStoreBreakdown[];
+  final_plan: MetricValues;
+  warnings: string[];
+}
+
+export interface EmployeeMonthPlanDraftRow {
+  id: number;
+  org_id: string;
+  month: string;
+  status: EmployeeMonthPlanDraftStatus;
+  input_fingerprint: string;
+  blocking_errors: EmployeeMonthPlanDraftBlockingError[];
+  generated_at: string;
+  generated_by: number | null;
+  applied_at: string | null;
+  applied_by: number | null;
+}
+
+export interface GenerateEmployeeMonthPlanDraftRequest {
+  month?: string;
+  org_id?: string;
+}
+
+export interface GenerateEmployeeMonthPlanDraftResponse {
+  draft_id: number;
+  month: string;
+  status: EmployeeMonthPlanDraftStatus;
+  blocking_errors: EmployeeMonthPlanDraftBlockingError[];
+  items: EmployeeMonthPlanDraftItem[];
+}
+
+export interface EmployeeMonthPlanDraftViewResponse {
+  draft: EmployeeMonthPlanDraftRow | null;
+  items: EmployeeMonthPlanDraftItem[];
+}
+
+export interface ApplyEmployeeMonthPlanDraftResponse {
+  draft: EmployeeMonthPlanDraftRow;
+  applied: boolean;
+}
+
 // ---------- /bfq, /bfq/:id, /bfq/manual ----------
 export interface BfqListItem {
   employee_id: number;

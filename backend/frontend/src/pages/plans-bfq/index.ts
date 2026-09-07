@@ -15,7 +15,13 @@ import type {
   StoreMonthPlanResponse,
   BfqListResponse,
   BfqEmployeeResponse,
-  SaveMonthPlanRequest
+  SaveMonthPlanRequest,
+  EmployeeMonthPlanDraftStatus,
+  EmployeeMonthPlanDraftBlockingError,
+  EmployeeMonthPlanDraftItem,
+  EmployeeMonthPlanDraftViewResponse,
+  GenerateEmployeeMonthPlanDraftResponse,
+  ApplyEmployeeMonthPlanDraftResponse
 } from '../../../../src/shared/api-types.js';
 import type { MonthSummaryRow } from '../../../../src/shared/api-types.js';
 
@@ -41,6 +47,18 @@ let monthPlanSort: { key: string; dir: 1 | -1 } = { key: 'name', dir: 1 };
 let monthPlanShowExtra = false;
 let lastMonthPlanRows: MonthSummaryRow[] = [];
 let lastMonthPlanTotals: { fact?: Record<string, number>; pct?: Record<string, number> } | undefined;
+
+// ===== Автоматический расчёт персональных планов на следующий месяц
+// (DRAFT -> APPLY, /plans/employees/month-drafts). Никогда не хардкодим
+// список метрик — так же, как loadMonthPlans() выше, берём его из METRICS. =====
+type EmployeePlanDraftState = {
+  id: number;
+  month: string;
+  status: EmployeeMonthPlanDraftStatus;
+  blocking_errors: EmployeeMonthPlanDraftBlockingError[];
+};
+let planDraft: EmployeePlanDraftState | null = null;
+let planDraftItems: EmployeeMonthPlanDraftItem[] = [];
 
 // ===== BFQ =====
 export async function loadBFQ(): Promise<void> {
@@ -150,6 +168,7 @@ export async function loadMonthPlans(): Promise<void> {
   if (!planMonth) planMonth = todayMoscow().slice(0, 7);
   if (label) label.textContent = monthLabel(planMonth);
   if (box) box.innerHTML = '<div class="skeleton"></div>';
+  if (typeof loadEmployeePlanDraftIfAny === 'function') loadEmployeePlanDraftIfAny();
   try {
     const data: MonthSummaryTableResponse = await window.apiClient.getPlansEmployeesMonth(authHeaders(), planMonth, orgQueryParam());
     const rows = data.rows || [];
@@ -467,6 +486,167 @@ export async function saveEmployeeMonthPlan(employeeId: number): Promise<void> {
   if (typeof loadMonthPlans === 'function') loadMonthPlans();
 }
 
+// ===== Черновики автоматических персональных планов на следующий месяц =====
+function draftStatusLabel(status: EmployeeMonthPlanDraftStatus): string {
+  if (status === 'applied') return 'Применён';
+  if (status === 'stale') return 'Устарел';
+  return 'Черновик';
+}
+
+function draftTierLabel(tier: string): string {
+  if (tier === 'employee_store') return 'по истории сотрудника на этой точке';
+  if (tier === 'store_avg') return 'по среднему показателю точки';
+  if (tier === 'org_avg') return 'по среднему показателю сети';
+  return 'пропорционально сменам (истории продаж нет)';
+}
+
+/** Понятное краткое объяснение расчёта — без диагностического JSON (п.11). */
+function draftItemExplanation(item: EmployeeMonthPlanDraftItem): string {
+  if (!item.by_store || !item.by_store.length) return 'Нет запланированных смен на этот месяц.';
+  return item.by_store
+    .map((s) => `${s.store_name}: ${s.future_shifts} смен, ${draftTierLabel(s.tier)}`)
+    .join('; ');
+}
+
+async function renderEmployeePlanDraft(): Promise<void> {
+  const body = document.getElementById('employeePlanDraftBody');
+  const applyBtn = document.getElementById('planDraftApplyBtn') as HTMLButtonElement | null;
+  if (!body) return;
+  if (!planDraft) {
+    body.innerHTML = '<div class="empty" style="padding:0 16px 12px">Черновик ещё не рассчитан.</div>';
+    if (applyBtn) applyBtn.style.display = 'none';
+    return;
+  }
+  await loadMetricsCatalog();
+
+  const monthTxt = monthLabel(planDraft.month.slice(0, 7));
+  const blocking = planDraft.blocking_errors || [];
+  let html = `<div class="empty" style="text-align:left;padding:0 16px 8px">Месяц: <b>${esc(monthTxt)}</b> · Статус: <b>${esc(draftStatusLabel(planDraft.status))}</b> · сотрудников: <b>${planDraftItems.length}</b></div>`;
+
+  if (planDraft.status === 'stale') {
+    html +=
+      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:#e5484d">Черновик устарел: расписание или план точки изменились после расчёта. Пересчитайте план заново.</div>';
+  }
+
+  if (blocking.length) {
+    html +=
+      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:#e5484d"><b>Есть блокирующие ошибки — применить план нельзя, пока они не устранены:</b><ul style="margin:6px 0 0 18px;padding:0">' +
+      blocking.map((be) => `<li>${esc(be.store_name)}: ${esc(be.message)}</li>`).join('') +
+      '</ul></div>';
+  }
+
+  if (!planDraftItems.length) {
+    html += '<div class="empty" style="padding:0 16px 12px">Нет сотрудников с запланированными сменами на этот месяц.</div>';
+  } else {
+    html +=
+      '<div class="mobile-table">' +
+      planDraftItems
+        .map((item) => {
+          const metricsHtml = METRICS.map((m) => {
+            const v = Number(item.final_plan?.[m.id]) || 0;
+            return `<div class="mt-cell"><div class="v">${v}</div><div class="l">${esc(m.label)}</div></div>`;
+          }).join('');
+          const warningsHtml =
+            item.warnings && item.warnings.length
+              ? `<div class="empty" style="text-align:left;padding:6px 0;color:#c77700">${item.warnings.map((w) => esc(String(w))).join('<br>')}</div>`
+              : '';
+          return `<div class="mt-card">
+            <div class="mt-card-head">
+              <div>
+                <div class="mt-name">${esc(item.full_name)}</div>
+                <div class="mt-meta">смен: ${item.total_shifts}</div>
+              </div>
+            </div>
+            <div class="mt-grid">${metricsHtml}</div>
+            <div class="empty" style="text-align:left;padding:6px 0">${esc(draftItemExplanation(item))}</div>
+            ${warningsHtml}
+          </div>`;
+        })
+        .join('') +
+      '</div>';
+  }
+
+  body.innerHTML = html;
+  if (applyBtn) applyBtn.style.display = planDraft.status === 'draft' && !blocking.length ? '' : 'none';
+}
+
+/** Подхватить последний уже рассчитанный черновик на след. месяц (если есть) — не показывать raw JSON при ошибке (п.11). */
+export async function loadEmployeePlanDraftIfAny(): Promise<void> {
+  const section = document.getElementById('employeePlanDraftSection');
+  if (!section) return;
+  if (!canManage()) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  try {
+    const data: EmployeeMonthPlanDraftViewResponse = await window.apiClient.getLatestEmployeeMonthPlanDraft(authHeaders(), '', orgQueryParam());
+    planDraft = data.draft
+      ? { id: data.draft.id, month: data.draft.month, status: data.draft.status, blocking_errors: data.draft.blocking_errors || [] }
+      : null;
+    planDraftItems = data.items || [];
+  } catch {
+    planDraft = null;
+    planDraftItems = [];
+  }
+  await renderEmployeePlanDraft();
+}
+
+export async function generateEmployeePlanDrafts(): Promise<void> {
+  if (!canManage()) return;
+  const btn = document.getElementById('planDraftGenerateBtn') as HTMLButtonElement | null;
+  if (btn) {
+    btn.setAttribute('disabled', 'disabled');
+    btn.textContent = 'Считаем…';
+  }
+  try {
+    const body: { org_id?: string } = {};
+    if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
+    const data: GenerateEmployeeMonthPlanDraftResponse = await window.apiClient.generateEmployeeMonthPlanDrafts(authHeaders(true), body);
+    planDraft = { id: data.draft_id, month: data.month, status: data.status, blocking_errors: data.blocking_errors || [] };
+    planDraftItems = data.items || [];
+    toast('Черновик планов рассчитан', 'ok');
+  } catch (e: any) {
+    toast(e?.message || 'Не удалось рассчитать черновик', 'err');
+  } finally {
+    if (btn) {
+      btn.removeAttribute('disabled');
+      btn.textContent = 'Рассчитать планы на следующий месяц';
+    }
+  }
+  await renderEmployeePlanDraft();
+}
+
+export async function applyEmployeePlanDraft(): Promise<void> {
+  if (!canManage() || !planDraft) return;
+  const monthTxt = monthLabel(planDraft.month.slice(0, 7));
+  if (!confirm(`Применить рассчитанные планы на ${monthTxt}? Текущие персональные планы сотрудников на этот месяц будут перезаписаны.`)) return;
+
+  const btn = document.getElementById('planDraftApplyBtn') as HTMLButtonElement | null;
+  if (btn) btn.setAttribute('disabled', 'disabled');
+  try {
+    const body: { org_id?: string } = {};
+    if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
+    const res: ApplyEmployeeMonthPlanDraftResponse = await window.apiClient.applyEmployeeMonthPlanDraft(authHeaders(true), planDraft.id, body);
+    planDraft = { id: res.draft.id, month: res.draft.month, status: res.draft.status, blocking_errors: res.draft.blocking_errors || [] };
+    toast('Планы применены', 'ok');
+    await renderEmployeePlanDraft();
+    if (typeof loadMonthPlans === 'function') loadMonthPlans();
+  } catch (e: any) {
+    if (e?.code === 'stale_draft') {
+      toast('Черновик устарел: расписание или план точки изменились — пересчитайте план', 'err');
+      planDraft = { ...planDraft, status: 'stale' };
+      await renderEmployeePlanDraft();
+    } else if (e?.code === 'blocking_errors') {
+      toast('В черновике есть блокирующие ошибки — сначала устраните их', 'err');
+    } else {
+      toast(e?.message || 'Не удалось применить план', 'err');
+    }
+  } finally {
+    if (btn) btn.removeAttribute('disabled');
+  }
+}
+
 // ===== Планы точек: дневной расчёт + ручной ввод месячного плана =====
 // Кэш имён точек последней загрузки — чтобы не передавать имя через
 // onclick-атрибут строкой (кавычки в названии точки уже ломали такое раньше).
@@ -581,6 +761,9 @@ declare global {
     toggleMonthExtra: typeof toggleMonthExtra;
     editEmployeeMonthPlan: typeof editEmployeeMonthPlan;
     saveEmployeeMonthPlan: typeof saveEmployeeMonthPlan;
+    loadEmployeePlanDraftIfAny: typeof loadEmployeePlanDraftIfAny;
+    generateEmployeePlanDrafts: typeof generateEmployeePlanDrafts;
+    applyEmployeePlanDraft: typeof applyEmployeePlanDraft;
     loadStoreDailyPlans: typeof loadStoreDailyPlans;
     editStoreMonthPlan: typeof editStoreMonthPlan;
     saveStoreMonthPlan: typeof saveStoreMonthPlan;
@@ -598,6 +781,9 @@ window.loadNetMonth = loadNetMonth;
 window.toggleMonthExtra = toggleMonthExtra;
 window.editEmployeeMonthPlan = editEmployeeMonthPlan;
 window.saveEmployeeMonthPlan = saveEmployeeMonthPlan;
+window.loadEmployeePlanDraftIfAny = loadEmployeePlanDraftIfAny;
+window.generateEmployeePlanDrafts = generateEmployeePlanDrafts;
+window.applyEmployeePlanDraft = applyEmployeePlanDraft;
 window.loadStoreDailyPlans = loadStoreDailyPlans;
 window.editStoreMonthPlan = editStoreMonthPlan;
 window.saveStoreMonthPlan = saveStoreMonthPlan;
