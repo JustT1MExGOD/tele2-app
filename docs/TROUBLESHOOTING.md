@@ -1,5 +1,7 @@
 # Типовые сбои
 
+[Документация](README.md) · [Обзор проекта](../README.md)
+
 > Вынесено из README §20 при сжатии корня (20.16.0). Операционные процедуры
 > (ротация токена, восстановление доступа, откат миграции) —
 > [RUNBOOK.md](./RUNBOOK.md); архитектура защиты — [SECURITY.md](./SECURITY.md).
@@ -18,7 +20,7 @@
 | Раздел "Чат" не открывается / пустой экран | Смотри DevTools Console на JS-ошибку в `chat.bundle.js`; проверь, что `/dist/pages/chat.bundle.js` подключён в `index.html` и реально собран (`npm run build:frontend`) — см. [CHAT.md](./CHAT.md) |
 | `401`/`403` на `/chat/*` | `401` — не прошёл `requireActive()` (не авторизован/сессия истекла); `403` — сотрудник неактивен/не той сети, чем ресурс (org-scope, см. [CHAT.md — tenant boundary](./CHAT.md#tenant-boundary)). Не путать одно с другим при диагностике |
 | Сообщение отправляется, но realtime не приходит второму клиенту | Проверь DevTools Network → `wss://.../chat/ws`: если апгрейд не 101 (или соединения нет вообще) — фронтенд обязан быть на polling-фолбэке (`GET /chat/messages?after=` на интервале ~4с); если и polling не видно — реальный баг, не ожидаемое поведение. См. [CHAT.md — realtime](./CHAT.md#realtime-direct--websocket-иначе--polling) |
-| Чат работает через Electron DIRECT, но "зависает"/не realtime через RELAY | Ожидаемо — текущий relay не поддерживает WS upgrade вообще, только `POST /forward`. Чат обязан продолжать работать через polling; если сообщения вообще не доходят (не только НЕ realtime) — это баг, см. [DESKTOP-TESTING.md — internal chat](./DESKTOP-TESTING.md#internal-chat-20570--a-separate-new-acceptance-item-not-a-re-run-of-71) |
+| Чат работает через Electron DIRECT, но "зависает"/не realtime через RELAY | Ожидаемо — текущий relay не поддерживает WS upgrade вообще, только `POST /forward`. Чат обязан продолжать работать через polling; если сообщения вообще не доходят (не только НЕ realtime) — это баг, см. [DESKTOP-TESTING.md — internal chat](./DESKTOP-TESTING.md#чат-и-обновления-отдельные-сценарии) |
 | Вложение отклонено при загрузке (`dangerous_type`/`unsupported_type`/`extension_mime_mismatch`) | Ожидаемое поведение allowlist-валидации (магические байты + расширение + заявленный MIME должны совпасть) — не баг. Разрешённые типы см. в [CHAT.md — attachments](./CHAT.md#attachments) |
 | Вложение "исчезло" до того, как сообщение отправлено | Prepared-вложение живёт 1 час без привязки к сообщению (TTL), затем orphan cleanup удаляет его — переоформить загрузку заново. См. [CHAT.md — attachments](./CHAT.md#attachments) |
 

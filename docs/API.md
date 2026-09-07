@@ -1,18 +1,27 @@
 # HTTP API
 
-> Извлечено из README §14 при репо-реструктуризации (20.11.0), оформлено в
-> справочный вид (таблица доступа, формат ошибок) при обновлении docs вслед
-> за `SECURITY.md` (20.13.0). Полное поведение проверок — там же.
+[Документация](README.md) · [Обзор проекта](../README.md)
+
+Справочник основных групп HTTP API, способов авторизации и формата ошибок. Таблица помогает найти модуль; точный контракт отдельного маршрута задаётся его схемой и обработчиком в исходниках.
+
+**Содержание**
+
+- [Базовые сведения](#базовые-сведения)
+- [Уровни доступа](#уровни-доступа)
+- [Эндпоинты](#эндпоинты)
+- [Пример запроса](#пример-запроса)
+- [Формат ошибок](#формат-ошибок)
+- [Связанные документы](#связанные-документы)
 
 ## Базовые сведения
 
-| | |
+| Параметр | Описание |
 |---|---|
 | **База** | `https://<app>.up.railway.app` |
 | **Auth-заголовок (прод, Telegram)** | `X-Telegram-Init-Data` — подписанный `tg.WebApp.initData`, проверяется HMAC'ом на сервере ([SECURITY.md](./SECURITY.md#2-аутентификация)) |
 | **Auth (браузер/PWA)** | Cookie `t2_session` (httpOnly) вместо заголовка; на каждый non-GET запрос с этой cookie дополнительно нужен `X-CSRF-Token`, равный значению cookie `t2_csrf` ([SECURITY.md — CSRF](./SECURITY.md#1-периметр)) |
 | **Auth-заголовок (dev)** | `X-Telegram-Id` — только если `BOT_TOKEN` не задан или `ALLOW_INSECURE_AUTH=true`; в проде сервер с этим не стартует |
-| **Content-Type** | `application/json` везде, кроме `POST /me/avatar` (multipart) и `/export/*.csv` (`text/csv`) |
+| **Content-Type** | обычно `application/json`; загрузки аватара и вложений используют multipart, выгрузки — свой тип, например `text/csv` |
 | **Формат ошибки** | `{ "error": "<код>", "message": "<человекочитаемо>" }` — единый `setErrorHandler`, см. ниже |
 
 ## Уровни доступа
@@ -25,7 +34,7 @@
 
 | Значок | Уровень | Гвард | Кто проходит |
 |:---:|---|---|---|
-| 🌐 | публичный | нет (только rate-limit) | кто угодно — сегодня только `GET /avatars/:employeeId` |
+| 🌐 | публичный | нет (только rate-limit) | без подтверждённой сессии; служебные маршруты, отдельные действия авторизации и чтение аватара имеют собственные ограничения |
 | 🔓 | auth | `requireAuth` | есть подтверждённая identity, необязательно одобренный доступ |
 | ✅ | active | `requireActive` | одобренный (`access_status='active'`) сотрудник любой роли |
 | 👔 | manager+ | `requireManager` | `manager` / `admin` / `senior` |
@@ -37,17 +46,17 @@
 
 | Группа | Доступ | Примеры | Модуль (`backend/src/api/routes/`) |
 |--------|:---:|---------|--------------------------------------|
-| System | 🌐 | `GET /health`, `/healthz`, `/readyz`, `/integrations/health`, `/metrics` (Prometheus) | `app.ts` |
-| Auth (браузер/телефон) | 🔀 | `POST /auth/register`/`/login`/`/reset/:token` (🌐, публичные, свои rate-limit, CSRF-исключены), `POST /auth/logout` (🔓), `POST /auth/admin/reset-password/:employeeId` (👔), `GET/DELETE /auth/sessions`, `POST /auth/sessions/revoke-others` (🔓, ownership-scoped) | `auth/session.ts`, `auth/sessions-admin.ts` |
-| Me / access | ✅ | `/me`, `/me/day`, `/me/bind`, `/me/link-phone` (🔓, привязка телефона к своей же карточке, свой rate-limit), `/me/access`, `/me/insight`, `/me/self-stats` | `me/index.ts` |
-| Avatar | 🔀 | `POST /me/avatar` (🔓), `GET /avatars/:employeeId` (🌐, rate-limit 30/мин) | `me/avatar.ts` |
-| Access requests | 🔀 | `/access/status` (🔓), `/access/request` (🔓), `/access/orgs`/`/access/requests` (👔🛡), `PUT /supervisor/:id/sector` (🔑) | `org/access.ts` |
-| Sales / shifts | 🔀 | `/sales` (✅ своя, `canWriteSalesForOthers()` узко для чужой — 👔 manager/admin, **не** senior), `/sales/quick` (🔓, та же `canWriteSalesForOthers()` для чужой), `/sales/:id/zero` (👔), `/shifts/open\|close\|current`/`/sales/parse` (🔓), `/sync/batch` (🔓, та же `canWriteSalesForOthers()` на каждой операции батча) | `sales.ts`, `shifts.ts` |
-| Plans / schedule | 🔀 | `GET /plans/*` (✅), запись — 👔; `/schedules` (✅ своя, 👔 за другого) | `plans.ts`, `schedules.ts` |
-| BFQ / cash | 🔀 | `GET /bfq/:employeeId` (✅), `/bfq` (👔); `/cash/table`+`PUT /cash` (👔) | `bfq.ts`, `cash.ts` |
-| Stores / org | 🔀 | `GET /stores` (✅), `POST /employees`/`/stores`, `PATCH /employees/:id/role` (👔, `canAssignRole` ограничивает роль сверху) | `org/stores.ts`, `org/employees.ts` |
-| Branding | 🔀 | `/branding`, `/orgs` (🔓), `PUT /admin/org/:id` (🔑) | `org/branding.ts` |
-| Command Center / Tasks / Alerts | 🔀 | `/command-center` (🔓), `/tasks`/`/tasks/:id` (🔓, часть операций 🛡), `/alerts`+`/alerts/:id/*` (👔) | `analytics/command-center.ts`, `ops/tasks.ts`, `ops/alerts.ts` |
+| Системные маршруты | 🌐 | `GET /health`, `/healthz`, `/readyz`, `/integrations/health`, `/metrics` (Prometheus) | `app.ts` |
+| Вход через браузер или телефон | 🔀 | `POST /auth/register`/`/login`/`/reset/:token` (🌐, публичные, свои rate-limit, CSRF-исключены), `POST /auth/logout` (🔓), `POST /auth/admin/reset-password/:employeeId` (👔), `GET/DELETE /auth/sessions`, `POST /auth/sessions/revoke-others` (🔓, ownership-scoped) | `auth/session.ts`, `auth/sessions-admin.ts` |
+| Профиль и доступ | ✅ | `/me`, `/me/day`, `/me/bind`, `/me/link-phone` (🔓, привязка телефона к своей же карточке, свой rate-limit), `/me/access`, `/me/insight`, `/me/self-stats` | `me/index.ts` |
+| Аватар | 🔀 | `POST /me/avatar` (🔓), `GET /avatars/:employeeId` (🌐, rate-limit 30/мин) | `me/avatar.ts` |
+| Заявки на доступ | 🔀 | `/access/status` (🔓), `/access/request` (🔓), `/access/orgs`/`/access/requests` (👔🛡), `PUT /supervisor/:id/sector` (🔑) | `org/access.ts` |
+| Продажи и смены | 🔀 | `/sales` (✅ своя, `canWriteSalesForOthers()` узко для чужой — 👔 manager/admin, **не** senior), `/sales/quick` (🔓, та же `canWriteSalesForOthers()` для чужой), `/sales/:id/zero` (👔), `/shifts/open\|close\|current`/`/sales/parse` (🔓), `/sync/batch` (🔓, та же `canWriteSalesForOthers()` на каждой операции батча) | `sales.ts`, `shifts.ts` |
+| Планы и графики | 🔀 | `GET /plans/*` (✅), запись — 👔; `/schedules` (✅ своя, 👔 за другого) | `plans.ts`, `schedules.ts` |
+| BFQ и касса | 🔀 | `GET /bfq/:employeeId` (✅), `/bfq` (👔); `/cash/table`+`PUT /cash` (👔) | `bfq.ts`, `cash.ts` |
+| Точки и организация | 🔀 | `GET /stores` (✅), `POST /employees`/`/stores`, `PATCH /employees/:id/role` (👔, `canAssignRole` ограничивает роль сверху) | `org/stores.ts`, `org/employees.ts` |
+| Оформление организации | 🔀 | `/branding`, `/orgs` (🔓), `PUT /admin/org/:id` (🔑) | `org/branding.ts` |
+| Сводный экран, задачи и уведомления | 🔀 | `/command-center` (🔓), `/tasks`/`/tasks/:id` (🔓, часть операций 🛡), `/alerts`+`/alerts/:id/*` (👔) | `analytics/command-center.ts`, `ops/tasks.ts`, `ops/alerts.ts` |
 | Profiles | 🔀 | `/stores/:id/profile`, `/employees/:id/profile` (🔓, отдельные поля 🔑) | `profiles/store.ts`, `profiles/employee.ts` |
 | Live map / what-if | 🔀 | `/network/live` (🔓), `/schedule/what-if`+`/apply` (👔) | `analytics/live.ts`, `analytics/what-if.ts` |
 | Forecast / analytics | 🔀 | `/forecast/:storeId` (🔓/👔 по под-роуту), `/heatmap/*` (🔓), `/staffing-hints`, `/cohorts/newbies`, `/export/bi/daily` (👔) | `analytics/forecast.ts`, `analytics/heatmap.ts` |

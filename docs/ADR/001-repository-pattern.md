@@ -1,6 +1,18 @@
-# 001 — Repository pattern для доступа к БД
+<a id="001--repository-pattern-для-доступа-к-бд"></a>
+
+# 001 — Репозитории для доступа к базе данных
+
+[Документация](../README.md) · [Обзор проекта](../../README.md)
 
 **Статус**: принято, реализовано (19.22.0 пилот на Stores → 20.8.0 весь backend).
+
+**Содержание**
+
+- [Контекст](#контекст)
+- [Решение](#решение)
+- [Альтернативы](#альтернативы)
+- [Последствия](#последствия)
+- [Связанные документы](#связанные-документы)
 
 ## Контекст
 
@@ -23,12 +35,12 @@ CI-скрипт `scripts/check-no-direct-sql.mjs` — allowlist файлов, о
 переноса; откат уже переехавшего файла на сырой SQL — красный CI.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph before["До (~50 файлов)"]
         R1["route"] --> SQL1["свой query()"] --> PG1[(Postgres)]
     end
     subgraph after["После (19.22.0→20.8.0)"]
-        R2["route"] --> C2["core/&lt;domain&gt;"] --> REPO["data/repositories/*<br/>orgId — обязательный первый параметр"] --> PG2[(Postgres)]
+        R2["route"] --> C2["core/&lt;domain&gt;"] --> REPO["data/repositories/* — orgId — обязательный первый параметр"] --> PG2[(Postgres)]
     end
 ```
 

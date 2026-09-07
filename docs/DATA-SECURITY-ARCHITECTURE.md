@@ -1,19 +1,30 @@
-# Data Security Architecture
+<a id="data-security-architecture"></a>
+
+# Архитектура защиты данных
+
+[Документация](README.md) · [Обзор проекта](../README.md)
 
 > Для каждого значимого класса данных проекта — нужен ли backend
-> plaintext, как именно данные защищены, кто владеет ключом, что
+> открытый текст, как именно данные защищены, кто владеет ключом, что
 > происходит при потере ключа/доступа, сколько данные живут. Дополняет
-> [SECURITY.md — Cryptographic Data Protection](./SECURITY.md#cryptographic-data-protection)
+> [SECURITY.md — Cryptographic Data Protection](./SECURITY.md#10-криптографическая-защита-данных)
 > (как устроено технически) и [THREAT-MODEL.md](./THREAT-MODEL.md) (от
 > чего защищаемся). Архитектурное решение и альтернативы —
 > [ADR/007](./ADR/007-application-level-envelope-encryption.md),
 > [ADR/008](./ADR/008-e2ee-not-implemented.md),
 > [ADR/010](./ADR/010-chat-e2ee-future-direction.md) (внутренний чат —
-> направление к будущему E2EE, Proposed/Planned, не текущая защита).
+> направление к будущему E2EE, предложено/запланировано, не текущая защита).
+
+**Содержание**
+
+- [Принцип](#принцип)
+- [Таблица данных](#таблица-данных)
+- [Почему не E2EE «на всякий случай»](#почему-не-e2ee-на-всякий-случай)
+- [Связанные документы](#связанные-документы)
 
 ## Принцип
 
-Backend легитимно требует plaintext везде, где он сам обрабатывает
+Backend легитимно требует открытый текст везде, где он сам обрабатывает
 данные — аналитика, AI Copilot, отчёты, Command Center. Шифрование таких
 данных не «более безопасно», оно ломает продукт без выигрыша: сервер
 всё равно расшифровывает их на каждый запрос, а ключ всё равно должен
@@ -24,9 +35,9 @@ read-доступом к диску, а не к работающему прил�
 
 ## Таблица данных
 
-| Data class | Server needs plaintext? | Encryption | Key owner | Recovery model | Retention |
+| Данные | Нужен открытый текст серверу? | Защита | Владелец ключа | Восстановление | Срок хранения |
 |---|:---:|---|---|---|---|
-| `sales`/`plans`/`shifts`/`store_cash` | Да (аналитика, Command Center, отчёты) | Нет — plaintext в Postgres, защищено TLS (Level 1) + org-scope/RBAC | — | Обычный backup Railway | Бессрочно (бизнес-история) |
+| `sales`/`plans`/`shifts`/`store_cash` | Да (аналитика, Command Center, отчёты) | Нет — открытый текст в Postgres, защищено TLS (Level 1) + org-scope/RBAC | — | Обычный backup Railway | Бессрочно (бизнес-история) |
 | `employees.full_name`/`role`/`org_id` | Да (везде, где отображается/фильтруется) | Нет | — | Обычный backup | Пока активен + после увольнения (история продаж ссылается на `employee_id`) |
 | `employees.telegram_id` | Да (auth-резолв, бот-уведомления) | Нет — но lookup всегда точный (`UNIQUE`), сам по себе не низкоэнтропийный секрет | — | Обычный backup | Пока привязан |
 | `employees.phone` | Да (login lookup, точное совпадение) | Нет — deterministic exact-match lookup (`identities.provider_key`); randomized encryption сломала бы `WHERE phone = $1` без отдельного blind-index (см. [ADR/007 — альтернативы](./ADR/007-application-level-envelope-encryption.md#альтернативы)), не реализовано в этом заходе | — | Обычный backup | Пока привязан |
@@ -34,9 +45,9 @@ read-доступом к диску, а не к работающему прил�
 | `employee_sessions.token_hash`, `employee_password_resets.token_hash` | Нет — сервер хранит только `sha256(token)`, сырой токен только у клиента | Хеш (`sha256`), не encryption — опрокинуть некуда, сравнение только "совпал/не совпал" | — | Reuse после истечения/отзыва невозможен по конструкции (строка удалена/`expires_at` прошёл) | 30 дней (сессия) / 1 час (reset token) |
 | `audit_log.before`/`after` | Да (admin-обзор истории действий) | Нет | — | Обычный backup | Бессрочно (подотчётность — см. §7 SECURITY.md) |
 | `ai_audit.prompt`/`response` | Да (AI Copilot сам генерирует и логирует) | Нет | — | Обычный backup | Бессрочно (диагностика AI-поведения) |
-| `support_tickets.message`/`admin_reply`, `support_messages.body` | Да, ПО ЗАПРОСУ (owner/admin читают на лету — это функция поддержки) | **Level 2 — application-level envelope encryption** (AES-256-GCM, DEK per-object, wrapped KEK) — см. [ADR/007](./ADR/007-application-level-envelope-encryption.md) | Backend (KEK в `ENCRYPTION_KEKS`, вне PostgreSQL) | KEK потерян → эти записи невосстановимы (честно, не скрытый мастер-ключ «для удобства» — см. §31 инвариант) | Как обычные тикеты (не удаляются автоматически) |
-| `channels`/`channel_messages`, `task_comments`, `announcements`, `shift_sessions.handover_note` | Да (team/org-wide broadcast — видимость команде это и есть фича) | Нет — не приватные данные по дизайну, см. [ADR/008](./ADR/008-e2ee-not-implemented.md) | — | Обычный backup | Бессрочно |
-| `chat_messages.body`, `chat_attachments`/`chat_attachment_blobs` (внутренний чат, 20.57.0) | **Да, целиком plaintext** — server-authoritative для confidentiality: тело сообщения читается/валидируется сервером как есть, содержимое вложения целиком проходит через magic-byte/MIME-валидацию на сервере до сохранения | **Нет — E2EE не реализован.** Та же категория, что строка выше (org-wide broadcast — весь чат сети видит любой активный сотрудник этой сети, не 1:1), см. [ADR/008](./ADR/008-e2ee-not-implemented.md). `chat_messages.encryption_version` существует в схеме как нейтральный задел под будущее (см. [ADR/010](./ADR/010-chat-e2ee-future-direction.md)), но не используется никаким кодом сегодня — это НЕ текущая защита | — | Обычный backup | Бессрочно |
+| `support_tickets.message`/`admin_reply`, `support_messages.body` | Да, ПО ЗАПРОСУ (owner/admin читают на лету — это функция поддержки) | **Level 2 — конвертное шифрование на уровне приложения** (AES-256-GCM, DEK per-object, wrapped KEK) — см. [ADR/007](./ADR/007-application-level-envelope-encryption.md) | Backend (KEK в `ENCRYPTION_KEKS`, вне PostgreSQL) | KEK потерян → эти записи невосстановимы (честно, не скрытый мастер-ключ «для удобства» — см. §31 инвариант) | Как обычные тикеты (не удаляются автоматически) |
+| `channels`/`channel_messages`, `task_comments`, `announcements`, `shift_sessions.handover_note` | Да (рассылка команде или организации — видимость команде это и есть фича) | Нет — не приватные данные по дизайну, см. [ADR/008](./ADR/008-e2ee-not-implemented.md) | — | Обычный backup | Бессрочно |
+| `chat_messages.body`, `chat_attachments`/`chat_attachment_blobs` (внутренний чат, 20.57.0) | **Да, целиком открытый текст** — сервер определяет действительное состояние для confidentiality: тело сообщения читается/валидируется сервером как есть, содержимое вложения целиком проходит через magic-byte/MIME-валидацию на сервере до сохранения | **Нет — E2EE не реализован.** Та же категория, что строка выше (общая рассылка внутри организации — весь чат сети видит любой активный сотрудник этой сети, не 1:1), см. [ADR/008](./ADR/008-e2ee-not-implemented.md). `chat_messages.encryption_version` существует в схеме как нейтральный задел под будущее (см. [ADR/010](./ADR/010-chat-e2ee-future-direction.md)), но не используется никаким кодом сегодня — это НЕ текущая защита | — | Обычный backup | Бессрочно |
 | `BOT_TOKEN`/`DATABASE_URL`/`GROQ_API_KEY` | Не данные, секреты рантайма | Вне кода/БД — Railway env | Владелец продукта (Railway dashboard) | Ротация — [RUNBOOK.md](./RUNBOOK.md) | Пока не скомпрометирован |
 | Приватная переписка сотрудник↔сотрудник (E2EE, Level 3) | **Не существует как фича** | Не реализовано | — | — | — |
 
@@ -44,7 +55,7 @@ read-доступом к диску, а не к работающему прил�
 [docs/CHAT.md](./CHAT.md)): tenant isolation держится на
 `request.user.org_id` (единственный authority, никогда из тела запроса);
 метаданные каждого сообщения — `sender_employee_id`/`org_id`/
-`created_at`, всегда server-generated. Backend сегодня — доверенная
+`created_at`, всегда формируются сервером. Backend сегодня — доверенная
 сторона для confidentiality чата целиком (как и для всех broadcast-типов
 данных в таблице выше) — это архитектурный факт, не временный недосмотр;
 меняется только если/когда направление из [ADR/010](./ADR/010-chat-e2ee-future-direction.md)
@@ -64,6 +75,6 @@ E2EE защищает от *самого backend* (honest-but-curious operator,
 
 ## Связанные документы
 
-- [SECURITY.md — Cryptographic Data Protection](./SECURITY.md#cryptographic-data-protection)
+- [SECURITY.md — Cryptographic Data Protection](./SECURITY.md#10-криптографическая-защита-данных)
 - [THREAT-MODEL.md](./THREAT-MODEL.md)
 - [ADR/007](./ADR/007-application-level-envelope-encryption.md), [ADR/008](./ADR/008-e2ee-not-implemented.md)

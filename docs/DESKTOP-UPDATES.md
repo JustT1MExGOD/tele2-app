@@ -1,224 +1,147 @@
-# Desktop Updates
+# Обновление приложения Windows
 
-## Architecture
+[Документация](README.md) · [Обзор проекта](../README.md)
 
-```
-T2 Sales Desktop (main process, updater/manager.ts)
-   |
-   | HTTPS, direct — NEVER routed through relay.vincere-mortem.ru
-   v
-https://updates.vincere-mortem.ru   (separate VPS virtual host, static files only)
-   |
-   +-- /stable/manifest.json
-   +-- /beta/manifest.json
-   +-- /releases/<installer>.exe
-```
+Механизм обновления получает манифест с отдельного HTTPS-сервера, проверяет установщик и запускает его только после явного действия пользователя. Сетевой маршрут приложения и доставка обновлений независимы.
 
-**Deliberately a separate control plane from both the application origin
-(Railway) and the relay** (see docs/DESKTOP-NETWORK.md). The entire reason
-a relay exists is that Railway can become unreachable on an affected
-network — if the updater depended on Railway (directly or via the relay)
-to fetch itself out of that situation, an affected-network user would be
-stuck exactly when they'd most want a fix. `updates.vincere-mortem.ru` is
-a separate virtual host on the same VPS as the relay, serving static
-files only (no application logic, no `/forward` endpoint, nothing that
-resembles the relay's proxy behavior) — see "VPS static layout" below.
+**Содержание**
 
-Everything updater-related lives in `desktop/src/main/updater/`:
+- [Архитектура и ответственность](#архитектура-и-ответственность)
+- [Каналы и конфигурация](#каналы-и-конфигурация)
+- [Формат манифеста](#формат-манифеста)
+- [Когда клиент проверяет обновления](#когда-клиент-проверяет-обновления)
+- [Загрузка и контроль целостности](#загрузка-и-контроль-целостности)
+- [Повторная проверка перед запуском](#повторная-проверка-перед-запуском)
+- [Политика цифровой подписи](#политика-цифровой-подписи)
+- [Пользовательское подтверждение и IPC](#пользовательское-подтверждение-и-ipc)
+- [Размещение файлов](#размещение-файлов)
+- [Подготовка и публикация](#подготовка-и-публикация)
+- [Откат и диагностика](#откат-и-диагностика)
 
-| File | Responsibility |
-|---|---|
-| `version.ts` | Numeric MAJOR.MINOR.PATCH comparison (never string comparison) |
-| `manifest.ts` | Manifest schema + strict validation |
-| `fetch-manifest.ts` | Fetches + validates one channel's manifest.json |
-| `downloader.ts` | Streams + verifies (size, SHA-256) one installer to disk |
-| `signature.ts` | Authenticode verification + signing policy |
-| `install-launcher.ts` | Launches the verified installer (`shell.openPath()` — no shell/command-line boundary at all, exact-filename-pin regex, fail-closed TOCTOU re-verification just before launch) |
-| `manager.ts` | `UpdateManager` — orchestrates check/download/install, owns state |
+## Архитектура и ответственность
 
-`main/config.ts::loadDesktopConfig()` is the single canonical source for
-`updateBaseUrl`/`updateChannel` (same file, same precedence pattern, as
-the relay config — see docs/DESKTOP-NETWORK.md).
-
-## Update channels
-
-Two channels: `stable` (default) and `beta`. A manifest's own `channel`
-field must match the channel it was fetched under — `/stable/manifest.json`
-claiming `channel: "beta"` is rejected as invalid, not silently trusted.
-
-## Config precedence
-
-```
-1. explicit env (T2_UPDATE_BASE_URL / T2_UPDATE_CHANNEL) — always wins
-2. packaged production build, no env         — DEFAULT_PRODUCTION_UPDATE_BASE_URL
-                                                 (https://updates.vincere-mortem.ru), stable
-3. dev/test/unpackaged, no env                — updateBaseUrl: '' (checking disabled entirely)
+```mermaid
+flowchart TB
+    U["Основной процесс desktop"] --> M["Манифест выбранного канала"]
+    M --> V["Проверка версии и описания"]
+    V --> D["Загрузка и проверка установщика"]
+    D --> C["Подтверждение пользователя"]
+    C --> I["Повторная проверка и запуск NSIS"]
 ```
 
-`isPackaged` is Electron's own `app.isPackaged` — a genuine installed
-build, not `npm run desktop:dev`. `loadDesktopConfig(env)` called without
-the second parameter (exactly how every existing test/script already
-calls it) can never silently reach the production update server — this
-is the same safety property the relay config already has, applied here
-too.
+По умолчанию установленный клиент обращается к `https://updates.vincere-mortem.ru`. Узел обновлений отделён от origin приложения и relay: сбой доступа к Railway не должен лишать пользователя возможности получить исправление. Общий VPS при этом остаётся возможной общей точкой отказа.
 
-```bat
-:: dev/acceptance override example
-set T2_UPDATE_BASE_URL=https://staging-updates.example.com
-set T2_UPDATE_CHANNEL=beta
+Код находится в `desktop/src/main/updater/`:
+
+| Файл | Назначение |
+| --- | --- |
+| `version.ts` | Числовое сравнение трёх частей версии |
+| `manifest.ts` | Структура и строгая проверка манифеста |
+| `fetch-manifest.ts` | Получение манифеста выбранного канала |
+| `downloader.ts` | Потоковая загрузка, размер и SHA-256 |
+| `signature.ts` | Проверка Authenticode и политика подписи |
+| `install-launcher.ts` | Проверка имени и запуск установщика через `shell.openPath()` |
+| `manager.ts` | Состояние и последовательность операций |
+
+## Каналы и конфигурация
+
+Поддерживаются `stable` и `beta`. Поле `channel` обязано совпадать с каналом запрошенного манифеста. Настройки читает `loadDesktopConfig()` из `desktop/src/main/config.ts` при запуске процесса.
+
+| Приоритет | Источник | Результат |
+| --- | --- | --- |
+| 1 | Непустые `T2_UPDATE_BASE_URL`, `T2_UPDATE_CHANNEL` | Явная настройка окружения |
+| 2 | Упакованная версия без переопределения | Стандартный HTTPS-узел, канал `stable` |
+| 3 | Разработка и тесты без переопределения | Пустой адрес: проверки отключены |
+
+`app.isPackaged` определяет установленную сборку; запуск режима разработки не равнозначен ей. Базовый адрес допускает HTTPS, а для локальной разработки — узкое исключение HTTP на `localhost` или `127.0.0.1`. URL установщика по контракту манифеста всё равно должен быть HTTPS.
+
+Пример переопределения в PowerShell перед запуском тестового приложения:
+
+```powershell
+$env:T2_UPDATE_BASE_URL = "https://staging-updates.example.com"
+$env:T2_UPDATE_CHANNEL = "beta"
 ```
 
-`T2_UPDATE_BASE_URL` accepts `https://` (any host) or `http://127.0.0.1`/
-`http://localhost` (narrow local-dev exception, same as `T2_RELAY_URL`).
+## Формат манифеста
 
-## Manifest schema
+Ниже учебный пример структуры. Нулевой хеш и размер являются заполнителями, а не реквизитами настоящего релиза. Перед публикацией их формирует скрипт из реального установщика.
 
 ```json
 {
   "schemaVersion": 1,
   "channel": "stable",
-  "version": "20.55.1",
-  "publishedAt": "2026-08-31T12:00:00Z",
+  "version": "20.56.7",
+  "publishedAt": "2026-09-07T12:00:00Z",
   "mandatory": false,
   "installer": {
-    "filename": "T2Sales-Setup-x64-20.55.1.exe",
-    "url": "https://updates.vincere-mortem.ru/releases/T2Sales-Setup-x64-20.55.1.exe",
-    "sha256": "<64 hex chars>",
+    "filename": "T2Sales-Setup-x64-20.56.7.exe",
+    "url": "https://updates.vincere-mortem.ru/releases/T2Sales-Setup-x64-20.56.7.exe",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "size": 123456789
   },
-  "releaseNotes": "optional, plain text, max 8000 chars",
-  "minSupportedVersion": "optional, X.Y.Z"
+  "releaseNotes": "Исправления и улучшения приложения.",
+  "minSupportedVersion": "20.56.0"
 }
 ```
 
-**`minSupportedVersion` is informational only in v1** — it is schema-
-validated (must parse as MAJOR.MINOR.PATCH) but nothing in
-`UpdateManager` currently reads or enforces it. No client behavior
-changes based on its value: there is no forced-update path, no blocked
-version, no warning surfaced from it. It exists in the schema now so a
-future version can add enforcement without a breaking manifest schema
-change; until then, treat it as a note to publishers, not a mechanism.
+| Поле | Правило |
+| --- | --- |
+| `schemaVersion` | Ровно `1` |
+| `channel` | Совпадает с запрошенным каналом |
+| `version` | Числовая версия `X.Y.Z`; сравнение не строковое |
+| `publishedAt` | Корректная дата |
+| `mandatory` | Булево значение; влияет на отметку важности |
+| `installer.filename` | Допустимое имя `.exe`, без разделителей пути и `..` |
+| `installer.url` | HTTPS, тот же origin, путь внутри `/releases/`, совпадающее имя файла |
+| `installer.sha256` | 64 шестнадцатеричных символа |
+| `installer.size` | Положительное целое число, максимум 500 МиБ |
+| `releaseNotes` | Необязательный обычный текст, максимум 8000 символов |
+| `minSupportedVersion` | Необязательная версия `X.Y.Z`, сейчас только справочная |
 
-Validated strictly (`main/updater/manifest.ts::validateManifest`), fail
-closed on anything unexpected:
+Для реального установщика используйте имя `T2Sales-Setup-x64-X.Y.Z.exe`: проверка запуска строже общей проверки имени в манифесте. Суффикс наподобие `-beta.1` не соответствует принятому формату версии; канал задаётся отдельно.
 
-- `schemaVersion` must be exactly `1`.
-- `channel` must match the channel the manifest was fetched under.
-- `version`/`minSupportedVersion` must parse as MAJOR.MINOR.PATCH.
-- `publishedAt` must be a parseable date.
-- `installer.filename` must match `^[A-Za-z0-9][A-Za-z0-9._-]*\.exe$` — no
-  path separators, no `..`.
-- `installer.url` must be `https://`, on the exact configured update
-  origin (not just "https", the literal origin), under `/releases/`, and
-  its filename segment must equal `installer.filename` exactly.
-- `installer.sha256` must be 64 hex characters.
-- `installer.size` must be a positive integer ≤ 500 MiB.
+Неизвестные поля не становятся командами: возвращаемый валидатором объект не предоставляет полей исполняемой команды, аргументов или произвольного локального пути. Это не означает, что валидатор обязательно отклоняет любой неизвестный ключ — важно отсутствие его передачи в исполняемый контракт.
 
-**Never present, structurally**: any executable command/arguments, any
-local filesystem path, any field that could influence what runs or
-where. The TypeScript type this validator returns has no slot for such a
-field — there is no code path that could read one even if a manifest
-somehow contained it (see the explicit regression test in
-`tests/updater-manifest.test.ts` proving an injected `command`/`args`
-field is silently dropped, never reaches the returned object).
+## Когда клиент проверяет обновления
 
-## Update check
+Первая проверка выполняется примерно через 15 секунд после запуска, последующие — каждые 4 часа. Пользователь также может нажать «Проверить обновления». Получение манифеста ограничено 10 секундами, загрузка — 120 секундами.
 
-- One check ~15s after startup (never blocks boot/login).
-- Then every 4 hours (not aggressive polling).
-- Plus a manual "Проверить обновления" trigger (`checkForUpdates()` IPC).
-- Bounded timeouts throughout (manifest fetch: 10s, download: 120s).
-- **If the update server is unreachable** (DNS/TCP/TLS/HTTP failure): the
-  check lands in `state: 'error'` with a short sanitized message. The
-  main application is completely unaffected — DIRECT/RELAY transport,
-  login, and every application feature work exactly as if the updater
-  didn't exist. There is no blocking dialog, no retry-storm (the next
-  attempt is the normal 4-hour interval or a manual click), no crash.
+При сетевом сбое состояние становится `error` с коротким очищенным сообщением. Проверка не блокирует вход и функции основного приложения. Следующая попытка — плановая или ручная, без непрерывного цикла запросов.
 
-## Download + SHA-256 verification flow
+## Загрузка и контроль целостности
 
-1. `installer.url` re-validated against the allowlisted update origin
-   AGAIN at download time (defense in depth beyond manifest validation).
-2. HTTPS only, real TLS verification (Node's `https` default,
-   `rejectUnauthorized` never overridden). No automatic redirect
-   following — a 3xx response is a hard failure.
-3. Streamed to `%LOCALAPPDATA%\T2 Sales\updates\<filename>.<random>.download`
-   — never buffered fully in memory. SHA-256 computed incrementally
-   alongside the write.
-4. `Content-Length` (if present) checked against `manifest.installer.size`
-   before any body is read; actual received bytes checked against the
-   same cap DURING streaming (aborts mid-flight on overflow, not just
-   after the fact) — a hard ceiling against an oversized/runaway
-   response.
-5. On stream completion: actual byte count AND SHA-256 both re-verified
-   (`crypto.timingSafeEqual` for the hash compare) against the manifest.
-6. **Only on success**: the temp file is renamed (atomic, same volume) to
-   the final `T2Sales-Setup-x64-X.Y.Z.exe` name. On ANY mismatch, the
-   temp file is deleted and nothing is ever renamed into a runnable
-   location — state becomes `'error'`, never `'ready_to_install'`.
+1. Клиент повторно проверяет URL относительно разрешённого origin.
+2. Выполняет HTTPS-запрос с проверкой TLS; перенаправления автоматически не принимает.
+3. Потоково записывает временный файл в `%LOCALAPPDATA%\T2 Sales\updates\<filename>.<random>.download`, параллельно вычисляя SHA-256.
+4. Проверяет `Content-Length`, если он есть, и ограничивает фактическое число полученных байтов во время загрузки.
+5. После завершения сверяет точный размер и SHA-256; сравнение хеша использует `crypto.timingSafeEqual`.
+6. Только после успеха переименовывает временный файл в итоговое имя на том же томе. При несовпадении удаляет временный файл и выставляет ошибку.
 
-## TOCTOU: re-verification immediately before launch
+Установщик не загружается целиком в оперативную память. При ошибке файл не переводится в состояние готового к установке.
 
-`ready_to_install` has no timeout — the app waits on an explicit human
-click, an unbounded window during which a local process with write
-access to `%LOCALAPPDATA%\T2 Sales\updates\` could in principle swap the
-verified file for something else. `installUpdate()` closes this gap by
-re-running BOTH checks against the file as it exists at the moment of the
-click, not trusting the result from download time:
+## Повторная проверка перед запуском
 
-1. Size + SHA-256 re-verified against the manifest (`downloader.ts`'s
-   `verifyFileIntegrity`, the same streaming-hash/`timingSafeEqual`
-   technique used at download time, run again against the on-disk file).
-2. Authenticode status + policy re-evaluated (same `signature.ts`
-   functions used at download time).
+Между загрузкой и нажатием кнопки может пройти произвольное время. Поэтому `installUpdate()` повторно проверяет размер, SHA-256 и Authenticode у файла на диске. При неуспехе установка отменяется и сохранённый путь очищается. Защита от повторного вызова предотвращает два параллельных запуска от двойного нажатия.
 
-Either check failing aborts the install (state → `'error'`, the tracked
-`downloadedFilePath` is cleared) — the installer is never launched. A
-duplicate `installUpdate()` call (double-click, a racing second IPC
-invocation) is a no-op while a launch is already in flight — the
-installer is never started twice.
+Повторная проверка уменьшает риск подмены за время ожидания, но сама по себе не доказывает отсутствие любого возможного локального состязания между проверкой и открытием файла. Скомпрометированная учётная запись ОС остаётся за границей этой гарантии.
 
-## Authenticode signing policy
+## Политика цифровой подписи
 
-- SHA-256 verification is **always** required, regardless of signing
-  status (step 5 above) — this never changes.
-- If the downloaded installer is Authenticode-signed
-  (`Get-AuthenticodeSignature` via a PowerShell helper — no Node API for
-  this — `main/updater/signature.ts`), its status/signer are checked and
-  the signer subject is available for display/logging (a certificate
-  subject is not a secret).
-- **v1 policy: both `stable` and `beta` allow an unsigned installer**
-  (`AUTHENTICODE_POLICY = { stable: 'warn', beta: 'warn' }` in
-  `signature.ts`) — because no real code-signing certificate exists yet
-  for any channel (see docs/DESKTOP-RELEASE.md's signing section). An
-  unsigned installer still requires a correct SHA-256 match; the UI shows
-  a visible warning ("This update is not digitally signed…") before the
-  user clicks Install.
-- **Exact meaning of "warn" — genuinely unsigned vs. broken signature are
-  NOT the same thing, and are not treated the same.** `warn` is lenient
-  only for `status === 'NotSigned'` — a file with no Authenticode
-  signature block at all, which is the expected shape of every build
-  today. A file whose status is `HashMismatch`, `NotTrusted`, `Invalid`,
-  or `UnknownError` — i.e. one that DOES carry a signature block (or
-  whose check itself failed to run) but fails verification — is **always
-  rejected**, on both channels, regardless of the `warn`/`required`
-  policy value. Accepting a broken-signature file under `warn` would
-  defeat the point of checking at all: it's a strictly worse signal than
-  having no signature claim in the first place, and `HashMismatch`
-  specifically is the exact shape of a file tampered with after signing.
-- **Once a real certificate exists**: flip `AUTHENTICODE_POLICY.stable`
-  to `'required'` — this is the one named, documented place to do it.
-  `beta` can stay `'warn'` for internal testing builds indefinitely, or
-  also be flipped, at the product owner's discretion.
-- Windows security is never bypassed: no SmartScreen suppression, no
-  Defender changes, no `-ExecutionPolicy` change beyond the single
-  PowerShell subprocess invocation used for signature *reading* (never
-  execution of untrusted code).
+SHA-256 обязателен при любой политике подписи. Authenticode проверяется через PowerShell; результат учитывается независимо от совпадения хеша.
 
-## IPC / security boundaries
+| Результат | Текущая политика `warn` для `stable` и `beta` |
+| --- | --- |
+| Корректная подпись | Разрешить после остальных проверок |
+| `NotSigned` | Показать предупреждение; допускается установка по решению пользователя |
+| `HashMismatch`, `NotTrusted`, `Invalid`, `UnknownError` | Заблокировать установку |
 
-Renderer-facing API (`window.t2Desktop`, via preload) is exactly 5
-methods, all parameterless:
+Отсутствие подписи и испорченная подпись — разные состояния. `warn` допускает первое, но не второе. После появления сертификата целевой переход для стабильного канала — `AUTHENTICODE_POLICY.stable = 'required'`; это изменение реализации и процесса выпуска, а не уже действующее правило.
+
+Механизм не отключает SmartScreen или Defender. Наличие правильного SHA-256 в полученном манифесте проверяет соответствие файла этому манифесту; доверие к самому узлу публикации также существенно.
+
+## Пользовательское подтверждение и IPC
+
+Страница получает четыре действия и одну подписку:
 
 ```ts
 checkForUpdates(): Promise<void>
@@ -228,75 +151,26 @@ installUpdate(): Promise<void>
 onUpdateStatusChanged(cb): () => void
 ```
 
-No channel accepts a URL, file path, or command from the renderer — what
-gets checked/downloaded/installed is entirely `UpdateManager`'s own
-internal state. `installUpdate()` always launches exactly the file this
-process itself downloaded and SHA-256-verified; there is no parameter
-through which a caller (compromised renderer or otherwise) could redirect
-it. `contextIsolation`/`nodeIntegration`/`sandbox` are unchanged (still
-`true`/`false`/`true`) — the updater adds no new preload capability
-beyond these 5 named methods.
+Четыре действия не принимают URL, путь или команду; подписка принимает обработчик. Выбор файла остаётся внутренним состоянием основного процесса. Механизм обновлений не использует прикладные cookie, CSRF-токены и данные авторизации для запросов к узлу обновлений.
 
-The updater has **no access whatsoever** to session cookies, CSRF tokens,
-TOTP secrets, Telegram auth, or any application credential — it is a
-completely separate code path (`updater/*`) that never imports or shares
-state with `network/relay-client.ts` or any auth-related module. It
-talks to a different host entirely (`updates.vincere-mortem.ru`, never
-`relay.vincere-mortem.ru` or the Railway origin).
+Установка выполняется после явного нажатия «Установить сейчас», через `shell.openPath()` без аргументов тихой установки. После успешного запуска приложение планирует завершение примерно через 1,5 секунды. В коде `unref()` относится к таймеру завершения, а не к дескриптору дочернего установщика.
 
-## Installation (v1 policy)
+`mandatory: true` показывает отметку «ВАЖНОЕ ОБНОВЛЕНИЕ», но не включает принудительную установку. `minSupportedVersion` проверяется по формату, но сейчас не блокирует старые клиенты и не задаёт отдельного пользовательского предупреждения.
 
-- Install only after: manifest validation → HTTPS download → size
-  verification → SHA-256 verification → signature policy check →
-  **explicit user click** on "Установить сейчас".
-- No silent install, ever, in v1 — the real NSIS installer UI always
-  runs (`shell.openPath(installerPath)`, no arguments passed at all —
-  v1 never builds a command line from manifest data, see
-  `install-launcher.ts`'s own module doc comment for the full traced
-  origin/security reasoning).
-- `mandatory: true` in v1: shown with a visible "ВАЖНОЕ ОБНОВЛЕНИЕ" badge
-  in the UI, nothing more — no force-install, no force-kill of the
-  running app, no blocking the rest of the UI. A future version may
-  change this policy explicitly; v1 does not.
-- After the user confirms install: the installer is launched detached
-  (`unref()`d — the desktop app does not wait for it), then the app
-  quits itself ~1.5s later (giving the installer window time to appear)
-  so it isn't holding file locks the installer needs.
+## Размещение файлов
 
-## VPS static layout
+| Путь на сервере | Содержимое |
+| --- | --- |
+| `/var/www/t2-updates/stable/manifest.json` | Манифест стабильного канала |
+| `/var/www/t2-updates/beta/manifest.json` | Манифест тестового канала |
+| `/var/www/t2-updates/releases/` | Неизменяемые установщики с версией в имени |
 
-```
-/var/www/t2-updates/
-  stable/
-    manifest.json
-  beta/
-    manifest.json
-  releases/
-    T2Sales-Setup-x64-20.55.0.exe
-    T2Sales-Setup-x64-20.55.1.exe
-    T2Sales-Setup-x64-20.56.0-beta.1.exe
-```
+Пример Caddy:
 
-**Historical note**: this layout/Caddy config was originally written as
-documentation/templates only, not yet deployed. It has since been
-deployed for real — the production `stable` update host is live,
-20.56.5 is published on it, and a real production update (20.56.4 →
-20.56.5) was accepted on an affected PC through this exact
-infrastructure (see `docs/DESKTOP-RELEASE.md#updates-v1--implemented-published-accepted`).
-The layout/Caddy example below still documents the real, current
-structure — kept as-is, not a stale claim about deployment status.
-
-### Caddy example
-
-```
+```caddyfile
 updates.vincere-mortem.ru {
     root * /var/www/t2-updates
-    file_server {
-        # Directory listing MUST stay disabled — file_server's default
-        # is already "no listing" as long as browse is not enabled;
-        # never add `browse` to this block.
-    }
-
+    file_server
     header /*/manifest.json Content-Type "application/json"
     header /*/manifest.json Cache-Control "no-cache"
     header /releases/* Content-Type "application/octet-stream"
@@ -304,99 +178,42 @@ updates.vincere-mortem.ru {
 }
 ```
 
-Recommendations:
-- **HTTPS only** — Caddy's automatic HTTPS already gives this by default;
-  do not add a plaintext `http://` site block for this host.
-- **Directory listing disabled** — confirmed above; double-check after
-  any Caddy config change (a bare `file_server` is safe, `file_server
-  browse` is not).
-- **manifest.json**: `Content-Type: application/json`, short/no-cache TTL
-  — clients must see a just-published version promptly.
-- **Installers**: `Content-Type: application/octet-stream`, long/immutable
-  cache TTL is safe **because filenames are versioned** (a given filename
-  never changes content once published — never overwrite an already-
-  published installer file; publish a new filename instead).
-- **No upload capability through this virtual host, ever** — `file_server`
-  is read-only by construction (no PUT/POST handling configured); do not
-  add one. Publishing is done via the operator's own deploy access to the
-  VPS (SSH/SCP/rsync), never through the public HTTPS endpoint.
+Не включайте `browse` и публичную загрузку файлов. Длительное кеширование допустимо только для неизменяемых установщиков: новое содержимое публикуется под новым именем. Манифест должен быстро обновляться у клиентов. Конфигурация — пример для оператора, её изменение не выполняется автоматически.
 
-## Publishing workflow
+## Подготовка и публикация
+
+Из каталога `desktop`, после сборки:
 
 ```bash
-cd desktop
-npm run update:prepare -- --channel beta --installer path/to/T2Sales-Setup-x64-20.55.1.exe \
-  --notes "Bug fixes" [--mandatory] [--min-supported 20.50.0]
+npm run update:prepare -- --channel beta --installer release/T2Sales-Setup-x64-20.56.7.exe --notes "Исправления и улучшения приложения"
 ```
 
-What it does:
-1. Reads the installer, computes SHA-256 (streaming) + size.
-2. Derives `version` from the filename (`T2Sales-Setup-x64-X.Y.Z.exe`) or
-   requires `--version` explicitly if the filename doesn't match.
-3. Writes `desktop/update-staging/<channel>/manifest.json` and copies the
-   installer to `desktop/update-staging/releases/<filename>`.
+Дополнительно можно передать `--mandatory` и `--min-supported 20.56.0`. Скрипт вычисляет размер и хеш, извлекает версию из имени, создаёт `update-staging/<channel>/manifest.json` и копирует установщик в `update-staging/releases/`. Параметр `--version` не отменяет требования конечного запуска к стандартному имени установщика.
 
-What it deliberately does **not** do:
-- SSH/SCP/rsync/deploy anywhere — zero network access.
-- Store or read any VPS credential.
-- Touch a live/published manifest — it only ever writes to the local
-  `update-staging/` directory (gitignored).
+Подготовка локальная: скрипт не получает доступ к VPS, не хранит его секреты и не изменяет опубликованный манифест.
 
-**Actual publishing is a separate, manual, explicitly-opted-into step**:
-copy `update-staging/<channel>/manifest.json` to the VPS's
-`<channel>/manifest.json`, and `update-staging/releases/<file>` to the
-VPS's `releases/<file>`, via whatever deploy access the operator already
-uses (SSH/SCP/rsync/Ansible/etc.) — this repo does not script that step.
+Публикация — отдельная согласованная операция оператора:
 
-## Beta → stable promotion
+1. Скопируйте новый установщик в `releases/`, не перезаписывая старые версии.
+2. Проверьте доступность по окончательному HTTPS-адресу, размер и хеш.
+3. Загрузите манифест под временным именем и атомарно замените манифест выбранного канала.
+4. Проверьте получение манифеста, загрузку и установку на тестовом клиенте Windows.
+5. Для продвижения из `beta` в `stable` подготовьте манифест стабильного канала для того же проверенного установщика и опубликуйте его тем же способом.
 
-Once a beta build has been validated:
-1. Re-run `update:prepare` with `--channel stable` against the SAME
-   installer file (or re-publish; the installer itself doesn't change,
-   only which channel's manifest points at it).
-2. Copy the resulting `stable/manifest.json` to the VPS.
-3. Stable-channel clients pick it up on their next check (≤4 hours, or
-   immediately via "Проверить обновления").
+При доступном сервере стабильные клиенты обнаружат выпуск на следующей успешной проверке либо вручную. Четырёхчасовой интервал не гарантирует доставку за четыре часа при выключенном приложении или недоступной сети.
 
-There is no automatic beta→stable promotion — every promotion is a
-deliberate publish of a new `stable/manifest.json`.
+## Откат и диагностика
 
-## Rollback
+Клиент автоматически принимает только более новую версию. Возврат манифеста к старой версии останавливает распространение проблемного выпуска среди ещё не обновившихся клиентов, но не понижает установленную версию. Основной путь восстановления — новый исправляющий `PATCH`. Храните несколько прошлых установщиков и не удаляйте файл во время возможной загрузки клиентами.
 
-- The server should retain several previous installer files under
-  `/releases/` (never delete a version another client might still be
-  mid-download of, or might need to reference).
-- **The desktop client never automatically downgrades** — `isNewerVersion()`
-  only ever returns true for a strictly newer version; a manifest with a
-  version ≤ the currently-installed one is simply ignored by the ordinary
-  update check (`state` stays `'up_to_date'`).
-- Rolling back in practice means either:
-  a. Publishing a new PATCH version whose contents restore the desired
-     behavior (the normal, recommended path — matches "roll forward, not
-     back" for every other part of this project), or
-  b. A manual admin action: overwrite `<channel>/manifest.json` to point
-     back at an older, already-retained installer's filename/hash. This
-     is an explicit, human decision — never something a client update
-     check or `update:prepare` does on its own.
+| Симптом | Что проверить |
+| --- | --- |
+| Новая версия не видна | Канал, числовую версию, кеш манифеста и доступность адреса |
+| Манифест отклонён | Обязательные поля, совпадение канала и origin, формат версии |
+| Загрузка завершается ошибкой | TLS, перенаправления, размер, SHA-256, тайм-аут |
+| Установка запрещена | Результат повторной проверки, Authenticode, имя файла |
+| В разработке нет проверок | Непустой `T2_UPDATE_BASE_URL`; это ожидаемое поведение без настройки |
 
-## Troubleshooting
+> **Историческое подтверждение.** В материалах проекта записана успешная установка обновления `20.56.4 → 20.56.5` через реальную инфраструктуру. При переработке документации серверы и установщик текущей версии не проверялись.
 
-| Symptom | Likely cause |
-|---|---|
-| App never shows "update available" | Check `T2_UPDATE_BASE_URL`/`T2_UPDATE_CHANNEL` env, confirm `app.isPackaged` is true (dev builds never check), confirm the manifest's `version` is actually newer |
-| "Ошибка обновления" right after check | Update server unreachable/DNS/TLS — the app itself is unaffected; check `updates.vincere-mortem.ru` connectivity independently of the relay |
-| Download fails with a hash/size error | The published manifest's `sha256`/`size` doesn't match the actual file on `/releases/` — re-run `update:prepare` and republish both together, never edit one without the other |
-| "not digitally signed" warning | Expected in v1 for every channel — see signing policy above; not an error |
-| Update never installs | v1 requires an explicit click on "Установить сейчас" — there is no silent/automatic install by design |
-
-## Offline / update-server-unreachable behavior
-
-Explicitly verified (`tests/updater-manager.test.ts`): a failed manifest
-fetch (DNS/TCP/TLS/HTTP, any reason) lands in `state: 'error'` with a
-short sanitized message, and the manager's own state machine never
-throws out of `checkNow()`. The main application (login, DIRECT/RELAY
-transport, every feature) is entirely independent of the updater's
-state — nothing in `main/index.ts`'s boot sequence `await`s an update
-check, and the update UI simply shows nothing (`not_configured`/
-`up_to_date`/`checking` all render no visible card) until there's
-something actionable to show.
+Связанные руководства: [выпуск](DESKTOP-RELEASE.md), [тестирование](DESKTOP-TESTING.md), [границы доверия](DESKTOP-SECURITY.md).

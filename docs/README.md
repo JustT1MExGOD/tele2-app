@@ -1,58 +1,78 @@
 # Документация T2 Sales
 
-Живой справочник — обновляется вместе с кодом. Главный вход в проект —
-**[README.md](../README.md)** в корне (продукт, витрина); полный разбор
-функциональности — **[FEATURES.md](./FEATURES.md)**; здесь — техническая
-и операционная часть.
+[Обзор проекта](../README.md) · [Словарь терминов](GLOSSARY.md)
 
-| Документ | О чём | Когда читать |
-|---|---|---|
-| **[ARCHITECTURE.md](./ARCHITECTURE.md)** | Диаграмма потока запроса, дерево `backend/src/`, правила слоёв и регистрации роутов | Первый файл в проекте; перед структурной правкой |
-| **[SECURITY.md](./SECURITY.md)** | 10 слоёв защиты, RBAC-матрица, известные компромиссы, тестовое покрытие, Cryptographic Data Protection | Перед любой правкой авторизации/доступа |
-| **[DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md)** | Таблица данных проекта — кто должен видеть plaintext, что зашифровано, кто владеет ключом | Перед добавлением нового чувствительного поля/фичи |
-| **[THREAT-MODEL.md](./THREAT-MODEL.md)** | Кто может навредить, чему и как, включая криптографический слой | Перед security-ревью, при онбординге в контекст рисков |
-| **[API.md](./API.md)** | Все HTTP-эндпоинты с уровнем доступа, формат ошибок | Интеграция с бэкендом, фронтенд-разработка |
-| **[CHAT.md](./CHAT.md)** | Внутренний чат сотрудников (20.57.0) — tenant boundary, endpoints, realtime/polling, вложения, privacy | Перед правкой чата; понять текущие границы и что НЕ реализовано (E2EE) |
-| **[FEATURES.md](./FEATURES.md)** | Что умеет приложение — по каждому экрану, метрики, формулы | Понять продукт, не только код |
-| **[DEVELOPMENT.md](./DEVELOPMENT.md)** | Локальный запуск, тесты, env-переменные | Первый запуск проекта локально |
-| **[DESKTOP-UX-AUDIT.md](./DESKTOP-UX-AUDIT.md)** | Полная инвентаризация страниц фронтенда — доступ, данные, текущий UI-паттерн, покрытие desktop-CSS | Перед любой desktop-адаптацией страницы |
-| **[DESKTOP-DESIGN.md](./DESKTOP-DESIGN.md)** | Desktop IA, design-система, responsive-стратегия, staged roadmap по страницам | Перед desktop-редизайном конкретной страницы |
-| **[DESKTOP.md](./DESKTOP.md)** | Native Windows-клиент (Electron, `desktop/`) — не путать с DESKTOP-UX-AUDIT/DESKTOP-DESIGN (те про адаптивную вёрстку сайта) | Первый файл перед правкой `desktop/` |
-| **[DESKTOP-NETWORK.md](./DESKTOP-NETWORK.md)** | DIRECT/RELAY/OFFLINE — сетевой слой Electron-клиента | Перед правкой network/relay-кода |
-| **[DESKTOP-SECURITY.md](./DESKTOP-SECURITY.md)** | Security-модель и threat model Electron-приложения | Перед security-ревью desktop-кода |
-| **[DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md)** | Versioning, сборка, подпись, CI, деплой relay, rollback | Перед сборкой/релизом desktop |
-| **[DESKTOP-TESTING.md](./DESKTOP-TESTING.md)** | Automated/manual acceptance, honesty levels, что реально проверено | Перед заявлением "проверено на affected-сети" |
-| **[DESKTOP-UPDATES.md](./DESKTOP-UPDATES.md)** | Self-update: control plane, manifest, подпись, publishing workflow | Перед правкой/публикацией обновлений |
-| **[REPORT_IMAGE.md](./REPORT_IMAGE.md)** | Пайплайн рендера PNG-отчётов | Точечная правка одного модуля |
-| **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** | Симптом → причина/действие | Что-то не работает, ищешь быстрый ответ |
-| **[RUNBOOK.md](./RUNBOOK.md)** | Операционные процедуры — ротация токена, восстановление доступа, работа с миграциями | Реальный инцидент на проде |
-| **[DEMO.md](./DEMO.md)** | Актуальный сценарий показа продукта | Перед презентацией/демо |
-| **[ADR/](./ADR/)** | Архитектурные решения с альтернативами и причинами отказа от них | «Почему сделано именно так, а не иначе» |
-| **[../CHANGELOG.md](../CHANGELOG.md)** | Полная построчная история версий | Что изменилось и когда |
-| **[../CONTRIBUTING.md](../CONTRIBUTING.md)** | Как вносить изменения — конвенции коммитов, чек-лист перед пушем | Перед первым коммитом |
+Путеводитель по продукту, исходникам, рабочим процедурам и истории решений. Основные тексты на русском; названия файлов, переменных и API совпадают с кодом.
 
-## Architecture Decision Records
+**Содержание**
 
-Каждый ADR — контекст → решение → рассмотренные альтернативы (с вердиктом
-и причиной) → последствия. Не переписываются задним числом — новое
-решение, меняющее старое, получает свой номер и ссылается на предыдущий.
+- [С чего начать](#с-чего-начать)
+- [Знакомство с продуктом](#знакомство-с-продуктом)
+- [Разработка и устройство](#разработка-и-устройство)
+- [Приложение Windows](#приложение-windows)
+- [Эксплуатация и границы доступа](#эксплуатация-и-границы-доступа)
+- [Решения и история](#решения-и-история)
+- [Дополнительные материалы репозитория](#дополнительные-материалы-репозитория)
 
-| № | Решение | Статус |
-|---|---|---|
-| [001](./ADR/001-repository-pattern.md) | Repository pattern для доступа к БД | принято, реализовано |
-| [002](./ADR/002-supervisor-scope-cache-in-memory.md) | In-memory кэш supervisor scope вместо Redis | принято, реализовано |
-| [003](./ADR/003-concurrency-cas-not-optimistic-locking.md) | CAS/unique-constraint concurrency вместо optimistic locking | принято, подтверждено аудитом |
-| [004](./ADR/004-typebox-validation.md) | TypeBox для валидации write-роутов | принято, реализовано |
-| [005](./ADR/005-authentication-boundary.md) | Authentication Boundary (Identity/Principal изолированы от Telegram) | принято, реализовано |
-| [006](./ADR/006-frontend-iife-bundle-not-full-vite-migration.md) | Typed API-клиент как отдельный iife-бандл, не полная миграция на Vite | принято, суперсед частично в 20.12.0+ (см. ADR сам файл) |
-| [007](./ADR/007-application-level-envelope-encryption.md) | Application-Level Envelope Encryption (Level 2) для support-тикетов | принято, реализовано |
-| [008](./ADR/008-e2ee-not-implemented.md) | E2EE/device identity/ratchet/post-quantum — почему НЕ реализовано | рассмотрено, PLANNED |
-| [009](./ADR/009-mfa-step-up.md) | MFA Step-Up | принято, реализовано |
-| [010](./ADR/010-chat-e2ee-future-direction.md) | Внутренний чат: направление к E2EE — дополняет 008 только для этого скоупа | Proposed/Planned, не реализовано |
+## С чего начать
 
-## Архив
+| Ваша задача | Маршрут чтения |
+| --- | --- |
+| Понять, что делает проект | [Обзор](../README.md) → [Функции](FEATURES.md) → [Демонстрация](DEMO.md) |
+| Запустить и изменить код | [Разработка](DEVELOPMENT.md) → [Архитектура](ARCHITECTURE.md) → [Участие в проекте](../CONTRIBUTING.md) |
+| Разобраться с Windows | [Обзор desktop](DESKTOP.md) → [Сеть](DESKTOP-NETWORK.md) → [Проверки](DESKTOP-TESTING.md) |
+| Выпустить установщик | [Сборка](DESKTOP-RELEASE.md) → [Обновления](DESKTOP-UPDATES.md) |
+| Разобрать сбой | [Диагностика](TROUBLESHOOTING.md) → [Эксплуатация](RUNBOOK.md) |
+| Найти причину решения | [Каталог ADR](ADR/README.md) → [История версий](../CHANGELOG.md) |
 
-**[archive/](./archive/)** — устаревшие документы, оставленные как
-исторический снимок, а не живой справочник (описывают уже давно
-реализованные и с тех пор изменившиеся фичи). Не обновляются вместе с
-кодом намеренно — если содержимое противоречит текущему коду, прав код.
+> **Граница актуальности.** Исходный архив содержит backend `20.57.5`, desktop `20.56.7` и relay `20.56.1`. Документация не подтверждает их развёртывание. Исторические отчёты и планы имеют отдельные пометки.
+
+## Знакомство с продуктом
+
+- [Функциональность](FEATURES.md).
+- [Демо-сценарий](DEMO.md).
+- [Словарь проекта](GLOSSARY.md).
+
+## Разработка и устройство
+
+- [Архитектура](ARCHITECTURE.md).
+- [Разработка](DEVELOPMENT.md).
+- [HTTP API](API.md).
+- [Внутренний чат сотрудников](CHAT.md).
+- [Картинка-отчёт](REPORT_IMAGE.md).
+- [Типовые сбои](TROUBLESHOOTING.md).
+- [Правила оформления документации](DOCUMENTATION-STYLE.md).
+
+## Приложение Windows
+
+- [Приложение T2 Sales для Windows](DESKTOP.md).
+- [Сетевой слой приложения Windows](DESKTOP-NETWORK.md).
+- [Обновление приложения Windows](DESKTOP-UPDATES.md).
+- [Выпуск приложения для Windows](DESKTOP-RELEASE.md).
+- [Проверка приложения Windows и relay](DESKTOP-TESTING.md).
+- [Дизайн настольного интерфейса](DESKTOP-DESIGN.md).
+- [Аудит удобства настольного интерфейса](DESKTOP-UX-AUDIT.md).
+- [Границы доверия приложения Windows](DESKTOP-SECURITY.md).
+
+## Эксплуатация и границы доступа
+
+- [Руководство по эксплуатации](RUNBOOK.md).
+- [Безопасность](SECURITY.md).
+- [Модель угроз](THREAT-MODEL.md).
+- [Архитектура защиты данных](DATA-SECURITY-ARCHITECTURE.md).
+
+## Решения и история
+
+- [Каталог архитектурных решений](ADR/README.md).
+- [Архив документации](archive/README.md).
+- [Версия 20.54.0: отчёт об укреплении защиты](security/20.54-baseline.md).
+
+## Дополнительные материалы репозитория
+
+- [Рабочее соглашение и разрешённые действия](../CLAUDE.md).
+- [Правила участия в разработке](../CONTRIBUTING.md).
+- [История изменений по эпохам](../CHANGELOG.md).
+- [Исторический отчёт об исправлениях 20.57.5](../IMPLEMENTATION-20.57.5.md).
+- [Назначение каталога SQL](../sql/README.md).
+- [Тестовые TLS-данные desktop](../desktop/tests/fixtures/README.md).
+- [Тестовые TLS-данные relay](../relay/tests/fixtures/README.md).

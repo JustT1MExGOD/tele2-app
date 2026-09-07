@@ -1,20 +1,33 @@
-# Test-only TLS fixture
+# Локальные TLS-данные для тестов
 
-`test-key.pem`/`test-cert.pem` — a self-signed keypair for `CN=localhost`
-(SAN: `localhost`, `127.0.0.1`), generated once via `openssl req -x509`,
-valid 10 years. Used **only** to run local, ephemeral HTTPS test servers
-in `tests/helpers/local-https-server.ts` — never a real host, never
-anything reachable outside the test process, never trusted by any
-production code path (production code always validates against the real
-system CA trust store; only the test harness explicitly points at this
-fixture's CA for the specific local servers it starts).
+[Документация](../../../docs/README.md) · [Обзор проекта](../../../README.md)
 
-The private key being checked into the repo is intentional and safe: it
-secures nothing except a loopback-only test server that exists for the
-duration of one test run. Regenerate any time with:
+В каталоге находятся `test-key.pem` и `test-cert.pem`: самоподписанная пара для `CN=localhost`, с SAN `localhost` и `127.0.0.1`. Они нужны вспомогательному серверу `tests/helpers/local-https-server.ts` для временных локальных HTTPS-проверок.
 
-```
+## Границы использования
+
+| Свойство | Правило |
+|---|---|
+| Назначение | Только локальный тестовый сервер на время прогона |
+| Доверие | Сертификат явно подключается тестовым стендом; рабочий код использует обычную проверку TLS |
+| Приватный ключ | Намеренно хранится в репозитории как публичная тестовая фикстура |
+| Рабочее окружение | Эти файлы не подходят для production, реальных пользователей или удалённых сервисов |
+| Срок | При генерации задаётся 3650 дней; фактические даты можно посмотреть в сертификате |
+
+## Пересоздать пару
+
+Выполните из этого каталога. Команда **заменяет** оба тестовых файла:
+
+```bash
 openssl req -x509 -newkey rsa:2048 -keyout test-key.pem -out test-cert.pem \
   -days 3650 -nodes -subj "/CN=localhost" \
   -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 ```
+
+## Посмотреть срок и имя
+
+```bash
+openssl x509 -in test-cert.pem -noout -subject -dates -ext subjectAltName
+```
+
+После замены перезапустите связанные тесты. Не переносите доверие к этой паре в системное хранилище production-машин.

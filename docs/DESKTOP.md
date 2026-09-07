@@ -1,95 +1,105 @@
-# T2 Sales Desktop (current stable: 20.56.5)
+# Приложение T2 Sales для Windows
 
-A native Windows client (`T2Sales-Setup-x64-20.56.5.exe`) that loads the
-existing T2 Sales web app directly — not a second frontend. See
-[docs/ADR/desktop-network-transport.md](./ADR/desktop-network-transport.md)
-for why the network layer is shaped DIRECT → RELAY → optional
-WINDOWS_COMPAT, [docs/DESKTOP-NETWORK.md](./DESKTOP-NETWORK.md) for how
-that actually works, [docs/DESKTOP-SECURITY.md](./DESKTOP-SECURITY.md)
-for the security model and threat model,
-[docs/DESKTOP-TESTING.md](./DESKTOP-TESTING.md) /
-[docs/DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) for how to verify and
-ship a build, and [docs/DESKTOP-UPDATES.md](./DESKTOP-UPDATES.md) for the
-self-update mechanism (a separate `updates.vincere-mortem.ru` control
-plane, independent of both the relay and Railway).
+[Документация](README.md) · [Обзор проекта](../README.md)
 
-**Versioning is independent per package, not a single shared number** —
-see [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md#versioning) for why and for
-each package's current version. Desktop's own updater (below) is closed
-and stable at 20.56.5 regardless of what version the backend is on.
+T2 Sales Desktop — приложение на Electron, которое открывает существующий веб-интерфейс T2 Sales. Оно добавляет управление сетевым соединением, диагностику и установку обновлений. Отдельной копии бизнес-интерфейса внутри установщика нет: окно загружает страницу с основного адреса приложения.
 
-**Not to be confused with** `docs/DESKTOP-DESIGN.md`/
-`docs/DESKTOP-UX-AUDIT.md` — those are about the existing responsive web
-layout (sidebar/topbar at wide browser viewports, shipped in 20.40),
-an unrelated older use of the word "desktop." This document and its
-siblings are about the native Windows app.
+| Компонент в этом архиве | Версия | Источник |
+|---|---|---|
+| Сервер и веб-интерфейс | `20.57.5` | `backend/package.json` |
+| Приложение Windows | `20.56.7` | `desktop/package.json` |
+| Сервис ретрансляции | `20.56.1` | `relay/package.json` |
 
-## Architecture
+Версии пакетов независимы. Номер в архиве не доказывает публикацию установщика или развёртывание сервиса. Описанный в прежних отчётах успешный переход `20.56.4 → 20.56.5` относится к конкретному историческому испытанию обновлений.
 
-```
-T2Sales.exe
-│
-├── Main process (desktop/src/main/index.ts)
-│   ├── single-instance lock
-│   ├── hardened BrowserWindow (window.ts)
-│   ├── navigation allowlist (navigation-policy.ts)
-│   └── NetworkManager (network/manager.ts)
-│         ├── NetworkDiagnosticsService (network/diagnostics.ts)
-│         ├── NetworkStateMachine — AUTO (network/state-machine.ts)
-│         ├── DIRECT (network/direct.ts — Electron's unmodified networking)
-│         ├── RELAY client (network/relay-client.ts — protocol.handle interception)
-│         └── NoopWindowsCompatibilityAdapter (compat/noop-adapter.ts)
-│   └── UpdateManager (updater/manager.ts) — separate control plane,
-│         talks directly to updates.vincere-mortem.ru, never via relay
-│
-├── Preload (desktop/src/preload/index.ts)
-│   └── contextBridge → window.t2Desktop (typed, minimal — shared/ipc-contract.ts)
-│
-└── Renderer = the real production frontend, unmodified
-      (BrowserWindow.loadURL(canonical origin) — no packaged copy)
+**Содержание**
 
-T2 Edge Relay (relay/) — separate deployable Fastify service, used only
-when RELAY mode is active. See DESKTOP-NETWORK.md.
+- [Из каких частей состоит приложение](#из-каких-частей-состоит-приложение)
+- [Почему выбран Electron](#почему-выбран-electron)
+- [Локальная разработка](#локальная-разработка)
+- [Настройки подключения](#настройки-подключения)
+- [Дальнейшее чтение](#дальнейшее-чтение)
+
+## Из каких частей состоит приложение
+
+| Часть | Ответственность | Где смотреть |
+|---|---|---|
+| Основной процесс Electron | Единственный экземпляр приложения, окно, навигация и жизненный цикл | `desktop/src/main/index.ts`, `window.ts` |
+| Управление сетью | Проверки соединения, выбор DIRECT или RELAY, восстановление прямого доступа | `desktop/src/main/network/` |
+| Предзагрузочный скрипт | Ограниченный типизированный мост `window.t2Desktop` | `desktop/src/preload/`, `desktop/src/shared/ipc-contract.ts` |
+| Веб-интерфейс | Продажи, смены, планы, касса, чат и остальные рабочие экраны | `backend/frontend/` |
+| Обновления | Проверка манифеста, загрузка и проверка установщика, запуск после подтверждения | `desktop/src/main/updater/` |
+| T2 Edge Relay | Передача запросов приложения одному настроенному серверу | `relay/` |
+
+```mermaid
+flowchart TB
+    UI["Веб-интерфейс в окне Electron"] --> MODE{"Способ подключения"}
+    MODE -->|DIRECT| API["Сервер T2 Sales"]
+    MODE -->|RELAY| RELAY["T2 Edge Relay"]
+    RELAY --> API
+    MAIN["Основной процесс Electron"] --> UPDATES["Сервер обновлений"]
+    MAIN --> UI
 ```
 
-## Why Electron
+Сервер обновлений используется напрямую, независимо от выбранного транспорта приложения. Адаптер `WINDOWS_COMPAT` остаётся заглушкой: наличие интерфейса или флага не означает наличие сетевого драйвера.
 
-The brief asked for Electron if security/runtime requirements are met
-(§4), and this project's frontend is already a plain browser app served
-by the existing Fastify backend — Electron's `BrowserWindow` navigating
-to the real origin costs nothing extra (no packaging, no duplication),
-which is exactly the "reuse the existing frontend" requirement (§5).
-WebView2/Tauri were not pursued: WebView2 would add a runtime dependency
-this design doesn't need (Electron bundles its own Chromium), and Tauri
-would mean rewriting the frontend's IPC/native-bridge layer for no
-architectural benefit here.
+## Почему выбран Electron
 
-## Development
+Electron позволяет использовать уже существующий браузерный интерфейс и поставляет собственный Chromium. Приложению не требуется новая реализация страниц или отдельный набор бизнес-правил. WebView2 добавил бы зависимость от соответствующей среды Windows; переход на Tauri потребовал бы другого взаимодействия с нативным слоем. Причины выбора и рассмотренные альтернативы зафиксированы в [архитектурном решении о транспорте](ADR/desktop-network-transport.md).
 
-```
+## Локальная разработка
+
+Выполняйте команды из корня репозитория:
+
+```bash
 cd desktop
 npm ci
 npm run desktop:typecheck
 npm run desktop:test
-npm run desktop:dev       # builds + launches a real window
-npm run desktop:package   # produces the unsigned NSIS installer
+npm run desktop:dev
 ```
 
-**Environment note**: some sandboxed/CI shells set `ELECTRON_RUN_AS_NODE=1`,
-which makes `electron <script>` run as plain Node (no `app`/
-`BrowserWindow`, no window ever appears) — a real, common gotcha, not an
-app bug. Unset it (`env -u ELECTRON_RUN_AS_NODE`, or check `Remove-Item
-Env:ELECTRON_RUN_AS_NODE` in PowerShell) before running `desktop:dev` if
-nothing appears to happen.
+`desktop:dev` сначала собирает приложение, затем запускает настоящее окно Electron. Для сборки Windows-установщика используйте `npm run desktop:package` в подходящей Windows-среде. Команда создаёт установщик NSIS; наличие файла само по себе не означает цифровую подпись или публикацию.
 
-Config is read from environment variables at runtime (dev) / build time
-(packaged) — see `desktop/src/main/config.ts`:
-- `T2_PUBLIC_APP_ORIGIN` — the canonical origin (defaults to production).
-- `T2_RELAY_URL` — the T2 Edge Relay's base URL (must be `https://`,
-  except `http://127.0.0.1`/`localhost` which is allowed only for local
-  dev against a relay running on the same machine — see config.ts's
-  comment for why that narrow exception is safe).
-- `T2_WINDOWS_COMPAT_ENABLED` — `true`/`false`, default `false`; has no
-  effect this pass regardless (see the ADR).
-- `T2_UPDATE_BASE_URL` / `T2_UPDATE_CHANNEL` — the update server and
-  channel (`stable`/`beta`); see [docs/DESKTOP-UPDATES.md](./DESKTOP-UPDATES.md).
+### Если окно не появляется
+
+Проверьте `ELECTRON_RUN_AS_NODE`. Значение `1` запускает Electron как обычный Node.js, без `app` и `BrowserWindow`.
+
+```powershell
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+npm run desktop:dev
+```
+
+Для оболочки Bash:
+
+```bash
+env -u ELECTRON_RUN_AS_NODE npm run desktop:dev
+```
+
+## Настройки подключения
+
+Настройки читает `desktop/src/main/config.ts` **при запуске процесса**. Встраивания значений окружения в момент сборки здесь нет.
+
+| Переменная | Назначение |
+|---|---|
+| `T2_PUBLIC_APP_ORIGIN` | Основной HTTPS-адрес веб-приложения |
+| `T2_RELAY_URL` | Адрес relay; HTTPS, либо локальный HTTP для `localhost` / `127.0.0.1` |
+| `T2_NETWORK_MODE` | Предпочтение `auto`, `direct_only` или `relay` |
+| `T2_WINDOWS_COMPAT_ENABLED` | Флаг адаптера совместимости; реализация пока отсутствует |
+| `T2_UPDATE_BASE_URL` | Адрес сервера обновлений |
+| `T2_UPDATE_CHANNEL` | Канал `stable` или `beta` |
+
+Упакованное приложение может использовать адреса по умолчанию. У локального запуска без явных настроек relay и проверка обновлений не включаются автоматически. Подробный порядок выбора значений приведён в [сетевом руководстве](DESKTOP-NETWORK.md) и [описании обновлений](DESKTOP-UPDATES.md).
+
+## Дальнейшее чтение
+
+| Задача | Документ |
+|---|---|
+| Понять переключение DIRECT / RELAY | [Сетевой слой](DESKTOP-NETWORK.md) |
+| Проверить границы доступа Electron | [Модель безопасности](DESKTOP-SECURITY.md) |
+| Прогнать автоматические и ручные проверки | [Тестирование](DESKTOP-TESTING.md) |
+| Собрать и выпустить установщик | [Выпуск приложения](DESKTOP-RELEASE.md) |
+| Подготовить обновление и манифест | [Система обновлений](DESKTOP-UPDATES.md) |
+| Изменить широкую браузерную раскладку | [Дизайн интерфейса](DESKTOP-DESIGN.md) |
+
+Документы о дизайне широкого веб-интерфейса описывают страницы, панели и таблицы. Это другой слой системы, хотя в старых названиях для него тоже используется слово desktop.

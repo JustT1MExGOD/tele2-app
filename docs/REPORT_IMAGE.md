@@ -1,8 +1,18 @@
 # Картинка-отчёт
 
-> Оформлено в справочный вид при обновлении docs вслед за `SECURITY.md`
-> (20.13.0); заодно поправлен путь модуля под layered-структуру 20.11.0
-> (`services/report-image.ts` → `core/reports/image.ts`).
+[Документация](README.md) · [Обзор проекта](../README.md)
+
+Как приложение строит дневные отчёты, превращает SVG в PNG и отправляет результат в Telegram. Документ описывает маршруты, очередь рендера и последовательность резервных форматов.
+
+**Содержание**
+
+- [Эндпоинты](#эндпоинты)
+- [Пайплайн рендера](#пайплайн-рендера)
+- [Шрифты](#шрифты)
+- [Лимиты](#лимиты)
+- [Отладка локально без Telegram](#отладка-локально-без-telegram)
+- [Пример вызова](#пример-вызова)
+- [Связанные документы](#связанные-документы)
 
 ## Эндпоинты
 
@@ -27,14 +37,14 @@
 [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ```mermaid
-flowchart LR
-    CRON["cron/reports.ts<br/>(расписание)"] --> IMG
-    ROUTE["POST /reports/send-*<br/>(вручную, manager+)"] --> IMG
-    IMG["core/reports/image.ts<br/>buildDailyReportPng / buildStoryReportPngs"] --> POOL["svg-pool.ts<br/>worker_threads"]
+flowchart TB
+    CRON["cron/reports.ts — (расписание)"] --> IMG
+    ROUTE["POST /reports/send-* — (вручную, manager+)"] --> IMG
+    IMG["core/reports/image.ts — buildDailyReportPng / buildStoryReportPngs"] --> POOL["svg-pool.ts — worker_threads"]
     POOL --> PNG["PNG"]
-    PNG -->|успех| CHAT["Telegram-чат сети<br/>notifyChatPhoto / MediaGroup"]
-    PNG -.->|сбой рендера| SVG["SVG-документ<br/>(файлом, без растеризации)"]
-    SVG -.->|тоже сбой| TEXT["Простой текст<br/>(microReport/finalReport)"]
+    PNG -->|успех| CHAT["Telegram-чат сети — notifyChatPhoto / MediaGroup"]
+    PNG -.->|сбой рендера| SVG["SVG-документ — (файлом, без растеризации)"]
+    SVG -.->|тоже сбой| TEXT["Простой текст — (microReport/finalReport)"]
     SVG -->|успех| CHAT
     TEXT --> CHAT
 ```

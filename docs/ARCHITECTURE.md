@@ -1,59 +1,37 @@
 # Архитектура
 
-> Извлечено из README §4/§5 при репо-реструктуризации (20.11.0). Живой
-> справочник структуры — обновляется вместе с кодом; README §5 держит
-> только короткую ссылку сюда.
+[Документация](README.md) · [Обзор проекта](../README.md)
+
+Карта компонентов и расположения кода. Основной поток запроса идёт через проверку личности, прикладные правила и репозитории данных. Фоновые задания и интеграции используют те же доменные модули.
+
+**Содержание**
+
+- [Быстрые факты](#быстрые-факты)
+- [Диаграмма](#диаграмма)
+- [Структура репозитория](#структура-репозитория)
+- [Связанные документы](#связанные-документы)
 
 ## Быстрые факты
 
-| | |
+| Параметр | Описание |
 |---|---|
 | **Backend** | Fastify + TypeScript, Node 22, layered (`api/` → `core/` → `data/`) |
 | **БД** | PostgreSQL (Railway), схема только через `backend/migrations/` |
-| **Frontend** | Полностью typed, Vite/iife (`frontend/src/`) — `frontend/js/` classic-script мир закрыт (21.x) |
+| **Frontend** | Полностью typed, Vite/iife (`frontend/src/`) — `frontend/js/` миграция прежних отдельных скриптов завершена в 20.30.0 |
 | **Бот** | Grammy, long-polling, 1 реплика (см. [ADR/002](./ADR/002-supervisor-scope-cache-in-memory.md)) |
 | **AI** | Groq (`llama-3.3-70b-versatile`), холодный путь — не в hot path запросов |
 | **Хостинг** | Railway, `backend/` — Root Directory, миграции накатываются сами при старте |
-| **Auth** | Telegram `initData`, HMAC на сервере — подробно в [SECURITY.md](./SECURITY.md) |
+| **Авторизация** | Telegram `initData` с HMAC либо браузерная cookie-сессия — подробно в [SECURITY.md](./SECURITY.md) |
 
 ## Диаграмма
 
 ```mermaid
 flowchart TB
-    subgraph TG["Telegram"]
-        MA["Mini App<br/>(frontend/*)"]
-        CH["Bot chats"]
-    end
-
-    subgraph WEB["Браузер / standalone PWA / iPhone Web App"]
-        BR["Тот же frontend/*, второй канал входа<br/>(20.35.0-20.47.0)"]
-    end
-
-    subgraph BE["Fastify backend (backend/src)"]
-        CSRF["auth/csrf.ts<br/>double-submit t2_csrf + Sec-Fetch-Site/Origin<br/>(только если есть cookie t2_session)"]
-        AUTH["auth/<br/>guards.ts (authPlugin, preHandler) · identity/principal ·<br/>providers/telegram · providers/phone"]
-        API["api/routes/<br/>29+ route-модулей, сгруппированы по домену:<br/>me/ · org/ · analytics/ · ops/ · profiles/ · flat (sales/schedules/plans/…)"]
-        CORE["core/&lt;domain&gt;/<br/>бизнес-логика: plans · bfq · sales/nlp · shifts/pace ·<br/>employees/gamification · analytics/* · alerts · reports"]
-        DATA["data/repositories/ + data/db/<br/>Full Data Access Layer, 19.22.0→20.8.0 —<br/>единственный путь к Postgres для всего backend"]
-        CRON["cron/<br/>reports.ts · digest.ts · alerts.ts · job-logger.ts"]
-        INTEG["integrations/<br/>telegram/ (Grammy bot) · ai/ (Groq client)"]
-        PLAT["platform/notifications/<br/>changelog · release-announce"]
-    end
-
-    PG[("PostgreSQL<br/>(Railway)")]
-    GROQ["Groq API<br/>llama-3.3-70b-versatile"]
-
-    MA -- "X-Telegram-Init-Data<br/>(подписанный, прод)" --> AUTH
-    BR -- "t2_session cookie<br/>+ X-CSRF-Token (мутации)" --> CSRF --> AUTH
-    AUTH --> API --> CORE
-    API --> DATA --> PG
-    CRON --> CORE
-    CORE --> DATA
-    CORE -- "shift summary /<br/>dip hypothesis" --> INTEG
-    INTEG -- Groq --> GROQ
-    INTEG <--> CH
-    API --> INTEG
-    CRON --> INTEG
+    C["Telegram, браузер, PWA и Windows"] --> A["Подтверждение личности и прав"]
+    A --> H["HTTP API"]
+    H --> B["Бизнес-правила"]
+    B --> D["Репозитории данных"]
+    D --> P[("PostgreSQL")]
 ```
 
 И Telegram Mini App, и браузерный/PWA-вход резолвятся в один и тот же
@@ -62,23 +40,18 @@ flowchart TB
 логика ниже `auth/` не знает, каким каналом пришёл запрос. Подробности
 слоя доверия (CSRF, cookie, session lifecycle) — [SECURITY.md](./SECURITY.md#2-аутентификация).
 
-### Три клиентские поверхности, один backend (с 20.55.0)
+<a id="три-клиентские-поверхности-один-backend-с-20550"></a>
 
-Диаграмма выше не показывает Electron — добавлено отдельно, чтобы не
-раздувать основной flowchart, не потому что Electron менее важен:
+### Три способа доступа к единому серверу (с 20.55.0)
 
-```text
-Browser (t2_session + CSRF) ──┐
-Telegram Mini App (initData) ─┼──► Fastify backend ──► PostgreSQL
-Electron DIRECT (unmodified   │      (тот же backend/src,
-  BrowserWindow → canonical   │       никакого отдельного API
-  origin, session cookie)    ─┘       для Electron)
+У всех клиентов общий API. Для Windows дополнительно существует резервный маршрут через relay:
 
-Electron RELAY (DIRECT недоступен) ──► T2 Edge Relay (relay/,
-  session.protocol.handle перехват,     отдельный деплой, fixed-
-  POST /forward, request/response)      upstream HTTP-relay, НЕ
-                                          generic proxy) ──► тот же
-                                          canonical origin выше
+```mermaid
+flowchart TB
+    W["Приложение Windows"] -->|DIRECT| A["Канонический origin приложения"]
+    W -->|RELAY| R["Сервис пересылки"]
+    R -->|"HTTP-запрос и ответ"| A
+    A --> B["Общий API и правила доступа"]
 ```
 
 Electron **не** второй frontend — тот же `backend/frontend/*`, тот же
@@ -96,7 +69,7 @@ RELAY (`docs/CHAT.md#realtime-direct--websocket-иначе--polling`) и люб�
 через `todayMoscow()` (`Europe/Moscow`), не UTC контейнера. AI Copilot
 (`integrations/ai/client.ts`) не в горячем пути запросов — вызывается
 только при закрытии смены, в cron итоговых отчётов и при открытии
-страницы «Прогноз» (кэшируется на день), no-op без `GROQ_API_KEY`. Рендер
+страницы «Прогноз» (кэшируется на день), пропуск действия без `GROQ_API_KEY`. Рендер
 SVG→PNG-картинок (отчёты, карточка анонса версии) — в отдельном пуле
 `worker_threads` (`core/reports/svg-pool.ts` + `workers/svg-render.worker.ts`),
 не блокирует основной event loop.
@@ -106,7 +79,7 @@ SVG→PNG-картинок (отчёты, карточка анонса верс
 ```text
 tele2-app/
 ├── README.md
-├── CHANGELOG.md               (полная построчная история версий — README держит только последние)
+├── CHANGELOG.md               (каталог истории версий по эпохам)
 ├── CONTRIBUTING.md
 ├── docs/                      (этот файл + API.md/DEVELOPMENT.md/SECURITY.md/CHAT.md/FEATURES.md/ADR/archive/…)
 ├── sql/                       (исторические ручные SQL-снимки, не источник схемы — см. sql/README.md)
@@ -308,9 +281,9 @@ ambient-глобалов в `legacy-globals.d.ts` писабельные (`let`,
 ## Связанные документы
 
 - [SECURITY.md](./SECURITY.md) — слои защиты поверх этой структуры (RBAC,
-  Data Access Layer, аудит, Cryptographic Data Protection).
+  Слой доступа к данным, аудит, Криптографическая защита данных).
 - [DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md) —
-  какие данные требуют backend plaintext, какие зашифрованы и почему.
+  какие данные требуют backend открытый текст, какие зашифрованы и почему.
 - [API.md](./API.md) — таблица эндпоинтов по модулям `api/routes/`.
 - [DEVELOPMENT.md](./DEVELOPMENT.md) — как запустить и проверить локально.
 - [ADR/](./ADR/) — почему структура именно такая, не другая.

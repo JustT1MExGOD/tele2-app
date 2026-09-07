@@ -1,14 +1,30 @@
 # T2 Sales v13 — интеграция «нового уровня»
 
+[Документация](../README.md) · [Обзор проекта](../../README.md)
+
+> **Контекст документа.** Архив версии 13. Старые пути, API и SQL сохранены как исторический материал. Не используйте этот файл как инструкцию обновления текущей версии.
+
+**Содержание**
+
+- [Фазы](#фазы)
+- [1. SQL](#1-sql)
+- [2. Серверные файлы](#2-серверные-файлы)
+- [3. index.ts](#3-indexts)
+- [4. Веб-интерфейс](#4-веб-интерфейс)
+- [Карта API версии 13](#карта-api-версии-13)
+- [Брендирование и несколько организаций](#брендирование-и-несколько-организаций)
+
 ## Фазы
 
 ### Фаза A — фундамент (этот пакет) ✅ код готов
+
 1. SQL `v13-schema.sql`
 2. Сервисы: NLP, insights, gamification, alerts, live-map, forecast
 3. `routes-v13.ts` + offline-queue.js
 4. Подключение в `index.ts`
 
 ### Фаза B — UI (1–2 недели)
+
 - Кнопки «Открыть / Закрыть смену» + гео
 - Поле «быстрый ввод» голосом/текстом
 - Экран Live-карта сети
@@ -18,6 +34,7 @@
 - Касса + алерты у manager
 
 ### Фаза C — масштаб
+
 - org_id / region на всех сущностях
 - онбординг точки (wizard)
 - white-label theme_json
@@ -36,11 +53,13 @@ Railway → Postgres → Query → выполнить `sql/v13-schema.sql`.
 SELECT to_regclass('shift_sessions'), to_regclass('smart_alerts'), to_regclass('offline_sync_log');
 ```
 
-## 2. Backend файлы
+<a id="2-backend-файлы"></a>
+
+## 2. Серверные файлы
 
 Скопировать в `backend/src/`:
 
-```
+```text
 services/sales-nlp.ts
 services/insights.ts
 services/gamification.ts
@@ -68,7 +87,9 @@ setInterval(() => {
 }, 30 * 60 * 1000);
 ```
 
-## 4. Frontend
+<a id="4-frontend"></a>
+
+## 4. Веб-интерфейс
 
 - Положить `offline-queue.js` в `frontend/`
 - В `index.html` перед основным скриптом:
@@ -125,7 +146,9 @@ await OfflineQueue.enqueueSale({
 toast('Сохранено офлайн — уйдёт при сети', 'ok');
 ```
 
-### Live карта
+<a id="live-карта"></a>
+
+### Карта в реальном времени
 
 ```js
 const live = await fetch(API + '/network/live', { headers: authHeaders() }).then(r => r.json());
@@ -134,7 +157,9 @@ const live = await fetch(API + '/network/live', { headers: authHeaders() }).then
 
 ---
 
-## API map (v13)
+<a id="api-map-v13"></a>
+
+## Карта API версии 13
 
 | Method | Path | Кто |
 |--------|------|-----|
@@ -160,8 +185,10 @@ const live = await fetch(API + '/network/live', { headers: authHeaders() }).then
 
 ---
 
-## Белый label / мультитенант
+<a id="белый-label--мультитенант"></a>
 
-Таблица `organizations` + `theme_json` + `brand_name`.  
-На старте можно не трогать — все точки без `org_id` работают как сейчас.  
+## Брендирование и несколько организаций
+
+Таблица `organizations` + `theme_json` + `brand_name`.
+На старте можно не трогать — все точки без `org_id` работают как сейчас.
 Супервайзер: уже есть `getUserStoreIds` в auth v8 — фильтруй `/network/live` по его точкам.

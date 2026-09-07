@@ -1,8 +1,22 @@
-# 005 — Authentication Boundary (Identity/Principal изолированы от Telegram)
+<a id="005--authentication-boundary-identityprincipal-изолированы-от-telegram"></a>
+
+# 005 — Граница аутентификации: личность отделена от Telegram
+
+[Документация](../README.md) · [Обзор проекта](../../README.md)
 
 **Статус**: принято, реализовано (20.9.0). Второй provider подключён в
 20.35; schema-level identity abstraction (`identities`) добавлена в
 20.48.0 — см. оба «Обновление» в конце документа.
+
+**Содержание**
+
+- [Контекст](#контекст)
+- [Решение](#решение)
+- [Альтернативы](#альтернативы)
+- [Последствия](#последствия)
+- [Обновление (20.35) — второй provider стал конкретным](#обновление-2035--второй-provider-стал-конкретным)
+- [Обновление (20.48.0) — порог пройден](#обновление-20480--порог-пройден)
+- [Связанные документы](#связанные-документы)
 
 ## Контекст
 
@@ -30,12 +44,12 @@ Abstraction» — подготовить Core к тому, что Telegram мо�
   ни один из ~30 роут-файлов, использующих их, не пришлось трогать.
 
 ```mermaid
-flowchart LR
-    HDR["X-Telegram-Init-Data"] --> PROV["auth/providers/telegram.ts<br/>+ telegram-verify.ts<br/>(единственное место, знающее про Telegram)"]
-    PROV --> ID["Identity<br/>{provider, providerId}"]
-    ID --> PRINC["auth/principal.ts<br/>loadUser(): Identity → Principal"]
-    PRINC --> USER["AuthUser<br/>(request.user)"]
-    USER --> GUARDS["auth/guards.ts<br/>requireAuth/requireManager/…"]
+flowchart TB
+    HDR["X-Telegram-Init-Data"] --> PROV["auth/providers/telegram.ts — + telegram-verify.ts — (единственное место, знающее про Telegram)"]
+    PROV --> ID["Identity — {provider, providerId}"]
+    ID --> PRINC["auth/principal.ts — loadUser(): Identity → Principal"]
+    PRINC --> USER["AuthUser — (request.user)"]
+    USER --> GUARDS["auth/guards.ts — requireAuth/requireManager/…"]
 ```
 
 ## Альтернативы
@@ -99,12 +113,12 @@ flowchart LR
 `identities` не заменяет их, а становится resolution-слоем поверх.
 
 Принцип, сформулированный и утверждённый владельцем продукта в процессе
-ревью плана, зафиксирован дословно как проектный инвариант:
+ревью плана, приведён ниже в русском переводе как проектный инвариант:
 
-> Identity ownership transfer preserves existing domain semantics.
-> Identity uniqueness prevents duplication, while atomic conflict
-> resolution performs ownership transfer within the same transaction as
-> synchronization of legacy employee identity fields.
+> Передача идентичности сохраняет существующие правила предметной области.
+> Уникальность предотвращает дублирование, а атомарное разрешение конфликта
+> передаёт идентичность в той же транзакции, в которой синхронизируются
+> прежние поля идентичности сотрудника.
 
 Конкретно это означает разную семантику конфликта по provider —
 **Telegram** (ownership transfer/steal разрешён, уже протестированный

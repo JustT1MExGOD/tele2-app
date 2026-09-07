@@ -1,7 +1,19 @@
-# 007 — Application-Level Envelope Encryption (Level 2), не E2EE
+<a id="007--application-level-envelope-encryption-level-2-не-e2ee"></a>
+
+# 007 — Конвертное шифрование на уровне приложения
+
+[Документация](../README.md) · [Обзор проекта](../../README.md)
 
 **Статус**: принято, реализовано (20.51.0). См. также [ADR/008](./008-e2ee-not-implemented.md)
 — почему рядом НЕ появился настоящий E2EE-слой.
+
+**Содержание**
+
+- [Контекст](#контекст)
+- [Решение](#решение)
+- [Альтернативы](#альтернативы)
+- [Последствия](#последствия)
+- [Связанные документы](#связанные-документы)
 
 ## Контекст
 
@@ -12,7 +24,7 @@
 приоритет — реальная безопасность, а не соответствие красивой диаграмме.
 
 Аудит (repo-wide documentation audit, 20.50.1, до этой версии) уже
-установил: `sales`/`plans`/`shifts`/`analytics` требуют backend-plaintext
+установил: `sales`/`plans`/`shifts`/`analytics` требуют backend-открытый текст
 для Command Center/AI/отчётов — их E2EE сломал бы продукт. Единственный
 реальный кандидат на защиту содержимого — текст support-тикетов
 (`support_tickets.message`/`admin_reply`, `support_messages.body`):
@@ -26,15 +38,17 @@
 Level 2 никогда не называли «E2EE»):
 
 - **Level 1** — TLS (Railway/HTTPS), уже существовал, не тронут.
-- **Level 2 (эта ADR)** — application-level envelope encryption:
+- **Level 2 (эта ADR)** — конвертное шифрование на уровне приложения:
   backend хранит зашифрованные данные, но расшифровывает их по
   требованию через KEK, которым сам владеет.
 - **Level 3** — true E2EE, где backend принципиально не может
   расшифровать. Не реализован — см. ADR-008.
 
-### Key hierarchy
+<a id="key-hierarchy"></a>
 
-```
+### Иерархия ключей
+
+```text
 Master Key / KEK (env, версионирован, ротируется)
        │
        ▼ HKDF, domain label t2/envelope/wrap-key/v1
@@ -54,7 +68,9 @@ KEK никогда не хранится в PostgreSQL — приходит из
 записи остаются читаемыми без re-encryption всего хранилища при смене
 активной версии.
 
-### Примитивы — только built-in Node crypto, ничего самописного
+<a id="примитивы--только-built-in-node-crypto-ничего-самописного"></a>
+
+### Криптографические операции: встроенный модуль Node.js
 
 - **AEAD**: AES-256-GCM через `node:crypto` (`createCipheriv`/
   `createDecipheriv`), не XChaCha20-Poly1305 — Node не даёт
@@ -69,7 +85,9 @@ KEK никогда не хранится в PostgreSQL — приходит из
 crypto/**`) построен на встроенном в Node/OpenSSL коде, гарантированно
 собирается на Railway/Nixpacks.
 
-### Versioned envelope
+<a id="versioned-envelope"></a>
+
+### Версионированный формат конверта
 
 ```json
 {
@@ -81,16 +99,20 @@ crypto/**`) построен на встроенном в Node/OpenSSL коде,
 }
 ```
 
-### AAD — привязка ciphertext к объекту
+<a id="aad--привязка-ciphertext-к-объекту"></a>
+
+### AAD: привязка шифротекста к объекту
 
 `canonicalAad()` сериализует `{type, id, ...}` детерминированно
 (отсортированные ключи). Для `support_tickets`/`support_messages` — id
 резервируется явным `nextval()` ДО `INSERT`, чтобы AAD мог включать
 реальный, финальный id строки (а не быть привязан к чему-то более
-слабому) — перенос ciphertext из одной строки в другую (даже с
+слабому) — перенос шифротекст из одной строки в другую (даже с
 одинаковым `employee_id`) ломает AEAD-tag, GCM отказывает расшифровать.
 
-### Feature flag и downgrade-инвариант
+<a id="feature-flag-и-downgrade-инвариант"></a>
+
+### Флаг функции и запрет неявного ослабления
 
 `DATA_ENCRYPTION_ENABLED` управляет только НОВЫМИ записями. Чтение уже
 зашифрованной строки расшифровывается всегда, независимо от текущего
@@ -99,7 +121,7 @@ crypto/**`) построен на встроенном в Node/OpenSSL коде,
 проверяется на каждом чтении отдельно от флага. Production-гвард в
 `index.ts` (тот же приём, что уже у `BOT_TOKEN`) не даёт серверу
 стартовать, если флаг включён, а `ENCRYPTION_KEKS`/
-`ENCRYPTION_ACTIVE_KEY_VERSION` сломаны — тихая деградация в plaintext
+`ENCRYPTION_ACTIVE_KEY_VERSION` сломаны — тихая деградация в открытый текст
 недопустима.
 
 ## Альтернативы
@@ -108,9 +130,9 @@ crypto/**`) построен на встроенном в Node/OpenSSL коде,
 |---|:---:|---|
 | XChaCha20-Poly1305 (сторонняя библиотека) | ❌ отклонено | Node не даёт extended-nonce ChaCha20 built-in; AES-256-GCM built-in уже даёт эквивалентные security properties для этой задачи без новой зависимости |
 | Deterministic/searchable encryption на `phone`/`full_name` для сохранения exact-match lookup | ❌ отклонено в этом заходе | Требует отдельного keyed blind-index (HMAC) — новый класс риска (сам индекс становится search-таргетом), не тривиальное следствие «просто зашифровать колонку»; не запрошено владельцем продукта в этом заходе как первая цель |
-| Шифровать `sales`/`plans`/`shifts`/`analytics` | ❌ отклонено | Backend легитимно требует plaintext (Command Center, AI Copilot, отчёты, forecast) — шифрование сломало бы продукт, не защитило бы его |
+| Шифровать `sales`/`plans`/`shifts`/`analytics` | ❌ отклонено | Backend легитимно требует открытый текст (Command Center, AI Copilot, отчёты, forecast) — шифрование сломало бы продукт, не защитило бы его |
 | Один master key напрямую на AEAD, без DEK-иерархии | ❌ отклонено | Компрометация единственного ключа раскрывала бы всё сразу; DEK-per-object + wrapped-DEK — стандартная envelope-схема (тот же паттерн, что AWS/GCP KMS), rotation не требует re-encrypt всего хранилища |
-| Application-level envelope encryption на `support_tickets`/`support_messages` | ✅ принято | Реальный, не гипотетический кандидат — admin легитимно нуждается в plaintext по требованию (Level 2, не Level 3), at-rest дамп БД больше не раскрывает содержимое |
+| Конвертное шифрование на уровне приложения на `support_tickets`/`support_messages` | ✅ принято | Реальный, не гипотетический кандидат — admin легитимно нуждается в открытый текст по требованию (Level 2, не Level 3), at-rest дамп БД больше не раскрывает содержимое |
 
 ## Последствия
 
@@ -131,10 +153,10 @@ crypto/**`) построен на встроенном в Node/OpenSSL коде,
 - 44 новых unit-теста (`tests/unit/crypto-envelope.test.ts`) + 6
   isolation-тестов через реальные роуты/Postgres
   (`tests/isolation/support-envelope-encryption.test.ts`), включая
-  key rotation, повреждённый ciphertext, IDOR-регресс.
+  key rotation, повреждённый шифротекст, IDOR-регресс.
 
 ## Связанные документы
 
 - [docs/DATA-SECURITY-ARCHITECTURE.md](../DATA-SECURITY-ARCHITECTURE.md) — таблица данных по классам защиты.
-- [SECURITY.md — Cryptographic Data Protection](../SECURITY.md#cryptographic-data-protection).
+- [SECURITY.md — Cryptographic Data Protection](../SECURITY.md#10-криптографическая-защита-данных).
 - [ADR/008](./008-e2ee-not-implemented.md) — почему Level 3 (E2EE) не реализован.

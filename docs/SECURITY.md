@@ -1,7 +1,9 @@
 # Безопасность
 
+[Документация](README.md) · [Обзор проекта](../README.md)
+
 > Извлечено из README §24 при репо-реструктуризации (20.11.0), переработано
-> в 20.13.0 (Security hardening) в архитектурный вид — по слоям защиты, а
+> в 20.13.0 (Security усиление надёжности) в архитектурный вид — по слоям защиты, а
 > не хронологической лентой правок. Полная построчная история —
 > [CHANGELOG.md](../CHANGELOG.md); этот файл — актуальный срез «как оно
 > работает сейчас и почему». Кто может навредить и чему конкретно —
@@ -11,17 +13,33 @@
 > Единственный канонический security-документ проекта — черновик
 > `SECURITY BETA.md`, начатый параллельно во время Web Security & Trust
 > Layer, слит сюда документационным аудитом (репо-wide, после 20.50.0):
-> классификация данных (К1-К5), целевой профиль/roadmap и security review
+> классификация данных (К1-К5), целевой профиль/план развития и security review
 > gate ниже — из него; сам файл удалён, дублировавшихся разделов не
 > осталось.
 >
-> Классификация статусов, используемая ниже: **IMPLEMENTED** — реально
+> Классификация статусов, используемая ниже: **РЕАЛИЗОВАНО** — реально
 > существует в коде/схеме/конфиге сегодня; **REQUIRED** — обязательный
-> инвариант для нового кода; **PLANNED** — согласованное направление, ещё
+> инвариант для нового кода; **ЗАПЛАНИРОВАНО** — согласованное направление, ещё
 > не реализовано. Раздел [Security roadmap](#security-roadmap--целевой-профиль)
-> целиком PLANNED, если не отмечено иное.
+> целиком ЗАПЛАНИРОВАНО, если не отмечено иное.
 
-## Baseline
+<a id="baseline"></a>
+
+**Содержание**
+
+- [Исходные правила](#исходные-правила)
+- [Принцип](#принцип)
+- [Архитектура защиты](#архитектура-защиты)
+- [Уровни защиты](#уровни-защиты)
+- [Известные компромиссы](#известные-компромиссы)
+- [RBAC — таблица прав по ролям](#rbac--таблица-прав-по-ролям)
+- [Тестовое покрытие](#тестовое-покрытие)
+- [Классификация данных](#классификация-данных)
+- [План развития защиты: целевой профиль](#план-развития-защиты-целевой-профиль)
+- [Обязательная проверка перед изменением доступа](#обязательная-проверка-перед-изменением-доступа)
+- [Связанные документы](#связанные-документы)
+
+## Исходные правила
 
 Пять фактов, которые должны оставаться истинными всегда — если что-то из
 этого нарушилось, это инцидент, не «особенность окружения»:
@@ -60,26 +78,26 @@ Postgres. Ни один роут не может обойти слой, мину
 
 ```mermaid
 flowchart TB
-    TG["Telegram Mini App<br/>tg.WebApp.initData"]
+    TG["Telegram Mini App — tg.WebApp.initData"]
 
     subgraph PERIM["Периметр"]
         CORS["CORS: origin false"]
         HELMET["Helmet: CSP + security headers"]
-        RATE["rate-limit: 300/мин глобально<br/>+ жёстче на чувствительных роутах"]
+        RATE["rate-limit: 300/мин глобально — + жёстче на чувствительных роутах"]
     end
 
     subgraph AUTHN["Аутентификация"]
-        VERIFY["authPlugin (preHandler, app.ts)<br/>HMAC(BOT_TOKEN) по initData"]
-        PRINC["Identity → Principal<br/>auth/principal.ts"]
+        VERIFY["authPlugin (preHandler, app.ts) — HMAC(BOT_TOKEN) по initData"]
+        PRINC["Identity → Principal — auth/principal.ts"]
     end
 
     subgraph AUTHZ["Авторизация (RBAC)"]
-        ROLE["requireAuth / requireActive /<br/>requireManager / requireSupervisor"]
-        ORG["assertStoreInOrg / assertEmployeeInOrg<br/>+ canWriteSalesForOthers"]
+        ROLE["requireAuth / requireActive / — requireManager / requireSupervisor"]
+        ORG["assertStoreInOrg / assertEmployeeInOrg — + canWriteSalesForOthers"]
     end
 
     subgraph VALID["Валидация"]
-        SCHEMA["TypeBox schema.body<br/>ajv, до входа в обработчик"]
+        SCHEMA["TypeBox schema.body — ajv, до входа в обработчик"]
     end
 
     subgraph HANDLE["Обработчик + бизнес-логика"]
@@ -88,13 +106,13 @@ flowchart TB
     end
 
     subgraph DAL["Data Access Layer"]
-        REPO["data/repositories/*<br/>orgId — обязательный параметр"]
-        TX["withTransaction()<br/>мутация + audit одним махом"]
+        REPO["data/repositories/* — orgId — обязательный параметр"]
+        TX["withTransaction() — мутация + audit одним махом"]
     end
 
-    PG[("PostgreSQL<br/>UNIQUE-constraints, CAS")]
-    AUDIT[("audit_log<br/>actor_role, target_org_id")]
-    ERR["setErrorHandler<br/>без сырых текстов драйвера"]
+    PG[("PostgreSQL — UNIQUE-constraints, CAS")]
+    AUDIT[("audit_log — actor_role, target_org_id")]
+    ERR["setErrorHandler — без сырых текстов драйвера"]
 
     TG --> PERIM --> VERIFY --> PRINC --> ROLE --> ORG --> SCHEMA --> ROUTE --> CORE --> REPO --> TX --> PG
     TX -.-> AUDIT
@@ -114,13 +132,13 @@ Defense-in-depth: ни один отдельный уровень не един�
 | 2 | Аутентификация | HMAC-проверка initData, TTL сессии, прод-гварды | `auth/providers/telegram*.ts`, `src/index.ts` |
 | 3 | Авторизация (RBAC) | Ролевая иерархия + org-scope на каждом чужом ресурсе | `auth/guards.ts` |
 | 4 | Валидация ввода | TypeBox-схемы, ajv, коэрсия под контролем | `api/routes/*` (`schema.body`) |
-| 5 | Data Access Layer | `orgId` обязателен, единственный путь к Postgres | `data/repositories/*` |
+| 5 | Слой доступа к данным | `orgId` обязателен, единственный путь к Postgres | `data/repositories/*` |
 | 6 | Целостность данных | UNIQUE-constraints, compare-and-swap, транзакции | миграции + `data/db/index.ts` |
-| 7 | Audit Trail | Кто/что/когда/над кем, транзакционно с мутацией | `data/repositories/audit.ts` |
+| 7 | Журнал аудита | Кто/что/когда/над кем, транзакционно с мутацией | `data/repositories/audit.ts` |
 | 8 | Обработка ошибок | Единый формат, без утечки внутренностей | `app.ts::setErrorHandler`, `shared/errors.ts` |
 | 9 | Frontend | Экранирование вывода, CSP, typed-контракт | `frontend/src/*` (`frontend/js/` не существует с 20.30.0) |
-| 10 | Cryptographic Data Protection | Application-level envelope encryption (Level 2) на чувствительных полях; E2EE (Level 3) — NOT IMPLEMENTED, см. ADR-008 | `security/crypto/*`, `data/repositories/support.ts` |
-| 11 | Multi-Factor Authentication + step-up | WebAuthn/TOTP/recovery codes; channel-agnostic step-up ticket на опасные действия; last-factor removal guard | `auth/mfa/*`, `auth/step-up.ts`, `api/routes/auth/mfa.ts` |
+| 10 | Криптографическая защита данных | Конвертное шифрование на уровне приложения (Level 2) на чувствительных полях; E2EE (Level 3) — НЕ РЕАЛИЗОВАНО, см. ADR-008 | `security/crypto/*`, `data/repositories/support.ts` |
+| 11 | Многофакторная аутентификация и дополнительное подтверждение | WebAuthn/TOTP/recovery codes; токен дополнительного подтверждения, независимый от канала на опасные действия; запрет удаления последнего фактора | `auth/mfa/*`, `auth/step-up.ts`, `api/routes/auth/mfa.ts` |
 
 ---
 
@@ -237,7 +255,7 @@ Defense-in-depth: ни один отдельный уровень не един�
 снижено в 19.14.0 по рекомендации Telegram) — по истечении роут отвечает
 понятным `session_expired`, а не голым 401.
 
-**Authentication Boundary** (`src/auth/`, 20.9.0) — Telegram-специфика
+**Граница аутентификации** (`src/auth/`, 20.9.0) — Telegram-специфика
 изолирована в `auth/providers/telegram.ts` + `telegram-verify.ts`;
 `Identity → Principal` резолвинг (`auth/principal.ts`) диспетчеризует по
 `provider`, не предполагает Telegram глобально — подготовка под будущий
@@ -278,6 +296,7 @@ auth-резолва (`auth/principal.ts::loadUser()`); `employees.telegram_id`/
 `phone`/`password_hash` остаются нетронутыми для не-auth потребителей
 (бот-уведомления, отображение в Команде). Разная семантика конфликта по
 provider, зафиксированная как инвариант:
+
 - **Telegram** — ownership transfer (steal) разрешён:
   `identitiesRepo.transferIdentity()`, атомарный
   `INSERT...ON CONFLICT DO UPDATE` (не `DELETE`+`INSERT` — race-safe при
@@ -342,7 +361,7 @@ lifetimes»), не продлевается. Cookie `t2_session` несёт то
 Иерархия ролей — строго линейная, каждая следующая включает возможности
 предыдущей (`ROLE_LEVEL`, `auth/principal.ts`):
 
-```
+```text
 guest (-1) < trainee (0) < employee (1) < senior (2) < manager (3) < supervisor (4) < admin (5)
 ```
 
@@ -404,7 +423,9 @@ TypeBox, `request.body as any` не осталось. Динамические �
 будущее: если фронтенд может прислать `null` намеренно — тип обязан быть
 `Type.Union([Type.Null(), ...])`, иначе баг тихий.
 
-### 5. Data Access Layer
+<a id="5-data-access-layer"></a>
+
+### 5. Слой доступа к данным
 
 Org-scoping — структурная гарантия, не «не забыть проверить в каждом
 SELECT»: каждая tenant-функция репозитория берёт `orgId` первым
@@ -445,13 +466,15 @@ lost-update сценарий физически не возникает.
 `rtk_promocodes.org_id`, у которых FK был с baseline. `0016_org_scoping_fk.sql`
 закрыл все пять — новый endpoint/воркер, забывший проверить существование
 сети/точки перед `INSERT`, получит отказ от Postgres, а не тихую запись
-осиротевшей строки. Перед миграцией — read-only проверка прод-БД (0 строк-сирот
+осиротевшей строки. Перед миграцией — только для чтения проверка прод-БД (0 строк-сирот
 по каждой колонке). Дилер→Сектор (`sectors.dealer_id`, 0015) и Сеть→Сектор
 (`organizations.sector_id`, baseline) уже были закрыты FK раньше — граф
 плоский (ни `sectors`, ни `dealers` не ссылаются сами на себя), циклов
 структурно не бывает.
 
-### 7. Audit Trail и Observability
+<a id="7-audit-trail-и-observability"></a>
+
+### 7. Журнал аудита и наблюдаемость
 
 `audit_log` (`data/repositories/audit.ts`, 19.23.0, расширено в 20.10.0) —
 единая лента чувствительных действий с полями `actor_role` (снимок роли
@@ -474,7 +497,9 @@ Postgres (дубликат, ссылка на несуществующую за�
 известная уязвимость высокой критичности в зависимостях блокирует мёрдж, а
 не остаётся незамеченной до следующего ручного аудита.
 
-### 9. Frontend
+<a id="9-frontend"></a>
+
+### 9. Веб-интерфейс
 
 Вывод данных пользователя экранируется через `esc()` (после Frontend
 Foundation — `frontend/src/app/core.ts`, bare global во всех страницах)
@@ -513,7 +538,9 @@ API-клиент (`api-client.ts`, 91 функция) сознательно б�
 исходных `frontend/js/*.js` (директория не существует с 20.30.0, но
 паттерн подключения бандлов в `index.html` — тот же).
 
-### 10. Cryptographic Data Protection
+<a id="10-cryptographic-data-protection"></a>
+
+### 10. Криптографическая защита данных
 
 Полный разбор — [docs/DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md)
 (таблица данных по классам), [ADR/007](./ADR/007-application-level-envelope-encryption.md)
@@ -523,15 +550,15 @@ API-клиент (`api-client.ts`, 91 функция) сознательно б�
 
 | Слой | Статус | Что это |
 |---|---|---|
-| TLS (transport) | IMPLEMENTED | Railway/HTTPS — граница транспорта, не application-уровень |
-| Хешированные credentials/tokens | IMPLEMENTED | `password_hash` — `crypto.scrypt` (необратимо, не шифрование); `employee_sessions.token_hash`/`employee_password_resets.token_hash` — `sha256` одноразовых секретов. Никогда не «шифрование, которое можно расшифровать» — восстанавливать эти значения не нужно, см. §44 несовместимость целей |
-| **Application-Level Envelope Encryption (Level 2)** | IMPLEMENTED | `backend/src/security/crypto/**` (20.51.0) — AES-256-GCM, DEK per-object, KEK версионирован вне PostgreSQL, HKDF-derived wrap-key, AAD связывает ciphertext с id/типом объекта. Потребители: `support_tickets.message`/`admin_reply`, `support_messages.body` (owner/admin читают по требованию, не E2EE), и `employee_totp.secret_encrypted` (20.52.0/20.52.1 — TOTP-секрет, fail-closed без фолбэка, см. ниже) |
-| **True E2EE (Level 3)** | NOT IMPLEMENTED | Ни одна фича продукта сегодня не является приватной перепиской 1:1 (см. ADR-008) — строить device identity/handshake/ratchet ради несуществующего private channel означало бы придумывать продуктовую фичу, не защищать существующую |
-| Post-quantum (ML-KEM/hybrid) | NOT IMPLEMENTED | Зависит от E2EE-слоя, которого нет; не заявляем «post-quantum secure» нигде в документации, пока PQ-слой не реализован полностью |
+| TLS (transport) | РЕАЛИЗОВАНО | Railway/HTTPS — граница транспорта, не application-уровень |
+| Хешированные credentials/tokens | РЕАЛИЗОВАНО | `password_hash` — `crypto.scrypt` (необратимо, не шифрование); `employee_sessions.token_hash`/`employee_password_resets.token_hash` — `sha256` одноразовых секретов. Никогда не «шифрование, которое можно расшифровать» — восстанавливать эти значения не нужно, см. §44 несовместимость целей |
+| **Конвертное шифрование на уровне приложения (Level 2)** | РЕАЛИЗОВАНО | `backend/src/security/crypto/**` (20.51.0) — AES-256-GCM, DEK per-object, KEK версионирован вне PostgreSQL, HKDF-derived wrap-key, AAD связывает шифротекст с id/типом объекта. Потребители: `support_tickets.message`/`admin_reply`, `support_messages.body` (owner/admin читают по требованию, не E2EE), и `employee_totp.secret_encrypted` (20.52.0/20.52.1 — TOTP-секрет, fail-closed без фолбэка, см. ниже) |
+| **True E2EE (Level 3)** | НЕ РЕАЛИЗОВАНО | Ни одна фича продукта сегодня не является приватной перепиской 1:1 (см. ADR-008) — строить device identity/handshake/ratchet ради несуществующего private channel означало бы придумывать продуктовую фичу, не защищать существующую |
+| Post-quantum (ML-KEM/hybrid) | НЕ РЕАЛИЗОВАНО | Зависит от E2EE-слоя, которого нет; не заявляем «post-quantum secure» нигде в документации, пока PQ-слой не реализован полностью |
 
 **Ключевая иерархия (Level 2)**:
 
-```
+```text
 Master Key / KEK (env ENCRYPTION_KEKS, версионирован, ротируется)
        │
        ▼ HKDF-SHA256, domain label t2/envelope/wrap-key/v1
@@ -552,9 +579,9 @@ Master Key / KEK (env ENCRYPTION_KEKS, версионирован, ротиру�
 **Backfill/rewrap tooling (20.54.0, §P1-D)** —
 `backend/src/scripts/backfill-support-encryption.ts`: resumable/
 idempotent/batched, закрывает две смежные, но разные задачи. Обычный
-режим шифрует legacy plaintext-строки (`support_tickets`/
+режим шифрует legacy открытый текст-строки (`support_tickets`/
 `support_messages`, созданные до включения `DATA_ENCRYPTION_ENABLED` —
-read-only проверка прода в рамках 20.54.0 нашла 10 таких строк,
+только для чтения проверка прода в рамках 20.54.0 нашла 10 таких строк,
 инструмент готов, на проде намеренно не запущен). `--rewrap` режим
 закрывает вторую половину — миграцию УЖЕ зашифрованных строк на новый
 активный ключ после ротации (находит `kid ≠ ENCRYPTION_ACTIVE_KEY_VERSION`,
@@ -566,17 +593,17 @@ read-only проверка прода в рамках 20.54.0 нашла 10 та
 запись; чтение уже зашифрованной строки расшифровывается всегда,
 независимо от текущего состояния флага. Выключить флаг нельзя сделать
 эквивалентом «рассекретить всё обратно» — это и есть требование §32/§48.7
-не допускать silent downgrade в plaintext.
+не допускать silent downgrade в открытый текст.
 
 **Fail-closed** — повреждённый/чужим ключом зашифрованный конверт
-никогда не возвращает мусор или тихий plaintext-фолбэк: `decryptField()`
+никогда не возвращает мусор или тихий открытый текст-фолбэк: `decryptField()`
 бросает `DecryptionError`/`InvalidEnvelopeError`; на уровне репозитория
 (`data/repositories/support.ts`) единичное чтение резервируется явным
 `[ошибка расшифровки]`-маркером с логированием только класса ошибки
 (`errorClass`, не текст/содержимое), не 500 на весь список и не
-подстановка plaintext.
+подстановка открытый текст.
 
-**Секреты не логируются** — ни KEK, ни DEK, ни plaintext не появляются в
+**Секреты не логируются** — ни KEK, ни DEK, ни открытый текст не появляются в
 логах/audit_log/ответах API; см. `security/crypto/errors.ts`/`log.ts` —
 сообщения ошибок содержат только класс ошибки и метаданные (`alg`/`kid`/
 `table`/`id`), никогда сырые байты.
@@ -598,12 +625,14 @@ dev/test — там флаг по умолчанию выключен, тест�
 отбрасывает posторонние символы) — не проверка валидности сама по себе.
 `strictBase64Decode()` (`security/crypto/random.ts`) применяется везде,
 где base64-строка приходит извне доверенной границы: KEK
-(`ENCRYPTION_KEKS`), nonce/tag/ciphertext AEAD-полей конверта. AEAD
+(`ENCRYPTION_KEKS`), nonce/tag/шифротекст AEAD-полей конверта. AEAD
 tag-проверка (GCM) уже страховала от эксплуатации испорченных байт как
 таковых — это про дисциплину fail-closed на входе, не про новую дыру,
 которая была эксплуатируема раньше.
 
-### 11. Multi-Factor Authentication (MFA)
+<a id="11-multi-factor-authentication-mfa"></a>
+
+### 11. Многофакторная аутентификация (MFA)
 
 Полное архитектурное решение —
 [docs/ADR/009](./ADR/009-mfa-step-up.md). Библиотеки — только vetted:
@@ -613,11 +642,12 @@ tag-проверка (GCM) уже страховала от эксплуатац
 криптографический примитив не написан самостоятельно.
 
 **Иерархия факторов**: WebAuthn/passkey (приоритетный) → TOTP
-(совместимый fallback) → recovery codes (последний резерв). SMS не
+(совместимый резервный вариант) → recovery codes (последний резерв). SMS не
 используется ни для одного из них.
 
 **Auth Assurance model (AAL1/AAL2/AAL3, 20.52.1, пересмотрено 20.53.0)** —
 явные, разные понятия, не смешиваются:
+
 - **AAL1** — только primary-аутентификация (пароль или Telegram initData
   HMAC). Достаточно для обычных ролей; для admin/supervisor — только для
   входа и MFA-enrollment роутов, см. ниже.
@@ -748,7 +778,7 @@ approve-путь (второй, отдельный от PATCH код-путь д
 `POST /employees/:id/mfa/reset`. Осознанно НЕ step-up-gated: демоушен
 ИЗ admin/supervisor (не эскалация — а требование step-up там мешало бы
 containment при реальном инциденте, см. RUNBOOK.md); `POST
-/metrics`/export-роуты (задокументированный trade-off, см. "Известные
+/metrics`/export-роуты (задокументированный компромисс, см. "Известные
 компромиссы").
 
 **ROLE-1 — эскалация роли отзывает существующие сессии (20.52.1)** —
@@ -765,7 +795,7 @@ admin/supervisor, если после этого не останется ни о
 Обычные роли (MFA не обязателен политикой) — без ограничения.
 
 **Recovery codes** — CSPRNG (`crypto.randomBytes`), показываются один
-раз в plaintext, дальше хранится только `sha256`-хеш (opaque bearer
+раз в открытый текст, дальше хранится только `sha256`-хеш (opaque bearer
 secret, не recoverable material — тот же принцип, что session/reset
 токены, см. §44 брифа). Атомарно single-use
 (`UPDATE...WHERE used_at IS NULL...RETURNING`, race-safe). Регенерация
@@ -779,7 +809,7 @@ recovery-кода при логине/step-up пишет отдельное audi
 отклоняет повторное использование того же/более раннего окна, даже с
 верным кодом.
 
-**TOTP-1 — секрет никогда не хранится plaintext (20.52.1)** —
+**TOTP-1 — секрет никогда не хранится открытый текст (20.52.1)** —
 `upsertPendingTotp()` бросает `EncryptionDisabledError`, если
 `DATA_ENCRYPTION_ENABLED` не `true` (раньше — молча падал на
 `{plain: secret}` в той же jsonb-колонке). Production обязан стартовать
@@ -807,12 +837,14 @@ TOTP уже полностью закрывает mandatory-политику б�
 
 ---
 
-### 12. Internal Chat (20.57.0)
+<a id="12-internal-chat-20570"></a>
 
-Новый attack surface — общий чат сотрудников внутри organization/network
+### 12. Внутренний чат (20.57.0)
+
+Новый attack surface — общий чат сотрудников внутри организации/сети
 (`docs/CHAT.md` — полное описание, здесь только security-инварианты).
 
-- **Только authenticated active employee** — тот же `requireActive()`,
+- **Только активному сотруднику с подтверждённой личностью** — тот же `requireActive()`,
   что и весь остальной API, ни одного отдельного auth-механизма для чата.
 - **Org scope — только из principal** (`request.user.org_id`), никогда из
   тела/query запроса. Нет admin cross-org view override для чата — в
@@ -853,11 +885,11 @@ TOTP уже полностью закрывает mandatory-политику б�
 - **No content logging** — ни тело сообщения, ни байты файла никогда не
   попадают в application-логи; допустимые поля — id/employee/org/событие/
   категория ошибки, тот же принцип, что и остальной backend (см. §7
-  Audit Trail и Observability выше).
-- **E2EE — не реализовано.** Сервер сегодня видит plaintext body и
-  plaintext вложения целиком — см. `docs/CHAT.md#privacy` и
+  Журнал аудита и Observability выше).
+- **E2EE — не реализовано.** Сервер сегодня видит открытый текст body и
+  открытый текст вложения целиком — см. `docs/CHAT.md#privacy` и
   [ADR/010](./ADR/010-chat-e2ee-future-direction.md) (направление на
-  будущее, Proposed/Planned, ничего не решено окончательно).
+  будущее, предложено/запланировано, ничего не решено окончательно).
 
 ---
 
@@ -866,7 +898,7 @@ TOTP уже полностью закрывает mandatory-политику б�
 Не всё в этом списке — недосмотр; часть — осознанные решения с понятной
 ценой, принятые владельцем продукта. Разница важна: внешний аудит (v20.11.1)
 изначально характеризовал часть этих пунктов как «дыры», но при проверке
-на реальном коде оказалось, что они — задокументированные trade-off'ы, не
+на реальном коде оказалось, что они — задокументированные компромисс'ы, не
 новые находки.
 
 | Риск | Текущая защита | Почему принято как есть |
@@ -874,7 +906,7 @@ TOTP уже полностью закрывает mandatory-политику б�
 | Публичные аватарки (`GET /avatars/:employeeId`) без сессии | rate-limit 30/мин | `<img src>` физически не может послать `Authorization`-заголовок; подписанные ссылки с TTL — больший рефакторинг, отложен, не забыт |
 | CSP разрешает `unsafe-inline` для `script-src-attr`/`style-src-attr` | Остальная CSP строгая (`default-src 'self'`, `object-src 'none'` и т.д.); реальные XSS-дыры, которые эта строгость закрыла бы дополнительным слоем, устранены адресно в 20.49.0 (`esc()` у источника инъекции, не только у её исполнения) | Точный объём подтверждён аудитом 20.49.0: 265+ `onclick=`/`onchange=`/`oninput=` (21 TS-файл + `index.html`) + ~400 `style=`. Закрытие требует перевода на event-delegation/CSS-классы поэкранно с тестами — сопоставимо по объёму с Frontend rewrite (20.3.0-20.30.0, ~27 версий). Запланировано отдельной эпохой (Web Security & Trust Layer, следующая часть), не забыто |
 | `styleSrc: 'unsafe-inline'` (block-level) | Единственный потребитель — `shift/index.ts`, keyframe-анимация конфетти через `document.createElement('style')` | Не убирать без замены (nonce/hash или отказ от динамического `<style>`) — сломает анимацию молча (CSP-нарушения для стилей не бросают JS-ошибку) |
-| Supervisor Scope Cache — in-memory, не Redis | 5-минутный TTL, точечная инвалидация при смене сектора/роли | Прод — 1 реплика Railway (`grammy`-бот на long-polling не переживёт вторую реплику без перехода на webhook); Redis добавил бы сетевой failure mode без выигрыша в корректности при одной реплике. **Уточнение (исправлено 20.54.0 — предыдущая формулировка здесь была неточной)**: кэш обслуживает только `resolveSupervisorStores()` (кабинет супервайзера/Command Center, `core/analytics/supervisor.ts`) — это же единственное место, где сектор супервайзера вообще ограничивает видимость. `getUserStoreIds()` (`auth/guards.ts`) существует, но не вызывается НИ ОДНИМ роутом — не «используется другими роутами», а мёртвый код; `GET /employees`, `GET /stores`, `/sales/history`, `/stores/:id/profile`, `/employees/:id/profile` отдают supervisor данные всей сети, не только сектора — сознательный (перепроверенный с владельцем продукта в 20.54.0, не переоткрыт) trade-off: сектор сегодня — только dashboard-scope для агрегатов, не confidentiality-граница на весь app; см. `docs/security/20.54-baseline.md`, §P1-C |
+| Supervisor Scope Cache — in-memory, не Redis | 5-минутный TTL, точечная инвалидация при смене сектора/роли | Прод — 1 реплика Railway (`grammy`-бот на long-polling не переживёт вторую реплику без перехода на webhook); Redis добавил бы сетевой failure mode без выигрыша в корректности при одной реплике. **Уточнение (исправлено 20.54.0 — предыдущая формулировка здесь была неточной)**: кэш обслуживает только `resolveSupervisorStores()` (кабинет супервайзера/Command Center, `core/analytics/supervisor.ts`) — это же единственное место, где сектор супервайзера вообще ограничивает видимость. `getUserStoreIds()` (`auth/guards.ts`) существует, но не вызывается НИ ОДНИМ роутом — не «используется другими роутами», а мёртвый код; `GET /employees`, `GET /stores`, `/sales/history`, `/stores/:id/profile`, `/employees/:id/profile` отдают supervisor данные всей сети, не только сектора — сознательный (перепроверенный с владельцем продукта в 20.54.0, не переоткрыт) компромисс: сектор сегодня — только dashboard-scope для агрегатов, не confidentiality-граница на весь app; см. `docs/security/20.54-baseline.md`, §P1-C |
 | `check-dangerous-js-patterns.mjs` (CI) не проверяет `innerHTML`/`onclick=` эвристикой | Сознательный выбор (высокий false-positive без AST, см. сам скрипт) | Значит новый недоэкранированный sink не поймается автоматически — только ручным/периодическим аудитом, как этот. Четыре конкретных места такого класса (`promos.ts` список, `plans-bfq.ts`×2, `schedule.ts`/`my-plan.ts` `title=`) найдены этим документационным аудитом и закрыты в 20.50.1 — не гипотетический риск, реальный прецедент |
 | Динамические тела запроса (кастомные метрики, `sync/batch`, `what-if moves`) вне строгой TypeBox-схемы | `additionalProperties: true` + ручная фильтрация в обработчике (regex на ключи, `Number()`) | Схема не должна быть строже уже отлаженной ручной логики; форма тела определяется каталогом метрик динамически |
 | `GET /access/orgs` + `GET /access/employees-directory` публичны без сессии | Отдают только названия сетей и список имён/id для формы регистрации, не бизнес-данные (продажи/кассу/роли); с 20.50.0 — 30/мин лимит (раньше вообще без лимита) | Нужны гостю ДО того, как у него есть identity — пикер сети и «я из списка» на регистрации; разведка оргструктуры — реальная, но малая цена (см. [THREAT-MODEL.md](./THREAT-MODEL.md)) |
@@ -925,7 +957,9 @@ Adversarial-тесты — не общая проверка happy path, а за�
 | К4 — служебные секреты контура | `BOT_TOKEN`, `DATABASE_URL`, `GROQ_API_KEY` | Вне кода, вне логов, ротация по [RUNBOOK.md](./RUNBOOK.md) |
 | К5 — открытые справочники регистрации | названия сетей, краткий каталог сотрудников для заявки | Допускается без сессии; состав ответа урезан, без продаж/кассы/ролей; с 20.50.0 — под rate-limit |
 
-## Security roadmap — целевой профиль
+<a id="security-roadmap--целевой-профиль"></a>
+
+## План развития защиты: целевой профиль
 
 Направление, не факт сегодняшнего дня — ничего в этом разделе не
 `IMPLEMENTED`. Часть пунктов, стоявших здесь до Web Security & Trust
@@ -950,7 +984,9 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
 152-ФЗ как продукта, WAF операторского класса, хранение платёжных данных
 (платёжный контур в продукте отсутствует и не планируется).
 
-## Security review gate — перед правкой допуска
+<a id="security-review-gate--перед-правкой-допуска"></a>
+
+## Обязательная проверка перед изменением доступа
 
 Перед любой правкой `auth/`, cookie, initData, ролей или публичных
 маршрутов — обязательные проверки (нарушение без записи в changelog и
@@ -967,12 +1003,12 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — общая структура репозитория и
   диаграмма потока запроса.
 - [docs/ADR/005](./ADR/005-authentication-boundary.md) — решение о
-  выделении Authentication Boundary (20.9.0).
+  выделении Граница аутентификации (20.9.0).
 - [docs/DATA-SECURITY-ARCHITECTURE.md](./DATA-SECURITY-ARCHITECTURE.md) —
-  таблица данных по классам защиты (кто должен видеть plaintext, кто
+  таблица данных по классам защиты (кто должен видеть открытый текст, кто
   владеет ключом).
 - [docs/ADR/007](./ADR/007-application-level-envelope-encryption.md) —
-  Application-Level Envelope Encryption (Level 2), 20.51.0.
+  Конвертное шифрование на уровне приложения (Level 2), 20.51.0.
 - [docs/ADR/008](./ADR/008-e2ee-not-implemented.md) — почему E2EE
   (Level 3) не реализован.
 - [docs/ADR/009](./ADR/009-mfa-step-up.md) — MFA и channel-agnostic

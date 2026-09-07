@@ -1,8 +1,17 @@
 # Разработка
 
-> Извлечено из README §16/§23 при репо-реструктуризации (20.11.0),
-> оформлено в справочный вид (пайплайн, таблицы) при обновлении docs вслед
-> за `SECURITY.md` (20.13.0).
+[Документация](README.md) · [Обзор проекта](../README.md)
+
+Инструкция для локальной разработки, проверок и изменения схемы. Команды ниже рассчитаны на отдельную локальную БД; рабочие подключения для тестов не используются.
+
+**Содержание**
+
+- [Быстрый старт](#быстрый-старт)
+- [Цикл разработки](#цикл-разработки)
+- [Тесты](#тесты)
+- [Переменные окружения](#переменные-окружения)
+- [Соглашения](#соглашения)
+- [Связанные документы](#связанные-документы)
 
 ## Быстрый старт
 
@@ -12,6 +21,7 @@
 ```bash
 cd backend
 npm ci
+# Создайте backend/.env с DATABASE_URL локальной БД до запуска.
 npm run build
 npm start
 curl -s localhost:3000/health
@@ -23,14 +33,14 @@ curl -s localhost:3000/health
 не нужно катить их отдельной командой после `npm start`/деплоя.
 
 ```mermaid
-flowchart LR
+flowchart TB
     CODE["Правка кода"] --> TSC["npx tsc --noEmit"]
-    TSC --> FE{"Менялся<br/>frontend/src/?"}
+    TSC --> FE{"Менялся — frontend/src/?"}
     FE -- да --> BUILD["npm run build:frontend"]
     FE -- нет --> SMOKE
     BUILD --> SMOKE["npm run smoke:frontend"]
     SMOKE --> TESTFE["npm run test:frontend"]
-    TESTFE --> VITEST["npx vitest run<br/>(локальный одноразовый Postgres)"]
+    TESTFE --> VITEST["npx vitest run — (локальный одноразовый Postgres)"]
     VITEST --> COMMIT["git commit"]
     COMMIT --> PUSH["git push origin main"]
     PUSH --> CI["Railway: build → migrate → start"]
@@ -42,10 +52,7 @@ flowchart LR
 (классические `<script>`-теги делят одну глобальную область, как и раньше
 с `frontend/js/*.js` до 20.30.0 — сама проверка та же, изменился только
 объект проверки), тесты — регресс авторизации/
-изоляции сети/бизнес-корректности/security. Тот же путь `build → migrate →
-start` выполняет CI (`.github/workflows/ci.yml`) на каждый push — Postgres
-поднимается в одноразовом контейнере, схема накатывается тем же
-`npm run migrate`, что и на проде.
+изоляции сети/бизнес-корректности/security. CI (`.github/workflows/ci.yml`) применяет миграции к одноразовому PostgreSQL, выполняет статические проверки, собирает интерфейс и запускает тесты. Развёртывание Railway и запуск рабочего сервера — отдельный процесс.
 
 ## Тесты
 
@@ -64,9 +71,15 @@ docker run -d --name t2-test-pg -e POSTGRES_PASSWORD=test -p 5432:5432 postgres:
 # DATABASE_URL=postgresql://postgres:test@127.0.0.1:5432/postgres
 
 cd backend
+export DATABASE_URL='postgresql://postgres:test@127.0.0.1:5432/postgres'
+export BOT_TOKEN=''
+export GROQ_API_KEY=''
+export BOT_POLLING=false
 npm run migrate   # один раз — накатить схему (backend/migrations/)
 npm test
 ```
+
+Миграционный CLI читает обычный `.env`, а тесты — `.env.test.local`. Поэтому в примере `DATABASE_URL` явно задан в окружении и одинаков для обеих команд. В PowerShell используйте `$env:DATABASE_URL = "postgresql://postgres:test@127.0.0.1:5432/postgres"`. Дождитесь готовности PostgreSQL перед миграцией. `BOT_POLLING=false` отключает получение обновлений Telegram, но само по себе не запрещает все исходящие сообщения; используйте отдельные тестовые настройки без рабочего токена.
 
 Прогнать один конкретный файл (быстрее, чем весь набор, при точечной
 отладке):
@@ -88,20 +101,20 @@ npx vitest run tests/adversarial/cross-tenant-write.test.ts
 
 ## Переменные окружения
 
-| Variable | Нужно | Описание |
+| Переменная | Нужно | Описание |
 |----------|:---:|----------|
 | `DATABASE_URL` | да | Postgres |
 | `BOT_TOKEN` | да (прод) | BotFather — без него сервер не стартует в `RAILWAY_ENVIRONMENT=production` |
-| `PORT` | Railway | listen port |
+| `PORT` | Railway | Порт HTTP-сервера |
 | `ADMIN_TELEGRAM_ID` | желательно | admin |
-| `MINI_APP_URL` | желательно (браузер/PWA) | Origin Mini App/сайта — сверяется в CSRF-проверке (`auth/csrf.ts::expectedOrigin()`) как fallback, когда браузер не шлёт `Sec-Fetch-Site`; без переменной эта ветка проверки эффективно отключена, не блокирует, см. [SECURITY.md — CSRF](./SECURITY.md#1-периметр) |
+| `MINI_APP_URL` | да в production | HTTPS-адрес приложения. Проверяется при запуске и участвует в проверке ожидаемого origin для CSRF |
 | `REPORT_CHAT_ID` | желательно | глобальный фолбэк-чат отчётов (по умолчанию — чат сети из `organizations.chat_id`) |
 | `RELEASE_CHANNEL_ID` | нет | отдельный Telegram-канал для автоанонса версий (с 18.11.0) — без него анонс тихо пропускается |
 | `BOT_POLLING` | нет | `false` отключает `getUpdates` (для второй локальной копии) |
 | `ALLOW_INSECURE_AUTH` | нет | `true` включает dev-фоллбэк на голый `X-Telegram-Id` без проверки initData — **сервер откажется стартовать с этим в проде**, см. [SECURITY.md](./SECURITY.md#2-аутентификация) |
-| `GROQ_API_KEY` | нет | ключ Groq (console.groq.com, free tier, без карты) — включает AI Copilot; без ключа обе функции no-op'ают |
+| `GROQ_API_KEY` | нет | ключ сервиса Groq — включает AI Copilot; без ключа ИИ-функции не выполняют запросы к сервису |
 | `GROQ_MODEL` | нет | override модели, дефолт `llama-3.3-70b-versatile` |
-| `DATA_ENCRYPTION_ENABLED` | нет | `true` включает Application-Level Envelope Encryption (20.51.0) для support-тикетов — новые записи шифруются; без флага (по умолчанию) поведение как раньше, plaintext. Чтение уже зашифрованных строк не зависит от флага, см. [SECURITY.md — Cryptographic Data Protection](./SECURITY.md#10-cryptographic-data-protection) |
+| `DATA_ENCRYPTION_ENABLED` | нет | `true` включает Конвертное шифрование на уровне приложения (20.51.0) для support-тикетов — новые записи шифруются; без флага (по умолчанию) поведение как раньше, открытый текст. Чтение уже зашифрованных строк не зависит от флага, см. [SECURITY.md — Cryptographic Data Protection](./SECURITY.md#10-cryptographic-data-protection) |
 | `ENCRYPTION_KEKS` | нужно, если `DATA_ENCRYPTION_ENABLED=true` | JSON `{"<version>":"<base64 32 байта>", ...}` — все известные версии master key (KEK), включая уже неактивные (для чтения старых записей после rotation). Никогда не коммитить реальные значения |
 | `ENCRYPTION_ACTIVE_KEY_VERSION` | нужно, если `DATA_ENCRYPTION_ENABLED=true` | Версия из `ENCRYPTION_KEKS`, которой шифруются НОВЫЕ записи. Сервер откажется стартовать, если версия не найдена в `ENCRYPTION_KEKS` (см. `assertEncryptionConfigValid()`, `src/index.ts`) |
 
@@ -116,7 +129,7 @@ npx vitest run tests/adversarial/cross-tenant-write.test.ts
 - [ ] Роуты, отдающие чужие/сетевые данные — всегда через `requireAuth`/
       `requireActive`/… + org-scope ([SECURITY.md](./SECURITY.md)), никогда
       голый заголовок в обход `authPlugin`
-- [ ] Сущности — через Data Access Layer (`src/data/repositories/*`), не
+- [ ] Сущности — через Слой доступа к данным (`src/data/repositories/*`), не
       собственным `query()`; CI (`npm run check:no-direct-sql`) ловит откат
 - [ ] Один bot polling (`BOT_POLLING=false` для второй локальной копии)
 - [ ] Не коммитить `.env`
@@ -126,8 +139,7 @@ npx vitest run tests/adversarial/cross-tenant-write.test.ts
       `backend/src/shared/api-types.ts`, не заново описанные типы.
       `frontend/js/` как директория не существует с 20.30.0 — миграция
       закрыта полностью, писать в неё уже нечего
-- [ ] Версионирование — MINOR на каждую сущностную правку (фича, фикс,
-      рефактор), changelog-запись в `src/platform/notifications/changelog.ts`
+- [ ] Версионирование — `MINOR` для эпика/функции, `PATCH` для исправления/рефакторинга, changelog-запись в `src/platform/notifications/changelog.ts`
       только для эпиков, не хотфиксов ([CHANGELOG.md](../CHANGELOG.md) —
       история версий длиннее, чем changelog-анонсы)
 
