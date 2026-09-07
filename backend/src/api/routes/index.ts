@@ -6,6 +6,7 @@
 import { FastifyInstance } from 'fastify';
 
 import { registerPlansRoutes } from './plans.js';
+import { registerEmployeePlanDraftsRoutes } from './employee-plan-drafts.js';
 import { registerEmployeesRoutes } from './org/employees.js';
 import { registerStoresRoutes } from './org/stores.js';
 import { registerAccessRoutes } from './org/access.js';
@@ -44,6 +45,7 @@ import { registerChatRoutes } from './chat/index.js';
 
 const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Plans', registerPlansRoutes],
+  ['Employee plan drafts', registerEmployeePlanDraftsRoutes],
   ['Employees', registerEmployeesRoutes],
   ['Stores', registerStoresRoutes],
   ['Access requests/sectors', registerAccessRoutes],

@@ -543,6 +543,7 @@ export function openAddStore(): void {
         <div class="field"><label>Цвет</label><input id="ns_color" value="#6d9eeb"></div>
         <div class="field"><label>Часы работы (например 10-21)</label><input id="ns_work_time" value="10-21"></div>
         <div class="field"><label>Часов в смене</label><input id="ns_hours" type="number" value="11"></div>
+        <div class="field"><label>Время открытия</label><input id="ns_open_time" value="09:00"></div>
         <div class="field"><label>Время итога дня</label><input id="ns_close_time" value="21:00"></div>
         <div class="field" style="display:flex;align-items:center;gap:8px">
           <input id="ns_24h" type="checkbox" onchange="toggle24hStore()">
@@ -577,6 +578,7 @@ export async function saveNewStore(): Promise<void> {
   const work_time = (document.getElementById('ns_work_time') as HTMLInputElement | null)?.value.trim() || '';
   const hours = Number((document.getElementById('ns_hours') as HTMLInputElement | null)?.value) || 11;
   const close_time = (document.getElementById('ns_close_time') as HTMLInputElement | null)?.value.trim() || '';
+  const open_time = (document.getElementById('ns_open_time') as HTMLInputElement | null)?.value.trim() || '';
   if (!id || !name) {
     toast('ID и название обязательны', 'err');
     return;
@@ -589,7 +591,9 @@ export async function saveNewStore(): Promise<void> {
     work_time: work_time || undefined,
     hours,
     close_time_weekday: close_time || undefined,
-    close_time_sunday: close_time || undefined
+    close_time_sunday: close_time || undefined,
+    open_time_weekday: open_time || undefined,
+    open_time_sunday: open_time || undefined
   };
   if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
   try {

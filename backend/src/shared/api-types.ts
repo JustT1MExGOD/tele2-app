@@ -1258,5 +1258,7 @@ export interface CreateStoreRequest {
   hours?: number;
   close_time_weekday?: string;
   close_time_sunday?: string;
+  open_time_weekday?: string;
+  open_time_sunday?: string;
   org_id?: string;
 }

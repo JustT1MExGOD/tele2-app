@@ -20,6 +20,8 @@ export interface StoreRecord {
   work_time: string | null;
   close_time_weekday: string;
   close_time_sunday: string | null;
+  open_time_weekday: string;
+  open_time_sunday: string | null;
   micro_report_times: string[] | null;
   skip_sunday_micro_times: string[] | null;
   is_active: boolean;
@@ -44,6 +46,8 @@ export interface NewStoreInput {
   skip_sunday_micro_times?: string[] | null;
   close_time_weekday?: string;
   close_time_sunday?: string;
+  open_time_weekday?: string;
+  open_time_sunday?: string;
 }
 
 export type StorePatch = Partial<{
@@ -60,12 +64,15 @@ export type StorePatch = Partial<{
   skip_sunday_micro_times: string[];
   close_time_weekday: string;
   close_time_sunday: string;
+  open_time_weekday: string;
+  open_time_sunday: string;
 }>;
 
 const PATCHABLE_FIELDS = [
   'name', 'code', 'short_name', 'address', 'display_name', 'work_time',
   'hours', 'color', 'is_active', 'micro_report_times',
-  'skip_sunday_micro_times', 'close_time_weekday', 'close_time_sunday'
+  'skip_sunday_micro_times', 'close_time_weekday', 'close_time_sunday',
+  'open_time_weekday', 'open_time_sunday'
 ] as const;
 
 export async function findById(orgId: string, storeId: string): Promise<StoreRecord | null> {
@@ -204,9 +211,10 @@ export async function create(orgId: string, data: NewStoreInput): Promise<StoreR
   const res = await query(
     `INSERT INTO stores (
        id, code, name, short_name, work_time, hours, color, is_active, org_id,
-       micro_report_times, skip_sunday_micro_times, close_time_weekday, close_time_sunday
+       micro_report_times, skip_sunday_micro_times, close_time_weekday, close_time_sunday,
+       open_time_weekday, open_time_sunday
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12, $13, $14)
      RETURNING *`,
     [
       data.id,
@@ -220,7 +228,9 @@ export async function create(orgId: string, data: NewStoreInput): Promise<StoreR
       data.micro_report_times || ['10:00', '12:00', '14:00', '16:00', '18:00', '20:00'],
       data.skip_sunday_micro_times || null,
       data.close_time_weekday || '21:00',
-      data.close_time_sunday || data.close_time_weekday || '21:00'
+      data.close_time_sunday || data.close_time_weekday || '21:00',
+      data.open_time_weekday || '09:00',
+      data.open_time_sunday || data.open_time_weekday || '09:00'
     ]
   );
 

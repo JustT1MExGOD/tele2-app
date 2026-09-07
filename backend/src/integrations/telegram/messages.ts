@@ -161,6 +161,35 @@ export function finalReport(opts: {
   );
 }
 
+/** Текстовый фолбэк для «закрытия месяца» (см. core/reports/image.ts::
+ * buildMonthClosingReportSvg) — та же тройная схема отказоустойчивости
+ * PNG→SVG→текст, что и у micro/final отчётов. */
+export function monthClosingReport(opts: {
+  storeName: string;
+  storeCode: string;
+  date: string;
+  dayNum: number;
+  totalDays: number;
+  rows: { label: string; plan: number; fact: number; remain: number; pct: number; perDay: number; forecast: number }[];
+}) {
+  if (!opts.rows.length) return `📆 <b>ЗАКРЫТИЕ МЕСЯЦА</b>\n🏪 ${esc(opts.storeName)}\nНет активных планов на месяц.`;
+  const rowsBlock = opts.rows
+    .map((r) => {
+      const forecastMark = r.forecast >= r.plan ? '✅' : '⚠️';
+      return (
+        `${statusMark(r.pct)} <b>${esc(r.label)}</b>\n` +
+        `<code>${bar(r.pct)}</code>  план ${fmtNum(r.plan)} · факт ${fmtNum(r.fact)} · ост. ${fmtNum(r.remain)} · ${r.pct}%\n` +
+        `В день: ${fmtNum(r.perDay)}  ${forecastMark} Прогноз: ${fmtNum(r.forecast)}`
+      );
+    })
+    .join('\n\n');
+  return (
+    `📆 <b>ЗАКРЫТИЕ МЕСЯЦА</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+    `📅 ${esc(opts.date)} · день ${opts.dayNum} из ${opts.totalDays}\n🏪 <b>${esc(opts.storeName)}</b>\n🏷 <code>${esc(opts.storeCode)}</code>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n\n${rowsBlock}\n\n━━━━━━━━━━━━━━━━━━━━\n<i>T2 Sales</i>`
+  );
+}
+
 /** 18.9 Reports — недельная/месячная сводка по сети (не по точке), первая
  * периодическая сетевая сводка в проекте: раньше в чат уходили только
  * ежедневные фото-отчёты по каждой точке отдельно. */

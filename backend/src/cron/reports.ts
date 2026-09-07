@@ -8,8 +8,8 @@
 import { todayMoscow } from '../utils/date.js';
 import { getSalesSumColumns } from '../core/shared/metrics-catalog.js';
 import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '../integrations/telegram/bot.js';
-import { shiftReminder, microReport, finalReport, microLines, finalLines, esc } from '../integrations/telegram/messages.js';
-import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs } from '../core/reports/image.js';
+import { shiftReminder, microReport, finalReport, microLines, finalLines, monthClosingReport, esc } from '../integrations/telegram/messages.js';
+import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs, buildMonthClosingReportPng, buildMonthClosingReportSvg, loadMonthClosingData } from '../core/reports/image.js';
 import { generateDipComment } from '../integrations/ai/client.js';
 import { materializeStoreDailyPlans } from '../core/plans/service.js';
 import { rebuildHourProfiles } from '../core/analytics/heatmap.js';
@@ -204,6 +204,37 @@ async function sendSingleFinalImage(
   }
 }
 
+/** Ежедневный отчёт «закрытие месяца» (с 16 числа, при открытии точки) —
+ * PNG→SVG→текст, тот же фолбэк-паттерн, что у micro/final отчётов. */
+async function sendMonthClosingReport(st: { store_id: string; name: string; code: string }, date: string) {
+  const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
+  const caption = `📆 ${st.name} · закрытие месяца · ${date}`;
+  try {
+    const { png } = await buildMonthClosingReportPng(st.store_id, date);
+    const r = await notifyChatPhoto(png, { caption, filename: `month_closing_${st.store_id}_${date}.png`, chatId, threadId });
+    if (r.ok) return r;
+    throw new Error(r.error || 'photo_failed');
+  } catch (e: any) {
+    console.warn('Month-closing PNG send failed, try SVG document:', e?.message || e);
+    try {
+      const svg = await buildMonthClosingReportSvg(st.store_id, date);
+      return await notifyChatPhoto(svg, {
+        caption,
+        filename: `month_closing_${st.store_id}_${date}.svg`,
+        asDocument: true,
+        chatId,
+        threadId
+      });
+    } catch (e2: any) {
+      console.warn('SVG also failed, text fallback:', e2?.message || e2);
+      const { rows, totalDays, dayNum } = await loadMonthClosingData(st.store_id, date);
+      const text = monthClosingReport({ storeName: st.name, storeCode: st.code || st.store_id, date, dayNum, totalDays, rows });
+      await notifyChat(text, chatId, threadId, true);
+      return { ok: true, type: 'text_fallback' };
+    }
+  }
+}
+
 /** Возвращает handle — graceful shutdown (index.ts) должен уметь снять
  * таймер, иначе процесс может тикнуть ещё раз в процессе останова. */
 export function startReportCron(): NodeJS.Timeout {
@@ -243,6 +274,12 @@ async function tick() {
     }
     const final=reportTime(String((sunday ? st.close_time_sunday : st.close_time_weekday) || '21:00'));
     if(final) add(`final:${st.id}:${date}`,final,{kind:'final',store_id:st.id});
+
+    // Закрытие месяца: с 16 числа по конец месяца, раз в день, при открытии точки.
+    if (Number(date.slice(8, 10)) >= 16) {
+      const open = reportTime(String((sunday ? (st as any).open_time_sunday : (st as any).open_time_weekday) || '09:00'));
+      if (open) add(`month_closing:${st.id}:${date}`, open, { kind: 'month_closing', store_id: st.id });
+    }
   }
   await cronRepo.enqueueReportJobs(jobs);
   // Bounded work per tick; other replicas claim different rows. Missed ticks
@@ -259,6 +296,12 @@ async function tick() {
         const tomorrow=new Date(p.date+'T12:00:00Z');tomorrow.setUTCDate(tomorrow.getUTCDate()+1);
         await materializeStoreDailyPlans(tomorrow.toISOString().slice(0,10));
       } else if(p.kind==='reminders') await sendTomorrowReminders(p.date);
+      else if(p.kind==='month_closing') {
+        const st=stores.find(st=>st.id===p.store_id);
+        if(!st) throw new Error('Report store no longer exists');
+        const result=await sendMonthClosingReport({store_id:st.id,name:st.name,code:st.code},p.date);
+        if(!result?.ok) throw new Error('Report delivery failed');
+      }
       else {
         const st=stores.find(st=>st.id===p.store_id);
         if(!st) throw new Error('Report store no longer exists');

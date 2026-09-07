@@ -248,3 +248,26 @@ export async function findHeadcountForDate(
   );
   return res.rows;
 }
+
+/** core/plans/employee-plan-generator.ts — смены сотрудников на всю сеть
+ * разом, сгруппированные по (employee_id, store_id), за один запрос
+ * (избегаем N+1 по сотрудникам). Используется и для будущего месяца
+ * (проекция смен), и для 3 исторических месяцев (знаменатель продуктивности
+ * "на смену"). org-фильтр — по сотруднику (employees.org_id), не по точке:
+ * подмена (сотрудник другой сети работает на этой точке) — легитимный,
+ * уже поддерживаемый в проекте случай (см. findByDayForOrgOrSelf выше). */
+export async function countShiftsByEmployeeStoreInRange(
+  orgId: string, start: string, end: string
+): Promise<{ employee_id: number; store_id: string; shifts: number }[]> {
+  const res = await query(
+    `SELECT sch.employee_id, sch.store_id, COUNT(*)::int as shifts
+     FROM schedules sch
+     JOIN employees e ON e.id = sch.employee_id
+     WHERE COALESCE(e.org_id,'default') = $1
+       AND sch.work_date >= $2 AND sch.work_date < $3
+       AND COALESCE(sch.hours,0) > 0 AND sch.store_id IS NOT NULL
+     GROUP BY sch.employee_id, sch.store_id`,
+    [orgId, start, end]
+  );
+  return res.rows;
+}

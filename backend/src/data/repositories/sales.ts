@@ -172,6 +172,29 @@ export async function sumColumnsForStoreMonth(
   return res.rows[0] || {};
 }
 
+/** core/plans/employee-plan-generator.ts — сумма метрик за месяц,
+ * сгруппированная по (employee_id, store_id), одним запросом на всю сеть
+ * (избегаем N+1 по сотрудникам/точкам при построении 3-месячной истории
+ * продуктивности). columns приходят уже провалидированными вызывающим кодом
+ * (тот же контракт, что у sumColumnsForEmployeeMonth/sumColumnsForStoreMonth
+ * выше — regex-фильтр имён колонок делает services/plans.ts::metricKeys()). */
+export async function sumColumnsByEmployeeStoreForOrgMonth(
+  orgId: string, start: string, end: string, columns: string[]
+): Promise<{ employee_id: number; store_id: string; [col: string]: number | string }[]> {
+  const selectParts = columns.map((c) => `COALESCE(SUM(s.${c}),0) as ${c}`);
+  const res = await query(
+    `SELECT s.employee_id, s.store_id, ${selectParts.join(', ')}
+     FROM sales s
+     JOIN employees e ON e.id = s.employee_id
+     WHERE COALESCE(e.org_id,'default') = $1
+       AND s.sale_date >= $2::date AND s.sale_date < $3::date
+       AND s.store_id IS NOT NULL
+     GROUP BY s.employee_id, s.store_id`,
+    [orgId, start, end]
+  );
+  return res.rows;
+}
+
 /** getEmployeeMonthFacts, ветка "ни одной ожидаемой колонки нет" (совсем старая схема) — без accessories. */
 export async function sumVeryOldSchemaForEmployeeMonth(
   employeeId: number, start: string, end: string

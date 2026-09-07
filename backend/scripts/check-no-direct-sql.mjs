@@ -60,6 +60,8 @@ const CLEAN_FILES = [
   'src/api/routes/org/employees.ts',
   'src/api/routes/org/stores.ts',
   'src/api/routes/plans.ts',
+  'src/api/routes/employee-plan-drafts.ts',
+  'src/core/plans/employee-plan-generator.ts',
   'src/api/routes/profiles/employee.ts',
   'src/api/routes/profiles/store.ts',
   'src/api/routes/promos.ts',

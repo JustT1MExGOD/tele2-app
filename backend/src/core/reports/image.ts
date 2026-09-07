@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import * as repo from '../../data/repositories/report-image.js';
 import { getMetricDefs, MICRO_KEYS, groupForMetric } from '../shared/metrics-catalog.js';
 import { getStoreHourWeights } from '../analytics/insights.js';
+import { getStoreMonthPlan, getStoreMonthFacts } from '../plans/service.js';
 import { renderSvgToPng } from './svg-pool.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -435,5 +436,111 @@ export async function buildDailyReportPng(
   opts?: { kind?: ReportKind; hourLabel?: string; name?: string; color?: string; brand?: { name?: string; color?: string } }
 ) {
   const svg = await buildDailyReportSvg(storeId, date, opts);
+  return { svg, png: await svgToPng(svg) };
+}
+
+function daysInMonthOf(monthStartIso: string): number {
+  const [y, m] = monthStartIso.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+/**
+ * Отчёт «закрытие месяца» (с 16 числа, раз в день, при открытии точки):
+ * план/факт МТД/остаток/%/сколько нужно в день/прогноз при текущем темпе —
+ * по ВСЕМ активным метрикам, тот же визуальный язык, что и daily-отчёты.
+ * fact считается "на начало дня" (before=date, как и в остальных отчётах
+ * этого модуля) — отчёт уходит при открытии точки, до продаж за сегодня.
+ */
+export type MonthClosingRow = {
+  label: string; plan: number; fact: number; remain: number; pct: number; perDay: number; forecast: number;
+};
+
+/** Общие данные для картинки и текстового фолбэка «закрытия месяца» —
+ * см. buildMonthClosingReportSvg ниже и cron/reports.ts::sendMonthClosingReport. */
+export async function loadMonthClosingData(storeId: string, date: string) {
+  const month = date.slice(0, 7);
+  const monthStartIso = `${month}-01`;
+
+  const storeRow = await repo.findStoreBasic(storeId);
+  const st = storeRow || { name: storeId, code: '' };
+  const defs = await getMetricDefs();
+
+  const [plan, fact] = await Promise.all([
+    getStoreMonthPlan(storeId, month),
+    getStoreMonthFacts(storeId, month, date)
+  ]);
+
+  const totalDays = daysInMonthOf(monthStartIso);
+  const dayNum = Number(date.slice(8, 10));
+  const daysElapsed = Math.max(0, dayNum - 1); // факт уже не включает сегодня
+  const remainingDays = Math.max(1, totalDays - daysElapsed);
+
+  const rows: MonthClosingRow[] = [];
+  for (const def of defs) {
+    const p = num(plan?.[def.id]);
+    const f = num(fact?.[def.id]);
+    if (!p && !f) continue;
+    const remain = Math.max(0, p - f);
+    const pct = p > 0 ? Math.round((f / p) * 100) : f > 0 ? 100 : 0;
+    const perDay = Math.ceil(remain / remainingDays);
+    const forecast = daysElapsed > 0 ? Math.round((f / daysElapsed) * totalDays) : f;
+    rows.push({ label: def.label, plan: p, fact: f, remain, pct, perDay, forecast });
+  }
+
+  return { st, totalDays, dayNum, rows };
+}
+
+export async function buildMonthClosingReportSvg(
+  storeId: string,
+  date: string,
+  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string } }
+) {
+  const brandName = opts?.brand?.name || opts?.name || 'T2 Sales';
+  const accent = opts?.brand?.color || opts?.color || '#2AABEE';
+  const { st, totalDays, dayNum, rows } = await loadMonthClosingData(storeId, date);
+
+  let y = 130;
+  const parts: string[] = [];
+  for (const r of rows) {
+    const fill = Math.round((Math.min(100, Math.max(0, r.pct)) / 100) * 140);
+    const color = r.pct >= 100 ? '#30D158' : r.pct >= 50 ? '#FF9F0A' : '#FF453A';
+    const forecastColor = r.forecast >= r.plan ? '#30D158' : '#FF453A';
+    parts.push(`
+      <text x="40" y="${y}" fill="#F3F4F6" font-size="14" font-family="${FONT}" font-weight="700">${esc(r.label)}</text>
+      <text x="480" y="${y}" fill="#A1A1AA" font-size="12" font-family="${FONT}" text-anchor="end">${r.pct}%</text>
+      <g transform="translate(40,${y + 8})">
+        <rect width="140" height="8" rx="4" fill="#2A2A2E"/>
+        <rect width="${fill}" height="8" rx="4" fill="${color}"/>
+      </g>
+      <text x="40" y="${y + 34}" fill="#9CA3AF" font-size="11" font-family="${FONT}">План ${r.plan} · Факт МТД ${r.fact} · Остаток ${r.remain}</text>
+      <text x="40" y="${y + 50}" fill="#9CA3AF" font-size="11" font-family="${FONT}">В день до конца месяца: ${r.perDay}</text>
+      <text x="40" y="${y + 66}" fill="${forecastColor}" font-size="11" font-family="${FONT}" font-weight="700">Прогноз при текущем темпе: ${r.forecast}</text>`);
+    y += 92;
+  }
+
+  const height = Math.max(440, y + 60);
+  const sub = `${esc(st.name)} · ${esc(st.code)} · ${esc(date)} · день ${dayNum} из ${totalDays}`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="${height}" viewBox="0 0 560 ${height}">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0A0A0B"/><stop offset="100%" stop-color="#14141A"/>
+  </linearGradient></defs>
+  <rect width="560" height="${height}" rx="24" fill="url(#bg)"/>
+  <rect width="560" height="6" fill="${esc(accent)}"/>
+  <text x="40" y="48" fill="${esc(accent)}" font-size="13" font-family="${FONT}" font-weight="700">${esc(brandName).toUpperCase()}</text>
+  <text x="40" y="78" fill="#FFFFFF" font-size="24" font-family="${FONT}" font-weight="700">Закрытие месяца</text>
+  <text x="40" y="102" fill="#A1A1AA" font-size="13" font-family="${FONT}">${sub}</text>
+  ${parts.join('\n')}
+  <text x="40" y="${height - 20}" fill="#6B7280" font-size="11" font-family="${FONT}">T2 Sales · Europe/Moscow</text>
+</svg>`;
+}
+
+export async function buildMonthClosingReportPng(
+  storeId: string,
+  date: string,
+  opts?: { name?: string; color?: string; brand?: { name?: string; color?: string } }
+) {
+  const svg = await buildMonthClosingReportSvg(storeId, date, opts);
   return { svg, png: await svgToPng(svg) };
 }

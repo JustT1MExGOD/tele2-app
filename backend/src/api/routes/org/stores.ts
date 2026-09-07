@@ -36,6 +36,8 @@ const StoreWriteFields = {
   skip_sunday_micro_times: Type.Optional(Type.Array(Type.String())),
   close_time_weekday: Type.Optional(Type.String()),
   close_time_sunday: Type.Optional(Type.String()),
+  open_time_weekday: Type.Optional(Type.String()),
+  open_time_sunday: Type.Optional(Type.String()),
   org_id: Type.Optional(Type.String())
 };
 
@@ -51,7 +53,8 @@ type PatchStoreBody = Static<typeof PatchStoreBody>;
 const PATCH_KEYS = [
   'name', 'code', 'short_name', 'address', 'display_name', 'work_time',
   'hours', 'color', 'is_active', 'micro_report_times',
-  'skip_sunday_micro_times', 'close_time_weekday', 'close_time_sunday'
+  'skip_sunday_micro_times', 'close_time_weekday', 'close_time_sunday',
+  'open_time_weekday', 'open_time_sunday'
 ] as const;
 
 export async function registerStoresRoutes(app: FastifyInstance) {

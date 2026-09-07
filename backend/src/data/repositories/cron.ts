@@ -33,13 +33,14 @@ export async function findDayOrTemplatePlanResilient(storeId: string, date: stri
 }
 
 export async function listStoresForReportSchedule(): Promise<{
-  id: string; name: string; code: string;
+  id: string; name: string; code: string; org_id: string | null;
   micro_report_times: string[] | null; skip_sunday_micro_times: string[] | null;
   close_time_weekday: string | null; close_time_sunday: string | null;
+  open_time_weekday: string | null; open_time_sunday: string | null;
 }[]> {
   const res = await query(
-    `SELECT id, name, code, micro_report_times, skip_sunday_micro_times,
-            close_time_weekday, close_time_sunday
+    `SELECT id, name, code, org_id, micro_report_times, skip_sunday_micro_times,
+            close_time_weekday, close_time_sunday, open_time_weekday, open_time_sunday
      FROM stores ORDER BY name`
   );
   return res.rows;
