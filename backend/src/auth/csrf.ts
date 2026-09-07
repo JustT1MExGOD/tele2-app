@@ -49,7 +49,23 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // в браузере (session fixation, протухшая сессия после рестарта БД и
 // т.п.); без явного исключения такой запрос падал бы в CSRF-отказ ДО
 // того, как дошёл бы до собственной логики логина, блокируя честный вход.
-const EXEMPT_PATHS = new Set(['/auth/login', '/auth/register']);
+//
+// 20.57.6 (Desktop MFA release-gate finding): /auth/login/mfa и
+// /auth/login/mfa/webauthn/options — тот же случай, пропущенный при
+// введении MFA-шага логина (20.52.1). Сессионная cookie на этом этапе
+// ещё НЕ выставлена (setSessionCookie вызывается только при успехе
+// внутри самого /auth/login/mfa), поэтому t2_csrf никогда не существует
+// в момент этого запроса — но если в браузере/Electron-профиле уже
+// лежит СТАРАЯ t2_session (протухшая сессия, предыдущий вход на этом же
+// устройстве — на Desktop это особенно вероятно из-за постоянного
+// persist:t2-sales профиля, переживающего перезапуск приложения), gate
+// на строке ниже (`if (!request.cookies?.[COOKIE_NAME]) return`) НЕ
+// срабатывает как no-op, и запрос без t2_csrf падает в 403
+// csrf_mismatch ДО проверки самого MFA-кода — валидный код введён, но
+// вход не завершается. Оба MFA-login эндпоинта сами несут одноразовый
+// mfa_token как явный credential (см. комментарий выше про /auth/login),
+// то же обоснование применимо один в один.
+const EXEMPT_PATHS = new Set(['/auth/login', '/auth/register', '/auth/login/mfa', '/auth/login/mfa/webauthn/options']);
 function isExemptReset(url: string): boolean {
   return /^\/auth\/reset\/[^/]+$/.test(url.split('?')[0]);
 }

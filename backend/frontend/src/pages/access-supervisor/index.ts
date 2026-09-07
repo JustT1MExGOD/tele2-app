@@ -488,13 +488,22 @@ export function showMfaLoginChallenge(mfaToken: string, methods: string[]): void
             <label>Код</label>
             <input id="mfaLoginCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="20">
           </div>
-          <button class="btn-main" style="margin-top:8px" onclick="submitMfaLoginCode()">Подтвердить</button>
+          <button id="mfaLoginSubmit" class="btn-main" style="margin-top:8px" onclick="submitMfaLoginCode()">Подтвердить</button>
         </div>`;
   const input = document.getElementById('mfaLoginCode') as HTMLInputElement | null;
   input?.focus();
 }
 
+// Release-gate finding (20.57.6): кнопка не должна выглядеть "мёртвой" во
+// время запроса и не должна допускать повторный сабмит одним и тем же
+// кликом/двойным кликом, пока первый запрос ещё в полёте — backend и так
+// атомарно гасит повторный consumePendingLogin, но без этого гейта
+// пользователь мог успеть отправить второй запрос, который увидит
+// "истёк" на фоне уже успешного первого.
+let mfaLoginSubmitInFlight = false;
+
 export async function submitMfaLoginCode(): Promise<void> {
+  if (mfaLoginSubmitInFlight) return;
   const raw = (document.getElementById('mfaLoginCode') as HTMLInputElement | null)?.value?.trim() || '';
   if (!raw) {
     toast('Введите код', 'err');
@@ -508,13 +517,19 @@ export async function submitMfaLoginCode(): Promise<void> {
   // recovery-коды в этом проекте — "xxxx-xxxx-xxxx-xxxx-xxxx" (с дефисами,
   // 20+ символов); всё остальное — TOTP-код.
   const method = raw.length > 8 || raw.includes('-') ? 'recovery_code' : 'totp';
+  const btn = document.getElementById('mfaLoginSubmit') as HTMLButtonElement | null;
+  mfaLoginSubmitInFlight = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Проверяем…'; }
   try {
     await window.apiClient.loginMfa(authHeaders(true), { mfa_token: mfaLoginToken, method, code: raw });
   } catch (e: any) {
     toast(e?.message || 'Неверный код', 'err');
+    mfaLoginSubmitInFlight = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Подтвердить'; }
     return;
   }
   mfaLoginToken = null;
+  mfaLoginSubmitInFlight = false;
   toast('Вход выполнен', 'ok');
   bootApp();
 }

@@ -20,6 +20,7 @@ import { hashPassword } from '../../src/auth/password.js';
 import * as totp from '../../src/auth/mfa/totp.js';
 import * as recoveryCodes from '../../src/auth/mfa/recovery-codes.js';
 import * as mfaRepo from '../../src/data/repositories/mfa.js';
+import * as sessionsRepo from '../../src/data/repositories/sessions.js';
 
 function uniquePhone(): string {
   return '+7906' + Math.floor(1000000 + Math.random() * 8999999);
@@ -69,6 +70,128 @@ describe('MFA — login second factor, step-up, enrollment guards', () => {
     });
     expect(verify.statusCode).toBe(200);
     expect(verify.cookies.some((c: any) => c.name === 't2_session')).toBe(true);
+  });
+
+  // 20.57.6 (Desktop MFA release-gate finding) — the CSRF gate
+  // (auth/csrf.ts::requireCsrf) only activates when a t2_session cookie is
+  // ALREADY present on the request; a stale/leftover session cookie from a
+  // prior login on the same device (persistent on Desktop's Electron
+  // profile, but also possible in a plain browser) was previously enough
+  // to trip it on /auth/login/mfa, which had no t2_csrf pair to satisfy it
+  // (that cookie is only ever set on a SUCCESSFUL login) — a real login
+  // with a correct code failed with 403 before ever reaching MFA
+  // verification. Reproduces with an arbitrary stale cookie value, no
+  // X-CSRF-Token header, exactly the shape a real leftover cookie has.
+  it('a correct MFA code still completes login when a stale t2_session cookie already exists on the client', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('MFA Stale Cookie Org');
+    const passwordHash = await hashPassword('plain-pass-stale');
+    const phone = uniquePhone();
+    const { id } = await fx.createPhoneEmployee(org, phone, passwordHash, { fullName: 'Stale Cookie' });
+    const enrollment = await totp.startTotpEnrollment(id, phone);
+    await totp.confirmTotpEnrollment(id, await generate({ secret: enrollment.secret }));
+
+    const login = await app.inject({ method: 'POST', url: '/auth/login', payload: { phone, password: 'plain-pass-stale' } });
+    const { mfa_token } = login.json();
+
+    const now = Math.floor(Date.now() / 1000);
+    const code = await generate({ secret: enrollment.secret, epoch: now + 30 });
+    const verify = await app.inject({
+      method: 'POST',
+      url: '/auth/login/mfa',
+      headers: { cookie: 't2_session=stale-or-expired-token-from-a-previous-login' },
+      payload: { mfa_token, method: 'totp', code }
+    });
+    expect(verify.statusCode).toBe(200);
+    expect(verify.cookies.some((c: any) => c.name === 't2_session')).toBe(true);
+  });
+
+  // Companion to the test above: proves the CSRF exemption only lets the
+  // request THROUGH to MFA verification — it must not weaken verification
+  // itself. Same stale-cookie shape, but a wrong code: must fail as
+  // invalid_mfa_code (normal MFA rejection), never csrf_mismatch, and must
+  // not issue a session.
+  it('a wrong TOTP code with a stale t2_session cookie present is rejected by MFA verification, not by CSRF, and issues no session', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('MFA Stale Cookie Wrong Code Org');
+    const passwordHash = await hashPassword('plain-pass-stale-2');
+    const phone = uniquePhone();
+    const { id } = await fx.createPhoneEmployee(org, phone, passwordHash, { fullName: 'Stale Cookie Wrong Code' });
+    const enrollment = await totp.startTotpEnrollment(id, phone);
+    await totp.confirmTotpEnrollment(id, await generate({ secret: enrollment.secret }));
+
+    const login = await app.inject({ method: 'POST', url: '/auth/login', payload: { phone, password: 'plain-pass-stale-2' } });
+    const { mfa_token } = login.json();
+
+    const verify = await app.inject({
+      method: 'POST',
+      url: '/auth/login/mfa',
+      headers: { cookie: 't2_session=stale-or-expired-token-from-a-previous-login' },
+      payload: { mfa_token, method: 'totp', code: '000000' }
+    });
+    expect(verify.statusCode).toBe(401);
+    expect(verify.json().error).toBe('invalid_mfa_code');
+    expect(verify.cookies.some((c: any) => c.name === 't2_session')).toBe(false);
+  });
+
+  // WebAuthn options endpoint is NOT "the same case merely because it
+  // looks similar" — separately verified: the CSRF exemption lets a
+  // stale-cookie request reach real MFA-lifecycle logic (challenge
+  // issuance), and issuing a challenge alone must never create a session.
+  it('login-mfa WebAuthn options endpoint is reachable with a stale t2_session cookie and issues no session merely by requesting options', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('MFA Stale Cookie WebAuthn Org');
+    const passwordHash = await hashPassword('plain-pass-stale-3');
+    const phone = uniquePhone();
+    await fx.createPhoneEmployee(org, phone, passwordHash, { fullName: 'Stale Cookie WebAuthn' });
+
+    const login = await app.inject({ method: 'POST', url: '/auth/login', payload: { phone, password: 'plain-pass-stale-3' } });
+    const { mfa_token } = login.json();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login/mfa/webauthn/options',
+      headers: { cookie: 't2_session=stale-or-expired-token-from-a-previous-login' },
+      payload: { mfa_token }
+    });
+    // Must NOT be blocked by CSRF (403 csrf_mismatch) — whatever the
+    // WebAuthn config outcome (200 with real options, or 503 when
+    // MINI_APP_URL isn't configured in this test environment), it must be
+    // real MFA-lifecycle logic answering, not the CSRF gate.
+    expect(res.statusCode).not.toBe(403);
+    expect(res.json().error).not.toBe('csrf_mismatch');
+    expect(res.cookies.some((c: any) => c.name === 't2_session')).toBe(false);
+  });
+
+  it('login-mfa WebAuthn options with an invalid/expired mfa_token is rejected as invalid_or_expired_mfa_token, not csrf_mismatch', async () => {
+    const app = await getApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login/mfa/webauthn/options',
+      headers: { cookie: 't2_session=stale-or-expired-token-from-a-previous-login' },
+      payload: { mfa_token: 'not-a-real-mfa-token' }
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_or_expired_mfa_token');
+  });
+
+  // Negative control (must NOT change with this fix): a real
+  // state-changing, session-authenticated route with NO/invalid CSRF
+  // token still gets rejected — the exemption is scoped to the two
+  // pre-session MFA-login paths only, nothing broader opened up.
+  it('CSRF negative control — a protected state-changing route with a real session but no X-CSRF-Token is still rejected', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('CSRF Negative Control Org');
+    const employee = await fx.createEmployee(org, { fullName: 'CSRF Control', role: 'employee', mfa: false });
+    const token = await sessionsRepo.createSession(employee.id);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/mfa/step-up',
+      headers: { cookie: `t2_session=${token}` },
+      payload: { method: 'totp', code: '000000' }
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toBe('csrf_mismatch');
   });
 
   it('a wrong TOTP code at login-mfa is rejected, mfa_token remains usable for a correct retry', async () => {
