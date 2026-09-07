@@ -85,7 +85,7 @@ export async function insertQuestionnaire(employeeId: number, score: number, com
 export async function avgQuestionnaireScore(employeeId: number, monthStart: string): Promise<number | null> {
   const res = await query(
     `SELECT AVG(score) as avg FROM bfq_questionnaires
-     WHERE employee_id = $1 AND created_at >= $2::date`,
+     WHERE employee_id = $1 AND created_at >= $2::date AND created_at < $2::date + interval '1 month'`,
     [employeeId, monthStart]
   );
   return res.rows[0]?.avg ?? null;
@@ -105,7 +105,7 @@ export async function listQuestionnaires(monthStart: string, orgId: string, empl
     SELECT q.*, e.full_name
     FROM bfq_questionnaires q
     JOIN employees e ON e.id = q.employee_id
-    WHERE q.created_at >= $1::date AND COALESCE(e.org_id,'default') = $2
+    WHERE q.created_at >= $1::date AND q.created_at < $1::date + interval '1 month' AND COALESCE(e.org_id,'default') = $2
   `;
   if (employeeId) {
     params.push(employeeId);

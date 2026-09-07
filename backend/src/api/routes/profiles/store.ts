@@ -60,7 +60,7 @@ export async function registerStoreProfileRoutes(app: FastifyInstance) {
       const cashRows = await cashRepo.findForStoreRange(id, from, date);
       const cashDaysTotal = cashRows.length;
       const cashDaysClean = cashRows.filter(
-        (r: any) => Math.abs((Number(r.cash_fact) || 0) - (Number(r.cash_1c) || 0)) < 1000
+        (r: any) => Math.abs((Number(r.cash_fact) || 0) - ((Number(r.cash_1c) || 0) + 2000)) < 1000
       ).length;
       // Нет данных по кассе за период — не штрафуем и не хвалим, нейтральные 100.
       const cashPct = cashDaysTotal > 0 ? clamp(Math.round((cashDaysClean / cashDaysTotal) * 100), 0, 100) : 100;

@@ -1,4 +1,5 @@
 import './env.js'; // должен быть первым — см. комментарий в env.ts
+import {startChatRealtimeBridge} from './core/chat/realtime-bridge.js';
 import { buildApp } from './app.js';
 import { runMigrations } from './data/db/migrate.js';
 import { pool } from './data/db/index.js';
@@ -127,6 +128,7 @@ try {
 
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
   const reportCronHandle = startReportCron();
+  const stopChatBridge = startChatRealtimeBridge();
   const digestCronTask = startDigestCron();
   // 20.10.0 — раньше был написан (services/alerts.ts docstring это явно
   // предполагало — "подключи в startReportCron или отдельный cron"), но
@@ -177,6 +179,7 @@ try {
     hardTimeout.unref();
 
     clearInterval(reportCronHandle);
+    await stopChatBridge();
     digestCronTask.stop();
     alertCronTask.stop();
     messageCleanupTask.stop();

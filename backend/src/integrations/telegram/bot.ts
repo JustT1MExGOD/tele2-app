@@ -31,13 +31,15 @@ export async function trackGroupMessage(chatId: string, messageId: number): Prom
   }
 }
 
-export async function notifyChat(text: string, chatId?: string, threadId?: string) {
+export async function notifyChat(text: string, chatId?: string, threadId?: string, strict = false) {
   const id = chatId || CHAT_ID;
   if (!bot) {
+    if(strict) throw new Error('Bot disabled');
     console.error('notifyChat: bot disabled (no BOT_TOKEN)');
     return;
   }
   if (!id) {
+    if(strict) throw new Error('Report chat not configured');
     console.error('notifyChat: no CHAT_ID / REPORT_CHAT_ID');
     return;
   }
@@ -49,6 +51,7 @@ export async function notifyChat(text: string, chatId?: string, threadId?: strin
     } as any);
     await trackGroupMessage(id, msg.message_id);
   } catch (e: any) {
+    if(strict) throw e;
     console.error('notifyChat failed:', e?.message || e, 'chat=', id);
   }
 }
@@ -135,11 +138,12 @@ export async function notifyAdmin(text: string) {
   return notifyChat(text, ADMIN_ID);
 }
 
-export async function notifyUser(telegramId: number | string, text: string) {
-  if (!bot || !telegramId) return;
+export async function notifyUser(telegramId: number | string, text: string, strict = false) {
+  if (!bot || !telegramId) { if(strict) throw new Error('Reminder delivery unavailable'); return; }
   try {
     await bot.api.sendMessage(Number(telegramId), text, { parse_mode: 'HTML' });
   } catch (e: any) {
+    if(strict) throw e;
     console.error('notifyUser failed:', e?.message || e);
   }
 }

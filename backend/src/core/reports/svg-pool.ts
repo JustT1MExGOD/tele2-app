@@ -20,10 +20,11 @@ type RenderPayload = {
   defaultFontFamily: string;
 };
 
-type PendingEntry = { resolve: (png: Buffer) => void; reject: (err: Error) => void };
+type PendingEntry = { timer: ReturnType<typeof setTimeout>; resolve: (png: Buffer) => void; reject: (err: Error) => void };
 
 class RenderWorker {
   private worker: Worker;
+  private dead = false;
   private pending = new Map<number, PendingEntry>();
   private nextId = 1;
 
@@ -33,15 +34,23 @@ class RenderWorker {
       const entry = this.pending.get(msg.id);
       if (!entry) return;
       this.pending.delete(msg.id);
+      clearTimeout(entry.timer);
+      if (!this.pending.size) this.worker.unref();
       if (msg.error) entry.reject(new Error(msg.error));
       else entry.resolve(Buffer.from(msg.png!));
     });
-    this.worker.on('error', (err) => {
-      // воркер упал целиком — не оставляем вызовы висеть вечно
-      for (const entry of this.pending.values()) entry.reject(err);
-      this.pending.clear();
-    });
+    this.worker.on('error', err => this.fail(err));
+    this.worker.on('exit', code => this.fail(new Error(`SVG worker exited (${code})`)));
+    this.worker.unref();
   }
+
+  private fail(err: Error) {
+    this.dead = true;
+    for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(err); }
+    this.pending.clear();
+  }
+
+  get isDead() { return this.dead; }
 
   get load() {
     return this.pending.size;
@@ -50,8 +59,14 @@ class RenderWorker {
   render(payload: RenderPayload): Promise<Buffer> {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ id, ...payload });
+      const timer = setTimeout(() => {
+        this.fail(new Error('SVG render deadline exceeded'));
+        void this.worker.terminate();
+      }, 30_000);
+      this.pending.set(id, { resolve, reject, timer });
+      this.worker.ref();
+      try { this.worker.postMessage({ id, ...payload }); }
+      catch (err) { this.fail(err as Error); void this.worker.terminate(); }
     });
   }
 }
@@ -60,6 +75,7 @@ let pool: RenderWorker[] | null = null;
 
 function getPool(): RenderWorker[] {
   if (!pool) pool = Array.from({ length: POOL_SIZE }, () => new RenderWorker());
+  pool = pool.map(worker => worker.isDead ? new RenderWorker() : worker);
   return pool;
 }
 
@@ -67,6 +83,7 @@ function getPool(): RenderWorker[] {
  * одновременных рендеров, что даёт story-отчёт (3 картинки разом). */
 export async function renderSvgToPng(payload: RenderPayload): Promise<Buffer> {
   const workers = getPool();
+  if (workers.reduce((n,w) => n+w.load,0) >= 40) throw new Error('SVG render queue full');
   const worker = workers.reduce((a, b) => (b.load < a.load ? b : a));
   return worker.render(payload);
 }

@@ -22,12 +22,12 @@ export async function findDayOrTemplatePlanResilient(storeId: string, date: stri
   let res = await query(
     `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date::date = $2::date LIMIT 1`,
     [storeId, date]
-  ).catch(() => ({ rows: [] as any[] }));
+  );
   if (!res.rows[0]) {
     res = await query(
       `SELECT * FROM store_plans WHERE store_id = $1 AND plan_date IS NULL LIMIT 1`,
       [storeId]
-    ).catch(() => ({ rows: [] as any[] }));
+    );
   }
   return res.rows[0] || {};
 }
@@ -128,4 +128,25 @@ export async function listSentGroupMessagesOlderThan(cutoffIso: string): Promise
 
 export async function deleteSentGroupMessageLogRow(id: number): Promise<void> {
   await query(`DELETE FROM bot_sent_messages WHERE id = $1`, [id]);
+}
+
+export async function enqueueReportJobs(jobs: {key:string;due_at:string;payload:any}[]) {
+  if (!jobs.length) return;
+  await query(`INSERT INTO report_jobs(key,due_at,payload)
+    SELECT j.key,j.due_at,j.payload FROM jsonb_to_recordset($1::jsonb) j(key text,due_at timestamptz,payload jsonb)
+    WHERE NOT EXISTS(SELECT 1 FROM cron_send_log old WHERE old.key=j.key)
+    ON CONFLICT(key) DO NOTHING`,[JSON.stringify(jobs)]);
+}
+export async function claimReportJob() {
+  await query(`UPDATE report_jobs SET status='failed',last_error=COALESCE(last_error,'Worker lease expired') WHERE status='running' AND lease_until<now() AND attempts>=5`);
+  return (await query(`UPDATE report_jobs SET status='running', attempts=attempts+1, lease_until=now()+interval '10 minutes'
+    WHERE key=(SELECT key FROM report_jobs WHERE due_at<=now() AND next_attempt_at<=now() AND attempts<5
+      AND (status='pending' OR (status='running' AND lease_until<now())) ORDER BY due_at,key
+      FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`)).rows[0];
+}
+export async function finishReportJob(key:string,attempt:number,error?:string) {
+  await query(`UPDATE report_jobs SET status=CASE WHEN $3::text IS NULL THEN 'done' WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,
+    completed_at=CASE WHEN $3::text IS NULL THEN now() ELSE NULL END,last_error=$3,lease_until=NULL,
+    next_attempt_at=now()+ LEAST(30,attempts*attempts)*interval '1 minute'
+    WHERE key=$1 AND attempts=$2 AND status='running'`,[key,attempt,error ?? null]);
 }

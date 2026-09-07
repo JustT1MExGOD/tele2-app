@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { getSalesSumColumns } from '../../../core/shared/metrics-catalog.js';
 /**
  * История продаж, аудит правок, CSV-экспорты (продажи/BFQ/график).
  * Выделено из routes-v3.ts.
@@ -5,7 +7,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { calculateAllBFQ } from '../../../core/bfq/service.js';
 import { requireActive, requireManager, isManager, resolveViewOrgId } from '../../../auth/guards.js';
-import { todayMoscow, currentMonthMoscow } from '../../../utils/date.js';
+import { toDateISO, todayMoscow, currentMonthMoscow } from '../../../utils/date.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
@@ -112,31 +114,27 @@ export async function registerExportRoutes(app: FastifyInstance) {
       });
     }
     const orgId = resolveViewOrgId(request.user!, q.org_id);
-    const rows = await salesRepo.findForCsvExport({ from, to, orgId, storeId: q.store_id || null });
-    const header = [
-      'date', 'employee', 'store', 'code',
-      'sim', 'mnp', 'pa', 'combo', 'phones', 'accessories',
-      'insurance', 'wink', 'shpd', 'focus', 'settings',
-      'credit_request', 'credit_issued', 'plotter', 'hb'
-    ];
-
-    const lines = [header.join(';')];
-    for (const r of rows) {
-      lines.push([
-        String(r.sale_date).slice(0, 10),
-        r.full_name, r.store_name, r.code,
-        r.sim, r.mnp, r.pa, r.combo, r.phones, r.accessories,
-        r.insurance, r.wink, r.shpd, r.focus, r.settings,
-        r.credit_request, r.credit_issued, r.plotter, r.hb
-      ].map(csvSafeCell).join(';'));
+    const columns=await getSalesSumColumns();
+    const opts={from,to,orgId,storeId:q.store_id || null};
+    // Fetch first page before headers so a database error remains a regular HTTP error.
+    const first=await salesRepo.csvExportPage(opts,null);
+    async function* csv() {
+      yield '\ufeff'+['date','employee','store','code',...columns].join(';');
+      let rows=first;
+      while(rows.length) {
+        for(const row of rows) yield '\n'+[toDateISO(row.sale_date),row.full_name,row.store_name,row.code,...columns.map(c=>row[c])].map(csvSafeCell).join(';');
+        if(rows.length<500) break;
+        const last=rows[rows.length-1];
+        rows=await salesRepo.csvExportPage(opts,{date:toDateISO(last.sale_date),id:String(last.id)});
+      }
     }
 
     auditExport(request, orgId, 'sales', { from, to, store_id: q.store_id || null });
 
-    reply
+    return reply
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="sales_${safeFilenameSegment(from)}_${safeFilenameSegment(to)}.csv"`)
-      .send('﻿' + lines.join('\n'));
+      .send(Readable.from(csv(),{objectMode:false}));
     }
   );
 
@@ -205,7 +203,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
     const lines = [header.join(';')];
     for (const r of rows) {
       lines.push([
-        String(r.work_date).slice(0, 10),
+        toDateISO(r.work_date),
         r.full_name, r.store_name, r.code, r.shift_text, r.hours
       ].map(csvSafeCell).join(';'));
     }

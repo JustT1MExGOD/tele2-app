@@ -1,3 +1,4 @@
+import {publishChatChanged} from '../../../data/repositories/chat.js';
 /**
  * REST-эндпоинты чата — история (keyset-пагинация) и отправка сообщения
  * (§5/§6 брифа). org_id/senderId ВСЕГДА берутся из request.user (см.
@@ -125,6 +126,7 @@ export async function registerChatMessageRoutes(app: FastifyInstance) {
       }
       if (!result.deduplicated) {
         broadcastToOrg(orgId, { type: 'message', message: result.message });
+        try { await publishChatChanged(orgId,result.message.id); } catch(err) { request.log.warn({err},'Chat saved; realtime signal unavailable'); }
       }
       return reply.code(200).send(result.message);
     }

@@ -94,6 +94,7 @@ export async function createMessage(
   }
 
   const result = await withTransaction(async (q) => {
+    await chatRepo.lockOrganization(orgId,q);
     const inserted = await chatRepo.insertMessageIfAbsent(orgId, senderEmployeeId, clientMessageId, normalizedBody, q);
 
     if (!inserted) {
@@ -196,4 +197,13 @@ export async function listMessagesAfter(orgId: string, afterId: string, limit: n
   const rows = await chatRepo.listMessagesAfter(orgId, afterId, limit);
   const attachmentsMap = await attachmentsForMessages(rows.map((r) => r.id), orgId);
   return toCanonicalMessages(rows, attachmentsMap);
+}
+
+/** One canonical read per replica, rather than an HTTP refetch per subscriber. */
+export async function getRealtimeMessage(id:string,orgId:string):Promise<CanonicalMessage|null> {
+  const row=await chatRepo.getMessageWithAuthor(id,orgId);
+  if(!row) return null;
+  const attachments=await attachmentsForMessages([id],orgId);
+  return {id:row.id,clientMessageId:row.client_message_id,body:row.body,createdAt:row.created_at,
+    sender:toCanonicalSender(row),attachments:attachments.get(row.id) || []};
 }

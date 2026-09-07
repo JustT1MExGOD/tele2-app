@@ -1,3 +1,6 @@
+import { getEmployeeMonthFacts } from '../../../core/plans/service.js';
+import { overallProgress } from '../../../core/shared/progress.js';
+import { getEmployeeDailyPlan, metricKeys } from '../../../core/plans/service.js';
 /**
  * Идентичность и привязка Telegram: /me, /me/bind, /me/day (смена+факт+
  * дневной план сегодня), назначение роли. Выделено из routes-v3.ts.
@@ -207,25 +210,15 @@ export async function registerMeRoutes(app: FastifyInstance) {
     const monthPlan = await plansRepo.findEmployeeMonthPlanExact(e.id, month);
 
     // факт с начала месяца (для «остаток плана»)
-    const mf = await salesRepo.sumMonthFactForEmployee(e.id, month);
+    const mf = await getEmployeeMonthFacts(e.id,month.slice(0,7));
 
-    // сколько смен осталось с сегодня до конца месяца
-    const remShifts = await schedulesRepo.countRemainingInMonth(e.id, date, month);
-    const div = Math.max(1, remShifts);
-
-    const metrics = [
-      'sim', 'mnp', 'pa', 'combo', 'phones',
-      'accessories', 'settings', 'insurance', 'wink', 'shpd', 'focus'
-    ] as const;
-
-    // daily_plan = ceil( (месячный_план − факт_месяца) / оставшиеся_смены )
-    const dailyPlan: Record<string, number> = {};
+    const day = await getEmployeeDailyPlan(e.id,date);
+    const remShifts=day.remaining_shifts;
+    const metrics=await metricKeys();
+    const dailyPlan=day.plan;
     const progress: Record<string, { fact: number; plan: number; pct: number }> = {};
 
     for (const m of metrics) {
-      const left = Math.max(0, Number(monthPlan?.[m] || 0) - Number(mf[m] || 0));
-      dailyPlan[m] = Math.ceil(left / div);
-
       const f = Number(fact[m]) || 0;
       const p = dailyPlan[m];
       progress[m] = {
@@ -253,11 +246,11 @@ export async function registerMeRoutes(app: FastifyInstance) {
       total: {
         fact: totalFact,
         plan: totalPlan,
-        pct: totalPlan > 0 ? Math.round((totalFact / totalPlan) * 100) : 0
+        pct: overallProgress(fact,dailyPlan).pct
       },
       month_plan: monthPlan,
       month_fact: mf,
-      remaining_shifts: div,
+      remaining_shifts: remShifts,
       tasks
     };
   });

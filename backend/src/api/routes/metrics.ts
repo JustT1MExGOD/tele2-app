@@ -4,6 +4,7 @@
  * POST /metrics          { label, short_label?, unit?: count|money }
  * DELETE /metrics/:id    soft: is_active=false
  */
+import { invalidateSalesColumns } from '../../data/repositories/sales.js';
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { requireManager } from '../../auth/guards.js';
@@ -99,7 +100,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
       await withTransaction(async (q) => {
         await metricsRepo.upsert(id, label, short, unit, sort, q);
         // колонки в основных таблицах — чтобы план/продажи/точки работали
-        for (const table of ['sales', 'store_plans', 'employee_month_plans']) {
+        for (const table of ['sales', 'store_plans', 'employee_month_plans', 'store_month_plans']) {
           await metricsRepo.ensureColumn(table, id, q);
         }
       });
@@ -108,6 +109,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
     }
 
     invalidateMetricsCache();
+    invalidateSalesColumns();
     return {
       ok: true,
       item: {

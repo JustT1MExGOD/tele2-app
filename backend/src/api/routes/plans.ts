@@ -1,3 +1,5 @@
+import { withTransaction } from '../../data/db/index.js';
+import { metricKeys } from '../../core/plans/service.js';
 /**
  * Планы: месячные планы сотрудников, сводная таблица, дневные планы точек
  * и справочные дневные/шаблонные планы (GET /plans, слито из
@@ -112,18 +114,13 @@ export async function registerPlansRoutes(app: FastifyInstance) {
     const body = request.body as any;
     const month = body.month || currentMonthMoscow();
     const data: Record<string, number> = {};
-    for (const m of METRICS) {
+    for (const m of await metricKeys()) {
       if (body[m] !== undefined) data[m] = Number(body[m]) || 0;
     }
+    return withTransaction(async () => {
     const plan = await upsertEmployeeMonthPlan(Number(id), month, data);
 
-    // 19.23.0 (Audit Trail): не в withTransaction — upsertEmployeeMonthPlan
-    // сама по себе со своей веткой восстановления (INSERT..ON CONFLICT →
-    // фолбэк на UPDATE/INSERT при сбое) — заворачивать
-    // это в общую транзакцию с audit-записью значило бы трогать эту логику
-    // отдельным неаккуратным рефакторингом ради одного роута. Ошибку
-    // recordAudit не глушим (не .catch(()=>{})) — если она упадёт, ответ
-    // будет 500, но сам план к этому моменту уже сохранён.
+    // План и журнал записываются в одной транзакции.
     await recordAudit({
       orgId: resolveViewOrgId(request.user!, body.org_id),
       actorEmployeeId: request.user!.employee_id,
@@ -137,6 +134,7 @@ export async function registerPlansRoutes(app: FastifyInstance) {
     });
 
     return plan;
+    });
     }
   );
 
@@ -196,9 +194,10 @@ export async function registerPlansRoutes(app: FastifyInstance) {
     const body = request.body as any;
     const month = body.month || currentMonthMoscow();
     const data: Record<string, number> = {};
-    for (const m of METRICS) {
+    for (const m of await metricKeys()) {
       if (body[m] !== undefined) data[m] = Number(body[m]) || 0;
     }
+    return withTransaction(async () => {
     const plan = await upsertStoreMonthPlan(id, month, data);
 
     // store_plans (снапшот на сегодня/завтра, откуда реально читают BFQ,
@@ -207,14 +206,12 @@ export async function registerPlansRoutes(app: FastifyInstance) {
     // была бы не видна нигде, кроме GET /plans/stores/daily (он единственный
     // считает живьём из store_month_plans), вплоть до завтрашнего утра.
     // Пересчитываем сразу теми же двумя днями, что кроном каждое утро.
-    try {
-      const today = todayMoscow();
-      const tomorrow = new Date(today + 'T12:00:00');
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      await materializeStoreDailyPlans(today);
-      await materializeStoreDailyPlans(tomorrow.toISOString().slice(0, 10));
-    } catch (e: any) {
-      console.error('re-materialize after store plan edit failed:', e?.message || e);
+    const today=todayMoscow();
+    if (month.slice(0,7)===today.slice(0,7)) {
+      const target={orgId:resolveViewOrgId(request.user!,body.org_id),storeIds:[id]};
+      await materializeStoreDailyPlans(today,target);
+      const tomorrow=new Date(today+'T12:00:00Z');tomorrow.setUTCDate(tomorrow.getUTCDate()+1);
+      if(tomorrow.toISOString().slice(0,7)===month.slice(0,7)) await materializeStoreDailyPlans(tomorrow.toISOString().slice(0,10),target);
     }
 
     // 19.23.0 (Audit Trail) — та же логика, что у плана сотрудника выше:
@@ -234,6 +231,7 @@ export async function registerPlansRoutes(app: FastifyInstance) {
     });
 
     return plan;
+    });
     }
   );
 }

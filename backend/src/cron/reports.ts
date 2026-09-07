@@ -44,37 +44,6 @@ type StorePlanRow = {
   close_time_sunday: string | null;
 };
 
-function isSundayMoscow(now: Date): boolean {
-  // getDay: 0 = Sunday
-  return now.getDay() === 0;
-}
-
-const DEFAULT_MICRO_HOURS = [10, 12, 14, 16, 18, 20];
-const DEFAULT_FINAL = { h: 21, m: 0 };
-
-function parseHour(t: string): number {
-  return parseInt(String(t).split(':')[0], 10);
-}
-
-/** Микро-часы точки; по воскресеньям вычитаются часы из skip_sunday_micro_times. */
-function microHoursFor(st: StorePlanRow, sunday: boolean): number[] {
-  const base =
-    st.micro_report_times && st.micro_report_times.length
-      ? st.micro_report_times.map(parseHour)
-      : DEFAULT_MICRO_HOURS;
-  if (!sunday) return base;
-  const skip = new Set((st.skip_sunday_micro_times || []).map(parseHour));
-  return base.filter((h) => !skip.has(h));
-}
-
-/** Время финального отчёта = время закрытия точки (будни/вс). */
-function finalTimeFor(st: StorePlanRow, sunday: boolean): { h: number; m: number } {
-  const raw = sunday ? st.close_time_sunday : st.close_time_weekday;
-  if (!raw) return DEFAULT_FINAL;
-  const [h, m] = String(raw).split(':').map((x) => parseInt(x, 10));
-  return { h, m: m || 0 };
-}
-
 async function loadStorePlans(date: string): Promise<StorePlanRow[]> {
   const stores = await cronRepo.listStoresForReportSchedule();
   const out: StorePlanRow[] = [];
@@ -98,13 +67,13 @@ async function sendStoreReportImage(
   st: { store_id: string; name: string; code: string; plan: any },
   date: string,
   kind: 'micro' | 'final',
-  hour?: number
+  hour?: number | string
 ) {
   if (kind === 'final') return sendStoreStoryReport(st, date);
 
   const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
-  const hourLabel = hour != null ? `${String(hour).padStart(2, '0')}:00` : undefined;
-  const caption = `📊 ${st.name} · ${date}${hourLabel ? ' · ' + hourLabel : ''}`;
+  const hourLabel = hour == null ? undefined : typeof hour === 'string' ? hour : `${String(hour).padStart(2,'0')}:00`;
+  const caption = `📊 ${st.name} · ${date}${hourLabel ? ' · запланирован на ' + hourLabel + '; данные на момент отправки' : ''}`;
 
   try {
     const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'micro', hourLabel });
@@ -131,7 +100,7 @@ async function sendStoreReportImage(
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
       const staffNames = await cronRepo.listStaffNamesUnordered(date, st.store_id);
       const sumColsSql = await factSumColsSql();
-      const f = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql).catch(() => ({}));
+      const f = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql);
       const lines = await microLines(f, st.plan);
       const text = microReport({
         storeName: st.name,
@@ -140,7 +109,7 @@ async function sendStoreReportImage(
         staff: staffNames,
         lines
       });
-      await notifyChat(text, chatId, threadId);
+      await notifyChat(text, chatId, threadId,true);
       return { ok: true, type: 'text_fallback' };
     }
   }
@@ -156,7 +125,7 @@ async function sendStoreStoryReport(
     const { plan, fact, tomorrow } = await buildStoryReportPngs(st.store_id, date);
 
     const sumColsSql = await factSumColsSql();
-    const df = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql).catch(() => ({}));
+    const df = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql);
     // Полный факт/план точки (все ~18 метрик), а не только SIM/MNP/ПА/Комбо —
     // иначе просадка по остальным показателям для ИИ невидима.
     const comment = await generateDipComment({
@@ -185,7 +154,7 @@ async function sendStoreStoryReport(
     // controlled) и comment.text (AI-сгенерированный текст, Groq) — оба
     // потенциально ломают Telegram HTML-разметку или (для AI-текста)
     // внедряют её намеренно через prompt injection в исходных данных.
-    await notifyChat(`🏁 <b>${esc(st.name)}</b> · итог дня · ${date}\n\n${esc(comment.text)}`, chatId, threadId);
+    await notifyChat(`🏁 <b>${esc(st.name)}</b> · итог дня · ${date}\n\n${esc(comment.text)}`, chatId, threadId,true);
     return r;
   } catch (e: any) {
     console.warn('Story report failed, fallback to single final image:', e?.message || e);
@@ -220,7 +189,7 @@ async function sendSingleFinalImage(
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
       const staffNames = await cronRepo.listStaffNamesUnordered(date, st.store_id);
       const sumColsSql = await factSumColsSql();
-      const f = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql).catch(() => ({}));
+      const f = await reportImageRepo.sumDayFactColumns(st.store_id, date, sumColsSql);
       const lines = await finalLines(f, st.plan);
       const text = finalReport({
         storeName: st.name,
@@ -229,7 +198,7 @@ async function sendSingleFinalImage(
         staff: staffNames,
         lines
       });
-      await notifyChat(text, chatId, threadId);
+      await notifyChat(text, chatId, threadId,true);
       return { ok: true, type: 'text_fallback' };
     }
   }
@@ -238,65 +207,71 @@ async function sendSingleFinalImage(
 /** Возвращает handle — graceful shutdown (index.ts) должен уметь снять
  * таймер, иначе процесс может тикнуть ещё раз в процессе останова. */
 export function startReportCron(): NodeJS.Timeout {
-  console.log('📅 Cron T2: отчёты по точкам — расписание берётся из stores (micro_report_times / close_time_*)');
-  return setInterval(() => {
-    tick().catch((e) => console.error('cron tick', e?.message || e));
-  }, 60_000);
+  let busy=false;
+  const run=async () => {
+    if(busy) return;
+    busy=true;
+    try { await tick(); } catch(e) { console.error('report scheduler',e); } finally { busy=false; }
+  };
+  void run();
+  return setInterval(() => { void run(); },60_000);
+}
+
+export function reportTime(raw:string): string | null {
+  const match=/^(\d{1,2})(?::(\d{2}))?(?::00)?$/.exec(raw);
+  if(!match || Number(match[1])>23 || Number(match[2] || 0)>59) return null;
+  return `${match[1].padStart(2,'0')}:${match[2] || '00'}`;
 }
 
 async function tick() {
-  const now = new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' })
-  );
-  const hh = now.getHours();
-  const mm = now.getMinutes();
-  const date = todayMoscow();
-  const sunday = isSundayMoscow(now);
-
-  // напоминания о завтрашней смене — как было
-  if (hh === 20 && mm === 0 && (await claimCronSend(`tomorrow_reminders:${date}`))) {
-    await runJob('report.tomorrow_reminders', () => sendTomorrowReminders(date));
-  }
-
-  // Predict (21.0) — почасовой профиль точек (store_hour_profile) раньше
-  // обновлялся только вручную кнопкой «Пересчитать» (POST
-  // /admin/rebuild-hour-profiles) — если никто не нажал, профиль либо
-  // пуст, либо стал устаревшим по мере роста sales_events. Автоматический
-  // ежедневный пересчёт, рано утром, до открытия точек.
-  if (hh === 5 && mm === 0 && (await claimCronSend(`rebuild_hour_profiles:${date}`))) {
-    await runJob('report.rebuild_hour_profiles', () => rebuildHourProfiles());
-  }
-
-  // Дневные планы точек раньше материализовались только вручную кнопкой
-  // «Записать дневные планы в БД» — если никто не нажал, store_plans на
-  // сегодня/завтра просто нет, и отчёты/«Фокус на завтра» рендерятся
-  // пустыми (факт 0, план «—»). Автоматически считаем оба дня рано утром.
-  if (hh === 6 && mm === 0) {
-    const tomorrow = new Date(date + 'T12:00:00');
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-    await runJob('report.materialize_today', () => materializeStoreDailyPlans(date));
-    await runJob('report.materialize_tomorrow', () => materializeStoreDailyPlans(tomorrowStr));
-  }
-
-  const stores = await loadStorePlans(date);
-
-  for (const st of stores) {
-    const micros = microHoursFor(st, sunday);
-    if (mm === 0 && micros.includes(hh) && (await claimCronSend(`micro:${st.store_id}:${date}:${hh}`))) {
-      await runJob(`report.micro:${st.store_id}`, async () => {
-        await sendStoreReportImage(st, date, 'micro', hh);
-        console.log('Микро-картинка:', st.name, hh + ':00');
-      });
+  const date=todayMoscow();
+  const stores=await cronRepo.listStoresForReportSchedule();
+  const jobs:{key:string;due_at:string;payload:any}[]=[];
+  const add=(key:string,time:string,payload:any) => jobs.push({key,due_at:`${date}T${time}:00+03:00`,payload:{date,...payload}});
+  add(`tomorrow_reminders:${date}`,'20:00',{kind:'reminders'});
+  add(`rebuild_hour_profiles:${date}`,'05:00',{kind:'profiles'});
+  add(`materialize:${date}`,'06:00',{kind:'plans'});
+  const sunday=new Date(date+'T12:00:00Z').getUTCDay()===0;
+  for(const st of stores) {
+    const times=(st.micro_report_times?.length ? st.micro_report_times : ['10:00','12:00','14:00','16:00','18:00','20:00']).map(reportTime).filter(Boolean) as string[];
+    const skip=new Set((st.skip_sunday_micro_times || []).map(reportTime));
+    for(const time of times) {
+      if(sunday && skip.has(time)) continue;
+      // Preserve legacy key for whole-hour reports already sent before upgrade.
+      const suffix=time.endsWith(':00') ? String(Number(time.slice(0,2))) : time;
+      add(`micro:${st.id}:${date}:${suffix}`,time,{kind:'micro',store_id:st.id,time});
     }
-
-    const fin = finalTimeFor(st, sunday);
-    if (hh === fin.h && mm === fin.m && (await claimCronSend(`final:${st.store_id}:${date}`))) {
-      await runJob(`report.final:${st.store_id}`, async () => {
-        await sendStoreReportImage(st, date, 'final');
-        console.log('Итог-картинка:', st.name, `${fin.h}:${String(fin.m).padStart(2, '0')}`);
-      });
+    const final=reportTime(String((sunday ? st.close_time_sunday : st.close_time_weekday) || '21:00'));
+    if(final) add(`final:${st.id}:${date}`,final,{kind:'final',store_id:st.id});
+  }
+  await cronRepo.enqueueReportJobs(jobs);
+  // Bounded work per tick; other replicas claim different rows. Missed ticks
+  // and already queued previous-day jobs are recovered after restart.
+  for(let n=0;n<20;n++) {
+    const job=await cronRepo.claimReportJob();
+    if(!job) break;
+    const p=job.payload;
+    await runJob(`report.${p.kind}`,async () => {
+    try {
+      if(p.kind==='profiles') await rebuildHourProfiles();
+      else if(p.kind==='plans') {
+        await materializeStoreDailyPlans(p.date);
+        const tomorrow=new Date(p.date+'T12:00:00Z');tomorrow.setUTCDate(tomorrow.getUTCDate()+1);
+        await materializeStoreDailyPlans(tomorrow.toISOString().slice(0,10));
+      } else if(p.kind==='reminders') await sendTomorrowReminders(p.date);
+      else {
+        const st=stores.find(st=>st.id===p.store_id);
+        if(!st) throw new Error('Report store no longer exists');
+        const plan=await cronRepo.findDayOrTemplatePlanResilient(st.id,p.date);
+        const result=await sendStoreReportImage({...st,store_id:st.id,plan},p.date,p.kind,p.time);
+        if(!result?.ok) throw new Error('Report delivery failed');
+      }
+      await cronRepo.finishReportJob(job.key,job.attempts);
+    } catch(e:any) {
+      await cronRepo.finishReportJob(job.key,job.attempts,String(e?.message || e).slice(0,1000));
+      throw e;
     }
+    });
   }
 }
 
@@ -310,8 +285,8 @@ async function sendTomorrowReminders(today: string) {
         storeName: r.store_name || r.store_id,
         shiftText: r.shift_text || '',
         hours: r.hours,
-        dateLabel: 'завтра'
-      })
+        dateLabel: String(r.work_date).slice(0,10)
+      }),true
     );
   }
 }
@@ -325,7 +300,8 @@ export async function sendMicroReports(date: string, hour?: number) {
       new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' })).getHours();
     let sent = 0;
     for (const st of stores) {
-      await sendStoreReportImage(st, date, 'micro', h);
+      const result=await sendStoreReportImage(st, date, 'micro', h);
+      if(!result?.ok) throw new Error('Report delivery failed');
       sent++;
       console.log('Микро-картинка:', st.name, h + ':00');
     }
@@ -342,7 +318,8 @@ export async function sendFinalReports(date: string) {
     const stores = await loadStorePlans(date);
     let sent = 0;
     for (const st of stores) {
-      await sendStoreReportImage(st, date, 'final');
+      const result=await sendStoreReportImage(st, date, 'final');
+      if(!result?.ok) throw new Error('Report delivery failed');
       sent++;
       console.log('Итог-картинка:', st.name);
     }

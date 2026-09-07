@@ -11,8 +11,11 @@
   const DB_NAME = 't2_offline_v1';
   const STORE = 'ops';
 
+  let database;
+  let inFlight;
   function openDb() {
-    return new Promise((resolve, reject) => {
+    if (database) return database;
+    database = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, 1);
       req.onupgradeneeded = () => {
         const db = req.result;
@@ -20,9 +23,13 @@
           db.createObjectStore(STORE, { keyPath: 'client_id' });
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        req.result.onversionchange = () => { req.result.close(); database = null; };
+        resolve(req.result);
+      };
+      req.onerror = () => { database=null; reject(req.error); };
     });
+    return database;
   }
 
   function uuid() {
@@ -81,14 +88,57 @@
       metrics: payload.metrics || {}
     };
     await putOp(op);
+    updateQueueBadge().catch(() => {});
     // пробуем сразу синкнуть
     flush().catch(() => {});
     return op;
   }
 
   async function pendingCount() {
-    const ops = await allOps();
-    return ops.length;
+    const db=await openDb();
+    return new Promise((resolve,reject) => {
+      const request=db.transaction(STORE,'readonly').objectStore(STORE).count();
+      request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+    });
+  }
+
+  async function updateQueueBadge() {
+    if (!document.body) return;
+    const count=await pendingCount();
+    let button=document.getElementById('offlineQueueStatus');
+    if (!button && count) {
+      button=document.createElement('button');button.id='offlineQueueStatus';button.type='button';
+      button.className='btn secondary';button.setAttribute('aria-live','polite');
+      Object.assign(button.style,{position:'fixed',bottom:'calc(76px + env(safe-area-inset-bottom))',right:'12px',zIndex:'900',maxWidth:'calc(100vw - 24px)'});
+      button.addEventListener('click',()=>showQueue().catch(()=>{}));document.body.append(button);
+    }
+    if(button) {button.hidden=!count;button.textContent=`Не отправлено: ${count} · Подробнее`;}
+  }
+
+  async function showQueue() {
+    document.getElementById('offlineQueueDialog')?.remove();
+    const dialog=document.createElement('dialog');dialog.id='offlineQueueDialog';
+    dialog.setAttribute('aria-labelledby','offlineQueueTitle');
+    Object.assign(dialog.style,{maxWidth:'min(540px,92vw)',maxHeight:'80vh',overflow:'auto',borderRadius:'16px',padding:'20px'});
+    const heading=document.createElement('h2');heading.id='offlineQueueTitle';heading.textContent='Неотправленные продажи';dialog.append(heading);
+    const note=document.createElement('p');note.textContent='Эти записи ещё не подтверждены сервером. Автоматически повторяем временные ошибки. Записи с постоянной ошибкой сохраняются для сверки.';dialog.append(note);
+    const operations=await allOps();
+    for(const op of operations.slice(0,100)) {
+      const row=document.createElement('section');
+      const label=document.createElement('p');label.textContent=`${op.sale_date || op.created_at?.slice(0,10) || ''} · ${op.store_id || 'Точка не указана'} · ${Object.entries(op.metrics || {}).map(([k,v])=>`${k}: ${v}`).join(', ')}`;row.append(label);
+      if(op.error) {const error=document.createElement('p');error.textContent=op.error;row.append(error);}
+      if(op.failed) {
+        const retry=document.createElement('button');retry.type='button';retry.textContent='Повторить после исправления причины';
+        retry.addEventListener('click',async()=>{retry.disabled=true;try {await global.OfflineQueue.retry(op.client_id);dialog.close();await showQueue();} catch {retry.disabled=false;}});row.append(retry);
+      }
+      dialog.append(row);
+    }
+    if(operations.length>100) {const note=document.createElement('p');note.textContent='Показаны первые 100 записей; остальные остаются в очереди.';dialog.append(note);}
+    const retryAll=document.createElement('button');retryAll.type='button';retryAll.textContent='Отправить ожидающие';
+    retryAll.addEventListener('click',async()=>{retryAll.disabled=true;try{await flush();dialog.close();await showQueue();}catch{retryAll.disabled=false;note.textContent='Связь с сервером отсутствует. Записи сохранены на устройстве.';}});
+    const close=document.createElement('button');close.type='button';close.textContent='Закрыть';close.addEventListener('click',()=>dialog.close());
+    dialog.append(retryAll,close);dialog.addEventListener('close',()=>{dialog.remove();document.getElementById('offlineQueueStatus')?.focus();});
+    document.body.append(dialog);dialog.showModal();close.focus();
   }
 
   /**
@@ -118,9 +168,16 @@
     });
   }
 
-  async function flush() {
+  function flush() {
+    if (inFlight) return inFlight;
+    inFlight = flushBatch().finally(() => { inFlight=null; updateQueueBadge().catch(() => {}); });
+    return inFlight;
+  }
+
+  async function flushBatch() {
     if (!navigator.onLine) return { skipped: true };
-    const ops = await allOps();
+    const ops = (await allOps()).filter(op => !op.failed && (!op.retry_at || op.retry_at <= Date.now()))
+      .sort((a,b) => String(a.created_at).localeCompare(String(b.created_at))).slice(0,50);
     if (!ops.length) return { ok: true, count: 0 };
 
     const API = global.API || '';
@@ -138,10 +195,18 @@
     for (const r of data.results || []) {
       if (r.status === 'applied' || r.status === 'duplicate') {
         await removeOp(r.client_id);
+      } else {
+        const op = ops.find(op => op.client_id === r.client_id);
+        if (op) await putOp({...op, failed:r.retryable === false, error:r.error || 'Не удалось сохранить',
+          attempts:(op.attempts || 0)+1,retry_at:Date.now()+Math.min(300000,30000*2**Math.min(op.attempts || 0,4))});
       }
     }
+    global.dispatchEvent(new CustomEvent('t2:sync-status', {detail:{pending:await pendingCount()}}));
     return data;
   }
+
+  document.addEventListener('DOMContentLoaded',()=>updateQueueBadge().catch(()=>{}));
+  if(document.readyState!=='loading') updateQueueBadge().catch(()=>{});
 
   global.addEventListener('online', () => {
     flush().catch(() => {});
@@ -156,6 +221,11 @@
     enqueueSale,
     flush,
     pendingCount,
+    async retry(client_id) {
+      const op=(await allOps()).find(op => op.client_id === client_id);
+      if(op) await putOp({...op,failed:false,retry_at:0});
+      return flush();
+    },
     allOps,
     clear
   };

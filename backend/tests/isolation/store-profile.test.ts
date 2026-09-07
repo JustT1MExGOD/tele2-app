@@ -38,7 +38,7 @@ describe('GET /stores/:id/profile', () => {
         [employeeA.id, storeA, dateStr]
       );
       await query(
-        `INSERT INTO store_cash (store_id, cash_date, cash_fact, cash_1c) VALUES ($1,$2,$3,$3)`,
+        `INSERT INTO store_cash (store_id, cash_date, cash_fact, cash_1c) VALUES ($1,$2,$3+2000,$3)`,
         [storeA, dateStr, 10000]
       );
       await query(

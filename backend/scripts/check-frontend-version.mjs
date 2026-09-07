@@ -52,3 +52,9 @@ if (indexMatch[1] !== backendVersion) {
 }
 
 console.log(`check-frontend-version: OK (${backendVersion})`);
+
+const lock = JSON.parse(fs.readFileSync(path.join(ROOT,'package-lock.json'),'utf8'));
+if (lock.version !== backendVersion || lock.packages?.['']?.version !== backendVersion) {
+  console.error('check-frontend-version: package-lock root versions do not match package.json');
+  process.exit(1);
+}

@@ -5,7 +5,7 @@
 ### Операционная система розничных продаж сети T2
 **Telegram Mini App · Браузер/PWA · Fastify · PostgreSQL · Grammy · Railway**
 
-[![version](https://img.shields.io/badge/version-20.57.4--rc-2AABEE?style=flat-square)](#21-история-версий)
+[![version](https://img.shields.io/badge/version-20.57.5--rc-2AABEE?style=flat-square)](#21-история-версий)
 [![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-1566%20passing-2EA043?style=flat-square&logo=vitest&logoColor=white)
 ![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -56,7 +56,7 @@
 - **Как это устроено** — Telegram передаёт подписанную личность пользователя, либо браузер несёт cookie-сессию (телефон+пароль) → сервер на Fastify проверяет identity и права через общий шов (`auth/principal.ts`) → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
 - **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
 
-**Актуальная выпущенная версия:** `20.56.0` · **Release candidate на review:** `20.57.4` (внутренний чат 20.57.0 + hotfix pass 20.57.1 + 20.57.2 + visual/UX pass 20.57.3 + lockfile-sync fix 20.57.4 — набор точечных фиксов и security-патчей, см. §21, ещё не задеплоено) · **Часовой пояс истины:** `Europe/Moscow`
+**Актуальная выпущенная версия:** `20.56.0` · **Новый кандидат для проверки:** `20.57.5`, desktop `20.56.6`. Исправления целостности данных, расчётов, синхронизации и нагрузки: [IMPLEMENTATION-20.57.5.md](IMPLEMENTATION-20.57.5.md). Не развёрнут в production. · **Часовой пояс истины:** `Europe/Moscow`
 
 ---
 

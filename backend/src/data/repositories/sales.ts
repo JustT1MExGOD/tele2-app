@@ -7,8 +7,11 @@
  * комментарий ниже) — самый рискованный перенос всей миграции 20.8.0,
  * сделан буквальным cut-paste, без рефакторинга по пути.
  */
-import { query } from '../db/index.js';
-import { logSaleEvents } from '../../core/analytics/heatmap.js';
+import { query, withTransaction } from '../db/index.js';
+import { claimIdempotencyKey } from './sync-log.js';
+import { evaluateAfterSale } from '../../core/employees/gamification.js';
+import { getMetricDefs, getSalesSumColumns } from '../../core/shared/metrics-catalog.js';
+import { hourMoscow, logSaleEvents } from '../../core/analytics/heatmap.js';
 
 const SAFE_COLUMN = /^[a-z][a-z0-9_]{0,29}$/;
 // Границы integer в Postgres — часть колонок метрик (sim/mnp/pa/combo/hb)
@@ -23,6 +26,7 @@ const MAX_METRIC_VALUE = 2_147_483_647;
 export class SaleMetricRangeError extends Error {
   constructor(public metric: string, public value: number) {
     super(`Значение метрики "${metric}" (${value}) вне допустимого диапазона`);
+    Object.assign(this, {statusCode:400});
     this.name = 'SaleMetricRangeError';
   }
 }
@@ -31,77 +35,71 @@ export type SaleSource = 'api' | 'quick' | 'sync' | 'correction';
 
 export type AppliedMetric = { metric: string; value: number };
 
-/**
- * Аддитивно (+=, не =) — так и задумано: смысл в "прибавить N ещё", не
- * "задать итог". Best-effort (swallowed-exception) записи в sales_audit и
- * sales_events — асимметрия между ними (первая молча глотает, вторая
- * логирует warn) сохранена как есть, не "исправлена" по пути.
- */
+/** Additive write. Fact, idempotency receipt, journals and XP commit together. */
 export async function applySaleUpsert(opts: {
-  employee_id: number;
-  store_id: string;
-  sale_date: string;
-  metrics: Record<string, number>;
-  source: SaleSource;
-  createdByTelegramId?: number | null;
-}): Promise<{ row: any; applied: AppliedMetric[] }> {
-  const fields = Object.keys(opts.metrics).filter((k) => {
-    const v = Number(opts.metrics[k]);
-    return SAFE_COLUMN.test(k) && Number.isFinite(v) && v !== 0;
-  });
+  employee_id: number; store_id: string; sale_date: string;
+  metrics: Record<string, number>; source: SaleSource;
+  createdByTelegramId?: number | null; clientId?: string | null; occurredAt?: string;
+}): Promise<{ row: any; applied: AppliedMetric[]; deduped?: boolean }> {
+  const defs = await getMetricDefs();
+  const allowed = new Set(defs.map(d=>d.id));
+  const fields = Object.keys(opts.metrics).sort();
   for (const f of fields) {
     const v = Number(opts.metrics[f]);
-    if (Math.abs(v) > MAX_METRIC_VALUE) throw new SaleMetricRangeError(f, v);
-  }
-  if (!fields.length) return { row: null, applied: [] };
-
-  const insertCols = ['employee_id', 'store_id', 'sale_date', ...fields];
-  const insertVals: any[] = [
-    opts.employee_id,
-    opts.store_id,
-    opts.sale_date,
-    ...fields.map((f) => Number(opts.metrics[f]))
-  ];
-  const placeholders = insertVals.map((_, i) => `$${i + 1}`);
-  const setParts = fields.map((f) => `${f} = GREATEST(0, sales.${f} + EXCLUDED.${f})`);
-  setParts.push('updated_at = now()');
-
-  const res = await query(
-    `INSERT INTO sales (${insertCols.join(',')})
-     VALUES (${placeholders.join(',')})
-     ON CONFLICT (employee_id, store_id, sale_date)
-     DO UPDATE SET ${setParts.join(', ')}
-     RETURNING *`,
-    insertVals
-  );
-  const row = res.rows[0];
-  const applied: AppliedMetric[] = fields.map((f) => ({ metric: f, value: Number(opts.metrics[f]) }));
-
-  try {
-    for (const a of applied) {
-      await query(
-        `INSERT INTO sales_audit (employee_id, store_id, sale_date, metric, delta, source, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [opts.employee_id, opts.store_id, opts.sale_date, a.metric, a.value, opts.source, opts.createdByTelegramId || null]
-      );
+    if (!SAFE_COLUMN.test(f) || !allowed.has(f) || !Number.isFinite(v) || Math.abs(v) > MAX_METRIC_VALUE || (defs.find(d=>d.id===f)?.unit === 'count' && !Number.isInteger(v))) {
+      throw new SaleMetricRangeError(f, v);
     }
-  } catch (_) {}
-
-  try {
-    const metrics: Record<string, number> = {};
-    for (const a of applied) metrics[a.metric] = a.value;
-    await logSaleEvents({
-      employee_id: opts.employee_id,
-      store_id: opts.store_id,
-      sale_date: opts.sale_date,
-      metrics,
-      source: opts.source
-    });
-  } catch (e) {
-    console.warn('sales_events log failed:', (e as any)?.message || e);
   }
-
-  return { row, applied };
+  if (!fields.length) throw Object.assign(new Error('Не выбраны метрики'),{statusCode:400});
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.sale_date) || !Number.isFinite(Date.parse(opts.sale_date)) || new Date(opts.sale_date).toISOString().slice(0,10)!==opts.sale_date)
+    throw Object.assign(new Error('Неверная дата продажи'),{statusCode:400});
+  const payload = { employee_id: opts.employee_id, store_id: opts.store_id, sale_date: opts.sale_date,
+    metrics: Object.fromEntries(fields.map(f => [f, Number(opts.metrics[f])])) };
+  return withTransaction(async () => {
+    if (opts.clientId) {
+      const fresh = await claimIdempotencyKey(opts.clientId, opts.employee_id, opts.createdByTelegramId ?? null, payload);
+      if (!fresh) {
+        const old = (await query('SELECT payload,result FROM offline_sync_log WHERE client_id=$1', [opts.clientId])).rows[0];
+        const oldMetrics = old?.payload?.metrics || {};
+        if (!old?.result || Object.keys(oldMetrics).length !== fields.length ||
+            fields.some(f => Number(oldMetrics[f]) !== payload.metrics[f]) ||
+            Number(old.payload?.employee_id) !== opts.employee_id || old.payload?.store_id !== opts.store_id || old.payload?.sale_date !== opts.sale_date) {
+          throw Object.assign(new Error('Результат операции требует сверки; повтор с изменёнными данными не применён'), {statusCode: 409});
+        }
+        return {...old.result, applied: [], deduped: true};
+      }
+    }
+    // Serialize all writes, including zero corrections, for this daily row.
+    await query(`INSERT INTO sales(employee_id,store_id,sale_date) VALUES($1,$2,$3)
+      ON CONFLICT(employee_id,store_id,sale_date) DO NOTHING`, [opts.employee_id,opts.store_id,opts.sale_date]);
+    const before = (await query(`SELECT * FROM sales WHERE employee_id=$1 AND store_id=$2 AND sale_date=$3 FOR UPDATE`,
+      [opts.employee_id,opts.store_id,opts.sale_date])).rows[0];
+    // PostgreSQL numeric arithmetic preserves decimal sums and effective deltas.
+    for (const f of fields) {
+      if (Number(before[f] || 0) + Number(opts.metrics[f]) > MAX_METRIC_VALUE)
+        throw new SaleMetricRangeError(f,Number(before[f] || 0)+Number(opts.metrics[f]));
+    }
+    const values:any[]=[before.id];
+    for(const f of fields) values.push(opts.metrics[f],before[f] || 0);
+    const row=(await query(`UPDATE sales SET ${fields.map((f,i)=>`${f}=GREATEST(COALESCE(${f},0)+$${i*2+2}::numeric,0)`).join(',')},updated_at=now()
+      WHERE id=$1 RETURNING *,${fields.map((f,i)=>`${f}-$${i*2+3}::numeric AS __delta_${i}`).join(',')}`,values)).rows[0];
+    const applied:AppliedMetric[]=[];
+    fields.forEach((f,i)=>{
+      if(Number(row[f])>MAX_METRIC_VALUE) throw new SaleMetricRangeError(f,Number(row[f]));
+      const delta=Number(row[`__delta_${i}`]);delete row[`__delta_${i}`];
+      if(delta) applied.push({metric:f,value:delta});
+    });
+    for (const a of applied) await query(`INSERT INTO sales_audit(employee_id,store_id,sale_date,metric,delta,source,created_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7)`,[opts.employee_id,opts.store_id,opts.sale_date,a.metric,a.value,opts.source,opts.createdByTelegramId ?? null]);
+    const metrics = Object.fromEntries(applied.map(a=>[a.metric,a.value]));
+    const occurred = opts.occurredAt ? new Date(opts.occurredAt) : undefined;
+    if (occurred && !Number.isFinite(occurred.getTime())) throw Object.assign(new Error('Неверное время операции'),{statusCode:400});
+    await logSaleEvents({...opts,metrics,hour:occurred ? hourMoscow(occurred) : undefined});
+    await evaluateAfterSale(opts.employee_id,metrics);
+    const result = {row,applied};
+    if (opts.clientId) await query('UPDATE offline_sync_log SET result=$2 WHERE client_id=$1',[opts.clientId,JSON.stringify(result)]);
+    return result;
+  });
 }
 
 /** services/alerts.ts — сумма базовых метрик точки за день (для проверки алертов). */
@@ -121,9 +119,12 @@ export async function sumMetricsForStoreDay(
  * динамического подсчёта факта по существующим метрикам (кастомные метрики
  * добавляют колонки во время выполнения, не на этапе сборки). */
 let salesColumnsCache: Set<string> | null = null;
+let salesColumnsAt = 0;
+export function invalidateSalesColumns() { salesColumnsCache = null; }
 
 export async function getSalesColumns(): Promise<Set<string>> {
-  if (salesColumnsCache) return salesColumnsCache;
+  if (salesColumnsCache && Date.now() - salesColumnsAt < 30000) return salesColumnsCache;
+  salesColumnsAt = Date.now();
   try {
     const res = await query(
       `SELECT column_name
@@ -231,21 +232,9 @@ export async function sumDayFactNarrow(employeeId: number, date: string): Promis
 
 /** GET /me/day — факт сотрудника за один день, фиксированный набор колонок под этот экран. */
 export async function sumDayFactForEmployee(employeeId: number, date: string): Promise<Record<string, number>> {
-  const res = await query(
-    `SELECT
-       COALESCE(SUM(sim),0) as sim, COALESCE(SUM(mnp),0) as mnp,
-       COALESCE(SUM(pa),0) as pa, COALESCE(SUM(combo),0) as combo,
-       COALESCE(SUM(phones),0) as phones, COALESCE(SUM(accessories),0) as accessories,
-       COALESCE(SUM(shpd),0) as shpd, COALESCE(SUM(wink),0) as wink,
-       COALESCE(SUM(focus),0) as focus, COALESCE(SUM(insurance),0) as insurance,
-       COALESCE(SUM(settings),0) as settings,
-       COALESCE(SUM(credit_issued),0) as credit_issued,
-       COALESCE(SUM(credit_request),0) as credit_request
-     FROM sales
-     WHERE employee_id = $1 AND sale_date::date = $2::date`,
-    [employeeId, date]
-  );
-  return res.rows[0] || {};
+  const columns=await getSalesSumColumns();
+  return (await query(`SELECT ${columns.map(c=>`COALESCE(SUM(${c}),0) AS ${c}`).join(',')}
+    FROM sales WHERE employee_id=$1 AND sale_date=$2`,[employeeId,date])).rows[0] || {};
 }
 
 /** GET /me/day — факт сотрудника с начала месяца (для «остаток плана»). */
@@ -418,10 +407,10 @@ export async function getNotificationInfo(
  * провалидированным против getSalesSumColumns() (allowlist), безопасна
  * интерполяция имени колонки. */
 export async function getZeroContext(
-  saleId: string, metric: string
+  saleId: string, metric: string, lock = false
 ): Promise<{ val: number; employee_id: number; store_id: string; sale_date: string } | null> {
   const res = await query(
-    `SELECT ${metric} as val, employee_id, store_id, sale_date FROM sales WHERE id = $1`,
+    `SELECT ${metric} as val, employee_id, store_id, sale_date FROM sales WHERE id = $1 ${lock ? 'FOR UPDATE' : ''}`,
     [saleId]
   );
   return res.rows[0] || null;
@@ -441,4 +430,15 @@ export async function insertCorrectionAudit(
      VALUES ($1,$2,$3,$4,$5,'correction',$6)`,
     [data.employeeId, data.storeId, data.saleDate, data.metric, data.delta, data.createdByTelegramId]
   );
+  await logSaleEvents({employee_id:data.employeeId,store_id:data.storeId,sale_date:data.saleDate,metrics:{[data.metric]:data.delta},source:'correction'});
+}
+
+/** Bounded keyset export; no long-lived transaction while a client downloads. */
+export async function csvExportPage(opts:{from:string;to:string;orgId:string;storeId:string|null},cursor:{date:string;id:string}|null) {
+  return (await query(`SELECT s.*,e.full_name,COALESCE(st.display_name,st.name) store_name,st.code
+    FROM sales s JOIN employees e ON e.id=s.employee_id JOIN stores st ON st.id=s.store_id
+    WHERE s.sale_date >= $1 AND s.sale_date <= $2 AND COALESCE(st.org_id,'default')=$3
+      AND ($4::text IS NULL OR s.store_id=$4)
+      AND ($5::date IS NULL OR (s.sale_date,s.id)>($5::date,$6::bigint))
+    ORDER BY s.sale_date,s.id LIMIT 500`,[opts.from,opts.to,opts.orgId,opts.storeId,cursor?.date ?? null,cursor?.id ?? null])).rows;
 }

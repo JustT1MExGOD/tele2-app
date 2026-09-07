@@ -2,6 +2,7 @@
  * Точный heatmap по часу продажи (МСК) из sales_events.
  * Fallback: store_hour_profile + равномерное распределение дневных sales.
  */
+import { withTransaction } from '../../data/db/index.js';
 import * as repo from '../../data/repositories/heatmap.js';
 
 function num(v: any) {
@@ -52,7 +53,7 @@ export async function salesHeatmap(storeId: string, weeks = 4) {
     else if (m === 'mnp') byHour[h].mnp += t;
     else if (m === 'pa') byHour[h].pa += t;
     else if (m === 'combo') byHour[h].combo += t;
-    byHour[h].total += t;
+    if (['sim','mnp','pa','combo'].includes(m)) byHour[h].total += t;
   }
 
   const hours = Object.values(byHour);
@@ -83,7 +84,9 @@ export async function salesHeatmap(storeId: string, weeks = 4) {
 
 /** Пересчёт store_hour_profile из events */
 export async function rebuildHourProfiles(storeId?: string) {
-  await repo.deleteHourProfiles(storeId || null);
-  await repo.rebuildHourProfilesFromEvents(storeId || null);
+  await withTransaction(async () => {
+    await repo.deleteHourProfiles(storeId || null);
+    await repo.rebuildHourProfilesFromEvents(storeId || null);
+  });
   return { ok: true };
 }

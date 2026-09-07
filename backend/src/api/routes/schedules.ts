@@ -1,3 +1,4 @@
+import { withTransaction } from '../../data/db/index.js';
 /**
  * График смен: день, правка (в т.ч. массовая), месяц целиком.
  * Вынесено из index.ts при разбиении монолита на модули; /schedules/bulk и
@@ -113,6 +114,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     if (!items.length) return reply.code(400).send({ error: 'items required' });
 
     const orgId = resolveViewOrgId(request.user!, body.org_id);
+    return withTransaction(async () => {
     const saved = [];
     for (const item of items) {
       const employee_id = Number(item.employee_id);
@@ -139,6 +141,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     }
 
     return { ok: true, count: saved.length, items: saved };
+    });
     }
   );
 

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
+// The installer is Windows-only. Model its path rules on every test host.
+vi.mock('node:path', async (original) => {
+  const actual=await original<typeof import('node:path')>();
+  return {...actual,default:actual.win32};
+});
+
 const openPathMock = vi.fn();
 
 vi.mock('electron', () => ({

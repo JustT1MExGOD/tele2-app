@@ -36,6 +36,9 @@ export class RealtimeTransport {
   private opts: RealtimeTransportOptions;
   private ws: WebSocket | null = null;
   private stopped = false;
+  private restCursor = '0';
+  private pollInFlight = false;
+  private generation = 0;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private pollingActive = false;
   private wsRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -49,12 +52,16 @@ export class RealtimeTransport {
 
   start(): void {
     this.stopped = false;
+    this.generation++;
+    this.restCursor = this.opts.getLastKnownId() ?? '0';
     document.addEventListener('visibilitychange', this.visibilityHandler);
     this.tryConnectWs();
   }
 
   stop(): void {
     this.stopped = true;
+    this.generation++;
+    this.pollingActive = false;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     if (this.wsRetryTimer) clearTimeout(this.wsRetryTimer);
     if (this.pollTimer) clearTimeout(this.pollTimer);
@@ -74,7 +81,7 @@ export class RealtimeTransport {
     // Polling ставится на паузу, пока вкладка скрыта (§9 брифа: "не
     // создавать request storm") — при возврате сразу один немедленный тик
     // catch-up вместо ожидания следующего интервала.
-    if (!document.hidden && this.pollingActive && !this.isRealtimeConnected) {
+    if (!document.hidden && this.pollingActive) {
       this.pollTick();
     }
   }
@@ -82,6 +89,7 @@ export class RealtimeTransport {
   private tryConnectWs(): void {
     if (this.stopped) return;
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const generation = this.generation;
     let settled = false;
     let ws: WebSocket;
     try {
@@ -98,12 +106,12 @@ export class RealtimeTransport {
     }, WS_CONNECT_TIMEOUT_MS);
 
     ws.onopen = () => {
-      if (settled) return;
+      if (settled || this.stopped || generation !== this.generation) { ws.close(); return; }
       settled = true;
       clearTimeout(timeout);
       this.ws = ws;
       this.wsRetryDelay = WS_RETRY_BASE_MS;
-      this.stopPolling();
+      this.pollingActive = true;
       // Реальное соединение может пропустить всё, что случилось между
       // последним известным сообщением и открытием сокета — один
       // catch-up сразу после connect закрывает это окно (§8 брифа).
@@ -112,6 +120,7 @@ export class RealtimeTransport {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data as string);
+        if (data?.type === 'refresh') void this.pollTick();
         if (data?.type === 'message' && data.message) this.opts.onMessage(data.message as ChatMessage);
       } catch {
         /* игнорируем нераспознанный кадр — не роняем соединение */
@@ -170,7 +179,8 @@ export class RealtimeTransport {
 
   private schedulePoll(): void {
     if (this.stopped || !this.pollingActive) return;
-    this.pollTimer = setTimeout(() => this.pollTick(), this.pollDelay);
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.pollTimer = setTimeout(() => this.pollTick(), this.isRealtimeConnected ? Math.max(15000,this.pollDelay) : this.pollDelay);
   }
 
   /** Вызывается и как шаг рекуррентного polling-цикла (через schedulePoll),
@@ -178,27 +188,34 @@ export class RealtimeTransport {
    * должен запускать/продолжать сам цикл, поэтому реcouplerescheduling в
    * конце гейтится pollingActive, а не самим фактом вызова этой функции. */
   private async pollTick(): Promise<void> {
-    if (this.stopped) return;
-    if (document.hidden && !this.isRealtimeConnected) {
-      // Не шлём запрос, пока вкладка скрыта — просто переставляем таймер
-      // на следующую проверку; onVisibilityChange разбудит немедленно.
-      this.schedulePoll();
-      return;
-    }
-    // '0' — валидный keyset-курсор (chat_messages.id — bigserial, начинается
-    // с 1), означает "всё с начала", тот же bounded LIMIT, что и обычный
-    // afterId. Без этого сентинела пустая лента (getLastKnownId() === null)
-    // никогда не опрашивалась вообще — первое сообщение не появлялось до
-    // ручного перезагрузки страницы (hotfix 20.57.1, finding #3).
-    const afterId = this.opts.getLastKnownId() ?? '0';
+    if (this.stopped || this.pollInFlight) return;
+    if (this.pollTimer) { clearTimeout(this.pollTimer); this.pollTimer=null; }
+    if (document.hidden) { this.schedulePoll(); return; }
+    this.pollInFlight = true;
+    const generation = this.generation;
+    let fullPage = false;
     try {
-      const items = await this.opts.fetchAfter(afterId);
-      for (const item of items) this.opts.onMessage(item);
-      this.pollDelay = POLL_INTERVAL_MS; // успех — сбрасываем backoff
+      // Independent REST cursor: a live WS frame must not skip a missing page.
+      for (let page=0;page<10;page++) {
+        const items = await this.opts.fetchAfter(this.restCursor);
+        if (this.stopped || generation !== this.generation) return;
+        let advanced=false;
+        for (const item of items) {
+          this.opts.onMessage(item);
+          if (BigInt(item.id)>BigInt(this.restCursor)) { this.restCursor=String(item.id); advanced=true; }
+        }
+        fullPage = items.length >= 50 && advanced;
+        if (!fullPage) break;
+      }
+      this.pollDelay = POLL_INTERVAL_MS;
     } catch {
-      // Bounded backoff — не долбим сервер чаще при недоступности сети.
-      this.pollDelay = Math.min(this.pollDelay * 2, POLL_BACKOFF_MAX_MS);
+      this.pollDelay = Math.min(this.pollDelay*2,POLL_BACKOFF_MAX_MS);
+    } finally {
+      this.pollInFlight = false;
+      if (!this.stopped && generation === this.generation) {
+        if (fullPage) this.pollTimer=setTimeout(() => this.pollTick(),0);
+        else this.schedulePoll();
+      }
     }
-    if (this.pollingActive && !this.isRealtimeConnected) this.schedulePoll();
   }
 }

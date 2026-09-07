@@ -49,7 +49,7 @@ describe('RealtimeTransport', () => {
     vi.unstubAllGlobals();
   });
 
-  it('успешное WS-подключение — доставляет сообщение через onMessage, не запускает polling', async () => {
+  it('успешное WS-подключение доставляет сообщения и сохраняет сверку REST', async () => {
     const onMessage = vi.fn();
     const fetchAfter = vi.fn().mockResolvedValue([]);
     const t = new RealtimeTransport({ onMessage, getLastKnownId: () => '10', fetchAfter });
@@ -126,4 +126,27 @@ describe('RealtimeTransport', () => {
     t.stop();
     expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
   });
+  it('drains multiple catch-up pages even when a newer WS message arrives first',async()=>{
+    let known='10';const seen:string[]=[];
+    const fetchAfter=vi.fn(async(id:string)=>{
+      const start=Number(id)+1;
+      return start<=110 ? Array.from({length:Math.min(50,111-start)},(_,i)=>({id:String(start+i)})) as any[] : [];
+    });
+    const t=new RealtimeTransport({fetchAfter,getLastKnownId:()=>known,onMessage:m=>{
+      seen.push(m.id);if(BigInt(m.id)>BigInt(known)) known=m.id;
+    }});
+    t.start();const ws=FakeWebSocket.instances[0];ws.simulateOpen();
+    ws.simulateMessage({type:'message',message:{id:'200'}});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchAfter.mock.calls.map(c=>c[0])).toEqual(['10','60','110']);
+    expect(seen).toContain('110');expect(known).toBe('200');
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(fetchAfter).toHaveBeenLastCalledWith('110');t.stop();
+  });
+  it('a WebSocket that opens after stop cannot resurrect the transport',()=>{
+    const t=new RealtimeTransport({fetchAfter:vi.fn(),getLastKnownId:()=>null,onMessage:vi.fn()});
+    t.start();t.stop();FakeWebSocket.instances[0].simulateOpen();
+    expect(t.isRealtimeConnected).toBe(false);
+  });
+
 });

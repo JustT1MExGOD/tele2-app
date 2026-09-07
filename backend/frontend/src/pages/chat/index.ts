@@ -45,6 +45,9 @@ interface PendingEntry {
 
 // canonical messages, ASC (старые -> новые) — соответствует порядку рендера.
 let messages: ChatMessage[] = [];
+const messageIds=new Set<string>();
+const MAX_VISIBLE_MESSAGES=300;
+let historyDetached=false;
 const pendingByClientId = new Map<string, PendingEntry>();
 let oldestCursor: string | null = null; // id самого старого загруженного canonical-сообщения
 let hasMoreHistory = true;
@@ -205,6 +208,7 @@ function hideNewMessagesIndicator(): void {
 }
 
 export function jumpToChatBottom(): void {
+  if(historyDetached) {void loadInitialHistory();return;}
   scrollToBottom();
   hideNewMessagesIndicator();
 }
@@ -212,11 +216,16 @@ export function jumpToChatBottom(): void {
 function upsertCanonicalMessage(m: ChatMessage): void {
   // Дедупликация по canonical id (§22 брифа) — WS push, polling catch-up и
   // собственный POST-response вполне могут доставить один и тот же id.
-  if (messages.some((x) => x.id === m.id)) return;
+  if (messageIds.has(m.id)) return;
   cancelReconciliation(m.clientMessageId); // нашли canonical другим путём (realtime/history) — своя сверка больше не нужна
   pendingByClientId.delete(m.clientMessageId);
-  messages.push(m);
-  messages.sort((a, b) => Number(a.id) - Number(b.id));
+  if(historyDetached) {showNewMessagesIndicator();return;}
+  messageIds.add(m.id);messages.push(m);
+  messages.sort((a,b)=>BigInt(a.id)<BigInt(b.id)?-1:BigInt(a.id)>BigInt(b.id)?1:0);
+  if(messages.length>MAX_VISIBLE_MESSAGES) {
+    const removed=messages.splice(0,messages.length-MAX_VISIBLE_MESSAGES);
+    removed.forEach(m=>messageIds.delete(m.id));oldestCursor=messages[0].id;hasMoreHistory=true;
+  }
 }
 
 // 20.57.2 AMBIGUOUS DELIVERY RECONCILIATION — ограниченная (не бесконечная)
@@ -284,6 +293,7 @@ async function loadInitialHistory(): Promise<void> {
     const res = await window.apiClient.getChatMessages(authHeaders(), undefined, HISTORY_PAGE_SIZE);
     // Backend отдаёт DESC (новые первые) — разворачиваем для рендера сверху вниз.
     messages = [...res.items].reverse();
+    messageIds.clear();messages.forEach(m=>messageIds.add(m.id));historyDetached=false;hideNewMessagesIndicator();
     oldestCursor = res.nextCursor;
     hasMoreHistory = res.nextCursor !== null;
     renderFeed(null);
@@ -300,7 +310,10 @@ async function loadOlderMessages(): Promise<void> {
   try {
     const res = await window.apiClient.getChatMessages(authHeaders(), oldestCursor, HISTORY_PAGE_SIZE);
     const older = [...res.items].reverse();
-    messages = [...older, ...messages];
+    const combined=[...older.filter(m=>!messageIds.has(m.id)),...messages];
+    if(combined.length>MAX_VISIBLE_MESSAGES) historyDetached=true;
+    messages=combined.slice(0,MAX_VISIBLE_MESSAGES);
+    messageIds.clear();messages.forEach(m=>messageIds.add(m.id));
     oldestCursor = res.nextCursor;
     hasMoreHistory = res.nextCursor !== null;
     renderFeed({ fromTop: true });

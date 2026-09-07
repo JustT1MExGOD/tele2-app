@@ -1,3 +1,4 @@
+import { getEmployeeDailyPlan } from '../../../core/plans/service.js';
 /**
  * Личная аналитика сотрудника: инсайт по смене, само-сравнение, дневной
  * план по часам, завершение обучения. Выделено из routes-v13.ts.
@@ -36,14 +37,7 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
     const fact = await salesRepo.sumDayFactNarrow(employee_id, date);
 
     // approximate day plan from month
-    const month = date.slice(0, 7) + '-01';
-    const mp = (await plansRepo.findEmployeeMonthPlanExact(employee_id, month)) || {};
-    const remCnt = await schedulesRepo.countRemainingInMonth(employee_id, date, month);
-    const div = Math.max(1, num(remCnt));
-    const dayPlan: Record<string, number> = {};
-    for (const m of ['sim', 'mnp', 'pa', 'combo', 'phones', 'accessories']) {
-      dayPlan[m] = Math.ceil(num(mp[m]) / div);
-    }
+    const dayPlan = (await getEmployeeDailyPlan(employee_id,date)).plan;
 
     const insight = await buildShiftInsight({
       employeeId: employee_id,
@@ -92,14 +86,7 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
     const storeId = await schedulesRepo.findShiftStoreIdForDate(employee_id, date);
     if (!storeId) return { error: 'no shift' };
 
-    const month = date.slice(0, 7) + '-01';
-    const mp = (await plansRepo.findEmployeeMonthPlanExact(employee_id, month)) || {};
-    const remCnt = await schedulesRepo.countRemainingInMonth(employee_id, date, month);
-    const div = Math.max(1, num(remCnt));
-    const dayPlan: Record<string, number> = {};
-    for (const m of ['sim', 'mnp', 'pa', 'combo', 'phones', 'accessories']) {
-      dayPlan[m] = Math.ceil(num(mp[m]) / div);
-    }
+    const dayPlan = (await getEmployeeDailyPlan(employee_id,date)).plan;
     const split = await splitDayPlanByHours({
       storeId,
       date,

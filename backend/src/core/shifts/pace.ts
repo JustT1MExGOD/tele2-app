@@ -1,3 +1,4 @@
+import { getEmployeeDailyPlan } from '../plans/service.js';
 /**
  * План/факт дня для сотрудника — раньше считался только внутри
  * /shifts/close, теперь переиспользуется и в open/current (18.7, Shift 2.0)
@@ -37,16 +38,7 @@ export async function computeDayPlanFact(employeeId: number, date: string): Prom
     combo: num(factRow.combo)
   };
 
-  const month = date.slice(0, 7) + '-01';
-  const mp = (await plansRepo.findEmployeeMonthPlanExact(employeeId, month)) || {};
-  const remCnt = await schedulesRepo.countRemainingInMonth(employeeId, date, month);
-  const div = Math.max(1, num(remCnt));
-  const dayPlan: DayMetrics = {
-    sim: Math.ceil(num(mp.sim) / div),
-    mnp: Math.ceil(num(mp.mnp) / div),
-    pa: Math.ceil(num(mp.pa) / div),
-    combo: Math.ceil(num(mp.combo) / div)
-  };
+  const dayPlan = (await getEmployeeDailyPlan(employeeId,date)).plan as DayMetrics;
   const dayPlanUnits = dayPlan.sim + dayPlan.mnp + dayPlan.pa + dayPlan.combo;
   const factUnits = fact.sim + fact.mnp + fact.pa + fact.combo;
   const planPct = dayPlanUnits > 0 ? Math.round((factUnits / dayPlanUnits) * 100) : 0;

@@ -42,6 +42,7 @@ export async function runMigrations(): Promise<{ applied: string[] }> {
   const client = await pool.connect();
   const applied: string[] = [];
   try {
+    await client.query('SELECT pg_advisory_lock(205775)');
     // public. — намеренно схема-квалифицировано везде ниже: pg_dump в
     // 0001_baseline.sql сбрасывает search_path на '' на весь сеанс
     // соединения (set_config('search_path', '', false) — не транзакционно,
@@ -80,6 +81,7 @@ export async function runMigrations(): Promise<{ applied: string[] }> {
     // ровном месте («relation X does not exist») без этого сброса.
     try {
       await client.query('RESET search_path');
+      await client.query('SELECT pg_advisory_unlock(205775)');
     } catch (_) {}
     client.release();
   }

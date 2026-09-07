@@ -1,3 +1,5 @@
+import { withTransaction } from '../../data/db/index.js';
+import { saveDaySnapshot } from '../../data/repositories/plan-batches.js';
 /**
  * Смены (открытие/закрытие/текущая), быстрый разбор продажи по фразе (NLP)
  * и офлайн-очередь. Выделено из routes-v13.ts — было общей свалкой смен,
@@ -87,7 +89,7 @@ const SyncOp = Type.Object(
   { additionalProperties: true }
 );
 const SyncBatchBody = Type.Object({
-  ops: Type.Optional(Type.Array(SyncOp))
+  ops: Type.Optional(Type.Array(SyncOp, {maxItems:100}))
 });
 type SyncBatchBody = Static<typeof SyncBatchBody>;
 
@@ -117,8 +119,10 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
 
-    // закрыть висящие open
-    await shiftsRepo.autoCloseHanging(employee_id);
+    return withTransaction(async () => {
+    await shiftsRepo.lockEmployee(employee_id);
+    // Закрываем только смены предыдущих дней.
+    await shiftsRepo.autoCloseHanging(employee_id, date);
 
     // Partial unique index (employee_id) WHERE status='open' — гонка: два
     // параллельных /shifts/open для одного сотрудника оба проходят
@@ -138,14 +142,16 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       tasksRepo.findOpenForAssignee(employee_id)
     ]);
 
+    const snapshot=await saveDaySnapshot(session.id,pace.dayPlan);
     return {
       ok: true,
       session,
       deduped,
-      day_plan: pace.dayPlan,
+      day_plan: snapshot,
       handover: handover || null,
       open_tasks: openTasks
     };
+    });
     }
   );
 
@@ -159,9 +165,14 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     const body = (request.body || {}) as ShiftCloseBody;
     const employee_id = request.user!.employee_id!;
 
+    const result = await withTransaction(async () => {
+    // Employee row serializes close/reward transitions, including reopen/close races.
+    await shiftsRepo.lockEmployee(employee_id);
     const sess = await shiftsRepo.findOpenForEmployee(employee_id);
     if (!sess) {
-      return reply.code(400).send({ error: 'no open session' });
+      const cached=await shiftsRepo.latestCloseResult(employee_id,null);
+      if(cached) return {...cached,deduped:true,rewarded:false,gamification:{...cached.gamification,xp_gained:0,leveled_up:false}};
+      throw Object.assign(new Error('no open session'),{statusCode:400});
     }
     const date = toDateISO(sess.work_date);
 
@@ -220,25 +231,13 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
         employeeId: employee_id,
         score,
         ideal,
-        planPct
+        planPct,
+        workDate:date
       });
     }
 
     const factOut = { sim: num(fact.sim), mnp: num(fact.mnp), pa: num(fact.pa), combo: num(fact.combo) };
-    const empRow = await employeesRepo.getContactInfo(employee_id);
-    const aiSummary = await generateShiftSummary({
-      employeeId: employee_id,
-      employeeName: empRow?.full_name || 'Сотрудник',
-      planPct,
-      idealShift: ideal,
-      fact: factOut,
-      dayPlan,
-      xpGained: gam?.xp_gained || 0,
-      leveledUp: !!gam?.leveled_up,
-      streakDays: gam?.streak_days || 0
-    });
-
-    return {
+    const output = {
       ok: true,
       session: closed,
       plan_pct: planPct,
@@ -249,8 +248,24 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       day_plan: dayPlan,
       gamification: gam,
       rewarded,
-      ai_summary: aiSummary
+      ai_summary: ''
     };
+    await shiftsRepo.saveCloseResult(sess.id,output);
+    return output;
+    });
+    // AI is optional enrichment after COMMIT: a provider failure must not undo a shift.
+    if (!result.deduped && result.fact) {
+      try {
+        const employee = await employeesRepo.getContactInfo(employee_id);
+        result.ai_summary = await generateShiftSummary({employeeId:employee_id,
+          employeeName:employee?.full_name || 'Сотрудник',planPct:result.plan_pct,
+          idealShift:result.ideal_shift,fact:result.fact,dayPlan:result.day_plan,
+          xpGained:result.gamification?.xp_gained || 0,leveledUp:!!result.gamification?.leveled_up,
+          streakDays:result.gamification?.streak_days || 0});
+        await shiftsRepo.saveCloseResult(result.session.id,result);
+      } catch (err) { request.log.warn({err},'Shift saved; summary unavailable'); }
+    }
+    return result;
     }
   );
 
@@ -319,26 +334,15 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // Та же идемпотентность, что теперь и в основном POST /sales — без неё
     // повторный тап "Добавить" удваивал сумму (запись аддитивная).
     const clientId = body.client_id ? String(body.client_id).slice(0, 128) : null;
-    if (clientId) {
-      const fresh = await claimIdempotencyKey(clientId, employee_id, tg, body);
-      if (!fresh) {
-        const existing = await salesRepo.findOne(employee_id, store_id, sale_date);
-        return { ok: true, deduped: true, parsed, sale: existing || null };
-      }
-    }
-
-    // Единый с POST /sales и /sync/batch путь записи — раньше свой
-    // отдельный INSERT без GREATEST(0, ...) (мог уйти в минус) и без
-    // sales_audit/sales_events: продажи через быстрый ввод были невидимы
-    // и в истории правок, и в heatmap.
-    let row: any, applied: any[];
+    let row: any, applied: any[], deduped: boolean | undefined;
     try {
-      ({ row, applied } = await salesRepo.applySaleUpsert({
+      ({ row, applied, deduped } = await salesRepo.applySaleUpsert({
         employee_id,
         store_id,
         sale_date,
         metrics: parsed.metrics,
         source: 'quick',
+        clientId,
         createdByTelegramId: tg
       }));
     } catch (e: any) {
@@ -348,7 +352,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       throw e;
     }
 
-    await evaluateAfterSale(employee_id, parsed.metrics);
+
 
     // Уведомление в чат — той же логикой, что основной /sales. Раньше его
     // тут не было: быстрый ввод происходил невидимо для команды в чате.
@@ -366,7 +370,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       }
     } catch (_) {}
 
-    return { ok: true, parsed, sale: row };
+    return { ok: true, parsed, sale: row, deduped };
     }
   );
 
@@ -383,21 +387,12 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     for (const op of ops as any[]) {
       const client_id = String(op.client_id || '');
       if (!client_id) {
-        results.push({ client_id, status: 'rejected', error: 'no client_id' });
+        results.push({ client_id, status: 'rejected', retryable:false, error: 'no client_id' });
         continue;
       }
       try {
-        const fresh = await claimIdempotencyKey(
-          client_id,
-          request.user!.employee_id!,
-          request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
-          op
-        );
-        if (!fresh) {
-          results.push({ client_id, status: 'duplicate' });
-          continue;
-        }
-
+        let deduped=false;
+        if (op.type !== 'sale') throw Object.assign(new Error('Неизвестный тип операции'),{statusCode:400});
         if (op.type === 'sale') {
           // делегируем на quick-логику через метрики
           const metrics = op.metrics || {};
@@ -430,23 +425,26 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
           // в offline_sync_log по client_id чуть выше) — свой ключ внутрь
           // не передаём, иначе она сработала бы дважды на одном и том же op.
           if (store_id) {
-            await salesRepo.applySaleUpsert({
+            const applied=await salesRepo.applySaleUpsert({
               employee_id,
               store_id,
               sale_date,
               metrics,
               source: 'sync',
+              clientId: client_id,
+              occurredAt: op.created_at,
               createdByTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null
             });
+            deduped=!!applied.deduped;
           }
         }
         // shift_open/shift_close никогда не ставятся в офлайн-очередь —
         // open/close смены всегда бьют в /shifts/open|close напрямую
         // (см. frontend/offline-queue.js: очередь умеет только sale).
 
-        results.push({ client_id, status: 'applied' });
+        results.push({ client_id, status: deduped ? 'duplicate' : 'applied' });
       } catch (e: any) {
-        results.push({ client_id, status: 'rejected', error: e?.message || 'error' });
+        results.push({ client_id, status: 'rejected', retryable:!(e?.statusCode >=400 && e?.statusCode <500), error: e?.message || 'error' });
       }
     }
 

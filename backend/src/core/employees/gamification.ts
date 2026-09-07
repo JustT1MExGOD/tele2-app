@@ -37,11 +37,7 @@ export async function addXp(employeeId: number, amount: number, reason: string, 
 }
 
 export async function grantBadge(employeeId: number, code: string, title: string, meta: any = {}) {
-  try {
-    await repo.insertBadge(employeeId, code, title, JSON.stringify(meta));
-  } catch {
-    // unique may differ — ignore duplicates
-  }
+  await repo.insertBadge(employeeId, code, title, JSON.stringify(meta));
 }
 
 export async function evaluateAfterSale(employeeId: number, metrics: Record<string, number>) {
@@ -59,6 +55,7 @@ export async function evaluateShiftClose(opts: {
   score: number;
   ideal: boolean;
   planPct: number;
+  workDate?: string;
 }) {
   const beforeXp = await repo.findXp(opts.employeeId);
   const levelBefore = levelFromXp(num(beforeXp)).level;
@@ -73,7 +70,7 @@ export async function evaluateShiftClose(opts: {
   }
 
   // streak: продажа/смена сегодня
-  await repo.updateStreakAndBestScore(opts.employeeId, opts.score);
+  await repo.updateStreakAndBestScore(opts.employeeId, opts.score,opts.workDate);
 
   const st = await repo.findStreakXpLevel(opts.employeeId);
   const streak = num(st?.streak_days);

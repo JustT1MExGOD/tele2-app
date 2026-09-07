@@ -78,6 +78,7 @@ export class NetworkStateMachine {
   private readonly setIntervalFn: NonNullable<StateMachineDeps['setInterval']>;
   private readonly clearIntervalFn: NonNullable<StateMachineDeps['clearInterval']>;
 
+  private generation = 0;
   private state: EffectiveNetworkState = 'checking';
   private preference: ModePreference = 'auto';
   private consecutiveDirectSuccesses = 0;
@@ -137,6 +138,7 @@ export class NetworkStateMachine {
   }
 
   private async evaluate(): Promise<void> {
+    const generation=++this.generation;
     if (this.preference === 'direct_only') {
       // Real DIRECT_ONLY (refined in the acceptance-hardening pass) —
       // runs ONE honest DIRECT probe so the reported state actually
@@ -151,6 +153,7 @@ export class NetworkStateMachine {
       // still visible in lastDiagnostics either way.
       this.setState('checking');
       const ok = await this.probeOnce();
+      if(generation!==this.generation) return;
       this.setState(ok ? 'direct' : 'offline');
       return;
     }
@@ -160,7 +163,9 @@ export class NetworkStateMachine {
       // is active if it genuinely isn't reachable), then STAYS there —
       // no background DIRECT-recovery probing while forced, unlike AUTO.
       this.setState('checking');
-      if (await this.isRelayAvailable()) {
+      const relayAvailable=await this.isRelayAvailable();
+    if(generation!==this.generation) return;
+    if (relayAvailable) {
         this.setState('relay');
       } else {
         this.setState('offline');
@@ -168,14 +173,16 @@ export class NetworkStateMachine {
       return;
     }
 
-    await this.runAuto();
+    await this.runAuto(generation);
   }
 
   /** The original AUTO decision (§14's state diagram) — unchanged
    * behavior from before this pass's forced-mode support. */
-  private async runAuto(): Promise<void> {
+  private async runAuto(generation: number): Promise<void> {
     this.setState('checking');
-    if (await this.probeOnce()) {
+    const directAvailable=await this.probeOnce();
+    if(generation!==this.generation) return;
+    if (directAvailable) {
       this.consecutiveDirectSuccesses = 1;
       this.setState('direct');
       return;
@@ -185,13 +192,18 @@ export class NetworkStateMachine {
     // probe deciding the whole session's transport.
     for (let i = 1; i < this.config.directFailureConfirmProbes; i++) {
       await this.sleep(this.config.confirmProbeBackoffMs);
-      if (await this.probeOnce()) {
+      if(generation!==this.generation) return;
+      const directAvailable=await this.probeOnce();
+    if(generation!==this.generation) return;
+    if (directAvailable) {
         this.setState('direct');
         return;
       }
     }
 
-    if (await this.isRelayAvailable()) {
+    const relayAvailable=await this.isRelayAvailable();
+    if(generation!==this.generation) return;
+    if (relayAvailable) {
       this.setState('relay');
       this.startBackgroundDirectRecovery();
     } else {
@@ -223,8 +235,10 @@ export class NetworkStateMachine {
   }
 
   private async backgroundTick(): Promise<void> {
+    const generation=this.generation;
     if (this.state !== 'relay' || this.preference !== 'auto') return;
     const ok = await this.probeOnce();
+    if(generation!==this.generation) return;
     if (ok) {
       this.consecutiveDirectSuccesses += 1;
       if (this.consecutiveDirectSuccesses >= this.config.directRecoveryConsecutiveSuccesses) {
@@ -243,7 +257,9 @@ export class NetworkStateMachine {
    * probing is harmless (read-only), switching would defeat the point
    * of a forced mode. */
   async retryDirectNow(): Promise<boolean> {
+    const generation=this.generation;
     const ok = await this.probeOnce();
+    if(generation!==this.generation) return false;
     if (this.preference === 'direct_only') {
       // Unlike 'relay' below, direct_only's reported state IS the probe
       // result (see evaluate()) — a manual retry should honestly reflect
@@ -263,6 +279,7 @@ export class NetworkStateMachine {
   }
 
   dispose(): void {
+    this.generation++;
     this.stopBackgroundDirectRecovery();
     this.listeners = [];
   }

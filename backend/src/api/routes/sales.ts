@@ -97,14 +97,6 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     // что запись аддитивная (+=). Ключ необязательный — старые клиенты без
     // client_id работают как раньше, просто без этой защиты.
     const clientId = body.client_id ? String(body.client_id).slice(0, 128) : null;
-    if (clientId) {
-      const fresh = await claimIdempotencyKey(clientId, employee_id, tg, body);
-      if (!fresh) {
-        const existing = await salesRepo.findOne(employee_id, store_id, sale_date);
-        return existing || { ok: true, deduped: true };
-      }
-    }
-
     // Базовые + кастомные (import/imp/esim и любые ключи body a-z0-9_)
     const baseFields = [
       'sim', 'mnp', 'pa', 'combo', 'settings', 'accessories', 'insurance',
@@ -115,15 +107,16 @@ export async function registerSalesRoutes(app: FastifyInstance) {
       (k) =>
         /^[a-z][a-z0-9_]{0,29}$/.test(k) &&
         !baseFields.includes(k) &&
-        !['employee_id', 'store_id', 'sale_date', 'date', 'id', 'client_id', 'org_id'].includes(k)
+        !['employee_id', 'store_id', 'sale_date', 'date', 'id', 'client_id', 'org_id', 'occurred_at'].includes(k)
     );
     const fields = [...baseFields, ...extraFromBody];
 
     const metrics: Record<string, number> = {};
     for (const f of fields) {
       if (body[f] !== undefined && body[f] !== null && body[f] !== '') {
-        const val = Number(body[f]) || 0;
-        if (Number.isFinite(val)) metrics[f] = val;
+        const val = Number(body[f]);
+        if (!Number.isFinite(val)) return reply.code(400).send({error: `Некорректное значение ${f}`});
+        metrics[f] = val;
       }
     }
 
@@ -139,6 +132,8 @@ export async function registerSalesRoutes(app: FastifyInstance) {
         sale_date,
         metrics,
         source: 'api',
+        occurredAt: body.occurred_at,
+        clientId,
         createdByTelegramId: tg
       }));
     } catch (e: any) {
@@ -192,7 +187,7 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     if (!(await assertStoreInOrg(before.store_id, orgId))) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
-    const prevVal = Number(before.val) || 0;
+
     const user = request.user!;
 
     // 19.23.0 (Audit Trail): UPDATE + sales_audit + audit_log — одна
@@ -201,6 +196,8 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     // правок при сбое второго запроса). Теперь либо обе записи, либо
     // обнуления не было вообще — то самое "transactional audit".
     const row = await withTransaction(async (q) => {
+      const locked = await salesRepo.getZeroContext(id,metric,true);
+      const prevVal = Number(locked?.val) || 0;
       const res = await salesRepo.zeroMetric(id, metric, q);
 
       if (prevVal !== 0) {

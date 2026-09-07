@@ -17,6 +17,8 @@ import type {
   EmployeeListItem
 } from '../../../../src/shared/api-types.js';
 
+const scheduleEntries = new Map<string, ScheduleRow>();
+
 // ===== PLAN DAY =====
 export async function loadPlanDay(): Promise<void> {
   const box = document.getElementById('planList');
@@ -295,6 +297,8 @@ export async function loadMonthSchedule(): Promise<void> {
     return;
   }
   const items = data.items || [];
+  scheduleEntries.clear();
+  for (const row of items) scheduleEntries.set(`${row.employee_id}:${String(row.work_date).slice(0,10)}`, row);
 
   try {
     if (!stores.length) {
@@ -442,6 +446,7 @@ function renderSummarySchedule(list: EmpMonth[], total: number): void {
 }
 
 export async function editDay(employeeId: number, dateStr: string, currentStoreId: string, currentHours: number): Promise<void> {
+  const current = scheduleEntries.get(`${employeeId}:${dateStr}`);
   if (!canManage()) return;
   if (!stores.length) {
     stores = await fetchOrgStores();
@@ -463,7 +468,7 @@ export async function editDay(employeeId: number, dateStr: string, currentStoreI
         </div>
         <div class="field">
           <label>Смена</label>
-          <input id="schText" value="${currentHours ? '10-21' : '10-21'}" placeholder="10-21">
+          <input id="schText" value="${esc(current?.shift_text || '10-21')}" placeholder="10-21">
         </div>
         <button class="btn-main" onclick="saveShift(${employeeId}, '${dateStr}')">Сохранить</button>
       `;
@@ -476,9 +481,10 @@ export async function saveShift(employeeId: number, dateStr: string): Promise<vo
   const hours = Number((document.getElementById('schHours') as HTMLInputElement | null)?.value) || 0;
   const shift_text = (document.getElementById('schText') as HTMLInputElement | null)?.value || '';
   try {
-    await window.apiClient.saveSchedulesBulk(authHeaders(true), {
+    const saved = await window.apiClient.saveSchedulesBulk(authHeaders(true), {
       items: [{ employee_id: employeeId, work_date: dateStr, store_id, hours, shift_text }]
     });
+    if (saved.count !== 1) throw new Error('Смена не сохранена: обновите график и повторите');
     toast('Смена сохранена', 'ok');
     closeModal();
     loadMonthSchedule();

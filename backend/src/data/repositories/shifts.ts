@@ -8,11 +8,11 @@
 import { query } from '../db/index.js';
 
 /** Висящие open-сессии закрываются перед новым открытием (подмена/забытый close). */
-export async function autoCloseHanging(employeeId: number): Promise<void> {
+export async function autoCloseHanging(employeeId: number, date: string): Promise<void> {
   await query(
     `UPDATE shift_sessions SET status = 'auto_closed', closed_at = now()
-     WHERE employee_id = $1 AND status = 'open'`,
-    [employeeId]
+     WHERE employee_id = $1 AND status = 'open' AND work_date < $2::date`,
+    [employeeId, date]
   );
 }
 
@@ -28,25 +28,16 @@ export async function claimOpenSession(
   employeeId: number, storeId: string, date: string,
   lat: number | null, lng: number | null, accuracyM: number | null
 ): Promise<{ session: any; deduped: boolean }> {
-  try {
-    const res = await query(
-      `INSERT INTO shift_sessions
-         (employee_id, store_id, work_date, status, opened_at, open_lat, open_lng, open_accuracy_m)
-       VALUES ($1,$2,$3,'open', now(), $4, $5, $6)
-       RETURNING *`,
-      [employeeId, storeId, date, lat, lng, accuracyM]
-    );
-    return { session: res.rows[0], deduped: false };
-  } catch (e: any) {
-    if (e?.code === '23505') {
-      const existing = await query(
-        `SELECT * FROM shift_sessions WHERE employee_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1`,
-        [employeeId]
-      );
-      return { session: existing.rows[0], deduped: true };
-    }
-    throw e;
-  }
+  const res = await query(
+    `INSERT INTO shift_sessions (employee_id,store_id,work_date,status,opened_at,open_lat,open_lng,open_accuracy_m)
+     VALUES ($1,$2,$3,'open',now(),$4,$5,$6)
+     ON CONFLICT (employee_id) WHERE status='open' DO NOTHING RETURNING *`,
+    [employeeId,storeId,date,lat,lng,accuracyM]);
+  if (res.rows[0]) return {session:res.rows[0],deduped:false};
+  const session = await findOpenForEmployee(employeeId);
+  if (!session || session.store_id !== storeId || String(session.work_date).slice(0,10) !== date)
+    throw Object.assign(new Error('Уже открыта другая смена: сначала закройте её'),{statusCode:409});
+  return {session,deduped:true};
 }
 
 /** services/alerts.ts — есть ли сейчас открытая смена на точке (для "тишины к 13:00"). */
@@ -189,4 +180,12 @@ export async function findSessionCountForDate(
     [storeIds, date]
   );
   return res.rows;
+}
+
+export async function lockEmployee(id:number) { await query('SELECT id FROM employees WHERE id=$1 FOR UPDATE',[id]); }
+export async function latestCloseResult(id:number,date:string | null) {
+  return (await query('SELECT close_result FROM shift_sessions WHERE employee_id=$1 AND ($2::date IS NULL OR work_date=$2) AND close_result IS NOT NULL ORDER BY id DESC LIMIT 1',[id,date])).rows[0]?.close_result;
+}
+export async function saveCloseResult(id:string,result:any) {
+  await query('UPDATE shift_sessions SET close_result=$2 WHERE id=$1',[id,JSON.stringify(result)]);
 }

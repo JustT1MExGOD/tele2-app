@@ -1,3 +1,6 @@
+import { employeeInputs } from '../../data/repositories/plan-batches.js';
+import { metricKeys } from '../plans/service.js';
+import { todayMoscow } from '../../utils/date.js';
 /**
  * BFQ — полный расчёт как в старой Google-таблице (BFQ.gs)
  *
@@ -8,6 +11,7 @@
  * Прогноз: по отработанным/оставшимся сменам в месяце
  */
 
+import { toDateISO } from '../../utils/date.js';
 import { getEmployeeMonthPlan } from '../plans/service.js';
 import * as repo from '../../data/repositories/bfq.js';
 
@@ -195,7 +199,7 @@ async function getEmployeeMonthShifts(employeeId: number, month: string) {
   let worked = 0;
   let remaining = 0;
   for (const row of rows) {
-    const d = String(row.work_date).slice(0, 10);
+    const d = toDateISO(row.work_date);
     if (d <= today) worked++;
     else remaining++;
   }
@@ -234,23 +238,23 @@ async function getManual(employeeId: number, month: string) {
   };
 }
 
-export async function calculateEmployeeBFQ(employeeId: number, month: string) {
+export async function calculateEmployeeBFQ(employeeId: number, month: string, input?: {plan:any;fact:any;manual:any;shifts:{worked:number;remaining:number}}) {
   // Раньше план брался из store_plans WHERE plan_date IS NULL — строки,
   // которая создаётся РОВНО ОДИН РАЗ (нулями) при создании точки и никогда
   // больше нигде не обновляется ни одним из существующих эндпоинтов.
   // Реальный, живой план сотрудника — employee_month_plans, который
   // PUT /plans/employees/:id/month обновляет прямо сейчас — BFQ этот план
   // вообще не видел: правка плана никогда не отражалась в расчёте BFQ.
-  const plan: Record<string, any> = (await getEmployeeMonthPlan(employeeId, month)) || {};
+  const plan: Record<string, any> = {...(input ? input.plan : await getEmployeeMonthPlan(employeeId, month))};
   // Остальной bfq.ts (factsToPct/calcProfit/calcTopUpBlock) читает
   // plan.credit — upsertEmployeeMonthPlan пишет только credit_issued,
   // колонка credit остаётся на DEFAULT 0 навсегда. Без этого моста план по
   // кредитам обнулился бы точно так же, как до фикса.
   plan.credit = num(plan.credit_issued);
-  const fact = await getEmployeeFacts(employeeId, month);
+  const fact = input ? {...input.fact,credit:num(input.fact?.credit_issued)} : await getEmployeeFacts(employeeId, month);
   const pctFact = factsToPct(fact, plan);
-  const { vmr, penalty } = await getManual(employeeId, month);
-  const shifts = await getEmployeeMonthShifts(employeeId, month);
+  const { vmr, penalty } = input ? {vmr:num(input.manual?.vmr_avg),penalty:num(input.manual?.penalty)} : await getManual(employeeId, month);
+  const shifts = input ? input.shifts : await getEmployeeMonthShifts(employeeId, month);
 
   const pctForecast = forecastByShifts(plan, pctFact, shifts.worked, shifts.remaining);
 
@@ -278,11 +282,15 @@ export async function calculateEmployeeBFQ(employeeId: number, month: string) {
 /** orgId обязателен — раньше без него отдавал BFQ вообще всех сетей
  * (routes-bfq.ts, routes-export.ts), теперь оба вызова обязаны его передать. */
 export async function calculateAllBFQ(month: string, orgId: string) {
-  const emps = await repo.listActiveEmployeesForOrg(orgId);
+  const end=new Date(month+'-01T00:00:00Z');end.setUTCMonth(end.getUTCMonth()+1);
+  const batch=await employeeInputs(orgId,month+'-01',end.toISOString().slice(0,10),todayMoscow(),await metricKeys());
+  const emps=batch.employees;
 
   const items = [];
   for (const e of emps) {
-    const bfq = await calculateEmployeeBFQ(Number(e.id), month);
+    const id=String(e.id), count=batch.counts.get(id);
+    const bfq = await calculateEmployeeBFQ(Number(e.id), month, {plan:batch.plans.get(id) || {},fact:batch.facts.get(id) || {},
+      manual:batch.manual.get(id),shifts:{worked:num(count?.worked),remaining:num(count?.total)-num(count?.worked)}});
     items.push({
       employee_id: e.id,
       full_name: e.full_name,

@@ -251,3 +251,11 @@ export async function getBlob(storageKey: string): Promise<Buffer | null> {
 export async function deleteBlob(storageKey: string): Promise<void> {
   await query(`DELETE FROM chat_attachment_blobs WHERE storage_key = $1`, [storageKey]);
 }
+
+export async function lockOrganization(orgId:string,q:typeof query=query) {
+  await q('SELECT id FROM organizations WHERE id=$1 FOR UPDATE',[orgId]);
+}
+
+export async function publishChatChanged(orgId:string,messageId:string) {
+  await query("SELECT pg_notify('t2_chat_changed',$1)",[JSON.stringify({orgId,messageId})]);
+}

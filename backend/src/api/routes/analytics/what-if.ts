@@ -1,3 +1,4 @@
+import { withTransaction } from '../../../data/db/index.js';
 /**
  * What-if симуляция переноса смен: sandbox-прогон и применение к schedules.
  * Выделено из routes-live-alerts.ts (20.11.0, репо-реструктуризация) —
@@ -82,6 +83,7 @@ export async function registerWhatIfRoutes(app: FastifyInstance) {
     // Точки не своей сети simulateScheduleMoves теперь просто не видит
     // (coverage строится только по своей сети) — moves на них уже придут
     // сюда как skipped: 'unknown_store', реальной записи в schedules не будет.
+    return withTransaction(async () => {
     const orgId = resolveViewOrgId(request.user!, body.org_id);
     const sim = await simulateScheduleMoves({ date, moves: moves as any, orgId });
     const applied = [];
@@ -107,6 +109,7 @@ export async function registerWhatIfRoutes(app: FastifyInstance) {
       items: applied,
       simulation: sim
     };
+    });
     }
   );
 }

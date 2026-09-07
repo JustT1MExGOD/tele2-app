@@ -1,3 +1,4 @@
+import * as batches from '../../data/repositories/plan-batches.js';
 /**
  * Месячные планы → дневные → планы точек
  * Единый список метрик (как в sales / frontend)
@@ -57,8 +58,7 @@ function daysInMonth(month: string) {
   return new Date(y, m, 0).getDate();
 }
 
-function remainingDaysInMonth(month: string) {
-  const today = todayMoscow();
+function remainingDaysInMonth(month: string, today = todayMoscow()) {
   const start = monthStart(month);
   const end = monthEndExclusive(month);
   if (today < start) return daysInMonth(month);
@@ -86,66 +86,13 @@ function normalizePlanInput(data: Record<string, any>): Record<Metric, number> {
   return out;
 }
 
-export async function getEmployeeMonthFacts(employeeId: number, month: string) {
-  const start = monthStart(month);
-  const end = monthEndExclusive(month);
-
-  // 1) Базовый запрос — всегда, без «лишних» колонок
-  const BASE = [
-    'sim', 'mnp', 'pa', 'combo', 'phones', 'accessories',
-    'focus', 'settings', 'wink', 'shpd', 'insurance',
-    'credit_request', 'credit_issued', 'plotter', 'hb'
-  ] as const;
-
-  const out: Record<string, number> = {};
-  for (const m of METRICS) out[m] = 0;
-
-  try {
-    const cols = await salesRepo.getSalesColumns();
-    const sumCols = BASE.filter((c) => cols.has(c));
-    if (!sumCols.length) {
-      // совсем старая схема
-      const row = await salesRepo.sumVeryOldSchemaForEmployeeMonth(employeeId, start, end);
-      for (const k of Object.keys(row)) out[k] = num(row[k]);
-      return out;
-    }
-
-    const row = await salesRepo.sumColumnsForEmployeeMonth(employeeId, start, end, [...sumCols]);
-    for (const c of sumCols) out[c] = num(row[c]);
-
-    // 2) Кастомные метрики — только если колонка есть
-    const catalogIds = await getMetricIds().catch(() => [] as string[]);
-    const extra = catalogIds.filter(
-      (id) =>
-        /^[a-z][a-z0-9_]{0,29}$/.test(id) &&
-        cols.has(id) &&
-        !sumCols.includes(id as any)
-    );
-    if (extra.length) {
-      try {
-        const row2 = await salesRepo.sumColumnsForEmployeeMonth(employeeId, start, end, extra);
-        for (const c of extra) out[c] = num(row2[c]);
-      } catch (e) {
-        console.warn('extra metric facts failed:', (e as any)?.message || e);
-      }
-    }
-
-    // legacy credit
-    if (out.credit_issued === 0 && (row as any).credit != null) {
-      out.credit_issued = num((row as any).credit);
-    }
-    return out;
-  } catch (e) {
-    console.error('getEmployeeMonthFacts failed:', (e as any)?.message || e);
-    // 3) Последний шанс — минимальный набор
-    try {
-      const row = await salesRepo.sumMinimalForEmployeeMonth(employeeId, start, end);
-      for (const k of Object.keys(row)) out[k] = num(row[k]);
-    } catch (e2) {
-      console.error('facts fallback failed:', (e2 as any)?.message || e2);
-    }
-    return out;
-  }
+export async function metricKeys(): Promise<string[]> {
+  return [...new Set<string>([...METRICS,...await getMetricIds()])].filter(k=>/^[a-z][a-z0-9_]{0,29}$/.test(k));
+}
+export async function getEmployeeMonthFacts(employeeId: number, month: string, before?: string) {
+  const keys=await metricKeys();
+  const row=await salesRepo.sumColumnsForEmployeeMonth(employeeId,monthStart(month),before || monthEndExclusive(month),keys);
+  return Object.fromEntries(keys.map(k=>[k,num(row[k])]));
 }
 
 export async function getEmployeeShiftCount(employeeId: number, month: string) {
@@ -154,8 +101,8 @@ export async function getEmployeeShiftCount(employeeId: number, month: string) {
   return schedulesRepo.countWorkedInRange(employeeId, start, end);
 }
 
-export async function getEmployeeRemainingShifts(employeeId: number, month: string) {
-  const today = todayMoscow();
+export async function getEmployeeRemainingShifts(employeeId: number, month: string, asOf = todayMoscow()) {
+  const today = asOf < monthStart(month) ? monthStart(month) : asOf;
   const end = monthEndExclusive(month);
   return schedulesRepo.countWorkedInRange(employeeId, today, end);
 }
@@ -222,47 +169,40 @@ export async function getStoreMonthPlan(storeId: string, month: string) {
 export async function upsertStoreMonthPlan(storeId: string, month: string, data: Record<string, number>) {
   const start = monthStart(month);
   const norm = normalizePlanInput(data);
+  for (const k of await metricKeys()) if (data[k] !== undefined) (norm as any)[k]=num(data[k]);
   return plansRepo.upsertStoreMonthPlanRow(storeId, start, norm);
 }
 
 /** Факт точки за месяц — сумма продаж всех сотрудников на этой точке (не только своей сети — подмена тоже считается). */
-export async function getStoreMonthFacts(storeId: string, month: string) {
-  const start = monthStart(month);
-  const end = monthEndExclusive(month);
-  const out: Record<string, number> = {};
-  for (const m of METRICS) out[m] = 0;
-  try {
-    const cols = await salesRepo.getSalesColumns();
-    const sumCols = (METRICS as readonly string[]).filter((c) => cols.has(c));
-    const row = await salesRepo.sumColumnsForStoreMonth(storeId, start, end, sumCols);
-    for (const c of sumCols) out[c] = num(row[c]);
-  } catch (e) {
-    console.error('getStoreMonthFacts failed:', (e as any)?.message || e);
-  }
-  return out;
+export async function getStoreMonthFacts(storeId: string, month: string, before?: string) {
+  const keys=await metricKeys();
+  const row=await salesRepo.sumColumnsForStoreMonth(storeId,monthStart(month),before || monthEndExclusive(month),keys);
+  return Object.fromEntries(keys.map(k=>[k,num(row[k])]));
 }
 
 export async function getMonthSummaryTable(month: string, orgId?: string) {
   const start = monthStart(month);
-  const employees = await employeesRepo.listBasicByOrg(orgId || 'default');
+  const keys = await metricKeys();
+  const input = await batches.employeeInputs(orgId || 'default',start,monthEndExclusive(month),todayMoscow(),keys);
+  const employees = input.employees;
 
   const rows = [];
   const totalsFact: Record<string, number> = {};
   const totalsPlan: Record<string, number> = {};
-  for (const m of METRICS) {
+  for (const m of keys) {
     totalsFact[m] = 0;
     totalsPlan[m] = 0;
   }
 
   for (const e of employees) {
-    const fact = await getEmployeeMonthFacts(Number(e.id), month);
-    const planRow = await getEmployeeMonthPlan(Number(e.id), month);
-    const shifts = await getEmployeeShiftCount(Number(e.id), month);
-    const remainingShifts = await getEmployeeRemainingShifts(Number(e.id), month);
+    const fact = Object.fromEntries(keys.map(k=>[k,num(input.facts.get(String(e.id))?.[k])]));
+    const planRow = input.plans.get(String(e.id));
+    const shifts = num(input.counts.get(String(e.id))?.total);
+    const remainingShifts = num(input.counts.get(String(e.id))?.remaining);
 
     const plan: Record<string, number> = {};
     const pct: Record<string, number> = {};
-    for (const m of METRICS) {
+    for (const m of keys) {
       plan[m] = num(planRow?.[m]);
       const f = num(fact[m]);
       pct[m] = plan[m] > 0 ? Math.round((f / plan[m]) * 100) : f > 0 ? 100 : 0;
@@ -272,7 +212,7 @@ export async function getMonthSummaryTable(month: string, orgId?: string) {
 
     const perShift: Record<string, number> = {};
     const div = shifts > 0 ? shifts : daysInMonth(month);
-    for (const m of METRICS) {
+    for (const m of keys) {
       perShift[m] = div > 0 ? Math.ceil(plan[m] / div) : 0;
     }
 
@@ -291,7 +231,7 @@ export async function getMonthSummaryTable(month: string, orgId?: string) {
   }
 
   const totalsPct: Record<string, number> = {};
-  for (const m of METRICS) {
+  for (const m of keys) {
     totalsPct[m] =
       totalsPlan[m] > 0
         ? Math.round((totalsFact[m] / totalsPlan[m]) * 100)
@@ -302,7 +242,7 @@ export async function getMonthSummaryTable(month: string, orgId?: string) {
 
   return {
     month: start.slice(0, 7),
-    metrics: [...METRICS],
+    metrics: keys,
     rows,
     totals: { fact: totalsFact, plan: totalsPlan, pct: totalsPct },
     remaining_days: remainingDaysInMonth(month)
@@ -318,23 +258,25 @@ export async function getMonthSummaryTable(month: string, orgId?: string) {
  * не баг сверки). */
 export async function getStoreMonthSummaryTable(month: string, orgId?: string) {
   const start = monthStart(month);
-  const stores = await storesRepo.listActiveBasic(orgId || 'default');
+  const keys = await metricKeys();
+  const input=await batches.storeInputs(orgId || 'default',start,monthEndExclusive(month),keys);
+  const stores=input.stores;
 
   const rows = [];
   const totalsFact: Record<string, number> = {};
   const totalsPlan: Record<string, number> = {};
-  for (const m of METRICS) {
+  for (const m of keys) {
     totalsFact[m] = 0;
     totalsPlan[m] = 0;
   }
 
   for (const s of stores) {
-    const fact = await getStoreMonthFacts(s.id, month);
-    const planRow = await getStoreMonthPlan(s.id, month);
+    const fact=Object.fromEntries(keys.map(k=>[k,num(input.facts.get(s.id)?.[k])]));
+    const planRow=input.plans.get(s.id);
 
     const plan: Record<string, number> = {};
     const pct: Record<string, number> = {};
-    for (const m of METRICS) {
+    for (const m of keys) {
       plan[m] = num(planRow?.[m]);
       const f = num(fact[m]);
       pct[m] = plan[m] > 0 ? Math.round((f / plan[m]) * 100) : f > 0 ? 100 : 0;
@@ -353,7 +295,7 @@ export async function getStoreMonthSummaryTable(month: string, orgId?: string) {
   }
 
   const totalsPct: Record<string, number> = {};
-  for (const m of METRICS) {
+  for (const m of keys) {
     totalsPct[m] =
       totalsPlan[m] > 0
         ? Math.round((totalsFact[m] / totalsPlan[m]) * 100)
@@ -364,7 +306,7 @@ export async function getStoreMonthSummaryTable(month: string, orgId?: string) {
 
   return {
     month: start.slice(0, 7),
-    metrics: [...METRICS],
+    metrics: keys,
     rows,
     totals: { fact: totalsFact, plan: totalsPlan, pct: totalsPct },
     remaining_days: remainingDaysInMonth(month)
@@ -374,26 +316,27 @@ export async function getStoreMonthSummaryTable(month: string, orgId?: string) {
 export async function getEmployeeDailyPlan(employeeId: number, date: string) {
   const month = date.slice(0, 7);
   const planRow = await getEmployeeMonthPlan(employeeId, month);
-  if (!planRow) {
+  const snapshot=await batches.daySnapshot(employeeId,date);
+  if (!planRow && !snapshot) {
     const empty: Record<string, number> = {};
-    for (const m of METRICS) empty[m] = 0;
+    for (const m of await metricKeys()) empty[m] = 0;
     return { date, employee_id: employeeId, plan: empty, remaining_shifts: 0 };
   }
 
-  const fact = await getEmployeeMonthFacts(employeeId, month);
-  const remainingShifts = await getEmployeeRemainingShifts(employeeId, month);
+  const fact = await getEmployeeMonthFacts(employeeId, month, date);
+  const remainingShifts = await getEmployeeRemainingShifts(employeeId, month, date);
   const div = remainingShifts > 0 ? remainingShifts : 1;
 
   const plan: Record<string, number> = {};
-  for (const m of METRICS) {
-    const left = Math.max(0, num(planRow[m]) - num(fact[m]));
+  for (const m of await metricKeys()) {
+    const left = Math.max(0, num(planRow?.[m]) - num(fact[m]));
     plan[m] = Math.ceil(left / div);
   }
 
   return {
     date,
     employee_id: employeeId,
-    plan,
+    plan: snapshot || plan,
     remaining_shifts: remainingShifts,
     fact
   };
@@ -406,20 +349,22 @@ export async function getEmployeeDailyPlan(employeeId: number, date: string) {
  * по просьбе: план точки теперь вносится напрямую и независимо от планов
  * сотрудников).
  */
-export async function computeStoreDailyPlans(date?: string, orgId?: string) {
+export async function computeStoreDailyPlans(date?: string, orgId?: string, onlyIds?: string[]) {
   const d = date || todayMoscow();
   const month = d.slice(0, 7);
-  const remainingDays = Math.max(1, remainingDaysInMonth(month));
+  const remainingDays = Math.max(1, remainingDaysInMonth(month, d));
   const org = orgId || 'default';
 
-  const storeList = await storesRepo.listBasicForOrg(org);
+  const keys=await metricKeys();
+  const input=await batches.storeInputs(org,monthStart(month),d,keys,onlyIds);
+  const storeList=input.stores;
 
   const stores = [];
   for (const st of storeList) {
-    const planRow = await getStoreMonthPlan(st.id, month);
-    const fact = await getStoreMonthFacts(st.id, month);
+    const planRow=input.plans.get(st.id);
+    const fact=input.facts.get(st.id) || {};
     const plan: Record<string, number> = {};
-    for (const m of METRICS) {
+    for (const m of keys) {
       const monthly = planRow ? num(planRow[m]) : 0;
       const remaining = Math.max(0, monthly - num(fact[m]));
       plan[m] = Math.ceil(remaining / remainingDays);
@@ -446,17 +391,17 @@ export async function computeStoreDailyPlans(date?: string, orgId?: string) {
  * атомарно на уровне строки, без пустого окна между DELETE и повторным
  * INSERT (см. repositories/plans.ts::materializeRow).
  */
-export async function materializeStoreDailyPlans(date?: string) {
+export async function materializeStoreDailyPlans(date?: string, target?: {orgId:string; storeIds:string[]}) {
   const d = date || todayMoscow();
 
   // Пул считается ОТДЕЛЬНО на каждую сеть — иначе план одной сети размывался
   // бы остатками другой (и делился бы между чужими точками).
-  const orgIds0 = await orgsRepo.listIds();
+  const orgIds0 = target ? [target.orgId] : await orgsRepo.listIds();
   const orgIds = orgIds0.length ? orgIds0 : ['default'];
 
   let allStores: any[] = [];
   for (const org of orgIds) {
-    const computed = await computeStoreDailyPlans(d, org);
+    const computed = await computeStoreDailyPlans(d, org, target?.storeIds);
     allStores = allStores.concat(computed.stores);
   }
 

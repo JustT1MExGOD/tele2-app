@@ -1,3 +1,4 @@
+import { getEmployeeDailyPlan } from '../plans/service.js';
 /**
  * What-if: виртуальный перенос смены → пересчёт покрытия плана точки.
  * Не пишет в БД — только симуляция.
@@ -14,13 +15,7 @@ function n(v: any) {
 const METRICS = ['sim', 'mnp', 'pa', 'combo'] as const;
 
 async function perShiftPlan(employeeId: number, date: string) {
-  const month = date.slice(0, 7) + '-01';
-  const row = (await plansRepo.findEmployeeMonthPlanExact(employeeId, month)) || {};
-  const remCnt = await schedulesRepo.countRemainingInMonth(employeeId, date, month);
-  const div = Math.max(1, n(remCnt));
-  const out: Record<string, number> = {};
-  for (const m of METRICS) out[m] = Math.ceil(n(row[m]) / div);
-  return out;
+  return (await getEmployeeDailyPlan(employeeId,date)).plan;
 }
 
 export type WhatIfMove = {
@@ -108,6 +103,10 @@ export async function simulateScheduleMoves(opts: {
       continue;
     }
 
+    if (!coverage[from].staff_ids.includes(emp)) {
+      applied.push({employee_id:emp,from,to,skipped:true,reason:'stale_source'});
+      continue;
+    }
     const ps = await perShiftPlan(emp, date);
 
     coverage[from].staff_ids = coverage[from].staff_ids.filter((id) => id !== emp);

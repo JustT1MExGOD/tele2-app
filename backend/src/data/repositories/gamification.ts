@@ -38,16 +38,18 @@ export async function findXp(employeeId: number): Promise<number | null> {
   return res.rows[0]?.xp ?? null;
 }
 
-export async function updateStreakAndBestScore(employeeId: number, score: number): Promise<void> {
+export async function updateStreakAndBestScore(employeeId: number, score: number, date?:string): Promise<void> {
   await query(
     `UPDATE employees SET
        streak_days = CASE
-         WHEN best_shift_score IS NOT NULL THEN COALESCE(streak_days,0) + 1
+         WHEN last_shift_date = COALESCE($3::date,(now() AT TIME ZONE 'Europe/Moscow')::date) THEN COALESCE(streak_days,0)
+         WHEN last_shift_date = COALESCE($3::date,(now() AT TIME ZONE 'Europe/Moscow')::date)-1 THEN COALESCE(streak_days,0)+1
          ELSE 1
        END,
+       last_shift_date=COALESCE($3::date,(now() AT TIME ZONE 'Europe/Moscow')::date),
        best_shift_score = GREATEST(COALESCE(best_shift_score,0), $1)
      WHERE id = $2`,
-    [score, employeeId]
+    [score, employeeId,date ?? null]
   );
 }
 

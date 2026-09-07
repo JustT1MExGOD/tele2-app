@@ -36,6 +36,7 @@ export async function findDowHourMatrix(storeId: string, weeks: number): Promise
      FROM sales_events
      WHERE store_id = $1
        AND sale_date >= CURRENT_DATE - ($2 * 7)
+       AND metric IN ('sim','mnp','pa','combo')
      GROUP BY 1, 2`,
     [storeId, weeks]
   );
@@ -57,7 +58,9 @@ export async function rebuildHourProfilesFromEvents(storeId: string | null): Pro
             sale_hour,
             SUM(delta)::numeric
      FROM sales_events
-     WHERE ($1::text IS NULL OR store_id = $1)
+     WHERE ($1::text IS NULL OR store_id = $1) AND sale_date >= CURRENT_DATE - 120
+       AND metric IN ('sim','mnp','pa','combo')
+       AND metric IN ('sim','mnp','pa','combo')
      GROUP BY 1, 2, 3`,
     [storeId]
   );

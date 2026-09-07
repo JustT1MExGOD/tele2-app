@@ -1,3 +1,4 @@
+import { overallProgress } from '../../core/shared/progress.js';
 import * as repo from '../../data/repositories/ai.js';
 import { aiRequestsTotal, aiRequestDuration, aiRequestFailuresTotal } from '../../platform/observability/metrics.js';
 
@@ -144,12 +145,9 @@ export async function generateDipComment(opts: {
   fact: Record<string, number>;
   dayPlan: Record<string, number>;
 }): Promise<{ text: string; isAi: boolean; actualPct: number }> {
-  const plannedKeys = Object.keys(opts.dayPlan).filter((k) => num(opts.dayPlan[k]) > 0);
-  const factUnits = plannedKeys.reduce((s, k) => s + num(opts.fact[k]), 0);
-  const planUnits = plannedKeys.reduce((s, k) => s + num(opts.dayPlan[k]), 0);
-  const actualPct = planUnits > 0 ? Math.round((factUnits / planUnits) * 100) : 100;
-
-  if (actualPct >= DIP_THRESHOLD_PCT) {
+  const progress=overallProgress(opts.fact,opts.dayPlan);
+  const actualPct=progress.pct;
+  if (progress.complete) {
     return { text: GOOD_PHRASES[Math.floor(Math.random() * GOOD_PHRASES.length)], isAi: false, actualPct };
   }
 
