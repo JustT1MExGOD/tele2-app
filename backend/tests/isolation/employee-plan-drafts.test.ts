@@ -25,10 +25,15 @@ describe('Автоматический расчёт персональных п�
   const fx = new TestFixtures();
   const draftIds: number[] = [];
 
+  // Все существующие тесты в этом файле передают target ЯВНО в generateDraft
+  // (это обычный способ вызова) -> история считается по НОВОЙ формуле
+  // target-1/-2/-3 (historicalMonthsForTarget). Формула для omitted-month
+  // backward-compat пути (target-2/-3/-4 относительно "сегодня") проверяется
+  // отдельным тестом ниже.
   const target = defaultTargetMonth();
-  const hist1 = monthAdd(target, -2); // самый свежий полный месяц (вес 0.5)
-  const hist2 = monthAdd(target, -3); // вес 0.3
-  const hist3 = monthAdd(target, -4); // вес 0.2
+  const hist1 = monthAdd(target, -1); // самый свежий полный месяц (вес 0.5)
+  const hist2 = monthAdd(target, -2); // вес 0.3
+  const hist3 = monthAdd(target, -3); // вес 0.2
 
   async function setStorePlan(storeId: string, month: string, sim: number, phones: number) {
     await query(
@@ -311,5 +316,87 @@ describe('Автоматический расчёт персональных п�
     });
     expect(applyRes.statusCode).toBe(200);
     expect(applyRes.json().applied).toBe(true);
+  });
+
+  it('явно выбранный месяц: история = target-1/-2/-3 (не next-month дефолт), факт целевого месяца не участвует', async () => {
+    const org = await fx.createOrg('Plan Gen Explicit Month Org');
+    const store = await fx.createStore(org, 'Explicit Month Store');
+    const manager = await fx.createEmployee(org, { role: 'manager' });
+    const emp = await fx.createEmployee(org, { role: 'employee', fullName: 'Explicit Month Employee' });
+
+    // Явно выбранный менеджером месяц — намеренно НЕ следующий месяц от
+    // "сегодня" (target), а месяц через один после него, чтобы доказать,
+    // что backend не подменяет его на next month.
+    const explicitTarget = monthAdd(target, 1);
+    const eh1 = monthAdd(explicitTarget, -1); // вес 0.5
+    const eh2 = monthAdd(explicitTarget, -2); // вес 0.3
+    const eh3 = monthAdd(explicitTarget, -3); // вес 0.2
+
+    for (const m of [eh1, eh2, eh3]) {
+      await addSchedule(emp.id, store, [`${m.slice(0, 8)}05`]);
+      await addSales(emp.id, store, `${m.slice(0, 8)}05`, 1, 0);
+    }
+    // Факт САМОГО целевого месяца (explicitTarget) — если бы он ошибочно
+    // попал в historical productivity, продуктивность выросла бы с 1 до
+    // существенно большего значения.
+    await addSchedule(emp.id, store, [`${explicitTarget.slice(0, 8)}05`]);
+    await addSales(emp.id, store, `${explicitTarget.slice(0, 8)}05`, 1000, 0);
+
+    await setStorePlan(store, explicitTarget, 10, 0);
+    await addSchedule(emp.id, store, [`${explicitTarget.slice(0, 8)}10`]);
+
+    const result = await generateDraft(org, explicitTarget, manager.id);
+    draftIds.push(result.draft.id);
+
+    expect(result.draft.month.slice(0, 10)).toBe(explicitTarget);
+    expect(result.blocking_errors).toEqual([]);
+    const item = result.items.find((it) => Number(it.employee_id) === emp.id)!;
+    // Продуктивность = 1 sim/смену (только eh1/eh2/eh3), не ~250, как было
+    // бы, если бы факт explicitTarget-месяца просочился в историю.
+    expect(item.by_store[0].productivity.sim).toBeCloseTo(1, 6);
+    expect(item.final_plan.sim).toBe(10);
+
+    const applied = await applyDraft(result.draft.id, org, manager.id);
+    expect(applied.applied).toBe(true);
+    const planRow = await query(
+      `SELECT sim FROM employee_month_plans WHERE employee_id = $1 AND month = $2`,
+      [emp.id, explicitTarget]
+    );
+    expect(Number(planRow.rows[0].sim)).toBe(10);
+  });
+
+  it('month не передан: сохранено старое поведение — план на next month, история target-2/-3/-4 от сегодняшней даты', async () => {
+    const org = await fx.createOrg('Plan Gen Default Month Org');
+    const store = await fx.createStore(org, 'Default Month Store');
+    const manager = await fx.createEmployee(org, { role: 'manager' });
+    const emp = await fx.createEmployee(org, { role: 'employee', fullName: 'Default Month Employee' });
+
+    const dh1 = monthAdd(target, -2); // вес 0.5 (старая формула)
+    const dh2 = monthAdd(target, -3); // вес 0.3
+    const dh3 = monthAdd(target, -4); // вес 0.2
+
+    for (const m of [dh1, dh2, dh3]) {
+      await addSchedule(emp.id, store, [`${m.slice(0, 8)}05`]);
+      await addSales(emp.id, store, `${m.slice(0, 8)}05`, 1, 0);
+    }
+    await setStorePlan(store, target, 7, 0);
+    await addSchedule(emp.id, store, [`${target.slice(0, 8)}10`]);
+
+    const app = await getApp();
+    const genRes = await app.inject({
+      method: 'POST', url: '/plans/employees/month-drafts',
+      headers: { ...authAs(manager.telegramId), 'content-type': 'application/json' },
+      payload: {} // month намеренно не передан
+    });
+    expect(genRes.statusCode).toBe(200);
+    const genBody = genRes.json();
+    draftIds.push(genBody.draft_id);
+
+    expect(genBody.month.slice(0, 10)).toBe(target); // старое поведение — next month
+    expect(genBody.blocking_errors).toEqual([]);
+    const item = genBody.items.find((it: any) => Number(it.employee_id) === emp.id);
+    expect(item).toBeDefined();
+    expect(item.by_store[0].productivity.sim).toBeCloseTo(1, 6);
+    expect(item.final_plan.sim).toBe(7);
   });
 });

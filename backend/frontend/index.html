@@ -889,9 +889,10 @@
         </div>
       </div>
       <div class="section" id="employeePlanDraftSection" style="display:none">
-        <div class="section-title">Автоматический расчёт планов на следующий месяц</div>
-        <div style="padding:0 16px 12px;display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn-main" onclick="generateEmployeePlanDrafts()" id="planDraftGenerateBtn">Рассчитать планы на следующий месяц</button>
+        <div class="section-title">Автоматический расчёт персональных планов</div>
+        <div style="padding:0 16px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="planDraftMonthSelect"></select>
+          <button type="button" class="btn-main" onclick="generateEmployeePlanDrafts()" id="planDraftGenerateBtn">Рассчитать планы</button>
           <button type="button" class="btn-main" onclick="applyEmployeePlanDraft()" id="planDraftApplyBtn" style="display:none">Применить планы</button>
         </div>
         <div id="employeePlanDraftBody"><div class="empty" style="padding:0 16px 12px">Черновик ещё не рассчитан.</div></div>

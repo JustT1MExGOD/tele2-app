@@ -19,15 +19,16 @@ export async function registerEmployeePlanDraftsRoutes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const body = (request.body || {}) as { month?: string; org_id?: string };
     const orgId = resolveViewOrgId(request.user!, body.org_id);
-    const month = body.month || defaultTargetMonth();
-
-    const result = await generateDraft(orgId, month, request.user!.employee_id);
+    // Передаём body.month как есть (может быть undefined) — generateDraft сам
+    // решает, использовать ли явно выбранный месяц или старое поведение
+    // "следующий месяц" при отсутствии month (backward compatibility).
+    const result = await generateDraft(orgId, body.month, request.user!.employee_id);
 
     await recordAudit({
       orgId, actorEmployeeId: request.user!.employee_id,
       actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
       action: 'plan_draft.generate', targetType: 'employee_plan_draft', targetId: String(result.draft.id),
-      after: { month, employees: result.items.length, blocking_errors: result.blocking_errors.length },
+      after: { month: result.draft.month, employees: result.items.length, blocking_errors: result.blocking_errors.length },
       requestId: request.id, actorRole: request.user!.role
     });
 

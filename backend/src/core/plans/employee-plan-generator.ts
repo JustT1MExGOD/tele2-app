@@ -77,10 +77,23 @@ export function defaultTargetMonth(asOf = todayMoscow()): string {
   return monthAdd(monthStart(asOf.slice(0, 7)), 1);
 }
 
-/** Последние 3 ПОЛНЫХ месяца перед текущим (не перед целевым — целевой ещё не наступил). */
+/** Последние 3 ПОЛНЫХ месяца перед текущим (не перед целевым — целевой ещё не наступил).
+ * Используется ТОЛЬКО когда targetMonth не передан явно (backward compatibility
+ * со старым поведением "план на следующий месяц") — см. historicalMonthsForTarget()
+ * ниже для случая явно выбранного месяца. */
 function historicalMonths(asOf = todayMoscow()): { month: string; weight: number }[] {
   const currentStart = monthStart(asOf.slice(0, 7));
   return HIST_WEIGHTS.map((weight, i) => ({ month: monthAdd(currentStart, -1 - i), weight }));
+}
+
+/** 3 полных календарных месяца, непосредственно предшествующих ЯВНО выбранному
+ * целевому месяцу (target-1, target-2, target-3) — напр. target=2026-09 ->
+ * история 2026-06, 2026-07, 2026-08. Веса 50/30/20 от новейшего к самому
+ * старому, как и раньше. Факт самого целевого месяца сюда никогда не
+ * попадает — он строго после этого диапазона. */
+function historicalMonthsForTarget(targetMonth: string): { month: string; weight: number }[] {
+  const targetStart = monthStart(targetMonth);
+  return HIST_WEIGHTS.map((weight, i) => ({ month: monthAdd(targetStart, -1 - i), weight }));
 }
 
 type MonthAgg = {
@@ -241,11 +254,17 @@ export async function generateDraft(orgId: string, targetMonth: string | undefin
   const metrics = await metricKeys();
   const metricDefs = await getMetricDefs();
   const unitOf = new Map(metricDefs.map((d) => [d.id, d.unit]));
+  // explicitTarget: месяц выбран менеджером вручную (UI прислал month) — история
+  // считается строго относительно ЭТОГО месяца (target-1,-2,-3). Если month не
+  // передан вовсе — старое поведение "план на следующий месяц" с историей
+  // относительно СЕГОДНЯШНЕЙ даты (пропускает текущий незавершённый месяц),
+  // не меняется, backward compatibility.
+  const explicitTarget = !!targetMonth;
   const month = monthStart(targetMonth || defaultTargetMonth());
 
   const { employees, stores, futureShiftRows, storePlans } = await loadDraftInputs(orgId, month, metrics);
 
-  const monthsMeta = historicalMonths();
+  const monthsMeta = explicitTarget ? historicalMonthsForTarget(month) : historicalMonths();
   const histAggs = await Promise.all(monthsMeta.map((m) => loadMonthAgg(orgId, m.month, m.weight, metrics)));
 
   const futureByEmployeeStore = new Map<string, Map<string, number>>();

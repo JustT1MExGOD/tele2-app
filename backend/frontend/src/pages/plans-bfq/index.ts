@@ -486,7 +486,28 @@ export async function saveEmployeeMonthPlan(employeeId: number): Promise<void> {
   if (typeof loadMonthPlans === 'function') loadMonthPlans();
 }
 
-// ===== Черновики автоматических персональных планов на следующий месяц =====
+// ===== Черновики автоматических персональных планов =====
+/** 'YYYY-MM-01' текущего и следующего календарного месяца (по московской дате) —
+ * единственные два варианта, которые разрешено выбрать менеджеру. */
+function planDraftMonthOptions(): { value: string; label: string }[] {
+  const [y, m] = todayMoscow().slice(0, 7).split('-').map(Number);
+  const current = new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10);
+  const next = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  return [
+    { value: current, label: monthLabel(current.slice(0, 7)) },
+    { value: next, label: monthLabel(next.slice(0, 7)) }
+  ];
+}
+
+/** Заполняет select месяца черновика (идемпотентно), по умолчанию выбран следующий месяц. */
+function ensurePlanDraftMonthSelectPopulated(): void {
+  const select = document.getElementById('planDraftMonthSelect') as HTMLSelectElement | null;
+  if (!select || select.options.length) return;
+  const options = planDraftMonthOptions();
+  select.innerHTML = options.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
+  select.value = options[options.length - 1].value; // следующий месяц — дефолт
+}
+
 function draftStatusLabel(status: EmployeeMonthPlanDraftStatus): string {
   if (status === 'applied') return 'Применён';
   if (status === 'stale') return 'Устарел';
@@ -579,8 +600,12 @@ export async function loadEmployeePlanDraftIfAny(): Promise<void> {
     return;
   }
   section.style.display = '';
+  ensurePlanDraftMonthSelectPopulated();
+  const monthSelect = document.getElementById('planDraftMonthSelect') as HTMLSelectElement | null;
   try {
-    const data: EmployeeMonthPlanDraftViewResponse = await window.apiClient.getLatestEmployeeMonthPlanDraft(authHeaders(), '', orgQueryParam());
+    const data: EmployeeMonthPlanDraftViewResponse = await window.apiClient.getLatestEmployeeMonthPlanDraft(
+      authHeaders(), monthSelect?.value || '', orgQueryParam()
+    );
     planDraft = data.draft
       ? { id: data.draft.id, month: data.draft.month, status: data.draft.status, blocking_errors: data.draft.blocking_errors || [] }
       : null;
@@ -594,24 +619,27 @@ export async function loadEmployeePlanDraftIfAny(): Promise<void> {
 
 export async function generateEmployeePlanDrafts(): Promise<void> {
   if (!canManage()) return;
+  ensurePlanDraftMonthSelectPopulated();
+  const monthSelect = document.getElementById('planDraftMonthSelect') as HTMLSelectElement | null;
   const btn = document.getElementById('planDraftGenerateBtn') as HTMLButtonElement | null;
   if (btn) {
     btn.setAttribute('disabled', 'disabled');
     btn.textContent = 'Считаем…';
   }
   try {
-    const body: { org_id?: string } = {};
+    const body: { org_id?: string; month?: string } = {};
     if (me?.role === 'admin' && adminViewOrgId) body.org_id = adminViewOrgId;
+    if (monthSelect?.value) body.month = monthSelect.value;
     const data: GenerateEmployeeMonthPlanDraftResponse = await window.apiClient.generateEmployeeMonthPlanDrafts(authHeaders(true), body);
     planDraft = { id: data.draft_id, month: data.month, status: data.status, blocking_errors: data.blocking_errors || [] };
     planDraftItems = data.items || [];
-    toast('Черновик планов рассчитан', 'ok');
+    toast(`Черновик планов на ${monthLabel(data.month.slice(0, 7))} рассчитан`, 'ok');
   } catch (e: any) {
     toast(e?.message || 'Не удалось рассчитать черновик', 'err');
   } finally {
     if (btn) {
       btn.removeAttribute('disabled');
-      btn.textContent = 'Рассчитать планы на следующий месяц';
+      btn.textContent = 'Рассчитать планы';
     }
   }
   await renderEmployeePlanDraft();
