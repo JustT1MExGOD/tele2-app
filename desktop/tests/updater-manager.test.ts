@@ -6,6 +6,17 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
+// install-launcher.ts imports { shell } from 'electron' at module scope.
+// Every other test in this file goes through freshManager(), which mocks
+// install-launcher.js itself (so the real module, and its electron import,
+// never evaluates). The very first test below imports manager.js directly
+// without that mock, which — unmocked — pulls in the real electron npm
+// package on the test runner and triggers Electron binary resolution
+// instead of running as an isolated unit test. Mocked here, file-wide
+// (vi.mock is hoisted), the same way tests/updater-install-launcher.test.ts
+// already mocks it for its own suite.
+vi.mock('electron', () => ({ shell: { openPath: vi.fn() } }));
+
 function baseManifest(overrides: Record<string, unknown> = {}) {
   return {
     schemaVersion: 1,
