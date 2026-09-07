@@ -272,7 +272,7 @@ if (document.readyState === 'loading') {
 // check:frontend-version` (scripts/check-frontend-version.mjs) rather than
 // a build-time injection — 24 separate Vite bundle configs make wiring a
 // real single-source define() a build-system refactor out of scope here.
-const APP_VERSION = '20.57.3';
+const APP_VERSION = '20.57.4';
 const API = window.location.origin;
 
 export function todayMoscow(): string {
