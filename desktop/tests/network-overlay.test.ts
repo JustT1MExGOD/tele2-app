@@ -133,17 +133,32 @@ describe('network-overlay render — optional Relay host row (hostname only)', (
 // Moving it to a bare top:8/right:8 was ALSO confirmed colliding (Phase 2
 // review) with .app-header-top's own avatar/theme-toggle/refresh icon
 // buttons, since Electron's minWidth:960 always renders the desktop-shell
-// breakpoint. Anchored below the real (ResizeObserver-measured) header
-// height instead — collides with neither.
-describe('network-overlay badge position — no FAB / header collision (20.58 Phase 2)', () => {
-  it('mounts below --app-header-height at right:8px, not at a bare top:8px or bottom:8px', () => {
+// breakpoint.
+//
+// 20.56.7 — the ResizeObserver/--app-header-height fixed-offset approach
+// above was ITSELF confirmed displaced into the content area on real
+// Windows hardware (a "large white pill" floating over cards). Replaced
+// with mounting into the header's own already-laid-out `.header-actions`
+// flex row (see pickMountStrategy() below) — real layout, not a computed
+// position — so it can never overlap the header or content and tracks
+// resize/DPI scaling for free. The fixed/--app-header-height offset is
+// kept ONLY as a last-resort fallback for the header markup being absent.
+describe('network-overlay badge position — no FAB / header collision (20.58 Phase 2, superseded by 20.56.7 header mount)', () => {
+  it('mounts inside .header-actions (real flex layout) as the primary strategy, not a fixed/computed offset', () => {
     const source = readFileSync(path.join(__dirname, '..', 'src', 'preload', 'network-overlay.ts'), 'utf8');
-    const idx = source.indexOf("badge.style.cssText =");
-    expect(idx).toBeGreaterThanOrEqual(0);
-    const cssText = source.slice(idx, idx + 400);
-    expect(cssText).toContain('top:calc(var(--app-header-height');
-    expect(cssText).toContain('right:8px');
-    expect(cssText).not.toContain('top:8px;right:8px');
-    expect(cssText).not.toContain('bottom:8px;right:8px');
+    expect(source).toContain("document.querySelector('.header-actions')");
+    expect(source).toContain('headerActions.insertBefore(wrapper, headerActions.firstChild)');
+  });
+
+  it('keeps the old fixed/--app-header-height offset only as the fallback path, never the primary mount', () => {
+    const source = readFileSync(path.join(__dirname, '..', 'src', 'preload', 'network-overlay.ts'), 'utf8');
+    const fallbackIdx = source.indexOf('fixed-fallback');
+    const offsetIdx = source.indexOf('top:calc(var(--app-header-height');
+    expect(offsetIdx).toBeGreaterThan(-1);
+    // The offset must appear in the `else` (fallback) branch, textually
+    // after the primary `strategy === 'header'` branch's insertBefore call.
+    const primaryIdx = source.indexOf('headerActions.insertBefore(wrapper, headerActions.firstChild)');
+    expect(offsetIdx).toBeGreaterThan(primaryIdx);
+    expect(fallbackIdx).toBeGreaterThan(-1);
   });
 });

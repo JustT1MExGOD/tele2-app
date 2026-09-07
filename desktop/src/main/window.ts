@@ -16,7 +16,7 @@ import path from 'node:path';
 export const SESSION_PARTITION = 'persist:t2-sales';
 
 export function createMainWindow(): BrowserWindow {
-  return new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 960,
@@ -35,4 +35,19 @@ export function createMainWindow(): BrowserWindow {
       // re-enabling it is a non-action, not a flag to set.
     }
   });
+
+  // 20.56.7 — Electron syncs the native window title (and, through it,
+  // the Windows taskbar label) to the loaded page's `document.title` by
+  // default via 'page-title-updated'. The web app legitimately sets
+  // `document.title` from org branding (`b.app_title`, network-admin/
+  // index.ts) for real browser tabs — that stays untouched, nothing in
+  // the frontend changes. The installed desktop shell's own identity
+  // must never follow it, so every attempt to change the title away from
+  // the fixed `title` above is rejected here, at the one place a
+  // BrowserWindow gets created.
+  win.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
+
+  return win;
 }

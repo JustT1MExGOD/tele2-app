@@ -6,6 +6,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // the mock BrowserWindow constructor captures exactly the options object
 // passed at the real call site.
 const capturedOptions: any[] = [];
+const capturedWindowListeners: Array<{ event: string; handler: (...args: any[]) => void }> = [];
+const setApplicationMenuCalls: any[] = [];
 
 vi.mock('electron', () => {
   class MockBrowserWindow {
@@ -13,9 +15,17 @@ vi.mock('electron', () => {
     constructor(options: any) {
       capturedOptions.push(options);
     }
+    on(event: string, handler: (...args: any[]) => void) {
+      capturedWindowListeners.push({ event, handler });
+    }
   }
   return {
     BrowserWindow: MockBrowserWindow,
+    Menu: {
+      setApplicationMenu: (menu: any) => {
+        setApplicationMenuCalls.push(menu);
+      }
+    },
     shell: { openExternal: vi.fn() }
   };
 });
@@ -23,6 +33,7 @@ vi.mock('electron', () => {
 describe('createMainWindow — webPreferences hardening (DESK-01,02,03,04,09)', () => {
   beforeEach(() => {
     capturedOptions.length = 0;
+    capturedWindowListeners.length = 0;
     vi.resetModules();
   });
 
@@ -65,6 +76,58 @@ describe('createMainWindow — webPreferences hardening (DESK-01,02,03,04,09)', 
     createMainWindow();
     expect(capturedOptions[0].webPreferences.preload).toBeTruthy();
     expect(String(capturedOptions[0].webPreferences.preload)).toMatch(/preload[\\/]index\.[jt]s$/);
+  });
+
+  it('20.56.7: locks the window title to "T2 Sales" by preventing page-title-updated sync, regardless of what document.title/branding sets', async () => {
+    const { createMainWindow } = await import('../src/main/window.js');
+    createMainWindow();
+
+    const titleListener = capturedWindowListeners.find((l) => l.event === 'page-title-updated');
+    expect(titleListener).toBeTruthy();
+
+    const preventDefault = vi.fn();
+    // Simulate the frontend setting document.title = 'РТТ Бижонов Sales'
+    // (org-branded value) — Electron's default behavior would sync this
+    // onto the native window/taskbar title unless prevented here.
+    titleListener!.handler({ preventDefault }, 'РТТ Бижонов Sales');
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('20.56.7 — production app has no File/Edit/View/Window application menu (DESK-menu)', () => {
+  beforeEach(() => {
+    setApplicationMenuCalls.length = 0;
+    vi.resetModules();
+  });
+
+  it('disableApplicationMenu() removes the menu object entirely via Menu.setApplicationMenu(null), never autoHideMenuBar', async () => {
+    const { disableApplicationMenu } = await import('../src/main/menu.js');
+    disableApplicationMenu();
+    expect(setApplicationMenuCalls).toEqual([null]);
+  });
+
+  it('menu.ts source never uses autoHideMenuBar — Alt would restore a merely-hidden default menu on Windows, whereas setApplicationMenu(null) leaves nothing to restore', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'main', 'menu.ts'), 'utf8');
+    // Strip comments first — the file's own docblock legitimately explains
+    // WHY autoHideMenuBar is avoided (mentioning the term as prose), same
+    // self-referential-comment trap guarded against elsewhere in this file;
+    // only actual code should trip this check.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(code).not.toMatch(/autoHideMenuBar/);
+    expect(code).toMatch(/Menu\.setApplicationMenu\(\s*null\s*\)/);
+  });
+
+  it('index.ts wires disableApplicationMenu() before the window is created', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'main', 'index.ts'), 'utf8');
+    const menuCallIdx = src.indexOf('disableApplicationMenu()');
+    const windowCallIdx = src.indexOf('createMainWindow()');
+    expect(menuCallIdx).toBeGreaterThan(-1);
+    expect(windowCallIdx).toBeGreaterThan(-1);
+    expect(menuCallIdx).toBeLessThan(windowCallIdx);
   });
 });
 
@@ -117,5 +180,33 @@ describe('§6 preload API surface — no generic OS-capability channels', async 
     const code = contractSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(code).not.toMatch(/invoke\s*\(\s*command/i);
     expect(code).not.toMatch(/genericInvoke|runCommand|execute\(/i);
+  });
+});
+
+describe('20.56.7 — desktop theme resolves from the app\'s own data-theme, not prefers-color-scheme alone (network indicator theme fix)', () => {
+  it('resolveDesktopTheme() normalizes the app\'s real data-theme value', async () => {
+    const { resolveDesktopTheme } = await import('../src/preload/electron-visual-tokens.js');
+    expect(resolveDesktopTheme('dark')).toBe('dark');
+    expect(resolveDesktopTheme('light')).toBe('light');
+  });
+
+  it('resolveDesktopTheme() falls back to null (caller uses prefers-color-scheme) for unknown/unset values, never guesses', async () => {
+    const { resolveDesktopTheme } = await import('../src/preload/electron-visual-tokens.js');
+    expect(resolveDesktopTheme(null)).toBeNull();
+    expect(resolveDesktopTheme(undefined)).toBeNull();
+    expect(resolveDesktopTheme('')).toBeNull();
+    expect(resolveDesktopTheme('sepia')).toBeNull();
+  });
+});
+
+describe('20.56.7 — network status indicator mounts into the stable header location, not a hard-coded fixed offset (displaced-overlay fix)', () => {
+  it('pickMountStrategy() prefers the header when .header-actions exists', async () => {
+    const { pickMountStrategy } = await import('../src/preload/network-overlay.js');
+    expect(pickMountStrategy(true)).toBe('header');
+  });
+
+  it('pickMountStrategy() only falls back to the fixed-position overlay when the header markup is absent', async () => {
+    const { pickMountStrategy } = await import('../src/preload/network-overlay.js');
+    expect(pickMountStrategy(false)).toBe('fixed-fallback');
   });
 });

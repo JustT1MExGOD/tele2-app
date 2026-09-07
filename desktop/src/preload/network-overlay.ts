@@ -84,6 +84,26 @@ export function render(container: { innerHTML: string }, status: NetworkStatus):
   `;
 }
 
+/** Pure — decides where the indicator lives. Exported for regression
+ * coverage without needing a real DOM.
+ *
+ * 20.56.7: the previous approach (`position:fixed`, top offset computed
+ * from `--app-header-height`) is exactly the "compensate with another
+ * hard-coded top offset" pattern the redesign avoids — on a real Windows
+ * machine it showed up as a displaced overlay in the content area. The
+ * header's own `.header-actions` row (theme toggle / refresh icon
+ * buttons, `backend/frontend/index.html`) is a stable, already-laid-out
+ * location: mounting the indicator there means it participates in the
+ * header's normal flex layout — never overlaps the header or content,
+ * never floats at an arbitrary point, and tracks resize/DPI scaling for
+ * free because it's real layout, not a computed position. The fixed
+ * overlay is kept ONLY as a last-resort fallback for the (unexpected)
+ * case where the header markup doesn't match, so the feature degrades
+ * instead of silently disappearing. */
+export function pickMountStrategy(hasHeaderActions: boolean): 'header' | 'fixed-fallback' {
+  return hasHeaderActions ? 'header' : 'fixed-fallback';
+}
+
 /** Installs the overlay once the page DOM is ready. Safe to call
  * unconditionally from preload — it only activates inside this desktop
  * app (where `window.t2Desktop` exists), never affects a normal browser
@@ -91,43 +111,62 @@ export function render(container: { innerHTML: string }, status: NetworkStatus):
 export function installNetworkStatusOverlay(api: T2DesktopAPI): void {
   const mount = () => {
     ensureVisualTokenStyle();
-    const badge = document.createElement('div');
-    badge.id = 't2desktop-network-status';
-    badge.className = 't2desktop-card';
-    // Not bottom:8px;right:8px — that's where the real page's own FAB
-    // (.fab, right:32/bottom:32, 58x58) and update-card (bottom:8/left:8)
-    // live. Also NOT a bare top:8px;right:8px (20.58 Phase 1 first
-    // attempt) — Electron's minWidth:960 keeps the app always on the
-    // desktop-shell breakpoint (>=860px), whose .app-header-top row
-    // (avatar + theme-toggle + refresh icon buttons) sits right there,
-    // confirmed colliding in Phase 2 review. Anchored just BELOW the real
-    // header instead, via the same --app-header-height custom property
-    // Phase 1 already exposes on document.body (core.ts, ResizeObserver) —
-    // preload has real DOM/CSSOM access to the loaded page, so this value
-    // is live and correct even if header height ever changes (DPI, fonts),
-    // with a sane fallback for the split second before core.ts sets it.
-    // Colors come from the .t2desktop-card class (electron-visual-tokens.ts)
-    // — light/dark via prefers-color-scheme — everything else (position,
-    // spacing, radius/shadow rhythm matching the app's own card look)
-    // stays inline since it's specific to this badge's placement.
-    badge.style.cssText =
-      `position:fixed;top:calc(var(--app-header-height, 56px) + 8px);right:8px;z-index:2147483647;` +
-      `font:11px/1.4 ${FONT_STACK};` +
-      `padding:8px 10px;border-radius:${RADIUS_CARD};min-width:170px;` +
-      `box-shadow:${SHADOW_CARD};cursor:pointer;user-select:none;`;
-    const body = document.createElement('div');
-    badge.appendChild(body);
+    const headerActions = document.querySelector('.header-actions');
+    const strategy = pickMountStrategy(Boolean(headerActions));
 
-    let collapsed = false;
-    badge.addEventListener('click', () => {
-      collapsed = !collapsed;
-      body.style.display = collapsed ? 'none' : 'block';
+    // Wrapper owns position:relative so the expandable detail panel can
+    // anchor to IT (top:100%, right:0) instead of the viewport — a
+    // popover anchored to its own trigger, not a second floating
+    // coordinate to keep in sync.
+    const wrapper = document.createElement('div');
+    wrapper.id = 't2desktop-network-status';
+    wrapper.style.cssText = 'position:relative;display:inline-flex;';
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.setAttribute('aria-label', 'Network status');
+    trigger.className = 't2desktop-card';
+    trigger.style.cssText =
+      `width:32px;height:32px;border-radius:999px;border:none;cursor:pointer;` +
+      `display:flex;align-items:center;justify-content:center;padding:0;font:11px/1 ${FONT_STACK};`;
+    const dot = document.createElement('span');
+    dot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#757575;display:block;';
+    trigger.appendChild(dot);
+
+    const panel = document.createElement('div');
+    panel.className = 't2desktop-card';
+    panel.style.cssText =
+      `position:absolute;top:calc(100% + 8px);right:0;z-index:1000;display:none;` +
+      `font:11px/1.4 ${FONT_STACK};padding:8px 10px;border-radius:${RADIUS_CARD};` +
+      `min-width:170px;box-shadow:${SHADOW_CARD};cursor:default;user-select:text;`;
+
+    let open = false;
+    trigger.addEventListener('click', () => {
+      open = !open;
+      panel.style.display = open ? 'block' : 'none';
     });
 
-    document.body.appendChild(badge);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(panel);
 
-    api.getNetworkStatus().then((status) => render(body, status));
-    api.onNetworkStatusChanged((status) => render(body, status));
+    if (strategy === 'header' && headerActions) {
+      headerActions.insertBefore(wrapper, headerActions.firstChild);
+    } else {
+      // Fallback: same fixed/header-offset placement used before
+      // 20.56.7, only reached if the header markup is ever absent.
+      wrapper.style.cssText += `position:fixed;top:calc(var(--app-header-height, 56px) + 8px);right:8px;z-index:2147483647;`;
+      panel.style.top = 'calc(100% + 8px)';
+      document.body.appendChild(wrapper);
+    }
+
+    const applyStatus = (status: NetworkStatus) => {
+      const overallOutcome = status.lastDiagnostics?.overall;
+      dot.style.background = OUTCOME_COLOR[overallOutcome ?? 'UNKNOWN'] ?? '#757575';
+      render(panel, status);
+    };
+
+    api.getNetworkStatus().then(applyStatus);
+    api.onNetworkStatusChanged(applyStatus);
   };
 
   if (document.readyState === 'loading') {

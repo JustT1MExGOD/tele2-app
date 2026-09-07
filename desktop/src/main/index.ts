@@ -9,6 +9,7 @@ import { app, type BrowserWindow, ipcMain, session } from 'electron';
 import os from 'node:os';
 import path from 'node:path';
 import { createMainWindow, SESSION_PARTITION } from './window';
+import { disableApplicationMenu } from './menu';
 import { applyNavigationPolicy } from './navigation-policy';
 import { loadDesktopConfig } from './config';
 import { NetworkManager } from './network/manager';
@@ -79,6 +80,7 @@ if (!gotLock) {
 
     registerIpcHandlers(networkManager, updateManager);
 
+    disableApplicationMenu();
     mainWindow = createMainWindow();
     applyNavigationPolicy(mainWindow, config.publicAppOrigin);
 
