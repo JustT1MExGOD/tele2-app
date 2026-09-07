@@ -23,6 +23,12 @@ function setupGlobals(overrides: { role?: string } = {}) {
     <div id="overlay"></div>
     <div id="modalTitle"></div>
     <div id="modalBody"></div>
+    <div id="employeePlanDraftSection" style="display:none">
+      <select id="planDraftMonthSelect"></select>
+      <button id="planDraftGenerateBtn"></button>
+      <button id="planDraftApplyBtn" style="display:none"></button>
+    </div>
+    <div id="employeePlanDraftBody"></div>
   `;
   // Documentation-audit XSS fix — реальная реализация esc(), не no-op стаб
   // (no-op стаб не поймал бы регрессию attribute-breakout фикса ниже).
@@ -59,6 +65,9 @@ function setupGlobals(overrides: { role?: string } = {}) {
   const getStoreDailyPlans = vi.fn().mockResolvedValue({ stores: [] });
   const getStoreMonthPlan = vi.fn().mockResolvedValue({});
   const saveStoreMonthPlan = vi.fn().mockResolvedValue({});
+  const generateEmployeeMonthPlanDrafts = vi.fn().mockResolvedValue({ draft_id: 1, month: '2026-09-01', status: 'draft', blocking_errors: [], items: [] });
+  const getLatestEmployeeMonthPlanDraft = vi.fn().mockResolvedValue({ draft: null, items: [] });
+  const applyEmployeeMonthPlanDraft = vi.fn().mockResolvedValue({ applied: true, draft: { id: 1, month: '2026-09-01', status: 'applied', blocking_errors: [] } });
   (window as any).apiClient = {
     getBfqList,
     getBfqEmployee,
@@ -69,9 +78,15 @@ function setupGlobals(overrides: { role?: string } = {}) {
     saveEmployeeMonthPlan,
     getStoreDailyPlans,
     getStoreMonthPlan,
-    saveStoreMonthPlan
+    saveStoreMonthPlan,
+    generateEmployeeMonthPlanDrafts,
+    getLatestEmployeeMonthPlanDraft,
+    applyEmployeeMonthPlanDraft
   };
-  return { getBfqList, getBfqEmployee, saveBfqManual, getPlansEmployeesMonth, getPlansStoresMonth, getEmployeeMonthPlan, saveEmployeeMonthPlan, getStoreDailyPlans, getStoreMonthPlan, saveStoreMonthPlan };
+  return {
+    getBfqList, getBfqEmployee, saveBfqManual, getPlansEmployeesMonth, getPlansStoresMonth, getEmployeeMonthPlan, saveEmployeeMonthPlan,
+    getStoreDailyPlans, getStoreMonthPlan, saveStoreMonthPlan, generateEmployeeMonthPlanDrafts, getLatestEmployeeMonthPlanDraft, applyEmployeeMonthPlanDraft
+  };
 }
 
 describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/pages/plans-bfq)', () => {
@@ -412,6 +427,67 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
     await save('s1');
     expect(saveStoreMonthPlan).toHaveBeenCalledWith(expect.anything(), 's1', expect.objectContaining({ sim: 9 }));
     expect(getStoreDailyPlans).toHaveBeenCalled();
+  });
+
+  // ===== Черновик автоматических персональных планов: форматирование метрик =====
+  it('generateEmployeePlanDrafts: значения метрик в карточках округляются до целых с русским разделителем тысяч', async () => {
+    const { generateEmployeeMonthPlanDrafts } = setupGlobals({ role: 'manager' });
+    generateEmployeeMonthPlanDrafts.mockResolvedValue({
+      draft_id: 1, month: '2026-09-01', status: 'draft', blocking_errors: [],
+      items: [
+        {
+          employee_id: 1, full_name: 'Иван', total_shifts: 10,
+          final_plan: { sim: 7972.91, mnp: 8551.76 },
+          by_store: [], warnings: []
+        }
+      ]
+    });
+    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
+    await generateEmployeePlanDrafts();
+    const html = document.getElementById('employeePlanDraftBody')!.innerHTML;
+    expect(html).toContain('7&nbsp;973');
+    expect(html).toContain('8&nbsp;552');
+    expect(html).not.toContain('7972.91');
+    expect(html).not.toContain('8551.76');
+  });
+
+  it('generateEmployeePlanDrafts: floating-point артефакты (20907.120000000003) не просачиваются в UI', async () => {
+    const { generateEmployeeMonthPlanDrafts } = setupGlobals({ role: 'manager' });
+    generateEmployeeMonthPlanDrafts.mockResolvedValue({
+      draft_id: 1, month: '2026-09-01', status: 'draft', blocking_errors: [],
+      items: [
+        {
+          employee_id: 1, full_name: 'Иван', total_shifts: 10,
+          final_plan: { sim: 20907.120000000003, mnp: 759.49 },
+          by_store: [], warnings: []
+        }
+      ]
+    });
+    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
+    await generateEmployeePlanDrafts();
+    const html = document.getElementById('employeePlanDraftBody')!.innerHTML;
+    expect(html).toContain('20&nbsp;907');
+    expect(html).toContain('759');
+    expect(html).not.toContain('20907.12');
+    expect(html).not.toContain('000000000');
+  });
+
+  it('generateEmployeePlanDrafts: total_shifts (уже целое поле) не ломается форматированием метрик', async () => {
+    const { generateEmployeeMonthPlanDrafts } = setupGlobals({ role: 'manager' });
+    generateEmployeeMonthPlanDrafts.mockResolvedValue({
+      draft_id: 1, month: '2026-09-01', status: 'draft', blocking_errors: [],
+      items: [
+        {
+          employee_id: 1, full_name: 'Иван', total_shifts: 12,
+          final_plan: { sim: 100, mnp: 200 },
+          by_store: [], warnings: []
+        }
+      ]
+    });
+    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
+    await generateEmployeePlanDrafts();
+    const html = document.getElementById('employeePlanDraftBody')!.innerHTML;
+    expect(html).toContain('смен: 12');
   });
 
   it('window.* мост — все 15 функций', async () => {

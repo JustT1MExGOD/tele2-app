@@ -508,6 +508,14 @@ function ensurePlanDraftMonthSelectPopulated(): void {
   select.value = options[options.length - 1].value; // следующий месяц — дефолт
 }
 
+/** Значения метрик в карточках черновика — только целые, с русским
+ * разделителем тысяч. Math.round убирает и обычные дробные части, и
+ * floating-point артефакты вроде 20907.120000000003. Презентационный
+ * слой — формула/normalization/данные в БД не трогаются. */
+function formatDraftMetricValue(v: number): string {
+  return Math.round(Number(v) || 0).toLocaleString('ru-RU');
+}
+
 function draftStatusLabel(status: EmployeeMonthPlanDraftStatus): string {
   if (status === 'applied') return 'Применён';
   if (status === 'stale') return 'Устарел';
@@ -565,7 +573,7 @@ async function renderEmployeePlanDraft(): Promise<void> {
         .map((item) => {
           const metricsHtml = METRICS.map((m) => {
             const v = Number(item.final_plan?.[m.id]) || 0;
-            return `<div class="mt-cell"><div class="v">${v}</div><div class="l">${esc(m.label)}</div></div>`;
+            return `<div class="mt-cell"><div class="v">${formatDraftMetricValue(v)}</div><div class="l">${esc(m.label)}</div></div>`;
           }).join('');
           const warningsHtml =
             item.warnings && item.warnings.length
