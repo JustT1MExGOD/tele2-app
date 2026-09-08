@@ -18,7 +18,7 @@ import {
   generateDraft, applyDraft, viewDraft, defaultTargetMonth, monthAdd, monthStart,
   weekdayMonday0, deriveShift, computeEditableFromDateToday, resolveEditableFromDate,
   storeFullShiftHours, StaleDraftError, DraftHasBlockingErrorsError
-} from '../../src/core/schedule/schedule-generator.js';
+} from '../../src/core/schedules/index.js';
 
 function daysInMonthList(monthStartIso: string): string[] {
   const start = monthStart(monthStartIso);

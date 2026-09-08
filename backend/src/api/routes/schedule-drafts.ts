@@ -14,7 +14,7 @@ import * as availabilityRepo from '../../data/repositories/employee-availability
 import {
   generateDraft, viewDraft, applyDraft, defaultTargetMonth,
   StaleDraftError, DraftHasBlockingErrorsError
-} from '../../core/schedule/schedule-generator.js';
+} from '../../core/schedules/index.js';
 
 export async function registerScheduleDraftsRoutes(app: FastifyInstance) {
   // Рассчитать (или пересчитать) черновик графика на месяц.

@@ -7,8 +7,8 @@ import {
   tierAdjustedRate,
   type HistBucketsForTest,
   type MetricBucketForTest
-} from '../../src/core/schedule/schedule-generator.js';
-import { K_HOURS } from '../../src/core/schedule/weights.js';
+} from '../../src/core/schedules/index.js';
+import { K_HOURS } from '../../src/core/schedules/domain/weights.js';
 
 function bucket(metricSum: Record<string, number>, hours: number): MetricBucketForTest {
   return { metricSum, hours };
