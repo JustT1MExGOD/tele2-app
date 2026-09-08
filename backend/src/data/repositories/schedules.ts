@@ -218,6 +218,73 @@ export async function deleteOne(employeeId: number, workDate: string): Promise<v
   await query(`DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2`, [employeeId, workDate]);
 }
 
+/**
+ * core/schedule/schedule-generator.ts — уже зафиксированные (immutable)
+ * строки графика целевого месяца: work_date < editableFromDate. Возвращает
+ * сырые строки (employee_id, store_id, work_date, hours, role) — генератор
+ * агрегирует их сам в fixedPastHours[e]/fixedPastShiftCount[e]/
+ * fixedPastStoreShifts[e,s], разделяя стажёров и обычных сотрудников (role
+ * из employees нужна именно для этого разделения, см. round 10 фикса).
+ * org-фильтр — по сотруднику (employees.org_id), тот же принцип, что
+ * countShiftsByEmployeeStoreInRange выше.
+ */
+export async function findLockedRowsForOrgMonth(
+  orgId: string, start: string, end: string, editableFromDate: string
+): Promise<{ employee_id: number; store_id: string; work_date: string; hours: number; shift_text: string; role: string }[]> {
+  const res = await query(
+    `SELECT sch.employee_id, sch.store_id, sch.work_date::text as work_date,
+            COALESCE(sch.hours,0) as hours, sch.shift_text, e.role
+     FROM schedules sch
+     JOIN employees e ON e.id = sch.employee_id
+     WHERE COALESCE(e.org_id,'default') = $1
+       AND sch.work_date >= $2::date AND sch.work_date < $3::date AND sch.work_date < $4::date
+       AND sch.store_id IS NOT NULL`,
+    [orgId, start, end, editableFromDate]
+  );
+  return res.rows;
+}
+
+/** Все строки целевого месяца (locked + editable) — только для fingerprint (изменение любой строки, включая locked, инвалидирует черновик). */
+export async function findAllRowsForOrgMonth(
+  orgId: string, start: string, end: string
+): Promise<{ employee_id: number; store_id: string; work_date: string; hours: number; shift_text: string }[]> {
+  const res = await query(
+    `SELECT sch.employee_id, sch.store_id, sch.work_date::text as work_date, COALESCE(sch.hours,0) as hours, sch.shift_text
+     FROM schedules sch
+     JOIN employees e ON e.id = sch.employee_id
+     WHERE COALESCE(e.org_id,'default') = $1 AND sch.work_date >= $2::date AND sch.work_date < $3::date
+       AND sch.store_id IS NOT NULL`,
+    [orgId, start, end]
+  );
+  return res.rows;
+}
+
+/** APPLY — сколько editable-строк (work_date >= editableFromDate) будет заменено; для payload подтверждения замены. */
+export async function countEditableForOrgMonth(orgId: string, editableFromDate: string, end: string): Promise<number> {
+  const res = await query(
+    `SELECT COUNT(*)::int as cnt
+     FROM schedules sch
+     JOIN employees e ON e.id = sch.employee_id
+     WHERE COALESCE(e.org_id,'default') = $1 AND sch.work_date >= $2::date AND sch.work_date < $3::date`,
+    [orgId, editableFromDate, end]
+  );
+  return Number(res.rows[0]?.cnt) || 0;
+}
+
+/** APPLY — удаляет ТОЛЬКО editable-диапазон (work_date >= editableFromDate); locked-строки никогда не трогает.
+ * Вызывается внутри withTransaction — query() сама подхватывает активную транзакцию через AsyncLocalStorage
+ * (см. data/db/index.ts), отдельный scoped-параметр не нужен, тот же принцип, что и в employee-plan-generator.ts. */
+export async function deleteEditableRangeForOrgMonth(
+  orgId: string, editableFromDate: string, end: string
+): Promise<void> {
+  await query(
+    `DELETE FROM schedules
+     WHERE work_date >= $2::date AND work_date < $3::date
+       AND employee_id IN (SELECT id FROM employees WHERE COALESCE(org_id,'default') = $1)`,
+    [orgId, editableFromDate, end]
+  );
+}
+
 /** core/analytics/anomaly.ts (Explain, 21.0) — история укомплектованности по
  * графику (hours>0), тот же батч-по-точкам паттерн, что sales.ts::findHistoricalTotals. */
 export async function findHeadcountHistory(

@@ -69,6 +69,15 @@ import type {
   GenerateEmployeeMonthPlanDraftResponse,
   EmployeeMonthPlanDraftViewResponse,
   ApplyEmployeeMonthPlanDraftResponse,
+  GenerateScheduleDraftRequest,
+  GenerateScheduleDraftResponse,
+  ScheduleDraftViewResponse,
+  ApplyScheduleDraftResponse,
+  StaffingRequirementsListResponse,
+  SaveStaffingRequirementsRequest,
+  ScheduleAvailabilityListResponse,
+  AddScheduleAvailabilityRequest,
+  SchedulePreferenceRow,
   BfqListResponse,
   BfqEmployeeResponse,
   SaveBfqManualRequest,
@@ -509,6 +518,70 @@ export async function applyEmployeeMonthPlanDraft(
   body: { org_id?: string }
 ): Promise<ApplyEmployeeMonthPlanDraftResponse> {
   return request(`/plans/employees/month-drafts/${draftId}/apply`, headers, { method: 'POST', body });
+}
+
+export async function generateScheduleDraft(
+  headers: Record<string, string>,
+  body: GenerateScheduleDraftRequest
+): Promise<GenerateScheduleDraftResponse> {
+  return request('/schedule-drafts/generate', headers, { method: 'POST', body });
+}
+
+export async function getScheduleDraftById(
+  headers: Record<string, string>,
+  draftId: number,
+  orgQuery: string
+): Promise<ScheduleDraftViewResponse> {
+  return request(`/schedule-drafts/${draftId}${orgQuery}`, headers);
+}
+
+export async function applyScheduleDraft(
+  headers: Record<string, string>,
+  draftId: number,
+  body: { org_id?: string; replace?: boolean }
+): Promise<ApplyScheduleDraftResponse> {
+  return request(`/schedule-drafts/${draftId}/apply`, headers, { method: 'POST', body });
+}
+
+export async function getStaffingRequirements(
+  headers: Record<string, string>,
+  storeId: string,
+  orgQuery: string
+): Promise<StaffingRequirementsListResponse> {
+  return request(`/stores/${storeId}/staffing-requirements${orgQuery}`, headers);
+}
+
+export async function saveStaffingRequirements(
+  headers: Record<string, string>,
+  storeId: string,
+  body: SaveStaffingRequirementsRequest
+): Promise<StaffingRequirementsListResponse> {
+  return request(`/stores/${storeId}/staffing-requirements`, headers, { method: 'PUT', body });
+}
+
+export async function getScheduleAvailability(
+  headers: Record<string, string>,
+  employeeId: number,
+  orgQuery: string
+): Promise<ScheduleAvailabilityListResponse> {
+  return request(`/employees/${employeeId}/schedule-availability${orgQuery}`, headers);
+}
+
+export async function addScheduleAvailability(
+  headers: Record<string, string>,
+  employeeId: number,
+  body: AddScheduleAvailabilityRequest
+): Promise<SchedulePreferenceRow> {
+  return request(`/employees/${employeeId}/schedule-availability`, headers, { method: 'POST', body });
+}
+
+export async function deleteScheduleAvailability(
+  headers: Record<string, string>,
+  employeeId: number,
+  rowId: number,
+  body: { org_id?: string }
+): Promise<{ ok: boolean }> {
+  return request(`/employees/${employeeId}/schedule-availability/${rowId}`, headers, { method: 'DELETE', body });
 }
 
 export async function getBfqList(
@@ -1042,6 +1115,14 @@ declare global {
       getLatestEmployeeMonthPlanDraft: typeof getLatestEmployeeMonthPlanDraft;
       getEmployeeMonthPlanDraftById: typeof getEmployeeMonthPlanDraftById;
       applyEmployeeMonthPlanDraft: typeof applyEmployeeMonthPlanDraft;
+      generateScheduleDraft: typeof generateScheduleDraft;
+      getScheduleDraftById: typeof getScheduleDraftById;
+      applyScheduleDraft: typeof applyScheduleDraft;
+      getStaffingRequirements: typeof getStaffingRequirements;
+      saveStaffingRequirements: typeof saveStaffingRequirements;
+      getScheduleAvailability: typeof getScheduleAvailability;
+      addScheduleAvailability: typeof addScheduleAvailability;
+      deleteScheduleAvailability: typeof deleteScheduleAvailability;
       getBfqList: typeof getBfqList;
       getBfqEmployee: typeof getBfqEmployee;
       saveBfqManual: typeof saveBfqManual;
@@ -1167,6 +1248,14 @@ window.apiClient = {
   getLatestEmployeeMonthPlanDraft,
   getEmployeeMonthPlanDraftById,
   applyEmployeeMonthPlanDraft,
+  generateScheduleDraft,
+  getScheduleDraftById,
+  applyScheduleDraft,
+  getStaffingRequirements,
+  saveStaffingRequirements,
+  getScheduleAvailability,
+  addScheduleAvailability,
+  deleteScheduleAvailability,
   getBfqList,
   getBfqEmployee,
   saveBfqManual,

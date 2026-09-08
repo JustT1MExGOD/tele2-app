@@ -625,6 +625,115 @@ export interface ApplyEmployeeMonthPlanDraftResponse {
   applied: boolean;
 }
 
+// ---------- /schedule-drafts(+:id, +:id/apply), /stores/:id/staffing-requirements,
+// /employees/:id/schedule-availability (автоматический генератор месячного графика) ----------
+export type ScheduleDraftStatus = 'draft' | 'applied' | 'stale';
+export type ScheduleDraftSolverStatus = 'feasible' | 'timeout_feasible' | 'infeasible' | 'config_error' | 'solver_error';
+
+export interface ScheduleDraftBlockingError {
+  message: string;
+}
+
+export interface ScheduleDraftRow {
+  id: number;
+  org_id: string;
+  month: string;
+  status: ScheduleDraftStatus;
+  input_fingerprint: string;
+  blocking_errors: ScheduleDraftBlockingError[];
+  solver_status: ScheduleDraftSolverStatus;
+  editable_from_date: string;
+  score: number | null;
+  generated_at: string;
+  generated_by: number | null;
+  applied_at: string | null;
+  applied_by: number | null;
+  replace_mode: string | null;
+}
+
+export interface ScheduleDraftItemRow {
+  id: number;
+  draft_id: number;
+  employee_id: number;
+  work_date: string;
+  store_id: string;
+  shift_text: string;
+  hours: number;
+  predicted_score: number | null;
+  explanation: { tier: string; historical_hours: number; dayPreference: number; fallback_used: boolean } | Record<string, any>;
+}
+
+export interface GenerateScheduleDraftRequest {
+  month?: string;
+  org_id?: string;
+}
+
+export interface GenerateScheduleDraftResponse {
+  draft_id: number;
+  month: string;
+  status: ScheduleDraftStatus;
+  solver_status: ScheduleDraftSolverStatus;
+  blocking_errors: ScheduleDraftBlockingError[];
+  items: unknown[]; // сырые Candidate (empId/date/storeId) — не тот же shape, что ScheduleDraftItemRow; для отображения всегда дозапрашивается GET /schedule-drafts/:id
+}
+
+export interface ScheduleDraftViewResponse {
+  draft: ScheduleDraftRow | null;
+  items: ScheduleDraftItemRow[];
+}
+
+export interface ApplyScheduleDraftResponse {
+  draft: ScheduleDraftRow;
+  applied: boolean;
+  requires_replace_confirmation?: boolean;
+  existing_editable_shifts?: number;
+}
+
+export interface StaffingRequirementRow {
+  id: number;
+  org_id: string;
+  store_id: string;
+  weekday: number | null;
+  specific_date: string | null;
+  required_employees: number;
+  max_trainees: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StaffingRequirementsListResponse {
+  rows: StaffingRequirementRow[];
+}
+
+export interface SaveStaffingRequirementsRequest {
+  org_id?: string;
+  weekday_rows?: { weekday: number; required_employees: number; max_trainees?: number }[];
+  date_rows?: { specific_date: string; required_employees: number; max_trainees?: number }[];
+}
+
+export interface SchedulePreferenceRow {
+  id: number;
+  org_id: string;
+  employee_id: number;
+  kind: string;
+  specific_date: string | null;
+  weekday: number | null;
+  store_id: string | null;
+  source: string;
+  created_at: string;
+  created_by: number | null;
+}
+
+export interface ScheduleAvailabilityListResponse {
+  rows: SchedulePreferenceRow[];
+}
+
+export interface AddScheduleAvailabilityRequest {
+  org_id?: string;
+  kind: 'unavailable' | 'vacation';
+  specific_date: string;
+}
+
 // ---------- /bfq, /bfq/:id, /bfq/manual ----------
 export interface BfqListItem {
   employee_id: number;

@@ -221,6 +221,28 @@ export async function listActiveByOrg(orgId: string, includeTelegramId: boolean)
   return res.rows;
 }
 
+/**
+ * core/schedule/schedule-generator.ts — активные сотрудники сети с role и
+ * hire_date (не входит в listActiveByOrg выше — тот используется во многих
+ * местах, где hire_date не нужна, менять его форму ради одного вызывающего
+ * было бы неоправданным риском). hire_date используется ТОЛЬКО как один из
+ * кандидатов на нижнюю границу окна истории для инференса дня-офф
+ * (min с самой ранней реально наблюдаемой сменой/продажей) — не как
+ * единственный источник границы, см. план.
+ */
+export async function listActiveWithHireDateByOrg(
+  orgId: string
+): Promise<{ id: number; full_name: string; short_name: string | null; role: string; hire_date: string | null }[]> {
+  const res = await query(
+    `SELECT id, full_name, short_name, role, hire_date::text as hire_date
+     FROM employees
+     WHERE is_active = true AND COALESCE(org_id, 'default') = $1
+     ORDER BY id`,
+    [orgId]
+  );
+  return res.rows;
+}
+
 export async function createEmployee(
   fullName: string, shortName: string, role: string, orgId: string
 ): Promise<EmployeeRow> {

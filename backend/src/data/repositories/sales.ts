@@ -195,6 +195,36 @@ export async function sumColumnsByEmployeeStoreForOrgMonth(
   return res.rows;
 }
 
+/**
+ * core/schedule/schedule-generator.ts — та же bulk-агрегация, что
+ * sumColumnsByEmployeeStoreForOrgMonth выше, но по (employee, store,
+ * sale_date) без группировки по месяцу целиком и с часами реальной смены
+ * этого дня (LEFT JOIN schedules) — генератору нужен день недели каждой
+ * продажи (weekdayMonday0(sale_date)) и фактические часы смены, чтобы
+ * считать historicalMetricPerHour, а не просто "метрика за смену".
+ * Никакого шифта sale_date != work_date не предполагается — LEFT JOIN на
+ * то же (employee_id, work_date=sale_date), берём максимум на случай
+ * дублей (schedules уникален по (employee_id, work_date), так что фактически
+ * это просто одно значение или NULL).
+ */
+export async function sumColumnsByEmployeeStoreDateForOrgMonth(
+  orgId: string, start: string, end: string, columns: string[]
+): Promise<{ employee_id: number; store_id: string; sale_date: string; hours: number; [col: string]: number | string }[]> {
+  const selectParts = columns.map((c) => `COALESCE(SUM(s.${c}),0) as ${c}`);
+  const res = await query(
+    `SELECT s.employee_id, s.store_id, s.sale_date::text as sale_date, COALESCE(MAX(sch.hours),0) as hours, ${selectParts.join(', ')}
+     FROM sales s
+     JOIN employees e ON e.id = s.employee_id
+     LEFT JOIN schedules sch ON sch.employee_id = s.employee_id AND sch.work_date = s.sale_date
+     WHERE COALESCE(e.org_id,'default') = $1
+       AND s.sale_date >= $2::date AND s.sale_date < $3::date
+       AND s.store_id IS NOT NULL
+     GROUP BY s.employee_id, s.store_id, s.sale_date`,
+    [orgId, start, end]
+  );
+  return res.rows;
+}
+
 /** getEmployeeMonthFacts, ветка "ни одной ожидаемой колонки нет" (совсем старая схема) — без accessories. */
 export async function sumVeryOldSchemaForEmployeeMonth(
   employeeId: number, start: string, end: string

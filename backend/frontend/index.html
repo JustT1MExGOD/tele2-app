@@ -654,6 +654,18 @@
         <button onclick="shiftMonth(1)">›</button>
       </div>
       <div id="summaryScheduleSection"></div>
+      <div class="section" id="scheduleDraftSection" style="display:none">
+        <div class="section-title">Автоматический расчёт графика</div>
+        <div style="padding:0 16px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="scheduleDraftMonthSelect"></select>
+          <button type="button" class="btn-main" onclick="generateScheduleDraft()" id="scheduleDraftGenerateBtn">Составить график автоматически</button>
+          <button type="button" class="btn-main" onclick="applyScheduleDraftAction()" id="scheduleDraftApplyBtn" style="display:none">Применить график</button>
+          <button type="button" class="btn-ghost" onclick="openStaffingEditor()">Требования к покрытию</button>
+          <button type="button" class="btn-ghost" onclick="openAvailabilityEditor()">Недоступность/отпуск</button>
+        </div>
+        <div id="scheduleDraftErrors"></div>
+        <div id="scheduleDraftSummary"><div class="empty" style="padding:0 16px 12px">Черновик графика ещё не рассчитан.</div></div>
+      </div>
       <div id="monthBoard"><div class="skeleton"></div></div>
     </div>
 
