@@ -14,6 +14,7 @@
     "check:no-direct-sql": "node scripts/check-no-direct-sql.mjs",
     "check:dangerous-js": "node scripts/check-dangerous-js-patterns.mjs",
     "check:route-auth": "node scripts/check-route-auth-policy.mjs",
+    "check:architecture": "node scripts/check-architecture-boundaries.mjs",
     "check:frontend-version": "node scripts/check-frontend-version.mjs",
     "test": "vitest run",
     "test:frontend": "vitest run --config frontend/vitest.config.ts",

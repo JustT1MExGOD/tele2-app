@@ -11,6 +11,9 @@ import { buildSesModel, projectDay } from './forecast.js';
 import { getCached, setCached } from '../shared/scope-cache.js';
 import * as repo from '../../data/repositories/supervisor-analytics.js';
 import * as supervisorSectorsRepo from '../../data/repositories/supervisor-sectors.js';
+import type { StoreScope } from '../shared/store-scope.js';
+
+export type { StoreScope };
 
 // Тот же полный список, что METRICS в services/plans.ts — держим локальную
 // копию (не импортируем, чтобы не тянуть весь plans.ts) для дневных и
@@ -128,7 +131,6 @@ async function forecastRemainingOfMonth(
   return result;
 }
 
-export type StoreScope = string[] | null; // null = все точки (сейчас нигде не возвращается)
 
 export async function resolveSupervisorStores(
   employeeId: number,

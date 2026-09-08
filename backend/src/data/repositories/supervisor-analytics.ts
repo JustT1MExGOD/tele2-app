@@ -5,7 +5,7 @@
  * перенесены дословно (тот же приём, что live-map.ts/insights.ts).
  */
 import { query } from '../db/index.js';
-import type { StoreScope } from '../../core/analytics/supervisor.js';
+import type { StoreScope } from '../../core/shared/store-scope.js';
 
 export async function findStoreIdsForOrg(orgId: string): Promise<string[]> {
   const res = await query(`SELECT id FROM stores WHERE COALESCE(org_id, 'default') = $1`, [orgId]);

@@ -6,9 +6,7 @@
  */
 import { todayMoscow } from '../../utils/date.js';
 import { notifyAdmin, notifyChat } from '../../integrations/telegram/bot.js';
-import { checkAnomalyVsForecast } from '../analytics/anomaly.js';
-import { getStoreHourWeights, projectEndOfDay } from '../analytics/insights.js';
-import { evaluateOutcomes } from '../analytics/learn.js';
+import { checkAnomalyVsForecast, getStoreHourWeights, projectEndOfDay, evaluateOutcomes } from '../analytics/index.js';
 import * as alertsRepo from '../../data/repositories/alerts.js';
 import * as storesRepo from '../../data/repositories/stores.js';
 import * as salesRepo from '../../data/repositories/sales.js';
