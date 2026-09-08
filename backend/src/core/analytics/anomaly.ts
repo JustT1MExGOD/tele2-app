@@ -8,7 +8,7 @@
  */
 import { todayMoscow } from '../../utils/date.js';
 import { buildSesModel, projectDay } from './forecast.js';
-import { insertAlertOnce } from '../alerts/service.js';
+import { insertOnce as insertAlertOnce } from '../../data/repositories/alerts.js';
 import * as storesRepo from '../../data/repositories/stores.js';
 import * as salesRepo from '../../data/repositories/sales.js';
 import * as schedulesRepo from '../../data/repositories/schedules.js';

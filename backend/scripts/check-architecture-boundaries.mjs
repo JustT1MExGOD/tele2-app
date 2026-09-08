@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Enforces modular-monolith dependency direction for backend/src.
-// Rules (see docs/architecture.md):
+// Rules (see docs/ARCHITECTURE.md "Module boundaries"):
 //   1. core/**              must not import Fastify/pg/grammy/node-cron/api/** directly
 //                            (technical concerns belong to platform/data, not domain+application code).
 //   2. data/repositories/** must not import from core/** (infrastructure must not depend on domain).
@@ -18,10 +18,10 @@ const SRC = join(__dirname, '..', 'src');
 
 const FORBIDDEN_CORE_PACKAGES = ['fastify', 'pg', 'grammy', 'node-cron'];
 // Files that are legitimately infrastructure-flavored but live inside core/ for now
-// (tracked as architecture debt in docs/architecture.md, not silently allowed forever).
+// (tracked as architecture debt in docs/ARCHITECTURE.md, not silently allowed forever).
 const CORE_INFRA_EXCEPTIONS = new Set(['core/chat/realtime-bridge.ts']);
 // Repository -> core imports that predate this check, documented as architecture debt
-// in docs/architecture.md (moving them safely requires touching several call sites —
+// in docs/ARCHITECTURE.md (moving them safely requires touching several call sites —
 // deferred, not silently allowed to grow beyond this list).
 const REPO_CORE_EXCEPTIONS = new Set(['data/repositories/sales.ts']);
 
@@ -68,7 +68,7 @@ for (const file of files) {
     for (const spec of importLines) {
       const resolved = toPosix(join(dirname(rel), spec)).replace(/\.js$/, '');
       // core/shared/** is the shared-primitives/contracts layer — usable from any layer,
-      // same as `shared/` at repo root (see docs/architecture.md).
+      // same as `shared/` at repo root (see docs/ARCHITECTURE.md).
       if (resolved.startsWith('core/') && !resolved.startsWith('core/shared/')) {
         violations.push(`${rel}: repository imports domain module '${spec}' — infrastructure must not depend on core`);
       }
@@ -94,7 +94,7 @@ for (const file of files) {
 if (violations.length > 0) {
   console.error(`Architecture boundary check FAILED (${violations.length} violation(s)):\n`);
   for (const v of violations) console.error(`  - ${v}`);
-  console.error('\nSee docs/architecture.md for the dependency rules.');
+  console.error('\nSee docs/ARCHITECTURE.md for the dependency rules.');
   process.exit(1);
 } else {
   console.log(`Architecture boundary check passed (${files.length} files scanned).`);
