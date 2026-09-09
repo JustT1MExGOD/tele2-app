@@ -1,4 +1,4 @@
-import { employeeInputs } from '../../data/repositories/plan-batches.js';
+import { employeeInputs } from '../plans/index.js';
 import { metricKeys } from '../plans/index.js';
 import { todayMoscow } from '../../utils/date.js';
 /**

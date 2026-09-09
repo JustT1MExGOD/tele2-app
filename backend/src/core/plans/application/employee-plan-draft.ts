@@ -7,7 +7,7 @@
  */
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as storesRepo from '../../../data/repositories/stores.js';
-import * as schedulesRepo from '../../../data/repositories/schedules.js';
+import { scheduleReads } from '../../schedules/index.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
 import * as plansRepo from '../../../data/repositories/plans.js';
 import * as batches from '../../../data/repositories/plan-batches.js';
@@ -24,7 +24,7 @@ async function loadMonthAgg(orgId: string, month: string, weight: number, metric
   const start = monthStart(month);
   const end = monthAdd(start, 1);
   const [shiftRows, salesRows] = await Promise.all([
-    schedulesRepo.countShiftsByEmployeeStoreInRange(orgId, start, end),
+    scheduleReads.countShiftsByEmployeeStoreInRange(orgId, start, end),
     salesRepo.sumColumnsByEmployeeStoreForOrgMonth(orgId, start, end, metrics)
   ]);
 
@@ -108,7 +108,7 @@ export async function loadDraftInputs(orgId: string, targetMonth: string, metric
   const [employees, stores, futureShiftRows, storeInput] = await Promise.all([
     employeesRepo.listActiveByOrg(orgId, false),
     storesRepo.listActiveBasic(orgId),
-    schedulesRepo.countShiftsByEmployeeStoreInRange(orgId, start, end),
+    scheduleReads.countShiftsByEmployeeStoreInRange(orgId, start, end),
     batches.storeInputs(orgId, start, end, metrics)
   ]);
   return { employees, stores, futureShiftRows, storePlans: storeInput.plans, start };

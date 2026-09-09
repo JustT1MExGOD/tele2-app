@@ -23,3 +23,4 @@ export {
   METRICS,
   type Metric
 } from '../application/read-model.js';
+export { employeeInputs } from '../../../data/repositories/plan-batches.js';
