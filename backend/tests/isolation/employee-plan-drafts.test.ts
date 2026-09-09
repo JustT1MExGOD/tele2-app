@@ -11,7 +11,7 @@ import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import {
   generateDraft, applyDraft, viewDraft, defaultTargetMonth, StaleDraftError, DraftHasBlockingErrorsError
-} from '../../src/core/plans/employee-plan-generator.js';
+} from '../../src/core/plans/index.js';
 
 function monthAdd(monthStartIso: string, delta: number): string {
   const [y, m] = monthStartIso.split('-').map(Number);

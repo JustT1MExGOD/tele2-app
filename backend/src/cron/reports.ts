@@ -11,7 +11,7 @@ import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '.
 import { shiftReminder, microReport, finalReport, microLines, finalLines, monthClosingReport, esc } from '../integrations/telegram/messages.js';
 import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs, buildMonthClosingReportPng, buildMonthClosingReportSvg, loadMonthClosingData } from '../core/reports/image.js';
 import { generateDipComment } from '../integrations/ai/client.js';
-import { materializeStoreDailyPlans } from '../core/plans/service.js';
+import { materializeStoreDailyPlans } from '../core/plans/index.js';
 import { rebuildHourProfiles } from '../core/analytics/heatmap.js';
 import { getStoreNotifyTarget } from '../core/shared/tenant.js';
 import * as cronRepo from '../data/repositories/cron.js';

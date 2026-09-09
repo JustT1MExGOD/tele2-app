@@ -1,6 +1,6 @@
-import { getEmployeeMonthFacts } from '../../../core/plans/service.js';
+import { getEmployeeMonthFacts } from '../../../core/plans/index.js';
 import { overallProgress } from '../../../core/shared/progress.js';
-import { getEmployeeDailyPlan, metricKeys } from '../../../core/plans/service.js';
+import { getEmployeeDailyPlan, metricKeys } from '../../../core/plans/index.js';
 /**
  * Идентичность и привязка Telegram: /me, /me/bind, /me/day (смена+факт+
  * дневной план сегодня), назначение роли. Выделено из routes-v3.ts.

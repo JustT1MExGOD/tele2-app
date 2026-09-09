@@ -7,7 +7,7 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { bot, notifyChat } from '../integrations/telegram/bot.js';
 import { todayMoscow, nowTimeMoscow } from '../utils/date.js';
-import { computeStoreDailyPlans } from '../core/plans/service.js';
+import { computeStoreDailyPlans } from '../core/plans/index.js';
 import { getOrgNotifyTarget } from '../core/shared/tenant.js';
 import * as cronRepo from '../data/repositories/cron.js';
 import * as orgsRepo from '../data/repositories/organizations.js';

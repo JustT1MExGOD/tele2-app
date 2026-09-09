@@ -2,6 +2,7 @@
  * Единый каталог метрик из plan_metrics (+ fallback)
  */
 import * as repo from '../../data/repositories/metrics.js';
+import { METRICS } from '../../data/repositories/plans.js';
 
 export type MetricDef = {
   id: string;
@@ -54,6 +55,18 @@ export async function getMetricDefs(force = false): Promise<MetricDef[]> {
 
 export async function getMetricIds(): Promise<string[]> {
   return (await getMetricDefs()).map((m) => m.id);
+}
+
+/**
+ * Full metric key set (plans' base METRICS union any custom metric ids from
+ * plan_metrics) — genuinely cross-cutting vocabulary consumed by sales,
+ * plans, schedules/schedule-generator, employee-plan-generator, bfq, and
+ * reports; moved here from core/plans (20.58.0 split, corr. #8) to break a
+ * plans<->schedules import cycle, not to dodge a layering violation — this
+ * has no owner-specific business meaning of its own.
+ */
+export async function metricKeys(): Promise<string[]> {
+  return [...new Set<string>([...METRICS, ...await getMetricIds()])].filter((k) => /^[a-z][a-z0-9_]{0,29}$/.test(k));
 }
 
 export async function metricLabelMap(): Promise<Record<string, string>> {

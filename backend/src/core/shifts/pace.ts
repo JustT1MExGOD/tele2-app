@@ -1,4 +1,4 @@
-import { getEmployeeDailyPlan } from '../plans/service.js';
+import { getEmployeeDailyPlan } from '../plans/index.js';
 /**
  * План/факт дня для сотрудника — раньше считался только внутри
  * /shifts/close, теперь переиспользуется и в open/current (18.7, Shift 2.0)
@@ -6,8 +6,6 @@ import { getEmployeeDailyPlan } from '../plans/service.js';
  * перенесена как есть из routes-shifts.ts.
  */
 import * as salesRepo from '../../data/repositories/sales.js';
-import * as plansRepo from '../../data/repositories/plans.js';
-import * as schedulesRepo from '../../data/repositories/schedules.js';
 
 function num(v: any) {
   return Number(v) || 0;

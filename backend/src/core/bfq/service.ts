@@ -1,5 +1,5 @@
 import { employeeInputs } from '../../data/repositories/plan-batches.js';
-import { metricKeys } from '../plans/service.js';
+import { metricKeys } from '../plans/index.js';
 import { todayMoscow } from '../../utils/date.js';
 /**
  * BFQ — полный расчёт как в старой Google-таблице (BFQ.gs)
@@ -12,7 +12,7 @@ import { todayMoscow } from '../../utils/date.js';
  */
 
 import { toDateISO } from '../../utils/date.js';
-import { getEmployeeMonthPlan } from '../plans/service.js';
+import { getEmployeeMonthPlan } from '../plans/index.js';
 import * as repo from '../../data/repositories/bfq.js';
 
 export const BFQ_CONFIG = {

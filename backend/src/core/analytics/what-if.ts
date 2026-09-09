@@ -1,12 +1,10 @@
-import { getEmployeeDailyPlan } from '../plans/service.js';
+import { getEmployeeDailyPlan } from '../plans/index.js';
 /**
  * What-if: виртуальный перенос смены → пересчёт покрытия плана точки.
  * Не пишет в БД — только симуляция.
  */
 import { toDateISO, todayMoscow } from '../../utils/date.js';
 import * as repo from '../../data/repositories/what-if.js';
-import * as plansRepo from '../../data/repositories/plans.js';
-import * as schedulesRepo from '../../data/repositories/schedules.js';
 
 function n(v: any) {
   return Number(v) || 0;

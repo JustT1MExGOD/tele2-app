@@ -1,5 +1,5 @@
 import { withTransaction } from '../../data/db/index.js';
-import { metricKeys } from '../../core/plans/service.js';
+import { metricKeys } from '../../core/plans/index.js';
 /**
  * Планы: месячные планы сотрудников, сводная таблица, дневные планы точек
  * и справочные дневные/шаблонные планы (GET /plans, слито из
@@ -37,7 +37,7 @@ import {
   upsertStoreMonthPlan,
   METRICS,
   monthStart
-} from '../../core/plans/service.js';
+} from '../../core/plans/index.js';
 import { currentMonthMoscow, todayMoscow } from '../../utils/date.js';
 import type {
   MonthSummaryTableResponse,

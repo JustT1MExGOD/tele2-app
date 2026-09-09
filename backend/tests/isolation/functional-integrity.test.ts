@@ -2,7 +2,7 @@ import {describe,it,expect,beforeAll,afterAll} from 'vitest';
 import {TestFixtures} from '../helpers/fixtures.js';
 import {query,withTransaction} from '../../src/data/db/index.js';
 import {applySaleUpsert} from '../../src/data/repositories/sales.js';
-import {getEmployeeDailyPlan,upsertEmployeeMonthPlan,getMonthSummaryTable} from '../../src/core/plans/service.js';
+import {getEmployeeDailyPlan,upsertEmployeeMonthPlan,getMonthSummaryTable} from '../../src/core/plans/index.js';
 import {overallProgress} from '../../src/core/shared/progress.js';
 import {reportTime} from '../../src/cron/reports.js';
 import {enqueueReportJobs,claimReportJob,finishReportJob} from '../../src/data/repositories/cron.js';

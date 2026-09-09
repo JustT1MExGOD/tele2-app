@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import * as repo from '../../data/repositories/report-image.js';
 import { getMetricDefs, MICRO_KEYS, groupForMetric } from '../shared/metrics-catalog.js';
 import { getStoreHourWeights } from '../analytics/insights.js';
-import { getStoreMonthPlan, getStoreMonthFacts } from '../plans/service.js';
+import { getStoreMonthPlan, getStoreMonthFacts } from '../plans/index.js';
 import { renderSvgToPng } from './svg-pool.js';
 
 const __filename = fileURLToPath(import.meta.url);

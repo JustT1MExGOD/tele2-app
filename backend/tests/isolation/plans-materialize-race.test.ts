@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { query } from '../../src/data/db/index.js';
 import { TestFixtures } from '../helpers/fixtures.js';
-import { materializeStoreDailyPlans } from '../../src/core/plans/service.js';
+import { materializeStoreDailyPlans } from '../../src/core/plans/index.js';
 
 describe('materializeStoreDailyPlans — конкурентные вызовы не дублируют строки', () => {
   const fx = new TestFixtures();

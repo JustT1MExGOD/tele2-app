@@ -1,4 +1,4 @@
-import { getEmployeeDailyPlan } from '../../../core/plans/service.js';
+import { getEmployeeDailyPlan } from '../../../core/plans/index.js';
 /**
  * Личная аналитика сотрудника: инсайт по смене, само-сравнение, дневной
  * план по часам, завершение обучения. Выделено из routes-v13.ts.

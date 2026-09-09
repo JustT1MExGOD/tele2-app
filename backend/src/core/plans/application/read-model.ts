@@ -1,4 +1,4 @@
-import * as batches from '../../data/repositories/plan-batches.js';
+import * as batches from '../../../data/repositories/plan-batches.js';
 /**
  * Месячные планы → дневные → планы точек
  * Единый список метрик (как в sales / frontend)
@@ -9,13 +9,14 @@ import * as batches from '../../data/repositories/plan-batches.js';
  * repositories/organizations.ts (факты/справочники) — этот файл остаётся
  * бизнес-логикой: нормализация ввода, выбор колонок, композиция.
  */
-import { getMetricIds } from '../shared/metrics-catalog.js';
-import * as plansRepo from '../../data/repositories/plans.js';
-import * as salesRepo from '../../data/repositories/sales.js';
-import * as employeesRepo from '../../data/repositories/employees.js';
-import * as schedulesRepo from '../../data/repositories/schedules.js';
-import * as storesRepo from '../../data/repositories/stores.js';
-import * as orgsRepo from '../../data/repositories/organizations.js';
+import { metricKeys } from '../../shared/metrics-catalog.js';
+
+export { metricKeys };
+import * as plansRepo from '../../../data/repositories/plans.js';
+import * as salesRepo from '../../../data/repositories/sales.js';
+import { scheduleReads } from '../../schedules/index.js';
+import * as storesRepo from '../../../data/repositories/stores.js';
+import * as orgsRepo from '../../../data/repositories/organizations.js';
 
 export const METRICS = plansRepo.METRICS;
 export type Metric = plansRepo.Metric;
@@ -86,9 +87,6 @@ function normalizePlanInput(data: Record<string, any>): Record<Metric, number> {
   return out;
 }
 
-export async function metricKeys(): Promise<string[]> {
-  return [...new Set<string>([...METRICS,...await getMetricIds()])].filter(k=>/^[a-z][a-z0-9_]{0,29}$/.test(k));
-}
 export async function getEmployeeMonthFacts(employeeId: number, month: string, before?: string) {
   const keys=await metricKeys();
   const row=await salesRepo.sumColumnsForEmployeeMonth(employeeId,monthStart(month),before || monthEndExclusive(month),keys);
@@ -98,13 +96,13 @@ export async function getEmployeeMonthFacts(employeeId: number, month: string, b
 export async function getEmployeeShiftCount(employeeId: number, month: string) {
   const start = monthStart(month);
   const end = monthEndExclusive(month);
-  return schedulesRepo.countWorkedInRange(employeeId, start, end);
+  return scheduleReads.countWorkedInRange(employeeId, start, end);
 }
 
 export async function getEmployeeRemainingShifts(employeeId: number, month: string, asOf = todayMoscow()) {
   const today = asOf < monthStart(month) ? monthStart(month) : asOf;
   const end = monthEndExclusive(month);
-  return schedulesRepo.countWorkedInRange(employeeId, today, end);
+  return scheduleReads.countWorkedInRange(employeeId, today, end);
 }
 
 export async function getEmployeeMonthPlan(employeeId: number, month: string) {

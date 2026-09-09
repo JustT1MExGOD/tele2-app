@@ -1,111 +1,24 @@
 /**
- * Автоматический расчёт рекомендованных персональных месячных планов на
- * СЛЕДУЮЩИЙ месяц (DRAFT -> APPLY, миграция 0029). Никогда не пишет
- * shift_sessions/sales_events/XP и не трогает историю sales/schedules —
- * только читает их и производные из плана продажи (store_month_plans).
- *
- * Формула (кратко, полное объяснение — в PR/памяти):
- * 1. Продуктивность "на смену" сотрудника на конкретной точке = взвешенное
- *    среднее (сумма метрики / число смен) за последние 3 ПОЛНЫХ месяца,
- *    веса 50% / 30% / 20% (от новейшего к самому старому), считается
- *    ОТДЕЛЬНО по каждой точке, где сотрудник реально работал.
- * 2. Fallback по отсутствию истории (в этом порядке): своя история на
- *    точке -> средняя продуктивность точки -> средняя продуктивность сети
- *    -> пропорционально числу будущих смен (когда product. данных нет
- *    вообще нигде, либо когда её сумма по всем участникам точки равна 0).
- * 3. Ожидаемый вклад сотрудника на точке = будущие смены на этой точке ×
- *    продуктивность на смену на этой точке (посчитанная выше).
- * 4. На каждой точке, по каждой метрике, вклады сотрудников нормализуются
- *    так, чтобы сумма ТОЧНО равнялась store_month_plan этой точки/метрики.
- * 5. Итоговый personal-план сотрудника = сумма его нормализованных долей
- *    по всем точкам, где он работает в следующем месяце.
- * 6. Целочисленные (unit='count') метрики округляются методом наибольшего
- *    остатка (largest remainder) — сумма после округления остаётся точно
- *    равна плану точки; денежные метрики округляются тем же методом до
- *    копеек.
+ * generateDraft/viewDraft/applyDraft for employee-plan-generator — the
+ * capability inside `plans` that recommends next-month personal targets
+ * (DRAFT -> APPLY, migration 0029). Moved verbatim from
+ * core/plans/employee-plan-generator.ts (20.58.0 split) — only import
+ * paths changed, plus loadMonthAgg moved here unchanged (it's I/O).
  */
-import * as employeesRepo from '../../data/repositories/employees.js';
-import * as storesRepo from '../../data/repositories/stores.js';
-import * as schedulesRepo from '../../data/repositories/schedules.js';
-import * as salesRepo from '../../data/repositories/sales.js';
-import * as plansRepo from '../../data/repositories/plans.js';
-import * as batches from '../../data/repositories/plan-batches.js';
-import * as draftsRepo from '../../data/repositories/employee-plan-drafts.js';
-import { withTransaction } from '../../data/db/index.js';
-import { getMetricDefs } from '../shared/metrics-catalog.js';
-import { metricKeys } from './service.js';
+import * as employeesRepo from '../../../data/repositories/employees.js';
+import * as storesRepo from '../../../data/repositories/stores.js';
+import * as schedulesRepo from '../../../data/repositories/schedules.js';
+import * as salesRepo from '../../../data/repositories/sales.js';
+import * as plansRepo from '../../../data/repositories/plans.js';
+import * as batches from '../../../data/repositories/plan-batches.js';
+import * as draftsRepo from '../../../data/repositories/employee-plan-drafts.js';
+import { withTransaction } from '../../../data/db/index.js';
+import { getMetricDefs } from '../../shared/metrics-catalog.js';
+import { metricKeys } from '../ports/read-model.js';
 import { createHash } from 'node:crypto';
-
-const HIST_WEIGHTS = [0.5, 0.3, 0.2];
-
-export class StaleDraftError extends Error {
-  constructor() {
-    super('Черновик устарел: расписание или план точки изменились после расчёта — пересчитайте план');
-    Object.assign(this, { statusCode: 409 });
-    this.name = 'StaleDraftError';
-  }
-}
-
-export class DraftHasBlockingErrorsError extends Error {
-  constructor(public errors: any[]) {
-    super('Черновик содержит блокирующие ошибки — применить его нельзя');
-    Object.assign(this, { statusCode: 422 });
-    this.name = 'DraftHasBlockingErrorsError';
-  }
-}
-
-function monthStart(month: string): string {
-  return month.length === 7 ? `${month}-01` : month.slice(0, 10);
-}
-
-function monthAdd(monthStartIso: string, delta: number): string {
-  const [y, m] = monthStart(monthStartIso).split('-').map(Number);
-  const total = y * 12 + (m - 1) + delta;
-  const ny = Math.floor(total / 12);
-  const nm = (total % 12) + 1;
-  return `${ny}-${String(nm).padStart(2, '0')}-01`;
-}
-
-function todayMoscow(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit'
-  }).format(new Date());
-}
-
-/** Следующий (относительно сегодняшней даты) календарный месяц — цель генерации по умолчанию. */
-export function defaultTargetMonth(asOf = todayMoscow()): string {
-  return monthAdd(monthStart(asOf.slice(0, 7)), 1);
-}
-
-/** Последние 3 ПОЛНЫХ месяца перед текущим (не перед целевым — целевой ещё не наступил).
- * Используется ТОЛЬКО когда targetMonth не передан явно (backward compatibility
- * со старым поведением "план на следующий месяц") — см. historicalMonthsForTarget()
- * ниже для случая явно выбранного месяца. */
-function historicalMonths(asOf = todayMoscow()): { month: string; weight: number }[] {
-  const currentStart = monthStart(asOf.slice(0, 7));
-  return HIST_WEIGHTS.map((weight, i) => ({ month: monthAdd(currentStart, -1 - i), weight }));
-}
-
-/** 3 полных календарных месяца, непосредственно предшествующих ЯВНО выбранному
- * целевому месяцу (target-1, target-2, target-3) — напр. target=2026-09 ->
- * история 2026-06, 2026-07, 2026-08. Веса 50/30/20 от новейшего к самому
- * старому, как и раньше. Факт самого целевого месяца сюда никогда не
- * попадает — он строго после этого диапазона. */
-function historicalMonthsForTarget(targetMonth: string): { month: string; weight: number }[] {
-  const targetStart = monthStart(targetMonth);
-  return HIST_WEIGHTS.map((weight, i) => ({ month: monthAdd(targetStart, -1 - i), weight }));
-}
-
-type MonthAgg = {
-  month: string;
-  weight: number;
-  empStoreShifts: Map<string, Map<string, number>>;
-  empStoreSales: Map<string, Map<string, Record<string, number>>>;
-  storeShifts: Map<string, number>;
-  storeSales: Map<string, Record<string, number>>;
-  orgShifts: number;
-  orgSales: Record<string, number>;
-};
+import { StaleDraftError, DraftHasBlockingErrorsError } from './errors.js';
+import { monthStart, monthAdd, todayMoscow, defaultTargetMonth } from '../scoring/date-helpers.js';
+import { HIST_WEIGHTS, historicalMonths, historicalMonthsForTarget, weightedProductivity, largestRemainderRound, type MonthAgg, type ProductivityResult } from '../scoring/productivity.js';
 
 async function loadMonthAgg(orgId: string, month: string, weight: number, metrics: string[]): Promise<MonthAgg> {
   const start = monthStart(month);
@@ -144,53 +57,9 @@ async function loadMonthAgg(orgId: string, month: string, weight: number, metric
   return { month: start, weight, empStoreShifts, empStoreSales, storeShifts, storeSales, orgShifts, orgSales };
 }
 
-type ProductivityResult = {
-  productivity: Record<string, number>;
-  monthsUsed: { month: string; shifts: number; weight: number }[];
-};
-
-function weightedProductivity(
-  months: MonthAgg[], metrics: string[],
-  getShifts: (m: MonthAgg) => number, getSales: (m: MonthAgg) => Record<string, number> | undefined
-): ProductivityResult | null {
-  const weightedSum: Record<string, number> = Object.fromEntries(metrics.map((m) => [m, 0]));
-  let weightTotal = 0;
-  const monthsUsed: { month: string; shifts: number; weight: number }[] = [];
-  for (const agg of months) {
-    const shifts = getShifts(agg);
-    if (shifts > 0) {
-      const sales = getSales(agg) || {};
-      for (const m of metrics) weightedSum[m] += agg.weight * (Number(sales[m]) || 0) / shifts;
-      weightTotal += agg.weight;
-      monthsUsed.push({ month: agg.month, shifts, weight: agg.weight });
-    }
-  }
-  if (weightTotal <= 0) return null;
-  const productivity: Record<string, number> = {};
-  for (const m of metrics) productivity[m] = weightedSum[m] / weightTotal;
-  return { productivity, monthsUsed };
-}
-
-/** Largest-remainder — детерминированное округление: сумма после округления точно равна target. */
-function largestRemainderRound(values: number[], target: number, decimals: number): number[] {
-  const scale = 10 ** decimals;
-  const scaledTarget = Math.round(target * scale);
-  const floors = values.map((v) => Math.floor(v * scale));
-  let remainder = scaledTarget - floors.reduce((a, b) => a + b, 0);
-  const order = values.map((v, i) => ({ i, frac: v * scale - floors[i] }));
-  if (remainder > 0) {
-    order.sort((a, b) => b.frac - a.frac || a.i - b.i);
-    for (let k = 0; k < remainder && k < order.length; k++) floors[order[k].i] += 1;
-  } else if (remainder < 0) {
-    order.sort((a, b) => a.frac - b.frac || a.i - b.i);
-    for (let k = 0; k < -remainder && k < order.length; k++) floors[order[k].i] -= 1;
-  }
-  return floors.map((v) => v / scale);
-}
-
 export type BlockingError = { store_id: string; store_name: string; message: string };
 
-type StoreBreakdown = {
+export type StoreBreakdown = {
   store_id: string;
   store_name: string;
   future_shifts: number;
@@ -218,12 +87,7 @@ export type GenerateDraftResult = {
   blocking_errors: BlockingError[];
 };
 
-/** Хэш инпутов, от которых зависит валидность черновика: будущее расписание
- * (агрегированное по сотруднику+точке — точечная перестановка одной смены
- * между теми же сотрудником/точкой в тот же месяц теоретически не меняет
- * хэш, но это не влияет на результат расчёта, т.к. используется именно
- * агрегированное число смен) + планы точек на целевой месяц. */
-function computeFingerprint(
+export function computeFingerprint(
   futureShiftRows: { employee_id: number; store_id: string; shifts: number }[],
   storePlans: Map<string, any>
 ): string {
@@ -238,7 +102,7 @@ function computeFingerprint(
   return createHash('sha256').update(shiftsPart + '|' + plansPart).digest('hex');
 }
 
-async function loadDraftInputs(orgId: string, targetMonth: string, metrics: string[]) {
+export async function loadDraftInputs(orgId: string, targetMonth: string, metrics: string[]) {
   const start = monthStart(targetMonth);
   const end = monthAdd(start, 1);
   const [employees, stores, futureShiftRows, storeInput] = await Promise.all([

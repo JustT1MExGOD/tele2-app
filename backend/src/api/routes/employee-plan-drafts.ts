@@ -11,7 +11,7 @@ import { record as recordAudit } from '../../data/repositories/audit.js';
 import {
   generateDraft, viewDraft, applyDraft, defaultTargetMonth,
   StaleDraftError, DraftHasBlockingErrorsError
-} from '../../core/plans/employee-plan-generator.js';
+} from '../../core/plans/index.js';
 
 export async function registerEmployeePlanDraftsRoutes(app: FastifyInstance) {
   // Рассчитать (или пересчитать) черновик планов на следующий месяц.

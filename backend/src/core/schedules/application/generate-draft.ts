@@ -14,7 +14,7 @@ import * as salesRepo from '../../../data/repositories/sales.js';
 import * as staffingRepo from '../../../data/repositories/store-staffing.js';
 import * as availabilityRepo from '../../../data/repositories/employee-availability.js';
 import * as draftsRepo from '../../../data/repositories/schedule-drafts.js';
-import { metricKeys } from '../../plans/service.js';
+import { metricKeys } from '../../shared/metrics-catalog.js';
 import { weekdayMonday0, monthStart, monthAdd, addDaysIso, defaultTargetMonth, daysInMonth } from '../domain/weekday.js';
 import { storeFullShiftHours, deriveShift } from '../domain/shift-time.js';
 import { resolveEditableFromDate } from '../domain/editable-boundary.js';
