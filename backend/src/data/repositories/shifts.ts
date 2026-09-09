@@ -165,7 +165,7 @@ export async function hasOtherClosedToday(employeeId: number, date: string, excl
   return !!res.rows[0];
 }
 
-/** core/analytics/anomaly.ts (Explain, 21.0) — сколько уникальных сотрудников
+/** core/alerts/anomaly.ts (Explain, 21.0) — сколько уникальных сотрудников
  * реально открыли смену на точке в эту дату (любой статус — open/closed/
  * auto_closed), по всем точкам разом. НЕ то же самое, что countOpenForStoreDay
  * (только те, что открыты ПРЯМО СЕЙЧАС) — здесь интересует явка за весь день. */

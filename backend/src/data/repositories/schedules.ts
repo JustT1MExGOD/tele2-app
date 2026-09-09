@@ -285,7 +285,7 @@ export async function deleteEditableRangeForOrgMonth(
   );
 }
 
-/** core/analytics/anomaly.ts (Explain, 21.0) — история укомплектованности по
+/** core/alerts/anomaly.ts (Explain, 21.0) — история укомплектованности по
  * графику (hours>0), тот же батч-по-точкам паттерн, что sales.ts::findHistoricalTotals. */
 export async function findHeadcountHistory(
   storeIds: string[], beforeDate: string
@@ -301,7 +301,7 @@ export async function findHeadcountHistory(
   return res.rows;
 }
 
-/** core/analytics/anomaly.ts (Explain) — факт укомплектованности по графику на
+/** core/alerts/anomaly.ts (Explain) — факт укомплектованности по графику на
  * конкретную дату, по всем точкам разом. */
 export async function findHeadcountForDate(
   storeIds: string[], date: string

@@ -7,11 +7,11 @@
  * статистический (z-score), а не «меньше плана на N%».
  */
 import { todayMoscow } from '../../utils/date.js';
-import { buildSesModel, projectDay } from './forecast.js';
+import { buildSesModel, projectDay } from '../analytics/forecast.js';
 import { insertOnce as insertAlertOnce } from '../../data/repositories/alerts.js';
 import * as storesRepo from '../../data/repositories/stores.js';
 import * as salesRepo from '../../data/repositories/sales.js';
-import * as schedulesRepo from '../../data/repositories/schedules.js';
+import { scheduleReads } from '../schedules/index.js';
 import * as shiftsRepo from '../../data/repositories/shifts.js';
 
 function num(v: any) {
@@ -70,13 +70,13 @@ export async function checkAnomalyVsForecast() {
   // трёх факторов: недоукомплектованность (headcount из графика), разрыв
   // явки (график vs реально открытые смены), сетевая просадка (нужны z ВСЕХ
   // точек за вчера, поэтому z считаем в первом проходе, причины — во втором).
-  const headcountHist = await schedulesRepo.findHeadcountHistory(storeIds, yesterday);
+  const headcountHist = await scheduleReads.findHeadcountHistory(storeIds, yesterday);
   const headcountHistByStore = new Map<string, Map<string, number>>();
   for (const r of headcountHist) {
     if (!headcountHistByStore.has(r.store_id)) headcountHistByStore.set(r.store_id, new Map());
     headcountHistByStore.get(r.store_id)!.set(String(r.d).slice(0, 10), num(r.headcount));
   }
-  const headcountTodayRows = await schedulesRepo.findHeadcountForDate(storeIds, yesterday);
+  const headcountTodayRows = await scheduleReads.findHeadcountForDate(storeIds, yesterday);
   const headcountTodayByStore = new Map<string, number>();
   for (const r of headcountTodayRows) headcountTodayByStore.set(r.store_id, num(r.headcount));
   const sessionRows = await shiftsRepo.findSessionCountForDate(storeIds, yesterday);
