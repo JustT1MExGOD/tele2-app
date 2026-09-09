@@ -20,7 +20,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     lib: {
-      entry: resolve(__dirname, 'src/api-client.ts'),
+      entry: resolve(__dirname, 'src/app/api-bridge.ts'),
       formats: ['iife'],
       name: '__t2ApiClientBundle',
       fileName: () => 'api-client.bundle.js'

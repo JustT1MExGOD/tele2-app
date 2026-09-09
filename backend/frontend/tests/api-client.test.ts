@@ -11,56 +11,90 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  getOrgStores,
-  getMetrics,
-  getPromos,
-  getPromoCard,
-  createPromo,
-  markPromoUsed,
-  keepPromo,
-  getCashTable,
-  saveCash,
-  createMetric,
-  deleteMetric,
-  sendNetworkDigest,
-  getAlerts,
-  changeAlertStatus,
-  getTasks,
-  getTask,
-  changeTaskStatus,
-  addTaskComment,
-  getCommandCenter,
-  getEmployees,
-  createTask,
-  getMe,
-  bindMe,
-  getSchedules,
-  saveSchedulesBulk,
-  getEmployeeMonthPlan,
-  saveEmployeeMonthPlan,
-  getStoreDailyPlans,
-  getBfqEmployee,
   getAccessDirectory,
-  rejectAccessRequest,
-  getSupervisorHealth,
-  getSales,
-  zeroSaleMetric,
-  getSalesHistory,
-  getAnnouncementReads,
-  getReportDay,
-  updateStoreDisplayName,
-  deactivateEmployee,
-  setEmployeeRole,
-  getNetworkLive,
-  uploadAvatar,
-  exportCsv,
+  rejectAccessRequest
+} from '../src/features/access/api.js';
+import {
   getAuditLog,
   getDealersTree,
   renameDealer,
   renameSector,
-  assignSupervisorSector,
+  assignSupervisorSector
+} from '../src/features/admin/api.js';
+import {
+  getAlerts,
+  changeAlertStatus
+} from '../src/features/alerts/api.js';
+import {
+  getBfqEmployee
+} from '../src/features/bfq/api.js';
+import {
+  getMetrics,
+  getCashTable,
+  saveCash,
+  createMetric,
+  deleteMetric
+} from '../src/features/cash-metrics/api.js';
+import {
   uploadChatAttachment
-} from '../src/api-client.js';
+} from '../src/features/chat/api.js';
+import {
+  getCommandCenter
+} from '../src/features/command-center/api.js';
+import {
+  getEmployees,
+  deactivateEmployee,
+  setEmployeeRole
+} from '../src/features/employees/api.js';
+import {
+  getMe,
+  bindMe,
+  uploadAvatar
+} from '../src/features/me/api.js';
+import {
+  getEmployeeMonthPlan,
+  saveEmployeeMonthPlan,
+  getStoreDailyPlans
+} from '../src/features/plans/api.js';
+import {
+  getPromos,
+  getPromoCard,
+  createPromo,
+  markPromoUsed,
+  keepPromo
+} from '../src/features/promos/api.js';
+import {
+  sendNetworkDigest,
+  getAnnouncementReads,
+  getReportDay
+} from '../src/features/reports/api.js';
+import {
+  getSales,
+  zeroSaleMetric,
+  getSalesHistory
+} from '../src/features/sales/api.js';
+import {
+  getSchedules,
+  saveSchedulesBulk
+} from '../src/features/schedules/api.js';
+import {
+  getOrgStores,
+  updateStoreDisplayName,
+  getNetworkLive
+} from '../src/features/stores/api.js';
+import {
+  getSupervisorHealth
+} from '../src/features/supervisor/api.js';
+import {
+  getTasks,
+  getTask,
+  changeTaskStatus,
+  addTaskComment,
+  createTask
+} from '../src/features/tasks/api.js';
+import {
+  exportCsv
+} from '../src/shared/api/http-client.js';
 
 function fetchOk(body: unknown) {
   return vi.fn(async () => ({

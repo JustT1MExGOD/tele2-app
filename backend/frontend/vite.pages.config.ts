@@ -5,7 +5,7 @@ const __dirname = import.meta.dirname;
 
 /**
  * 20.12.0 (Frontend rewrite kickoff) — separate config from vite.config.ts
- * (which builds api-client.ts) because Rollup's iife/umd output formats
+ * (which builds app/api-bridge.ts, 20.58.0+) because Rollup's iife/umd output formats
  * don't support multiple entries in one build (each iife bundle needs
  * exactly one global namespace) — so each migrated page gets its own
  * independent `vite build` invocation here rather than fighting that

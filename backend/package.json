@@ -15,6 +15,7 @@
     "check:dangerous-js": "node scripts/check-dangerous-js-patterns.mjs",
     "check:route-auth": "node scripts/check-route-auth-policy.mjs",
     "check:architecture": "node scripts/check-architecture-boundaries.mjs",
+    "check:frontend-architecture": "node scripts/check-frontend-architecture.mjs",
     "check:circular-deps": "node scripts/check-circular-deps.mjs",
     "check:frontend-version": "node scripts/check-frontend-version.mjs",
     "test": "vitest run",
