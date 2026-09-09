@@ -16,6 +16,7 @@
     "check:route-auth": "node scripts/check-route-auth-policy.mjs",
     "check:architecture": "node scripts/check-architecture-boundaries.mjs",
     "check:frontend-architecture": "node scripts/check-frontend-architecture.mjs",
+    "check:frontend-legacy-globals": "node scripts/check-frontend-legacy-globals.mjs",
     "check:circular-deps": "node scripts/check-circular-deps.mjs",
     "check:frontend-version": "node scripts/check-frontend-version.mjs",
     "test": "vitest run",

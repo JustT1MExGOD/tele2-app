@@ -256,6 +256,39 @@ ambient-глобалов в `legacy-globals.d.ts` писабельные (`let`,
 `scheduleMonth`, `planMonth`, `METRICS`, `page` — их реальные владельцы
 сами typed-код и пишут в них по-настоящему, а не только читают.
 
+### Legacy global state (frontend, frozen — explicit debt)
+
+`app/core.ts`/`app/nav.ts` own 9 shared mutable properties — `me`, `stores`,
+`employees`, `saleSelection`, `scheduleMonth`, `planMonth`, `adminViewOrgId`,
+`METRICS`, `page` — read/written as bare identifiers (not `window.x`) by
+~15 other bundles, via the ECMA-262 Global Environment Record mechanism
+described above. This is a real, working, tested pattern (`smoke-frontend.mjs`
+enforces script load order) and a genuinely large coupling surface — bigger
+than the former `api-client.ts` god-file ever was, since every migrated
+bundle touches it.
+
+20.58.0 (architecture split) did **not** migrate this away — that would be
+a full state-management rewrite across ~15 files, a separate, much larger
+initiative, not a scoped refactor commit. What it does instead, matching
+the "isolate behind an explicit boundary, freeze the surface, don't ban the
+existing pattern" principle:
+
+- `app/state.ts` gained typed read-only accessors for all 9 properties
+  (`getStores()`, `getEmployees()`, `getSaleSelection()`, `getScheduleMonth()`,
+  `getPlanMonth()`, `getAdminViewOrgId()`, `getMetricsCatalog()`,
+  `getCurrentPage()`, alongside the pre-existing `getSession()` for `me`) —
+  new code should call these instead of reading the bare identifiers
+  directly, so a future migration only has to change 9 function bodies, not
+  every call site. Existing bare-global reads are untouched — same runtime
+  behavior, same load order, nothing removed.
+- `npm run check:frontend-legacy-globals` freezes the set of `let`-declared
+  mutable globals in `shared/legacy-globals.d.ts` to exactly these 9. Adding
+  a 10th requires updating the checker's frozen list explicitly — a visible,
+  reviewed decision, not silent drift. It does not check the ~80
+  `function foo(): ...` bridge declarations in the same file (the
+  `window.<name> = <name>` legacy-`onclick`-dispatch mechanism) — that's a
+  different, larger migration concern, out of scope for this check.
+
 **Правило зависимости слоёв**: `api → core → data`, только в одну
 сторону. `api/routes/*` может импортировать `core/` и `data/`; `core/*`
 может импортировать `data/`, но не `api/` (и на деле не импортирует —
@@ -277,6 +310,26 @@ ambient-глобалов в `legacy-globals.d.ts` писабельные (`let`,
 `data/db/index.js` напрямую (кроме `withTransaction()`, это оркестрация,
 не сам SQL). `npm run check:no-direct-sql` — CI-ratchet, растёт по мере
 переноса следующих файлов, не позволяет откат.
+
+**Правило «модуль A не читает чужой репозиторий напрямую»** (20.58.0):
+`core/schedules/` и `core/plans/` — два модуля, реструктурированных в этом
+проходе с явным `index.ts`-публичным API и (для `schedules`)
+`ports/read.ts` — владеют своими репозиториями (`schedules`,
+`schedule-drafts`, `store-staffing`, `employee-availability` для
+`schedules`; `plans`, `employee-plan-drafts`, `plan-batches` для `plans`).
+Любой другой `core/<module>/` обязан читать их данные через
+`core/schedules/index.js`/`core/plans/index.js`, не через
+`data/repositories/*.js` напрямую — `npm run check:architecture`
+проверяет это (правило 4 в самом скрипте). Правило **намеренно** не
+распространено на весь `core/**` — полный аудит владения остальными ~35
+репозиториями (`stores`, `sales`, `employees`, `organizations`, ...) не
+входил в этот проход; это документированный, ограниченный охват, не
+недосмотр (см. комментарий в самом скрипте). Внутри `core/schedules/` и
+`core/plans/` домен-слои (`domain/`, `core/plans/scoring/`) дополнительно
+не могут импортировать `data/db` или `javascript-lp-solver` напрямую
+(правило 5) — конкретный MILP-солвер живёт только в
+`core/schedules/solver/lp-solver-adapter.ts`, домен зависит от контракта
+`solver/contract.ts`, не от библиотеки.
 
 ## Связанные документы
 
