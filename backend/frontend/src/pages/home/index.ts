@@ -9,7 +9,7 @@
  * stay as-is (still accurate, now backed by this module instead of the
  * classic script), same precedent as openModal/closeModal.
  */
-import type { MeDayResponse, TaskItem, SupervisorHealthResponse, StatsDailyRow, DashboardResponse } from '../../../../src/shared/api-types.js';
+import type { MeDayResponse, TaskItem, SupervisorHealthResponse, StatsDailyRow, DashboardResponse, SafeStoreInfo } from '../../../../src/shared/api-types.js';
 
 // Пишет в оба места разом — id элемента и его Desktop-версию (20.40,
 // docs/DESKTOP-DESIGN.md): данные получены один раз, два тонких
@@ -50,12 +50,38 @@ export async function loadMyDay(): Promise<void> {
     const shift = d.shift;
     const tot = d.total || ({} as { fact?: number; plan?: number; pct?: number });
     const pr = d.progress || {};
+
+    // Replacement shift (замена) — the store card becomes interactive:
+    // "Сменить точку" while no shift is open (store not yet fixed), a
+    // "Замена" badge once an open shift is in REPLACEMENT mode (store fixed
+    // for the session, per the lifecycle rule — must close before switching).
+    let currentSession: { work_mode?: string } | null = null;
+    try {
+      const cur = await window.apiClient.getShiftCurrent(authHeaders());
+      currentSession = (cur.session as { work_mode?: string } | null) || null;
+    } catch (_) { /* best-effort — card still renders without the badge/button */ }
+    const isReplacementOpen = currentSession?.work_mode === 'REPLACEMENT';
+    const canChangeStore = !currentSession; // no open shift at all — store not fixed yet
+
+    const changeStoreButtonHtml = canChangeStore
+      ? `<button class="btn-main" style="margin-top:6px;padding:6px 12px;font-size:12px;width:auto" onclick="openChangeStoreModal()">Сменить точку</button>`
+      : '';
+    const replacementBadgeHtml = isReplacementOpen
+      ? `<div style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:8px;background:var(--accent,#2AABEE);color:#fff;font-size:11px;font-weight:600">Замена · другая сеть</div>`
+      : '';
+
     const headHtml = shift
       ? `<div style="padding:0 16px 10px">
+                ${isReplacementOpen ? `<div style="font-size:11px;font-weight:700;color:var(--hint)">ТОЧКА ЗАМЕНЫ</div>` : ''}
                 <div style="font-size:15px;font-weight:700">${esc(shift.store_code || shift.store_name || '')}</div>
                 ${shift.store_address ? `<div style="font-size:12px;color:var(--hint);margin-top:2px">${esc(shift.store_address)}</div>` : ''}
+                ${replacementBadgeHtml}
+                ${changeStoreButtonHtml}
               </div>`
-      : `<div style="padding:0 16px 10px"><div style="font-size:15px;font-weight:700">Выходной</div></div>`;
+      : `<div style="padding:0 16px 10px">
+                <div style="font-size:15px;font-weight:700">Выходной</div>
+                ${changeStoreButtonHtml}
+              </div>`;
     setBothHTML('myDayStoreHead', 'myDayStoreHeadDesktop', headHtml);
     // Тот же код/адрес — ещё и в шапке приложения, той же плашкой, что
     // «Сегодня»: видно на любой вкладке, не только на Главной, пока не
@@ -475,6 +501,77 @@ export function openAbout(): void {
   else document.getElementById('overlay')?.classList.add('show');
 }
 
+// ---------- Replacement shift: manual store-code entry ----------
+// Minimal UI on the existing store card — no separate page, no
+// marketplace. resolveStore() is a pure preview (no mutation); the actual
+// authorization is re-checked by the backend at /shifts/open itself.
+let pendingReplacementStore: SafeStoreInfo | null = null;
+let pendingReplacementMode: 'NORMAL' | 'REPLACEMENT' | null = null;
+
+export function openChangeStoreModal(): void {
+  pendingReplacementStore = null;
+  pendingReplacementMode = null;
+  const modalTitle = document.getElementById('modalTitle');
+  if (modalTitle) modalTitle.textContent = 'Сменить точку';
+  const modalBody = document.getElementById('modalBody');
+  if (modalBody) {
+    modalBody.innerHTML = `
+        <div class="field"><label>Код точки</label>
+          <input type="text" id="changeStoreCode" inputmode="numeric" placeholder="888967" autofocus></div>
+        <div id="changeStoreResult" style="margin:8px 0;font-size:13px"></div>
+        <button type="button" class="btn-main" id="changeStoreCheckBtn" onclick="checkChangeStoreCode()">Проверить</button>
+      `;
+  }
+  if (typeof openModal === 'function') openModal();
+  else document.getElementById('overlay')?.classList.add('show');
+}
+
+export async function checkChangeStoreCode(): Promise<void> {
+  const input = document.getElementById('changeStoreCode') as HTMLInputElement | null;
+  const resultEl = document.getElementById('changeStoreResult');
+  const code = (input?.value || '').trim();
+  if (!code || !resultEl) return;
+  resultEl.textContent = 'Проверяем…';
+  try {
+    const res = await window.apiClient.resolveStore(authHeaders(), { code });
+    if (!res.allowed || !res.store || !res.mode) {
+      resultEl.innerHTML = `<div style="color:#e74c3c">${esc(res.message || 'Точка недоступна')}</div>`;
+      pendingReplacementStore = null;
+      pendingReplacementMode = null;
+      return;
+    }
+    pendingReplacementStore = res.store;
+    pendingReplacementMode = res.mode;
+    const storeLine = `<div style="font-weight:600">${esc(res.store.code)} — ${esc(res.store.display_name || res.store.name)}</div>${res.store.address ? `<div style="color:var(--hint);font-size:12px">${esc(res.store.address)}</div>` : ''}`;
+    const confirmLine = res.mode === 'REPLACEMENT'
+      ? `<div style="margin-top:8px;padding:8px;border-radius:8px;background:var(--surface-2)">Вы войдёте в режиме замены.</div>`
+      : '';
+    resultEl.innerHTML = `${storeLine}${confirmLine}
+        <button type="button" class="btn-main" style="margin-top:8px" onclick="confirmChangeStoreAndOpenShift()">Продолжить</button>`;
+  } catch (e: any) {
+    resultEl.innerHTML = `<div style="color:#e74c3c">${esc(e?.message || 'Ошибка проверки')}</div>`;
+  }
+}
+
+export async function confirmChangeStoreAndOpenShift(): Promise<void> {
+  if (!pendingReplacementStore) return;
+  const resultEl = document.getElementById('changeStoreResult');
+  try {
+    await window.apiClient.openShift(authHeaders(), {
+      store_code: pendingReplacementStore.code,
+      lat: null, lng: null, accuracy_m: null
+    });
+    pendingReplacementStore = null;
+    pendingReplacementMode = null;
+    if (typeof closeModal === 'function') closeModal();
+    else document.getElementById('overlay')?.classList.remove('show');
+    await loadMyDay();
+    await loadGreetShiftAndDaysOff();
+  } catch (e: any) {
+    if (resultEl) resultEl.innerHTML = `<div style="color:#e74c3c">${esc(e?.message || 'Не удалось открыть смену')}</div>`;
+  }
+}
+
 declare global {
   interface Window {
     loadMyDay: typeof loadMyDay;
@@ -484,6 +581,9 @@ declare global {
     loadHome: typeof loadHome;
     bumpStreak: typeof bumpStreak;
     openAbout: typeof openAbout;
+    openChangeStoreModal: typeof openChangeStoreModal;
+    checkChangeStoreCode: typeof checkChangeStoreCode;
+    confirmChangeStoreAndOpenShift: typeof confirmChangeStoreAndOpenShift;
   }
 }
 window.loadMyDay = loadMyDay;
@@ -493,3 +593,6 @@ window.loadCommandCenter = loadCommandCenter;
 window.loadHome = loadHome;
 window.bumpStreak = bumpStreak;
 window.openAbout = openAbout;
+window.openChangeStoreModal = openChangeStoreModal;
+window.checkChangeStoreCode = checkChangeStoreCode;
+window.confirmChangeStoreAndOpenShift = confirmChangeStoreAndOpenShift;
