@@ -16,6 +16,7 @@ import { COOKIE_NAME as PHONE_SESSION_COOKIE_NAME } from '../../../auth/provider
 import { CSRF_COOKIE_NAME, setCsrfCookie } from '../../../auth/csrf.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
+import * as shiftsRepo from '../../../data/repositories/shifts.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
 import * as plansRepo from '../../../data/repositories/plans.js';
 import * as tasksRepo from '../../../data/repositories/tasks.js';
@@ -202,7 +203,27 @@ export async function registerMeRoutes(app: FastifyInstance) {
       return { bound: false, message: 'Привяжите аккаунт во вкладке Профиль' };
     }
 
-    const shift = await schedulesRepo.findShiftWithStore(e.id, date);
+    const scheduledShift = await schedulesRepo.findShiftWithStore(e.id, date);
+
+    // Replacement shifts (и обычный "выход по коду на другую точку своей
+    // сети") позволяют shift_sessions.store_id != schedules.store_id для
+    // этой же даты — открытая смена всегда фактическая правда о том, где
+    // сотрудник реально работает сегодня, расписание — только план.
+    // Без этого /me/day показывал точку ИЗ ГРАФИКА (или «Выходной», если
+    // на эту дату вообще нет строки в graphике) сотруднику, у которого
+    // прямо сейчас открыта смена на другой точке.
+    const openSession = await shiftsRepo.findCurrentOpenWithStore(e.id).catch(() => null);
+    const shift =
+      openSession && openSession.store_id && openSession.work_date === date && openSession.store_id !== scheduledShift?.store_id
+        ? {
+            ...(scheduledShift || {}),
+            store_id: openSession.store_id,
+            store_name: openSession.store_name,
+            store_code: openSession.store_code,
+            store_address: openSession.store_address,
+            color: openSession.color
+          }
+        : scheduledShift;
 
     const fact = await salesRepo.sumDayFactForEmployee(e.id, date);
 

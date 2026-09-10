@@ -79,7 +79,9 @@ export async function findOpenForEmployee(employeeId: number): Promise<any | nul
 
 export async function findCurrentOpenWithStore(employeeId: number): Promise<any | null> {
   const res = await query(
-    `SELECT ss.*, COALESCE(st.display_name, st.name) as store_name, st.color
+    `SELECT ss.*, ss.work_date::text as work_date,
+            COALESCE(st.display_name, st.name) as store_name, st.color,
+            st.code as store_code, st.address as store_address
      FROM shift_sessions ss
      LEFT JOIN stores st ON st.id = ss.store_id
      WHERE ss.employee_id = $1 AND ss.status = 'open'

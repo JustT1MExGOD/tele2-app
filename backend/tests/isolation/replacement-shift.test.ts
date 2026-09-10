@@ -249,6 +249,97 @@ describe('Replacement shift — /shifts/open lifecycle', () => {
   });
 });
 
+describe('Replacement shift — GET /me/day reflects the actual worked store', () => {
+  it('open REPLACEMENT session overrides the scheduled store on /me/day (schedule says Store A, employee is actually clocked in at Store B)', async () => {
+    const sector = await createSector('RS Sector MeDay1');
+    const orgA = await fx.createOrg('RS Org A11');
+    const orgB = await fx.createOrg('RS Org B11');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeA = await fx.createStore(orgA, 'RS Store A11');
+    const storeB = await fx.createStore(orgB, 'RS Store B11');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-03';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'09:00-21:00',12)`,
+      [emp.id, date, storeA]
+    );
+
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    const dayRes = await app.inject({ method: 'GET', url: `/me/day?date=${date}`, headers });
+    expect(dayRes.statusCode).toBe(200);
+    const shift = dayRes.json().shift;
+    expect(shift).toBeTruthy();
+    expect(shift.store_id).toBe(storeB);
+    expect(shift.store_id).not.toBe(storeA);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('open REPLACEMENT session with NO schedule row that day still surfaces the actual store on /me/day (not "Выходной")', async () => {
+    const sector = await createSector('RS Sector MeDay2');
+    const orgA = await fx.createOrg('RS Org A12');
+    const orgB = await fx.createOrg('RS Org B12');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeB = await fx.createStore(orgB, 'RS Store B12');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-04';
+
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    const dayRes = await app.inject({ method: 'GET', url: `/me/day?date=${date}`, headers });
+    expect(dayRes.statusCode).toBe(200);
+    const shift = dayRes.json().shift;
+    expect(shift).toBeTruthy();
+    expect(shift.store_id).toBe(storeB);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('NORMAL-mode session (own org) at a store matching the schedule leaves /me/day unchanged (no spurious override)', async () => {
+    const orgA = await fx.createOrg('RS Org A13');
+    const storeA = await fx.createStore(orgA, 'RS Store A13');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-05';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'09:00-21:00',12)`,
+      [emp.id, date, storeA]
+    );
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_id: storeA, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    const dayRes = await app.inject({ method: 'GET', url: `/me/day?date=${date}`, headers });
+    const shift = dayRes.json().shift;
+    expect(shift.store_id).toBe(storeA);
+    expect(shift.shift_text).toBe('09:00-21:00');
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+});
+
 describe('Replacement shift — sale attribution and spoof prevention', () => {
   it("a replacement employee's sale is attributed to the actual (foreign) store/org, not their home org", async () => {
     const sector = await createSector('RS Sector Sale1');
