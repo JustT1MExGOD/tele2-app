@@ -70,6 +70,15 @@ export async function getChatId(orgId: string): Promise<string | null> {
   return res.rows[0]?.chat_id || null;
 }
 
+/** core/orgs/sector-membership.ts — replacement-shift sector check
+ * (Dealer -> Sector -> Organization -> Store/Employee; sector lives only on
+ * organizations, see docs/ARCHITECTURE.md). null — org has no sector
+ * assigned, or doesn't exist. */
+export async function getSectorId(orgId: string): Promise<string | null> {
+  const res = await query(`SELECT sector_id FROM organizations WHERE id = $1`, [orgId]);
+  return res.rows[0]?.sector_id ?? null;
+}
+
 export async function getNotifyTarget(orgId: string, threadCol: 'sales_thread_id' | 'reports_thread_id'): Promise<{ chat_id: string | null; thread_id: string | null } | null> {
   const res = await query(`SELECT chat_id, ${threadCol} as thread_id FROM organizations WHERE id = $1`, [orgId]);
   return res.rows[0] || null;

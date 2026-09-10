@@ -24,15 +24,21 @@ export async function autoCloseHanging(employeeId: number, date: string): Promis
  * с двумя одновременно "открытыми" сменами. Проигравший ловит 23505 и
  * получает уже открытую победителем сессию вместо ошибки.
  */
+/**
+ * orgId/workMode/selectionSource — replacement-shift work context (migration
+ * 0031), fixed for the lifetime of the session. Resolved BEFORE this call by
+ * core/shifts/work-context.ts — this function persists it, it doesn't decide it.
+ */
 export async function claimOpenSession(
   employeeId: number, storeId: string, date: string,
-  lat: number | null, lng: number | null, accuracyM: number | null
+  lat: number | null, lng: number | null, accuracyM: number | null,
+  workContext: { orgId: string; workMode: 'NORMAL' | 'REPLACEMENT'; selectionSource: 'SCHEDULE' | 'MANUAL_CODE' }
 ): Promise<{ session: any; deduped: boolean }> {
   const res = await query(
-    `INSERT INTO shift_sessions (employee_id,store_id,work_date,status,opened_at,open_lat,open_lng,open_accuracy_m)
-     VALUES ($1,$2,$3,'open',now(),$4,$5,$6)
+    `INSERT INTO shift_sessions (employee_id,store_id,work_date,status,opened_at,open_lat,open_lng,open_accuracy_m,org_id,work_mode,selection_source)
+     VALUES ($1,$2,$3,'open',now(),$4,$5,$6,$7,$8,$9)
      ON CONFLICT (employee_id) WHERE status='open' DO NOTHING RETURNING *`,
-    [employeeId,storeId,date,lat,lng,accuracyM]);
+    [employeeId,storeId,date,lat,lng,accuracyM,workContext.orgId,workContext.workMode,workContext.selectionSource]);
   if (res.rows[0]) return {session:res.rows[0],deduped:false};
   const session = await findOpenForEmployee(employeeId);
   if (!session || session.store_id !== storeId || String(session.work_date).slice(0,10) !== date)
@@ -178,6 +184,25 @@ export async function findSessionCountForDate(
      WHERE store_id = ANY($1) AND work_date = $2::date
      GROUP BY store_id`,
     [storeIds, date]
+  );
+  return res.rows;
+}
+
+/** cron/reports.ts — replacement employees to additionally DM the store's
+ * micro/final report to, for this store+date (any status — a shift closed
+ * earlier in the day still counts, per the feature's own "store/day" scope,
+ * not time-of-day). DISTINCT on employee_id — one row per employee even if
+ * they somehow had more than one REPLACEMENT session at this store today. */
+export async function findReplacementEmployeesForStoreDate(
+  storeId: string, date: string
+): Promise<{ employee_id: number; telegram_id: string | number | null; full_name: string }[]> {
+  const res = await query(
+    `SELECT DISTINCT ON (ss.employee_id) ss.employee_id, e.telegram_id, e.full_name
+     FROM shift_sessions ss
+     JOIN employees e ON e.id = ss.employee_id
+     WHERE ss.store_id = $1 AND ss.work_date = $2::date AND ss.work_mode = 'REPLACEMENT'
+     ORDER BY ss.employee_id`,
+    [storeId, date]
   );
   return res.rows;
 }

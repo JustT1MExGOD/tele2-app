@@ -983,7 +983,27 @@ export interface GeoCoords {
   accuracy_m: number | null;
 }
 
-export type ShiftOpenRequest = GeoCoords & { work_date?: string; store_id?: string };
+export type ShiftOpenRequest = GeoCoords & { work_date?: string; store_id?: string; store_code?: string };
+
+// ---------- /shifts/resolve-store (replacement shift, 20.58.x) ----------
+export interface ResolveStoreRequest {
+  code: string;
+}
+
+export interface SafeStoreInfo {
+  id: string;
+  code: string;
+  name: string;
+  display_name: string | null;
+  address: string | null;
+}
+
+export interface ResolveStoreResponse {
+  allowed: boolean;
+  message?: string;
+  store?: SafeStoreInfo;
+  mode?: 'NORMAL' | 'REPLACEMENT';
+}
 
 export interface ShiftOpenResponse {
   ok: true;

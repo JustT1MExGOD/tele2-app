@@ -202,6 +202,27 @@ export async function belongsToOrg(orgId: string, storeId: string): Promise<bool
 }
 
 /**
+ * Deliberate exception to this file's own "orgId first param" rule: the
+ * whole point is resolving a store code the caller does NOT yet know the
+ * org of (replacement-shift manual code entry, core/shifts/work-context.ts).
+ * Returns the row regardless of org/active status — the caller (work-context
+ * resolver) is responsible for every access decision (active/sector/etc.),
+ * this is a bare lookup only. Never call this to authorize anything by
+ * itself.
+ */
+export async function findByCode(code: string): Promise<StoreRecord | null> {
+  const res = await query(`SELECT * FROM stores WHERE code = $1`, [code]);
+  return res.rows[0] || null;
+}
+
+/** Same deliberate exception as findByCode() above, for the store_id case
+ * (e.g. a schedule-resolved store_id whose org isn't yet known to the caller). */
+export async function findByIdAnyOrg(id: string): Promise<StoreRecord | null> {
+  const res = await query(`SELECT * FROM stores WHERE id = $1`, [id]);
+  return res.rows[0] || null;
+}
+
+/**
  * Заводит точку целиком — INSERT в stores + placeholder-план в store_plans.
  * Одна бизнес-операция «завести точку», не две отдельные — так же вела себя
  * старая инлайн-версия в POST /stores (routes-employees.ts), включая

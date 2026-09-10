@@ -8,6 +8,7 @@ import { withTransaction } from '../../data/db/index.js';
 import { notifyChat } from '../../integrations/telegram/bot.js';
 import { todayMoscow } from '../../utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, canWriteSalesForOthers } from '../../auth/guards.js';
+import { resolveSaleStoreOrgId } from '../../core/shifts/work-context.js';
 import { getSalesSumColumns } from '../../core/shared/metrics-catalog.js';
 import { getStoreNotifyTarget } from '../../core/shared/tenant.js';
 import * as salesRepo from '../../data/repositories/sales.js';
@@ -84,8 +85,18 @@ export async function registerSalesRoutes(app: FastifyInstance) {
     // только внутри своей же сети. Раньше эта проверка запускалась ТОЛЬКО
     // в ветке "manager пишет за другого" — свою продажу можно было указать
     // на точке вообще любой чужой сети без единой проверки принадлежности.
-    const orgId = isManagerRole && !writingForSelf ? resolveViewOrgId(user, body.org_id) : user.org_id;
-    if (!(await assertStoreInOrg(store_id, orgId))) {
+    // Своя продажа дополнительно разрешена на точке чужой сети, только если
+    // именно там сейчас открыта смена сотрудника в режиме REPLACEMENT
+    // (resolveSaleStoreOrgId — core/shifts/work-context.ts), не любая точка
+    // сектора.
+    let orgId: string | null;
+    if (isManagerRole && !writingForSelf) {
+      orgId = resolveViewOrgId(user, body.org_id);
+      if (!(await assertStoreInOrg(store_id, orgId))) orgId = null;
+    } else {
+      orgId = await resolveSaleStoreOrgId(employee_id, store_id, user.org_id);
+    }
+    if (!orgId) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
     const tg = user.telegram_id ? Number(user.telegram_id) : null;

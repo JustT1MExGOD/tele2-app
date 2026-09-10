@@ -8,6 +8,7 @@ import { saveDaySnapshot } from '../../data/repositories/plan-batches.js';
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { requireActive, canWriteSalesForOthers, resolveViewOrgId, assertStoreInOrg } from '../../auth/guards.js';
+import { resolveStoreEligibility, resolveSaleStoreOrgId } from '../../core/shifts/work-context.js';
 import { parseSalePhrase } from '../../core/sales/nlp.js';
 import { evaluateAfterSale, evaluateShiftClose, getGamificationProfile } from '../../core/employees/gamification.js';
 import { generateShiftSummary } from '../../integrations/ai/client.js';
@@ -26,7 +27,8 @@ import type {
   ShiftCloseResponse,
   ShiftCurrentResponse,
   SalesParseResponse,
-  SalesQuickResponse
+  SalesQuickResponse,
+  ResolveStoreResponse
 } from '../../shared/api-types.js';
 
 function num(v: any) {
@@ -45,11 +47,17 @@ const NullableNumber = Type.Optional(Type.Union([Type.Null(), Type.Number()]));
 const ShiftOpenBody = Type.Object({
   work_date: Type.Optional(Type.String()),
   store_id: Type.Optional(Type.String()),
+  store_code: Type.Optional(Type.String()),
   lat: NullableNumber,
   lng: NullableNumber,
   accuracy_m: NullableNumber
 });
 type ShiftOpenBody = Static<typeof ShiftOpenBody>;
+
+const ResolveStoreBody = Type.Object({
+  code: Type.String({ minLength: 1 })
+});
+type ResolveStoreBody = Static<typeof ResolveStoreBody>;
 
 const ShiftCloseBody = Type.Object({
   lat: NullableNumber,
@@ -94,6 +102,29 @@ const SyncBatchBody = Type.Object({
 type SyncBatchBody = Static<typeof SyncBatchBody>;
 
 export async function registerShiftsRoutes(app: FastifyInstance) {
+  // ========== REPLACEMENT SHIFT: RESOLVE STORE CODE (preview, no mutation) ==========
+  // POST /shifts/resolve-store — employee types a store code manually; this
+  // tells them whether it's their own store (NORMAL), a same-sector foreign
+  // store they may work as a replacement (REPLACEMENT), or blocked, WITHOUT
+  // opening anything yet. /shifts/open re-checks the identical rules before
+  // actually persisting — this is a preview, not the authorization itself.
+  app.post(
+    '/shifts/resolve-store',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, schema: { body: ResolveStoreBody } },
+    async (request, reply): Promise<ResolveStoreResponse | undefined> => {
+      if (!requireActive(request, reply)) return;
+      const { code } = request.body as ResolveStoreBody;
+      const user = request.user!;
+      const result = await resolveStoreEligibility(
+        { employeeId: user.employee_id!, homeOrgId: user.org_id, role: user.role },
+        { storeCode: code }
+      );
+      // workOrgId (raw org id) is an internal decision input, not something
+      // the client needs or should see — only code/name/address + mode.
+      return { allowed: result.allowed, message: result.message, store: result.store, mode: result.mode };
+    }
+  );
+
   // ========== SHIFT SESSIONS ==========
   app.post(
     '/shifts/open',
@@ -104,20 +135,28 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     const employee_id = request.user!.employee_id!;
     const date = String(body.work_date || todayMoscow()).slice(0, 10);
 
-    // точка из графика или body
-    let store_id = body.store_id;
-    if (!store_id) {
+    // Точка: код (замена, ручной ввод) > store_id из body > график.
+    // Раньше store_id из body принимался с одной проверкой (своя сеть) — та
+    // же проверка теперь идёт через resolveStoreEligibility(), которая для
+    // точки своей сети даёт идентичный результат (mode=NORMAL), и
+    // дополнительно разрешает точку чужой сети того же сектора (замена).
+    let store_id = body.store_code ? undefined : body.store_id;
+    let selectionSource: 'SCHEDULE' | 'MANUAL_CODE' = body.store_code ? 'MANUAL_CODE' : 'SCHEDULE';
+    if (!body.store_code && !store_id) {
       store_id = (await schedulesRepo.findScheduledStoreId(employee_id, date)) || undefined;
     }
-    if (!store_id) {
+    if (!body.store_code && !store_id) {
       return reply.code(400).send({ error: 'store_id required (нет смены в графике)' });
     }
-    // Раньше store_id из body принимался без проверки — любой сотрудник мог
-    // открыть смену на точке совершенно чужой сети. "Подмена" на другой
-    // точке легитимна, но только внутри своей же сети.
-    if (!(await assertStoreInOrg(store_id, request.user!.org_id))) {
-      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    const eligibility = await resolveStoreEligibility(
+      { employeeId: employee_id, homeOrgId: request.user!.org_id, role: request.user!.role },
+      body.store_code ? { storeCode: body.store_code } : { storeId: store_id }
+    );
+    if (!eligibility.allowed || !eligibility.store || !eligibility.mode || !eligibility.workOrgId) {
+      return reply.code(403).send({ error: 'forbidden', message: eligibility.message || 'Точка недоступна' });
     }
+    store_id = eligibility.store.id;
+    const workContext = { orgId: eligibility.workOrgId, workMode: eligibility.mode, selectionSource };
 
     return withTransaction(async () => {
     await shiftsRepo.lockEmployee(employee_id);
@@ -131,7 +170,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // сотрудника с двумя одновременно "открытыми" сменами. Проигравший
     // ловит 23505 и получает уже открытую победителем сессию вместо ошибки.
     const { session, deduped } = await shiftsRepo.claimOpenSession(
-      employee_id, store_id, date, body.lat ?? null, body.lng ?? null, body.accuracy_m ?? null
+      employee_id, store_id, date, body.lat ?? null, body.lng ?? null, body.accuracy_m ?? null, workContext
     );
 
     // Shift 2.0 (18.7) — фаза «до»: план на сегодня, передача от предыдущей
@@ -322,11 +361,20 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // вносит продажу ЗА ДРУГОГО, и когда КТО УГОДНО вносит СВОЮ продажу на
     // другой точке ("подмена" легитимна, но только внутри своей сети).
     // Раньше проверка запускалась только в ветке "manager за другого".
+    // Своя продажа ("writing for self") дополнительно разрешена на точке
+    // чужой сети, если ИМЕННО там у сотрудника сейчас открыта смена в
+    // режиме REPLACEMENT (resolveSaleStoreOrgId) — не любая точка сектора,
+    // только точка активной смены; иначе (manager за другого) поведение не
+    // менялось.
     const writingForSelfQuick = employee_id === request.user!.employee_id;
-    const orgIdQuick = isManagerRole && !writingForSelfQuick
-      ? resolveViewOrgId(request.user!, body.org_id)
-      : request.user!.org_id;
-    if (!(await assertStoreInOrg(store_id, orgIdQuick))) {
+    let orgIdQuick: string | null;
+    if (isManagerRole && !writingForSelfQuick) {
+      orgIdQuick = resolveViewOrgId(request.user!, body.org_id);
+      if (!(await assertStoreInOrg(store_id, orgIdQuick))) orgIdQuick = null;
+    } else {
+      orgIdQuick = await resolveSaleStoreOrgId(employee_id, store_id, request.user!.org_id);
+    }
+    if (!orgIdQuick) {
       return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
     }
 
@@ -411,10 +459,17 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
           if (employee_id !== request.user!.employee_id && !canWriteSalesForOthers(request.user)) {
             throw new Error('можно синхронизировать только свои продажи');
           }
-          const orgIdSync = employee_id !== request.user!.employee_id
-            ? resolveViewOrgId(request.user!, op.org_id)
-            : request.user!.org_id;
-          if (!store_id || !(await assertStoreInOrg(store_id, orgIdSync))) {
+          // Same replacement-shift allowance as /sales/quick above — own
+          // sale, foreign store, only if that's exactly the active
+          // REPLACEMENT shift's store.
+          let orgIdSync: string | null;
+          if (employee_id !== request.user!.employee_id) {
+            orgIdSync = resolveViewOrgId(request.user!, op.org_id);
+            if (!store_id || !(await assertStoreInOrg(store_id, orgIdSync))) orgIdSync = null;
+          } else {
+            orgIdSync = store_id ? await resolveSaleStoreOrgId(employee_id, store_id, request.user!.org_id) : null;
+          }
+          if (!orgIdSync) {
             throw new Error('точка не принадлежит вашей сети');
           }
 
