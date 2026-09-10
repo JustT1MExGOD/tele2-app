@@ -11,6 +11,7 @@ import { todayMoscow, currentMonthMoscow } from '../../utils/date.js';
 import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, assertEmployeeInOrg, requireStoreInOrg, requireEmployeeInOrg } from '../../auth/guards.js';
 import * as schedulesRepo from '../../data/repositories/schedules.js';
 import type { SchedulesListResponse, ScheduleRow, ScheduleMonthResponse, SaveScheduleBulkResponse } from '../../shared/api-types.js';
+import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../shared/replacement.js';
 
 const PostScheduleBody = Type.Object({
   employee_id: Type.Number(),
@@ -124,7 +125,13 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
       const hours = Number(item.hours) || 0;
 
       if (!employee_id || !store_id || !work_date) continue;
-      if (!(await assertStoreInOrg(store_id, orgId))) continue;
+      // «Замена» (см. src/shared/replacement.ts) — намеренно не привязана
+      // ни к одной точке/сети, пока сотрудник сам не откроет смену и не
+      // выберет реальную. assertStoreInOrg() для неё всегда false (это не
+      // id реальной точки) — без этого пропуска сохранение графика с
+      // «Замена» тихо скипалось бы (item.length=0), и менеджер получал
+      // "Смена не сохранена: обновите график и повторите".
+      if (store_id !== REPLACEMENT_PLACEHOLDER_STORE_ID && !(await assertStoreInOrg(store_id, orgId))) continue;
       // Тот же пробел, что в одиночном POST /schedules — точка проверялась,
       // сотрудник нет.
       if (!(await assertEmployeeInOrg(employee_id, orgId))) continue;
@@ -162,7 +169,10 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, org_id);
     const existing = await schedulesRepo.findScheduleForDelete(Number(employee_id), work_date);
     if (existing.exists) {
-      if (existing.storeId !== null) {
+      // «Замена» (src/shared/replacement.ts) не привязана ни к одной точке —
+      // тот же случай, что store_id IS NULL ниже: точку проверить не на
+      // что, авторизуем по сотруднику.
+      if (existing.storeId !== null && existing.storeId !== REPLACEMENT_PLACEHOLDER_STORE_ID) {
         if (!(await assertStoreInOrg(existing.storeId, orgId))) {
           return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
         }

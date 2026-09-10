@@ -3,6 +3,7 @@ import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import { toDateISO } from '../../src/utils/date.js';
+import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../src/shared/replacement.js';
 
 describe('Изоляция графика смен (/schedules)', () => {
   const fx = new TestFixtures();
@@ -220,6 +221,55 @@ describe('Изоляция графика смен (/schedules)', () => {
       // типа date как полночь ПО ЛОКАЛЬНОМУ времени процесса — вне UTC-окружения
       // (CI — ubuntu, TZ=UTC) startsWith() ловит сдвиг на день и ложно падает.
       expect(items.find((r: any) => Number(r.employee_id) === employeeA.id && toDateISO(new Date(r.work_date)) === NULL_STORE_DATE_2)).toBeDefined();
+    });
+  });
+
+  // Регрессия: POST /schedules/bulk с store_id="Замена" (заглушка, см.
+  // src/shared/replacement.ts) молча скипался в цикле assertStoreInOrg()
+  // (это не id реальной точки → всегда false) — count оставался 0/меньше
+  // items.length, и фронт получал "Смена не сохранена: обновите график и
+  // повторите" при попытке отметить день как замену.
+  describe('POST /schedules/bulk и DELETE /schedules — store_id = "Замена" (заглушка)', () => {
+    const REPLACEMENT_DATE = '2026-06-25';
+
+    it('POST /schedules/bulk сохраняет "Замена" как есть — count=1, не скипается', async () => {
+      const app = await getApp();
+      const res = await app.inject({
+        method: 'POST',
+        url: '/schedules/bulk',
+        headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+        payload: {
+          items: [{ employee_id: employeeA.id, work_date: REPLACEMENT_DATE, store_id: REPLACEMENT_PLACEHOLDER_STORE_ID, shift_text: '10-21', hours: 11 }]
+        }
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().count).toBe(1);
+      const row = await query(`SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2`, [employeeA.id, REPLACEMENT_DATE]);
+      expect(row.rows[0].store_id).toBe(REPLACEMENT_PLACEHOLDER_STORE_ID);
+    });
+
+    it('DELETE /schedules — чужая сеть получает 403 на "Замена"-строке (авторизация по сотруднику, не по несуществующей точке)', async () => {
+      const app = await getApp();
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/schedules?employee_id=${employeeA.id}&work_date=${REPLACEMENT_DATE}`,
+        headers: authAs(managerB.telegramId)
+      });
+      expect(res.statusCode).toBe(403);
+      const check = await query(`SELECT 1 FROM schedules WHERE employee_id = $1 AND work_date = $2`, [employeeA.id, REPLACEMENT_DATE]);
+      expect(check.rows.length).toBe(1);
+    });
+
+    it('DELETE /schedules — своя сеть может удалить "Замена"-строку', async () => {
+      const app = await getApp();
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/schedules?employee_id=${employeeA.id}&work_date=${REPLACEMENT_DATE}`,
+        headers: authAs(managerA.telegramId)
+      });
+      expect(res.statusCode).toBe(200);
+      const check = await query(`SELECT 1 FROM schedules WHERE employee_id = $1 AND work_date = $2`, [employeeA.id, REPLACEMENT_DATE]);
+      expect(check.rows.length).toBe(0);
     });
   });
 });
