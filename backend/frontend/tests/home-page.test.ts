@@ -44,7 +44,11 @@ function setupGlobals(overrides: { role?: string } = {}) {
   // doesn't escape can't catch an escaping regression (see the
   // shift_text/firstName XSS fixes covered below).
   vi.stubGlobal('esc', esc);
-  vi.stubGlobal('authHeaders', () => ({}));
+  // Mirrors the real authHeaders(json) contract (app/core.ts) — a stub that
+  // always returns {} regardless of `json` can't catch a call site that
+  // forgot authHeaders(true) and silently sends a mutating request with no
+  // Content-Type (Fastify then fails to parse the body as JSON at all).
+  vi.stubGlobal('authHeaders', (json?: boolean) => (json ? { 'Content-Type': 'application/json' } : {}));
   vi.stubGlobal('orgQueryParam', () => '');
   vi.stubGlobal('toast', vi.fn());
   vi.stubGlobal('me', { employee_id: 1, role: overrides.role ?? 'employee', full_name: 'Иван Петров' });
@@ -71,8 +75,10 @@ function setupGlobals(overrides: { role?: string } = {}) {
   const getScheduleMonth = vi.fn().mockResolvedValue([]);
   const getStatsDaily = vi.fn().mockResolvedValue([]);
   const getDashboard = vi.fn().mockResolvedValue(null);
-  (window as any).apiClient = { getMyDay, changeTaskStatus, getSupervisorHealth, getShiftCurrent, getScheduleMonth, getStatsDaily, getDashboard };
-  return { getMyDay, changeTaskStatus, getSupervisorHealth, getShiftCurrent, getScheduleMonth, getStatsDaily, getDashboard };
+  const resolveStore = vi.fn().mockResolvedValue({ allowed: false, message: 'stub' });
+  const openShift = vi.fn().mockResolvedValue({ ok: true, session: {}, deduped: false, day_plan: {}, handover: null, open_tasks: [] });
+  (window as any).apiClient = { getMyDay, changeTaskStatus, getSupervisorHealth, getShiftCurrent, getScheduleMonth, getStatsDaily, getDashboard, resolveStore, openShift };
+  return { getMyDay, changeTaskStatus, getSupervisorHealth, getShiftCurrent, getScheduleMonth, getStatsDaily, getDashboard, resolveStore, openShift };
 }
 
 describe('Главная (миграция frontend/js/03-home.js → src/pages/home)', () => {
@@ -169,6 +175,42 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     const html = document.getElementById('myDayStoreHead')!.innerHTML;
     expect(html).toContain('Сменить точку');
     expect(html).not.toContain('Закройте смену, чтобы сменить точку');
+  });
+
+  it('checkChangeStoreCode: вызывает resolveStore с authHeaders(true) — Content-Type обязателен, иначе бэкенд не распарсит тело JSON ("Некорректные данные запроса")', async () => {
+    const { resolveStore } = setupGlobals();
+    resolveStore.mockResolvedValue({
+      allowed: true, mode: 'REPLACEMENT',
+      store: { id: 's2', name: 'Точка Б', display_name: 'Точка Б', code: '888967', address: 'Ленина 2' }
+    });
+    const { openChangeStoreModal, checkChangeStoreCode } = await import('../src/pages/home/index.js');
+    openChangeStoreModal();
+    (document.getElementById('changeStoreCode') as HTMLInputElement).value = '888967';
+    await checkChangeStoreCode();
+    expect(resolveStore).toHaveBeenCalledTimes(1);
+    const [headers, body] = resolveStore.mock.calls[0];
+    expect(headers).toMatchObject({ 'Content-Type': 'application/json' });
+    expect(body).toEqual({ code: '888967' });
+    expect(document.getElementById('changeStoreResult')!.innerHTML).toContain('888967');
+  });
+
+  it('confirmChangeStoreAndOpenShift: вызывает openShift с authHeaders(true) после успешного resolveStore', async () => {
+    const { resolveStore, openShift, getMyDay, getShiftCurrent } = setupGlobals();
+    resolveStore.mockResolvedValue({
+      allowed: true, mode: 'REPLACEMENT',
+      store: { id: 's2', name: 'Точка Б', display_name: 'Точка Б', code: '888967', address: 'Ленина 2' }
+    });
+    getMyDay.mockResolvedValue({ bound: true, shift: null, total: { fact: 0, plan: 0, pct: 0 }, progress: {}, tasks: [] });
+    getShiftCurrent.mockResolvedValue({ session: null });
+    const { openChangeStoreModal, checkChangeStoreCode, confirmChangeStoreAndOpenShift } = await import('../src/pages/home/index.js');
+    openChangeStoreModal();
+    (document.getElementById('changeStoreCode') as HTMLInputElement).value = '888967';
+    await checkChangeStoreCode();
+    await confirmChangeStoreAndOpenShift();
+    expect(openShift).toHaveBeenCalledTimes(1);
+    const [headers, body] = openShift.mock.calls[0];
+    expect(headers).toMatchObject({ 'Content-Type': 'application/json' });
+    expect(body).toMatchObject({ store_code: '888967' });
   });
 
   it('completeMyTask: успех — тостит и перезагружает "Мой день"', async () => {

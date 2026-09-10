@@ -535,7 +535,7 @@ export async function checkChangeStoreCode(): Promise<void> {
   if (!code || !resultEl) return;
   resultEl.textContent = 'Проверяем…';
   try {
-    const res = await window.apiClient.resolveStore(authHeaders(), { code });
+    const res = await window.apiClient.resolveStore(authHeaders(true), { code });
     if (!res.allowed || !res.store || !res.mode) {
       resultEl.innerHTML = `<div style="color:#e74c3c">${esc(res.message || 'Точка недоступна')}</div>`;
       pendingReplacementStore = null;
@@ -559,7 +559,7 @@ export async function confirmChangeStoreAndOpenShift(): Promise<void> {
   if (!pendingReplacementStore) return;
   const resultEl = document.getElementById('changeStoreResult');
   try {
-    await window.apiClient.openShift(authHeaders(), {
+    await window.apiClient.openShift(authHeaders(true), {
       store_code: pendingReplacementStore.code,
       lat: null, lng: null, accuracy_m: null
     });
