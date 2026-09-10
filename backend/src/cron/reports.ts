@@ -16,7 +16,32 @@ import { rebuildHourProfiles } from '../core/analytics/heatmap.js';
 import { getStoreNotifyTarget } from '../core/shared/tenant.js';
 import * as cronRepo from '../data/repositories/cron.js';
 import * as reportImageRepo from '../data/repositories/report-image.js';
+import * as shiftsRepo from '../data/repositories/shifts.js';
 import { runJob } from './job-logger.js';
+
+/**
+ * Replacement-shift additional recipient (corr. #12) — the store's normal
+ * micro/final report delivery is untouched; this ADDITIONALLY DMs the same
+ * text to any employee who worked a REPLACEMENT shift at this store today.
+ * Best-effort: a DM failure must never affect the store report itself. Text
+ * only (notifyUser has no photo variant) — the employee gets the same
+ * summary text the store chat saw, not the rendered image.
+ */
+async function notifyReplacementEmployees(storeId: string, date: string, text: string): Promise<void> {
+  try {
+    const reps = await shiftsRepo.findReplacementEmployeesForStoreDate(storeId, date);
+    const seen = new Set<string>();
+    for (const r of reps) {
+      if (!r.telegram_id) continue;
+      const key = String(r.telegram_id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      await notifyUser(r.telegram_id, text, false);
+    }
+  } catch (e: any) {
+    console.warn('notifyReplacementEmployees failed:', e?.message || e);
+  }
+}
 
 // Раньше это была строка с жёстким списком из 15 колонок — любая
 // кастомная метрика (заведённая через POST /metrics или руками в БД)
@@ -74,6 +99,10 @@ async function sendStoreReportImage(
   const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
   const hourLabel = hour == null ? undefined : typeof hour === 'string' ? hour : `${String(hour).padStart(2,'0')}:00`;
   const caption = `📊 ${st.name} · ${date}${hourLabel ? ' · запланирован на ' + hourLabel + '; данные на момент отправки' : ''}`;
+  // Best-effort (never throws) — decoupled from group-delivery success/
+  // failure below; awaited so it can't be dropped if the process moves on
+  // before a fire-and-forget promise settles.
+  await notifyReplacementEmployees(st.store_id, date, caption);
 
   try {
     const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'micro', hourLabel });
@@ -154,7 +183,9 @@ async function sendStoreStoryReport(
     // controlled) и comment.text (AI-сгенерированный текст, Groq) — оба
     // потенциально ломают Telegram HTML-разметку или (для AI-текста)
     // внедряют её намеренно через prompt injection в исходных данных.
-    await notifyChat(`🏁 <b>${esc(st.name)}</b> · итог дня · ${date}\n\n${esc(comment.text)}`, chatId, threadId,true);
+    const finalText = `🏁 <b>${esc(st.name)}</b> · итог дня · ${date}\n\n${esc(comment.text)}`;
+    await notifyChat(finalText, chatId, threadId,true);
+    await notifyReplacementEmployees(st.store_id, date, finalText);
     return r;
   } catch (e: any) {
     console.warn('Story report failed, fallback to single final image:', e?.message || e);
@@ -169,6 +200,7 @@ async function sendSingleFinalImage(
 ) {
   const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
   const caption = `🏁 ${st.name} · ${date}`;
+  await notifyReplacementEmployees(st.store_id, date, caption);
   try {
     const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'final' });
     const r = await notifyChatPhoto(png, { caption, filename: `final_${st.store_id}_${date}.png`, chatId, threadId });
