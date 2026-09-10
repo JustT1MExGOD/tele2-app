@@ -137,6 +137,40 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     expect(el.innerHTML).toContain('&lt;img');
   });
 
+  it('loadMyDay: смена открыта — кнопка "Сменить точку" скрыта, вместо неё подсказка закрыть смену (не голая карточка без объяснения)', async () => {
+    const { getMyDay, getShiftCurrent } = setupGlobals();
+    getMyDay.mockResolvedValue({
+      bound: true,
+      shift: { store_id: 's1', store_name: 'Точка А', store_code: 'A1', store_address: 'Ленина 1', color: null, shift_text: 'День', hours: 8 },
+      total: { fact: 0, plan: 0, pct: 0 },
+      progress: {},
+      tasks: []
+    });
+    getShiftCurrent.mockResolvedValue({ session: { work_mode: 'NORMAL' } });
+    const { loadMyDay } = await import('../src/pages/home/index.js');
+    await loadMyDay();
+    const html = document.getElementById('myDayStoreHead')!.innerHTML;
+    expect(html).not.toContain('Сменить точку');
+    expect(html).toContain('Закройте смену, чтобы сменить точку');
+  });
+
+  it('loadMyDay: смены нет — кнопка "Сменить точку" видна, подсказки нет', async () => {
+    const { getMyDay, getShiftCurrent } = setupGlobals();
+    getMyDay.mockResolvedValue({
+      bound: true,
+      shift: { store_id: 's1', store_name: 'Точка А', store_code: 'A1', store_address: 'Ленина 1', color: null, shift_text: 'День', hours: 8 },
+      total: { fact: 0, plan: 0, pct: 0 },
+      progress: {},
+      tasks: []
+    });
+    getShiftCurrent.mockResolvedValue({ session: null });
+    const { loadMyDay } = await import('../src/pages/home/index.js');
+    await loadMyDay();
+    const html = document.getElementById('myDayStoreHead')!.innerHTML;
+    expect(html).toContain('Сменить точку');
+    expect(html).not.toContain('Закройте смену, чтобы сменить точку');
+  });
+
   it('completeMyTask: успех — тостит и перезагружает "Мой день"', async () => {
     const { changeTaskStatus, getMyDay } = setupGlobals();
     const { completeMyTask } = await import('../src/pages/home/index.js');

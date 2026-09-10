@@ -65,7 +65,9 @@ export async function loadMyDay(): Promise<void> {
 
     const changeStoreButtonHtml = canChangeStore
       ? `<button class="btn-main" style="margin-top:6px;padding:6px 12px;font-size:12px;width:auto" onclick="openChangeStoreModal()">Сменить точку</button>`
-      : '';
+      : currentSession
+        ? `<div style="margin-top:6px;font-size:11px;color:var(--hint)">Закройте смену, чтобы сменить точку</div>`
+        : '';
     const replacementBadgeHtml = isReplacementOpen
       ? `<div style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:8px;background:var(--accent,#2AABEE);color:#fff;font-size:11px;font-weight:600">Замена · другая сеть</div>`
       : '';
