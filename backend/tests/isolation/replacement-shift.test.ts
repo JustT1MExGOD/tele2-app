@@ -10,6 +10,7 @@ import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import { findReplacementEmployeesForStoreDate } from '../../src/data/repositories/shifts.js';
+import { findUnderperformingRaw, findTopEmployees } from '../../src/data/repositories/supervisor-analytics.js';
 
 const fx = new TestFixtures();
 const sectorIds: string[] = [];
@@ -335,6 +336,189 @@ describe('Replacement shift — GET /me/day reflects the actual worked store', (
     const shift = dayRes.json().shift;
     expect(shift.store_id).toBe(storeA);
     expect(shift.shift_text).toBe('09:00-21:00');
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+});
+
+describe('Replacement shift — actual-session-first store resolution (corrective pass)', () => {
+  it('A: scheduled Store A, active REPLACEMENT Store B, sales at B -> GET /me/insight uses Store B', async () => {
+    const sector = await createSector('RS Sector Corr A');
+    const orgA = await fx.createOrg('RS Org CorrA-A');
+    const orgB = await fx.createOrg('RS Org CorrA-B');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeA = await fx.createStore(orgA, 'RS Store CorrA-A');
+    const storeB = await fx.createStore(orgB, 'RS Store CorrA-B');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-10';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'09:00-21:00',12)`,
+      [emp.id, date, storeA]
+    );
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    const saleRes = await app.inject({
+      method: 'POST', url: '/sales',
+      headers, payload: { employee_id: emp.id, store_id: storeB, sale_date: date, sim: 2 }
+    });
+    expect(saleRes.statusCode).toBe(200);
+
+    const insightRes = await app.inject({ method: 'GET', url: `/me/insight?date=${date}`, headers });
+    expect(insightRes.statusCode).toBe(200);
+    const body = insightRes.json();
+    expect(body.store_id).toBe(storeB);
+    expect(body.store_id).not.toBe(storeA);
+    expect(Number(body.fact?.sim) || 0).toBeGreaterThanOrEqual(2);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('B: NO schedule row, active REPLACEMENT Store B -> GET /me/day-plan-split works using Store B (not "no shift")', async () => {
+    const sector = await createSector('RS Sector Corr B');
+    const orgA = await fx.createOrg('RS Org CorrB-A');
+    const orgB = await fx.createOrg('RS Org CorrB-B');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeB = await fx.createStore(orgB, 'RS Store CorrB-B');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-11';
+
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    const splitRes = await app.inject({ method: 'GET', url: `/me/day-plan-split?date=${date}`, headers });
+    expect(splitRes.statusCode).toBe(200);
+    const body = splitRes.json();
+    expect(body.error).toBeUndefined();
+    expect(body.split).toBeTruthy();
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('C: scheduled A + REPLACEMENT B + sales at B -> supervisor underperformance is not evaluated against Store A', async () => {
+    const sector = await createSector('RS Sector Corr C');
+    const orgA = await fx.createOrg('RS Org CorrC-A');
+    const orgB = await fx.createOrg('RS Org CorrC-B');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeA = await fx.createStore(orgA, 'RS Store CorrC-A');
+    const storeB = await fx.createStore(orgB, 'RS Store CorrC-B');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-12';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'09:00-21:00',12)`,
+      [emp.id, date, storeA]
+    );
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+    const saleRes = await app.inject({
+      method: 'POST', url: '/sales',
+      headers, payload: { employee_id: emp.id, store_id: storeB, sale_date: date, sim: 3 }
+    });
+    expect(saleRes.statusCode).toBe(200);
+
+    // Viewed from Store A's scope: the employee isn't actually there today —
+    // they must not show up as a zero-sales row for Store A.
+    const rowsScopeA = await findUnderperformingRaw([storeA], date);
+    expect(rowsScopeA.find((r: any) => Number(r.employee_id) === emp.id)).toBeUndefined();
+
+    // Viewed from Store B's scope (their actual store today): evaluated
+    // there, with their real (non-zero) sales at B.
+    const rowsScopeB = await findUnderperformingRaw([storeB], date);
+    const rowB = rowsScopeB.find((r: any) => Number(r.employee_id) === emp.id);
+    expect(rowB).toBeTruthy();
+    expect(rowB.store_id).toBe(storeB);
+    expect(Number(rowB.units)).toBeGreaterThan(0);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('D: replacement employee ranked for Store B -> displayed org/network is Store B\'s org, employee.home_org stays Org A', async () => {
+    const sector = await createSector('RS Sector Corr D');
+    const orgA = await fx.createOrg('RS Org CorrD-A');
+    const orgB = await fx.createOrg('RS Org CorrD-B');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeB = await fx.createStore(orgB, 'RS Store CorrD-B');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-13';
+
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+    const saleRes = await app.inject({
+      method: 'POST', url: '/sales',
+      headers, payload: { employee_id: emp.id, store_id: storeB, sale_date: date, sim: 5 }
+    });
+    expect(saleRes.statusCode).toBe(200);
+
+    const rows = await findTopEmployees(date, date, [storeB]);
+    const row = rows.find((r: any) => Number(r.id) === emp.id);
+    expect(row).toBeTruthy();
+    expect(row.org_id).toBe(orgB);
+    expect(row.org_id).not.toBe(orgA);
+
+    const empRow = await query(`SELECT org_id FROM employees WHERE id = $1`, [emp.id]);
+    expect(empRow.rows[0].org_id).toBe(orgA);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('E: normal (non-replacement) employee — scheduled and working the same store, unchanged behavior', async () => {
+    const orgA = await fx.createOrg('RS Org CorrE-A');
+    const storeA = await fx.createStore(orgA, 'RS Store CorrE-A');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-14';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'09:00-21:00',12)`,
+      [emp.id, date, storeA]
+    );
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_id: storeA, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    // No sale posted today -> still correctly flagged as zero-sales at their
+    // real (and scheduled) store — the fix must not suppress genuine zeros.
+    const rows = await findUnderperformingRaw([storeA], date);
+    const row = rows.find((r: any) => Number(r.employee_id) === emp.id);
+    expect(row).toBeTruthy();
+    expect(row.store_id).toBe(storeA);
+    expect(Number(row.units)).toBe(0);
+
+    const insightRes = await app.inject({ method: 'GET', url: `/me/insight?date=${date}`, headers });
+    expect(insightRes.json().store_id).toBe(storeA);
 
     await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
   });

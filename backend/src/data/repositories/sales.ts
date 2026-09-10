@@ -177,7 +177,18 @@ export async function sumColumnsForStoreMonth(
  * (избегаем N+1 по сотрудникам/точкам при построении 3-месячной истории
  * продуктивности). columns приходят уже провалидированными вызывающим кодом
  * (тот же контракт, что у sumColumnsForEmployeeMonth/sumColumnsForStoreMonth
- * выше — regex-фильтр имён колонок делает services/plans.ts::metricKeys()). */
+ * выше — regex-фильтр имён колонок делает services/plans.ts::metricKeys()).
+ *
+ * Replacement-shift acceptance audit (deferred, not a bug in current usage):
+ * filters by employees.org_id, so a replacement sale (home org A, sold at a
+ * foreign org-B store) is still included, producing a bucket entry keyed by
+ * that foreign store_id for org A's history. Traced the only consumer
+ * (employee-plan-draft.ts::loadMonthAgg → generateDraft) — it only ever
+ * looks up buckets for storeId values drawn from storesRepo.listActiveBasic(orgId),
+ * i.e. org A's own stores, so the foreign-store entry is written but never
+ * read — inert today. Re-keying this query by stores.org_id instead would
+ * be more correct in principle, but is planner-aggregation scope, not this
+ * corrective commit's — left as documented, verified-safe technical debt. */
 export async function sumColumnsByEmployeeStoreForOrgMonth(
   orgId: string, start: string, end: string, columns: string[]
 ): Promise<{ employee_id: number; store_id: string; [col: string]: number | string }[]> {
@@ -206,6 +217,13 @@ export async function sumColumnsByEmployeeStoreForOrgMonth(
  * то же (employee_id, work_date=sale_date), берём максимум на случай
  * дублей (schedules уникален по (employee_id, work_date), так что фактически
  * это просто одно значение или NULL).
+ *
+ * Same deferred, verified-safe finding as sumColumnsByEmployeeStoreForOrgMonth
+ * above: filters by employees.org_id, not stores.org_id, so a replacement
+ * sale can produce a foreign-store bucket entry — traced generate-draft.ts's
+ * tierAdjustedRate/loadHistoryBuckets consumer, it's only ever looked up by
+ * storeId values from the generating org's own activeStores, so it's
+ * written but never read. Not refactored in this corrective commit.
  */
 export async function sumColumnsByEmployeeStoreDateForOrgMonth(
   orgId: string, start: string, end: string, columns: string[]

@@ -9,8 +9,8 @@ import { requireActive } from '../../../auth/guards.js';
 import { buildShiftInsight, selfComparison, splitDayPlanByHours } from '../../../core/analytics/insights.js';
 import { getGamificationProfile, addXp, grantBadge } from '../../../core/employees/gamification.js';
 import { todayMoscow } from '../../../utils/date.js';
-import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
+import { resolveActualOrScheduledStoreForDate } from '../../../core/shifts/actual-store.js';
 import * as plansRepo from '../../../data/repositories/plans.js';
 import * as gamificationRepo from '../../../data/repositories/gamification.js';
 import type { MyInsightResponse, SelfStatsResponse } from '../../../shared/api-types.js';
@@ -30,7 +30,11 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
     const employee_id = request.user!.employee_id!;
 
-    const store_id = await schedulesRepo.findShiftStoreIdForDate(employee_id, date);
+    // Active shift_session (e.g. a replacement shift with no schedule row
+    // at all) is the source of truth for the current work store; schedule
+    // is only the same-date fallback. See core/shifts/actual-store.ts.
+    const resolved = await resolveActualOrScheduledStoreForDate(employee_id, date);
+    const store_id = resolved.store_id;
     if (!store_id) return { message: 'Нет смены в графике', insight: null };
 
     // soft dependency: client can also pass day plan
@@ -83,7 +87,8 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
     if (!requireActive(request, reply)) return;
     const date = String((request.query as any)?.date || todayMoscow()).slice(0, 10);
     const employee_id = request.user!.employee_id!;
-    const storeId = await schedulesRepo.findShiftStoreIdForDate(employee_id, date);
+    const resolved = await resolveActualOrScheduledStoreForDate(employee_id, date);
+    const storeId = resolved.store_id;
     if (!storeId) return { error: 'no shift' };
 
     const dayPlan = (await getEmployeeDailyPlan(employee_id,date)).plan;

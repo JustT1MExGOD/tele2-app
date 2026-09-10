@@ -7,6 +7,7 @@ import { todayMoscow } from '../../../utils/date.js';
 import { requireActive, resolveViewOrgId, assertEmployeeInOrg } from '../../../auth/guards.js';
 import { getSalesSumColumns } from '../../../core/shared/metrics-catalog.js';
 import * as repo from '../../../data/repositories/stats.js';
+import { resolveActualOrScheduledStoreForDate } from '../../../core/shifts/actual-store.js';
 import type { StatsDailyResponse, DashboardResponse, EmployeeProgressResponse } from '../../../shared/api-types.js';
 
 export async function registerStatsRoutes(app: FastifyInstance) {
@@ -64,7 +65,12 @@ export async function registerStatsRoutes(app: FastifyInstance) {
     const { date } = request.query as { date?: string };
     const d = date || todayMoscow();
 
-    const storeId = await repo.findShiftStoreId(id, d);
+    // Live/current-day progress — active shift_session (if any, for this
+    // exact date) is the source of truth for which store's plan template
+    // applies; schedule is the same-date fallback. A past date naturally
+    // never has an open session, so historical progress is unaffected.
+    const resolved = await resolveActualOrScheduledStoreForDate(Number(id), d);
+    const storeId = resolved.store_id;
 
     let plan: any = {};
     if (storeId) {

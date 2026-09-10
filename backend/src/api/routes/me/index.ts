@@ -15,9 +15,8 @@ import { withTransaction } from '../../../data/db/index.js';
 import { COOKIE_NAME as PHONE_SESSION_COOKIE_NAME } from '../../../auth/providers/phone.js';
 import { CSRF_COOKIE_NAME, setCsrfCookie } from '../../../auth/csrf.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
-import * as schedulesRepo from '../../../data/repositories/schedules.js';
-import * as shiftsRepo from '../../../data/repositories/shifts.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
+import { resolveActualOrScheduledStoreForDate } from '../../../core/shifts/actual-store.js';
 import * as plansRepo from '../../../data/repositories/plans.js';
 import * as tasksRepo from '../../../data/repositories/tasks.js';
 import type { MeResponse, BindMeResponse, MeDayResponse, LinkPhoneResponse } from '../../../shared/api-types.js';
@@ -203,27 +202,22 @@ export async function registerMeRoutes(app: FastifyInstance) {
       return { bound: false, message: 'Привяжите аккаунт во вкладке Профиль' };
     }
 
-    const scheduledShift = await schedulesRepo.findShiftWithStore(e.id, date);
-
-    // Replacement shifts (и обычный "выход по коду на другую точку своей
-    // сети") позволяют shift_sessions.store_id != schedules.store_id для
-    // этой же даты — открытая смена всегда фактическая правда о том, где
-    // сотрудник реально работает сегодня, расписание — только план.
-    // Без этого /me/day показывал точку ИЗ ГРАФИКА (или «Выходной», если
-    // на эту дату вообще нет строки в graphике) сотруднику, у которого
-    // прямо сейчас открыта смена на другой точке.
-    const openSession = await shiftsRepo.findCurrentOpenWithStore(e.id).catch(() => null);
+    // Active (open) shift_session is the source of truth for where the
+    // employee is actually working today — schedules is only the planned
+    // assignment / same-date fallback. See core/shifts/actual-store.ts.
+    const resolved = await resolveActualOrScheduledStoreForDate(e.id, date);
     const shift =
-      openSession && openSession.store_id && openSession.work_date === date && openSession.store_id !== scheduledShift?.store_id
-        ? {
-            ...(scheduledShift || {}),
-            store_id: openSession.store_id,
-            store_name: openSession.store_name,
-            store_code: openSession.store_code,
-            store_address: openSession.store_address,
-            color: openSession.color
-          }
-        : scheduledShift;
+      resolved.source === 'none'
+        ? null
+        : {
+            store_id: resolved.store_id,
+            store_name: resolved.store_name,
+            store_code: resolved.store_code,
+            store_address: resolved.store_address,
+            color: resolved.color,
+            shift_text: resolved.shift_text,
+            hours: resolved.hours
+          };
 
     const fact = await salesRepo.sumDayFactForEmployee(e.id, date);
 

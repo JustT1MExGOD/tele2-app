@@ -81,13 +81,30 @@ export async function markAlertSent(key: string): Promise<void> {
   await query('INSERT INTO alert_flags (id) VALUES ($1) ON CONFLICT DO NOTHING', [key]);
 }
 
+/**
+ * Detection stays employee-wide (NOT EXISTS over ALL of the employee's
+ * sales that day, no store filter) — a replacement employee who sold
+ * anywhere today is correctly excluded, unchanged. Only the DISPLAYED
+ * store_name/org_id (message text + which network's chat it's routed to)
+ * now prefers the employee's active (open) shift_session store over the
+ * scheduled one, falling back to the scheduled store when no session is
+ * open — so the alert never labels/routes a replacement employee under
+ * their scheduled store while they're actually working elsewhere.
+ */
 export async function findZeroSalesOnShift(date: string): Promise<any[]> {
   const res = await query(
-    `SELECT e.full_name, e.telegram_id, st.name as store_name, sch.shift_text,
-            COALESCE(st.org_id, 'default') as org_id
+    `SELECT e.full_name, e.telegram_id,
+            COALESCE(actual_st.display_name, actual_st.name, st.display_name, st.name) as store_name,
+            sch.shift_text,
+            COALESCE(actual_st.org_id, st.org_id, 'default') as org_id
      FROM schedules sch
      JOIN employees e ON e.id = sch.employee_id
      JOIN stores st ON st.id = sch.store_id
+     LEFT JOIN shift_sessions ss
+       ON ss.employee_id = sch.employee_id
+      AND ss.work_date = sch.work_date
+      AND ss.status = 'open'
+     LEFT JOIN stores actual_st ON actual_st.id = ss.store_id
      WHERE sch.work_date = $1 AND sch.hours > 0 AND e.is_active = true
        AND NOT EXISTS (
          SELECT 1 FROM sales s

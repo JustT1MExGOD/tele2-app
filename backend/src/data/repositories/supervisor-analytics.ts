@@ -122,23 +122,57 @@ export async function findForecastHistory(storeIds: string[], date: string, hist
   return res.rows;
 }
 
+/**
+ * "Топ за период" — кросс-сетевой (storeIds может охватывать несколько
+ * сетей одного сектора, см. вызывающий код). Сумма продаж по-прежнему
+ * считается по фактам продаж на точках (не меняется), но отображаемые
+ * org_id/org_name теперь берутся от точки, а не от employee.org_id: для
+ * сотрудника на замене (home_org A, реально продающего на точке сети B)
+ * лидерборд должен показывать сеть B (чей результат засчитывается), а не
+ * его домашнюю сеть — employee.org_id/home_org сам по себе нигде не
+ * меняется. Когда у сотрудника в scope продажи на нескольких точках сразу
+ * (несколько сетей за период), отображается сеть той точки, что дала
+ * наибольший вклад — сумма метрик остаётся общей по всем точкам.
+ */
 export async function findTopEmployees(from: string, date: string, storeIds: string[]): Promise<any[]> {
   const res = await query(
-    `SELECT e.id, e.full_name, COALESCE(e.org_id,'default') as org_id, COALESCE(o.name,'default') as org_name,
+    `SELECT e.id, e.full_name, s.store_id, COALESCE(st.org_id,'default') as org_id, COALESCE(o.name,'default') as org_name,
        COALESCE(SUM(s.sim),0) sim, COALESCE(SUM(s.mnp),0) mnp,
        COALESCE(SUM(s.pa),0) pa, COALESCE(SUM(s.combo),0) combo,
        COALESCE(SUM(s.phones),0) phones
      FROM sales s
      JOIN employees e ON e.id = s.employee_id
-     LEFT JOIN organizations o ON o.id = COALESCE(e.org_id, 'default')
+     JOIN stores st ON st.id = s.store_id
+     LEFT JOIN organizations o ON o.id = COALESCE(st.org_id, 'default')
      WHERE s.sale_date >= $1::date AND s.sale_date <= $2::date
        AND s.store_id = ANY($3)
-     GROUP BY e.id, e.full_name, e.org_id, o.name
-     ORDER BY (COALESCE(SUM(s.sim),0)*2 + COALESCE(SUM(s.mnp),0)*3 + COALESCE(SUM(s.pa),0)*2) DESC
-     LIMIT 15`,
+     GROUP BY e.id, e.full_name, s.store_id, st.org_id, o.name`,
     [from, date, storeIds]
   ).catch(() => ({ rows: [] as any[] }));
-  return res.rows;
+
+  const byEmployee = new Map<string, any>();
+  for (const r of res.rows) {
+    const key = String(r.id);
+    const sim = Number(r.sim) || 0, mnp = Number(r.mnp) || 0, pa = Number(r.pa) || 0;
+    const combo = Number(r.combo) || 0, phones = Number(r.phones) || 0;
+    const storeScore = sim * 2 + mnp * 3 + pa * 2;
+    let agg = byEmployee.get(key);
+    if (!agg) {
+      agg = { id: r.id, full_name: r.full_name, org_id: r.org_id, org_name: r.org_name, sim: 0, mnp: 0, pa: 0, combo: 0, phones: 0, _bestStoreScore: -1 };
+      byEmployee.set(key, agg);
+    }
+    agg.sim += sim; agg.mnp += mnp; agg.pa += pa; agg.combo += combo; agg.phones += phones;
+    if (storeScore > agg._bestStoreScore) {
+      agg._bestStoreScore = storeScore;
+      agg.org_id = r.org_id;
+      agg.org_name = r.org_name;
+    }
+  }
+
+  return [...byEmployee.values()]
+    .map(({ _bestStoreScore, ...rest }) => rest)
+    .sort((a, b) => (b.sim * 2 + b.mnp * 3 + b.pa * 2) - (a.sim * 2 + a.mnp * 3 + a.pa * 2))
+    .slice(0, 15);
 }
 
 export async function findAiDipComments(date: string, dropStoreIds: string[]): Promise<any[]> {
@@ -161,20 +195,44 @@ function storeFilterSql(scope: StoreScope, alias = 'st', paramIdx = 1) {
   };
 }
 
+/**
+ * "Просевшие сегодня" эвристика (см. findUnderperformingEmployees) — WHO is
+ * evaluated (scheduled today, hours>0) is unchanged, but WHERE they're
+ * evaluated now prefers their active (open) shift_session's store over the
+ * scheduled one, falling back to the scheduled store only when no open
+ * session exists for that exact date. Without this, a replacement employee
+ * (scheduled Store A, actually working an open shift at Store B) was
+ * checked for sales at Store A — a store they were never physically at —
+ * and could be false-flagged as "underperforming" there even while
+ * genuinely selling at Store B. The scope filter is applied to this
+ * EFFECTIVE (actual) store, so an employee who's actually working outside
+ * the viewed scope today simply drops out of that scope's dashboard,
+ * rather than being misattributed to it.
+ */
 export async function findUnderperformingRaw(scope: StoreScope, date: string): Promise<any[]> {
   const filter = storeFilterSql(scope, 'st', 1);
   const res = await query(
-    `SELECT sch.employee_id, e.full_name, sch.store_id, COALESCE(st.display_name, st.name) as store_name,
+    `WITH effective AS (
+       SELECT sch.employee_id, sch.work_date,
+              COALESCE(ss.store_id, sch.store_id) as store_id
+       FROM schedules sch
+       LEFT JOIN shift_sessions ss
+         ON ss.employee_id = sch.employee_id
+        AND ss.work_date = sch.work_date
+        AND ss.status = 'open'
+       WHERE sch.work_date::date = $${scope !== null ? 2 : 1}::date
+         AND COALESCE(sch.hours, 0) > 0
+     )
+     SELECT ef.employee_id, e.full_name, ef.store_id, COALESCE(st.display_name, st.name) as store_name,
        COALESCE(SUM(s.sim + s.mnp + s.pa + s.combo), 0) as units
-     FROM schedules sch
-     JOIN employees e ON e.id = sch.employee_id
-     JOIN stores st ON st.id = sch.store_id
-     LEFT JOIN sales s ON s.employee_id = sch.employee_id AND s.store_id = sch.store_id
-       AND s.sale_date::date = sch.work_date::date
-     WHERE sch.work_date::date = $${scope !== null ? 2 : 1}::date
-       AND COALESCE(sch.hours, 0) > 0
+     FROM effective ef
+     JOIN employees e ON e.id = ef.employee_id
+     JOIN stores st ON st.id = ef.store_id
+     LEFT JOIN sales s ON s.employee_id = ef.employee_id AND s.store_id = ef.store_id
+       AND s.sale_date::date = ef.work_date::date
+     WHERE true
        ${filter.sql}
-     GROUP BY sch.employee_id, e.full_name, sch.store_id, st.name, st.display_name`,
+     GROUP BY ef.employee_id, e.full_name, ef.store_id, st.name, st.display_name`,
     scope !== null ? [...filter.params, date] : [date]
   ).catch(() => ({ rows: [] as any[] }));
   return res.rows;

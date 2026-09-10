@@ -31,11 +31,16 @@ export interface ScheduleReads {
   findHeadcountForDate(
     storeIds: string[], date: string
   ): ReturnType<typeof schedulesRepo.findHeadcountForDate>;
+  /** Planned shift + store details for one employee/date — used by core/shifts's actual-vs-scheduled store resolution (the schedule-fallback half of that rule). */
+  findShiftWithStore(
+    employeeId: number, date: string
+  ): ReturnType<typeof schedulesRepo.findShiftWithStore>;
 }
 
 export const scheduleReads: ScheduleReads = {
   countShiftsByEmployeeStoreInRange: schedulesRepo.countShiftsByEmployeeStoreInRange,
   countWorkedInRange: schedulesRepo.countWorkedInRange,
   findHeadcountHistory: schedulesRepo.findHeadcountHistory,
-  findHeadcountForDate: schedulesRepo.findHeadcountForDate
+  findHeadcountForDate: schedulesRepo.findHeadcountForDate,
+  findShiftWithStore: schedulesRepo.findShiftWithStore
 };
