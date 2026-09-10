@@ -92,6 +92,27 @@ export async function findCurrentOpenWithStore(employeeId: number): Promise<any 
 }
 
 /**
+ * GET /shifts/open-map — where each of the org's own employees is ACTUALLY
+ * working right now (open shift_session), not where they're scheduled.
+ * Used by the "Добавить продажу" modal to pre-fill the right store for a
+ * replacement employee instead of defaulting to their scheduled store.
+ * Filtered by employees.org_id (home org), same as GET /schedules's own
+ * "which employees are mine" scoping — a replacement employee's open
+ * session at a foreign store still shows up here under their home org,
+ * correctly pointing at the foreign store they're actually working.
+ */
+export async function findOpenSessionStoresForOrg(orgId: string): Promise<{ employee_id: number; store_id: string }[]> {
+  const res = await query(
+    `SELECT ss.employee_id, ss.store_id
+     FROM shift_sessions ss
+     JOIN employees e ON e.id = ss.employee_id
+     WHERE ss.status = 'open' AND COALESCE(e.org_id, 'default') = $1`,
+    [orgId]
+  );
+  return res.rows;
+}
+
+/**
  * AND status = 'open' делает переход атомарным compare-and-swap: если два
  * запроса close (двойной тап, повторный клиентский ретрай) прочитали одну
  * и ту же open-сессию до того, как любой из них успел её закрыть, выигрывает

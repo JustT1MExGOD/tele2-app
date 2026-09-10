@@ -12,9 +12,10 @@
 import { describe, it, expect } from 'vitest';
 import '../src/app/api-bridge.js';
 
-// Exact 129-name public surface of the former monolithic api-client.ts
-// (128 original + resolveStore, added for the replacement-shift feature),
-// preserved verbatim by the split (see the architecture trace/plan).
+// Exact 130-name public surface of the former monolithic api-client.ts
+// (128 original + resolveStore + getShiftOpenMap, both added for the
+// replacement-shift feature), preserved verbatim by the split (see the
+// architecture trace/plan).
 const EXPECTED_KEYS = [
   'getOrgStores', 'getMetrics', 'getPromos', 'getPromoCard', 'createPromo',
   'markPromoUsed', 'keepPromo', 'getCashTable', 'saveCash', 'createMetric',
@@ -39,7 +40,7 @@ const EXPECTED_KEYS = [
   'revokeSession', 'revokeOtherSessions', 'approveAccessRequest',
   'rejectAccessRequest', 'getSupportAdminTickets', 'getSupervisorDashboard',
   'getSupervisorHealth', 'getSales', 'createSale', 'zeroSaleMetric',
-  'getSalesHistory', 'openShift', 'closeShift', 'getShiftCurrent', 'resolveStore',
+  'getSalesHistory', 'openShift', 'closeShift', 'getShiftCurrent', 'getShiftOpenMap', 'resolveStore',
   'parseSalePhrase', 'quickSale', 'getFaq', 'getMyTickets',
   'getSupportTickets', 'replyTicket', 'createSupportTicket',
   'tutorialComplete', 'getStatsDaily', 'getDashboard', 'getEmployeeProgress',
@@ -56,7 +57,7 @@ const EXPECTED_KEYS = [
 ] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 129-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 130-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
     expect(actualKeys.length).toBe(EXPECTED_KEYS.length);
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());

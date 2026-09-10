@@ -158,6 +158,7 @@ import {
   openShift,
   closeShift,
   getShiftCurrent,
+  getShiftOpenMap,
   resolveStore
 } from '../features/shifts/api.js';
 import {
@@ -277,6 +278,7 @@ declare global {
       openShift: typeof openShift;
       closeShift: typeof closeShift;
       getShiftCurrent: typeof getShiftCurrent;
+      getShiftOpenMap: typeof getShiftOpenMap;
       resolveStore: typeof resolveStore;
       parseSalePhrase: typeof parseSalePhrase;
       quickSale: typeof quickSale;
@@ -411,6 +413,7 @@ window.apiClient = {
   openShift,
   closeShift,
   getShiftCurrent,
+  getShiftOpenMap,
   resolveStore,
   parseSalePhrase,
   quickSale,

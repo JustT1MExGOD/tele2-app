@@ -32,10 +32,11 @@ export async function openAddSale(presetEmployeeId?: number | string): Promise<v
     // admin при просмотре чужой сети видел бы в форме добавления продажи
     // СВОИХ сотрудников, а не сети, которую смотрит.
     const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
-    const [emps, storesData, schedules]: [EmployeeListItem[], any[], ScheduleRow[]] = await Promise.all([
+    const [emps, storesData, schedules, openMap]: [EmployeeListItem[], any[], ScheduleRow[], { open: Record<string, string> }] = await Promise.all([
       window.apiClient.getEmployees(authHeaders(), empParam),
       fetchOrgStores(),
-      window.apiClient.getSchedules(authHeaders(), todayMoscow(), orgQueryParam())
+      window.apiClient.getSchedules(authHeaders(), todayMoscow(), orgQueryParam()),
+      window.apiClient.getShiftOpenMap(authHeaders(), orgQueryParam()).catch(() => ({ open: {} }))
     ]);
     employees = emps;
     stores = storesData;
@@ -44,6 +45,13 @@ export async function openAddSale(presetEmployeeId?: number | string): Promise<v
     (Array.isArray(schedules) ? schedules : []).forEach((s) => {
       byEmp[s.employee_id] = s.store_id;
     });
+    // Replacement shift (замена) — an open shift_session is the source of
+    // truth for where an employee is ACTUALLY working right now, schedule
+    // is only the plan. Without this override, a replacement employee's
+    // sale silently defaulted to their SCHEDULED store instead of the
+    // store they're really standing in — see openMap's own doc comment
+    // (data/repositories/shifts.ts::findOpenSessionStoresForOrg).
+    Object.assign(byEmp, openMap.open);
 
     const isMgr = canManage();
     let empList: EmployeeListItem[] = employees || [];
@@ -75,7 +83,7 @@ export async function openAddSale(presetEmployeeId?: number | string): Promise<v
             ${isMgr ? '' : '<div style="font-size:12px;color:var(--hint);margin-top:4px">Можно вносить только свои продажи</div>'}
           </div>
           <div class="field">
-            <label>Точка <span style="font-weight:500;text-transform:none;color:var(--primary)">(из графика)</span></label>
+            <label>Точка <span style="font-weight:500;text-transform:none;color:var(--primary)">(по факту смены)</span></label>
             <select id="modalStore">
               ${(stores || [])
                 .map((s) => `<option value="${s.id}" ${s.id === defaultStore ? 'selected' : ''}>${esc(s.name)}</option>`)

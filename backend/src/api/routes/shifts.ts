@@ -23,10 +23,12 @@ import { notifyChat } from '../../integrations/telegram/bot.js';
 import { getStoreNotifyTarget } from '../../core/shared/tenant.js';
 import { computeDayPlanFact } from '../../core/shifts/pace.js';
 import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../shared/replacement.js';
+import { resolveActualOrScheduledStoreForDate } from '../../core/shifts/actual-store.js';
 import type {
   ShiftOpenResponse,
   ShiftCloseResponse,
   ShiftCurrentResponse,
+  ShiftOpenMapResponse,
   SalesParseResponse,
   SalesQuickResponse,
   ResolveStoreResponse
@@ -338,6 +340,20 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     return { session, fact: pace.fact, day_plan: pace.dayPlan, plan_pct: pace.planPct };
   });
 
+  // Кто из моих сотрудников сейчас реально на смене и на какой точке — не
+  // из графика (см. GET /schedules, тот же org-scope принцип). "Добавить
+  // продажу" использует это, чтобы предзаполнять точку по факту, а не по
+  // плану — иначе продажа сотрудника на замене молча уходила на его
+  // запланированную (не фактическую) точку.
+  app.get('/shifts/open-map', async (request, reply): Promise<ShiftOpenMapResponse | undefined> => {
+    if (!requireActive(request, reply)) return;
+    const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
+    const rows = await shiftsRepo.findOpenSessionStoresForOrg(orgId);
+    const open: Record<string, string> = {};
+    for (const r of rows) open[String(r.employee_id)] = r.store_id;
+    return { open };
+  });
+
   // ========== NLP PARSE + OPTIONAL APPLY ==========
   app.post(
     '/sales/parse',
@@ -371,7 +387,13 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     let store_id = body.store_id;
     const sale_date = String(body.sale_date || todayMoscow()).slice(0, 10);
     if (!store_id) {
-      store_id = (await schedulesRepo.findAnyScheduledStoreId(employee_id, sale_date)) || undefined;
+      // Active shift_session is the source of truth for where the employee
+      // is actually working today — schedule is only the same-date
+      // fallback (see core/shifts/actual-store.ts). Without this, a
+      // replacement employee's quick-typed sale (no explicit store_id)
+      // silently landed on their SCHEDULED store instead of the store
+      // they're actually clocked into.
+      store_id = (await resolveActualOrScheduledStoreForDate(employee_id, sale_date)).store_id || undefined;
     }
     if (!store_id) return reply.code(400).send({ error: 'store_id required' });
 

@@ -643,6 +643,86 @@ describe('Replacement shift — sale attribution and spoof prevention', () => {
 
     await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
   });
+
+  it('quick-sale with NO explicit store_id attributes to the active REPLACEMENT store, not the scheduled one', async () => {
+    const sector = await createSector('RS Sector Sale3');
+    const orgA = await fx.createOrg('RS Org A14b');
+    const orgB = await fx.createOrg('RS Org B14b');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeA = await fx.createStore(orgA, 'RS Store A14b');
+    const storeB = await fx.createStore(orgB, 'RS Store B14b');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-24';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'10-21',12)`,
+      [emp.id, date, storeA]
+    );
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+
+    // No store_id in the body at all — server must resolve it itself.
+    const quickRes = await app.inject({
+      method: 'POST', url: '/sales/quick',
+      headers, payload: { text: 'две симки', sale_date: date }
+    });
+    expect(quickRes.statusCode).toBe(200);
+
+    const row = await query(`SELECT store_id FROM sales WHERE employee_id = $1 AND sale_date = $2`, [emp.id, date]);
+    expect(row.rows[0].store_id).toBe(storeB);
+    expect(row.rows[0].store_id).not.toBe(storeA);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+});
+
+describe('Replacement shift — GET /shifts/open-map (add-sale store prefill by actual work, not schedule)', () => {
+  it('returns the active session store for a replacement employee, keyed by employee_id, home-org scoped', async () => {
+    const sector = await createSector('RS Sector OpenMap1');
+    const orgA = await fx.createOrg('RS Org OM-A1');
+    const orgB = await fx.createOrg('RS Org OM-B1');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeA = await fx.createStore(orgA, 'RS Store OM-A1');
+    const storeB = await fx.createStore(orgB, 'RS Store OM-B1');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const manager = await fx.createEmployee(orgA, { role: 'manager' });
+    const app = await getApp();
+    const empHeaders = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-25';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'10-21',12)`,
+      [emp.id, date, storeA]
+    );
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers: empHeaders, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/shifts/open-map', headers: authAs(manager.telegramId) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().open[String(emp.id)]).toBe(storeB);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers: empHeaders, payload: {} });
+  });
+
+  it('an employee with no open shift is simply absent from the map', async () => {
+    const orgA = await fx.createOrg('RS Org OM-A2');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const manager = await fx.createEmployee(orgA, { role: 'manager' });
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: '/shifts/open-map', headers: authAs(manager.telegramId) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().open[String(emp.id)]).toBeUndefined();
+  });
 });
 
 describe('Replacement shift — cross-org isolation (no escalation)', () => {

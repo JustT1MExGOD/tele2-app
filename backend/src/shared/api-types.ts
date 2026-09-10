@@ -1043,6 +1043,11 @@ export interface ShiftCurrentResponse {
   plan_pct?: number;
 }
 
+export interface ShiftOpenMapResponse {
+  /** employee_id (string key) -> store_id of their currently open shift_session. */
+  open: Record<string, string>;
+}
+
 export interface SalesParseRequest {
   text: string;
 }

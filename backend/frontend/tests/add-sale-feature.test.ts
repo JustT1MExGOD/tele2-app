@@ -39,9 +39,10 @@ function setupGlobals(overrides: { role?: string; empId?: number } = {}) {
 
   const getEmployees = vi.fn().mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
   const getSchedules = vi.fn().mockResolvedValue([]);
+  const getShiftOpenMap = vi.fn().mockResolvedValue({ open: {} });
   const createSale = vi.fn().mockResolvedValue({ ok: true, sale: null, parsed: {} });
-  (window as any).apiClient = { getEmployees, getSchedules, createSale };
-  return { getEmployees, getSchedules, createSale };
+  (window as any).apiClient = { getEmployees, getSchedules, getShiftOpenMap, createSale };
+  return { getEmployees, getSchedules, getShiftOpenMap, createSale };
 }
 
 describe('Добавить продажу (миграция frontend/js/07-add-sale.js → src/features/add-sale)', () => {
@@ -68,6 +69,34 @@ describe('Добавить продажу (миграция frontend/js/07-add-s
     const html = document.getElementById('modalBody')!.innerHTML;
     expect(html).toContain('disabled');
     expect(document.getElementById('overlay')!.classList.contains('show')).toBe(true);
+  });
+
+  it('openAddSale: сотрудник на замене — точка предзаполняется по факту открытой смены, а не из графика', async () => {
+    const { getSchedules, getShiftOpenMap } = setupGlobals({ role: 'employee' });
+    (globalThis as any).fetchOrgStores = vi.fn().mockResolvedValue([
+      { id: 's1', name: 'Мегалит' },
+      { id: 's2', name: 'Точка Б' }
+    ]);
+    getSchedules.mockResolvedValue([{ work_date: '2026-08-25', shift_text: '', hours: 8, store_id: 's1', employee_id: 1, full_name: 'Иван', store_name: 'Мегалит' }]);
+    getShiftOpenMap.mockResolvedValue({ open: { '1': 's2' } });
+    const { openAddSale } = await import('../src/features/add-sale/index.js');
+    await openAddSale();
+    const select = document.getElementById('modalStore') as HTMLSelectElement;
+    expect(select.value).toBe('s2');
+  });
+
+  it('openAddSale: без открытой смены — точка по-прежнему предзаполняется из графика', async () => {
+    const { getSchedules, getShiftOpenMap } = setupGlobals({ role: 'employee' });
+    (globalThis as any).fetchOrgStores = vi.fn().mockResolvedValue([
+      { id: 's1', name: 'Мегалит' },
+      { id: 's2', name: 'Точка Б' }
+    ]);
+    getSchedules.mockResolvedValue([{ work_date: '2026-08-25', shift_text: '', hours: 8, store_id: 's1', employee_id: 1, full_name: 'Иван', store_name: 'Мегалит' }]);
+    getShiftOpenMap.mockResolvedValue({ open: {} });
+    const { openAddSale } = await import('../src/features/add-sale/index.js');
+    await openAddSale();
+    const select = document.getElementById('modalStore') as HTMLSelectElement;
+    expect(select.value).toBe('s1');
   });
 
   it('toggleSaleMetric: переключает выбор метрики и перерисовывает qty-list', async () => {
