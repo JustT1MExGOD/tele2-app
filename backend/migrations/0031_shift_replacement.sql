@@ -1,3 +1,5 @@
+SET LOCAL search_path TO public;
+
 -- Replacement shift mechanic: an employee may manually work a shift at a
 -- same-sector foreign-org store ("замена"). shift_sessions gains the fields
 -- needed to fix the actual work context for that shift — see
