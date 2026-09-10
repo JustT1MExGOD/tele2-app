@@ -20,6 +20,7 @@ import type {
   StaffingRequirementRow,
   SchedulePreferenceRow
 } from '../../../../src/shared/api-types.js';
+import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../../../src/shared/replacement.js';
 
 const scheduleEntries = new Map<string, ScheduleRow>();
 
@@ -269,9 +270,11 @@ function calendarCellsHtml(
       // (произвольная строка), уже правильно экранируются в соседнем
       // renderSummarySchedule() ниже; тут раньше экранирования не было
       // (hotfix 20.57.1, finding #5).
-      const short = esc((row.store_short || row.store_name || '').slice(0, 4));
-      const col = storeColor(row.store_id);
-      cells += `<div class="sch-cell work" ${click} title="${esc(`${row.store_name || ''} ${row.shift_text || ''}`)}"
+      const isReplacementPlaceholder = row.store_id === REPLACEMENT_PLACEHOLDER_STORE_ID;
+      const short = isReplacementPlaceholder ? 'Зам' : esc((row.store_short || row.store_name || '').slice(0, 4));
+      const col = isReplacementPlaceholder ? '#00c853' : storeColor(row.store_id);
+      const title = isReplacementPlaceholder ? `Замена (точка неизвестна) ${row.shift_text || ''}` : `${row.store_name || ''} ${row.shift_text || ''}`;
+      cells += `<div class="sch-cell work" ${click} title="${esc(title)}"
             style="background:${col}22;color:${col};border-color:${col}">
             <div class="d">${d}</div><div class="s">${short}</div></div>`;
     } else {
@@ -447,10 +450,11 @@ function renderSummarySchedule(list: EmpMonth[], total: number): void {
           // тот же язык, что уже у .sch-cell.work в календарной сетке ниже
           // на этой же странице (было: статичный "warning"-жёлтый для всех
           // точек сразу, несостыковка визуала).
-          const col = storeColor(row.store_id);
+          const isReplacementPlaceholder = row.store_id === REPLACEMENT_PLACEHOLDER_STORE_ID;
+          const col = isReplacementPlaceholder ? '#00c853' : storeColor(row.store_id);
           const cellStyle = `style="background:${col}22;color:${col};border-color:${col}"`;
-          const storeShort = esc((row.store_short || row.store_name || '').slice(0, 6));
-          modeCells += `<td class="sum-sch-cell work" ${cellStyle} title="${esc(row.store_name || '')}">
+          const storeShort = isReplacementPlaceholder ? 'Замена' : esc((row.store_short || row.store_name || '').slice(0, 6));
+          modeCells += `<td class="sum-sch-cell work" ${cellStyle} title="${esc(isReplacementPlaceholder ? 'Замена (точка неизвестна)' : (row.store_name || ''))}">
               ${esc(row.shift_text || '')}<br><span class="sum-sch-store" style="color:inherit">${storeShort}</span></td>`;
           hourCells += `<td class="sum-sch-cell work" ${cellStyle}>${hours}</td>`;
         }
@@ -488,6 +492,7 @@ export async function editDay(employeeId: number, dateStr: string, currentStoreI
         <div class="field">
           <label>Точка</label>
           <select id="schStore">
+            <option value="${REPLACEMENT_PLACEHOLDER_STORE_ID}" style="background:#00c853;color:#fff;font-weight:700" ${currentStoreId === REPLACEMENT_PLACEHOLDER_STORE_ID ? 'selected' : ''}>Замена (точка неизвестна)</option>
             ${(stores || []).map((s) => `<option value="${esc(s.id)}" ${s.id === currentStoreId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
           </select>
         </div>

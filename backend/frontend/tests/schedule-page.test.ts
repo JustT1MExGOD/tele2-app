@@ -123,6 +123,20 @@ describe('График (миграция frontend/js/04-schedule.js → src/page
     expect(document.getElementById('monthLabel')!.textContent).toBe('Август 2026');
   });
 
+  it('loadMonthSchedule: день "Замена" (store_id=__REPLACEMENT__) — ярко-зелёная ячейка с меткой "Зам", не цвет несуществующей точки', async () => {
+    const { getEmployees, getScheduleMonth } = setupGlobals();
+    getEmployees.mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
+    getScheduleMonth.mockResolvedValue({
+      month: '2026-08', start: '', end: '',
+      items: [{ work_date: '2026-08-01', shift_text: '10-21', hours: 8, store_id: '__REPLACEMENT__', employee_id: 1, full_name: 'Иван', store_name: null, store_short: null }]
+    });
+    const { loadMonthSchedule } = await import('../src/pages/schedule/index.js');
+    await loadMonthSchedule();
+    const html = document.getElementById('monthBoard')!.innerHTML;
+    expect(html).toContain('#00c853');
+    expect(html).toContain('Зам');
+  });
+
   // Documentation-audit XSS fix — store_name раньше подставлялся в
   // title="..." без esc(), в отличие от соседних мест того же файла.
   it('store_name с " в title="..." не разрывает атрибут — атрибут-breakout невозможен', async () => {
@@ -200,7 +214,8 @@ describe('График (миграция frontend/js/04-schedule.js → src/page
     expect(document.querySelectorAll('script').length).toBe(0);
     expect(document.querySelectorAll('img').length).toBe(0);
     const select = document.getElementById('schStore') as HTMLSelectElement | null;
-    expect(select?.options.length).toBe(1);
+    // 1 malicious store + the static "Замена" placeholder option.
+    expect(select?.options.length).toBe(2);
   });
 
   // Hotfix 20.57.1 PASS 3, finding #1 — production "Ошибка загрузки графика"
@@ -309,6 +324,26 @@ describe('График (миграция frontend/js/04-schedule.js → src/page
     await editDay(1, '2026-08-25', 's1', 8);
     expect(document.getElementById('modalTitle')!.textContent).toContain('2026-08-25');
     expect(document.getElementById('modalBody')!.innerHTML).toContain("saveShift(1, '2026-08-25')");
+  });
+
+  it('editDay: точка "Замена" в выпадающем списке — ярко-зелёная, значение __REPLACEMENT__', async () => {
+    setupGlobals({ role: 'manager' });
+    (globalThis as any).stores = [{ id: 's1', name: 'Точка А' }];
+    const { editDay } = await import('../src/pages/schedule/index.js');
+    await editDay(1, '2026-08-25', 's1', 8);
+    const html = document.getElementById('modalBody')!.innerHTML;
+    expect(html).toContain('value="__REPLACEMENT__"');
+    expect(html).toContain('Замена');
+    expect(html).toMatch(/value="__REPLACEMENT__"[^>]*background:#00c853/);
+  });
+
+  it('editDay: текущая смена уже "Замена" — этот пункт выбран (selected)', async () => {
+    setupGlobals({ role: 'manager' });
+    (globalThis as any).stores = [{ id: 's1', name: 'Точка А' }];
+    const { editDay } = await import('../src/pages/schedule/index.js');
+    await editDay(1, '2026-08-25', '__REPLACEMENT__', 8);
+    const html = document.getElementById('modalBody')!.innerHTML;
+    expect(html).toMatch(/value="__REPLACEMENT__"[^>]*selected/);
   });
 
   it('saveShift: успех — сохраняет, тостит, закрывает модалку', async () => {

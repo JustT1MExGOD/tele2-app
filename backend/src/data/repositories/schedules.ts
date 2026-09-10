@@ -4,6 +4,7 @@
  * SQL (апсерт графика, чтение месяца/дня) — батч 3.
  */
 import { query } from '../db/index.js';
+import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../shared/replacement.js';
 
 /** Будущие смены — не история, а обещание, что человек выйдет на работу;
  * прошлые не трогаем (реальная история). Best-effort, вызывающий код сам
@@ -176,6 +177,22 @@ export async function upsert(
     [employeeId, storeId, workDate, shiftText, hours]
   );
   return res.rows[0];
+}
+
+/**
+ * POST /shifts/open — a manager-scheduled "Замена" (store TBD) placeholder
+ * row is bound to the real store once the employee actually opens a shift
+ * for that date. `store_id = REPLACEMENT_PLACEHOLDER_STORE_ID` in the WHERE
+ * clause is what makes this safe to call unconditionally on every open: it
+ * only ever touches a row still holding the placeholder, never a real,
+ * already-resolved schedule entry — a no-op UPDATE (0 rows) otherwise.
+ */
+export async function bindReplacementPlaceholder(employeeId: number, date: string, storeId: string): Promise<void> {
+  await query(
+    `UPDATE schedules SET store_id = $3
+     WHERE employee_id = $1 AND work_date::date = $2::date AND store_id = $4`,
+    [employeeId, date, storeId, REPLACEMENT_PLACEHOLDER_STORE_ID]
+  );
 }
 
 /** /shifts/open — точка из графика, только смены с реальными часами (hours>0). */

@@ -11,6 +11,7 @@ import { TestFixtures } from '../helpers/fixtures.js';
 import { query } from '../../src/data/db/index.js';
 import { findReplacementEmployeesForStoreDate } from '../../src/data/repositories/shifts.js';
 import { findUnderperformingRaw, findTopEmployees } from '../../src/data/repositories/supervisor-analytics.js';
+import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../src/shared/replacement.js';
 
 const fx = new TestFixtures();
 const sectorIds: string[] = [];
@@ -738,5 +739,114 @@ describe('Replacement shift — report recipient data (repo layer)', () => {
     const storeA = await fx.createStore(orgA, 'RS Store A18');
     const reps = await findReplacementEmployeesForStoreDate(storeA, '2026-07-10');
     expect(reps).toEqual([]);
+  });
+});
+
+describe('Replacement shift — schedule "Замена" placeholder (store TBD, bound on actual open)', () => {
+  it('opening a shift with a manual store code binds the placeholder schedule row to the real (foreign) store', async () => {
+    const sector = await createSector('RS Sector Placeholder1');
+    const orgA = await fx.createOrg('RS Org PH-A1');
+    const orgB = await fx.createOrg('RS Org PH-B1');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeB = await fx.createStore(orgB, 'RS Store PH-B1');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-20';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'10-21',12)`,
+      [emp.id, date, REPLACEMENT_PLACEHOLDER_STORE_ID]
+    );
+
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_code: storeBRow.rows[0].code, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    const row = await query(`SELECT store_id, shift_text, hours FROM schedules WHERE employee_id = $1 AND work_date = $2`, [emp.id, date]);
+    expect(row.rows[0].store_id).toBe(storeB);
+    // Binding only rewrites store_id — the manager's own hours/shift_text survive untouched.
+    expect(row.rows[0].shift_text).toBe('10-21');
+    expect(Number(row.rows[0].hours)).toBe(12);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('opening a shift at an own-org store (store_id, not a code) also binds the placeholder', async () => {
+    const orgA = await fx.createOrg('RS Org PH-A2');
+    const storeA = await fx.createStore(orgA, 'RS Store PH-A2');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-21';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'10-21',12)`,
+      [emp.id, date, REPLACEMENT_PLACEHOLDER_STORE_ID]
+    );
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_id: storeA, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    const row = await query(`SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2`, [emp.id, date]);
+    expect(row.rows[0].store_id).toBe(storeA);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('a normal, already-resolved schedule row is never overwritten by the binding logic', async () => {
+    const orgA = await fx.createOrg('RS Org PH-A3');
+    const storeA = await fx.createStore(orgA, 'RS Store PH-A3');
+    const storeC = await fx.createStore(orgA, 'RS Store PH-C3');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-22';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'10-21',12)`,
+      [emp.id, date, storeA]
+    );
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { store_id: storeC, work_date: date }
+    });
+    expect(openRes.statusCode).toBe(200);
+
+    // The schedule still says Store A — a real, already-resolved plan is
+    // never silently rewritten just because the employee opened elsewhere.
+    const row = await query(`SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2`, [emp.id, date]);
+    expect(row.rows[0].store_id).toBe(storeA);
+
+    await app.inject({ method: 'POST', url: '/shifts/close', headers, payload: {} });
+  });
+
+  it('tapping "open shift" with no code, on a day scheduled as the placeholder, returns a clear "enter a store code" message', async () => {
+    const orgA = await fx.createOrg('RS Org PH-A4');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const date = '2026-07-23';
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'10-21',12)`,
+      [emp.id, date, REPLACEMENT_PLACEHOLDER_STORE_ID]
+    );
+    const openRes = await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers, payload: { work_date: date }
+    });
+    expect(openRes.statusCode).toBe(400);
+    expect(openRes.json().error).toBe('replacement_store_required');
+    expect(openRes.json().message).toMatch(/код точки/i);
+
+    const count = await query(`SELECT COUNT(*)::int c FROM shift_sessions WHERE employee_id = $1`, [emp.id]);
+    expect(count.rows[0].c).toBe(0);
   });
 });

@@ -22,6 +22,7 @@ import * as employeesRepo from '../../data/repositories/employees.js';
 import { notifyChat } from '../../integrations/telegram/bot.js';
 import { getStoreNotifyTarget } from '../../core/shared/tenant.js';
 import { computeDayPlanFact } from '../../core/shifts/pace.js';
+import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../shared/replacement.js';
 import type {
   ShiftOpenResponse,
   ShiftCloseResponse,
@@ -145,6 +146,16 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     if (!body.store_code && !store_id) {
       store_id = (await schedulesRepo.findScheduledStoreId(employee_id, date)) || undefined;
     }
+    // «Замена» без точки в графике (см. src/shared/replacement.ts): менеджер
+    // отметил день как замену, ещё не зная точку — сотрудник обязан ввести
+    // код сам. Без этой проверки resolveStoreEligibility ниже просто не
+    // нашла бы такую "точку" и ответила бы общим "Точка не найдена.".
+    if (!body.store_code && store_id === REPLACEMENT_PLACEHOLDER_STORE_ID) {
+      return reply.code(400).send({
+        error: 'replacement_store_required',
+        message: 'Сегодня у вас замена — укажите код точки, где будете работать.'
+      });
+    }
     if (!body.store_code && !store_id) {
       return reply.code(400).send({ error: 'store_id required (нет смены в графике)' });
     }
@@ -172,6 +183,13 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     const { session, deduped } = await shiftsRepo.claimOpenSession(
       employee_id, store_id, date, body.lat ?? null, body.lng ?? null, body.accuracy_m ?? null, workContext
     );
+
+    // A manager-scheduled "Замена" placeholder for this exact date gets
+    // bound to the real store now that we know it — see
+    // schedulesRepo.bindReplacementPlaceholder's own doc comment. Safe to
+    // call unconditionally (no-op when there's no placeholder row); part of
+    // the same transaction as the session claim above.
+    await schedulesRepo.bindReplacementPlaceholder(employee_id, date, store_id);
 
     // Shift 2.0 (18.7) — фаза «до»: план на сегодня, передача от предыдущей
     // смены на этой точке (любой сотрудник), незакрытые задачи сотрудника.
