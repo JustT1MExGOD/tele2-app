@@ -43,6 +43,7 @@ import { registerAvatarRoutes } from './me/avatar.js';
 import { registerAuditRoutes } from './audit.js';
 import { registerDealersRoutes } from './org/dealers.js';
 import { registerChatRoutes } from './chat/index.js';
+import { registerAcademyRoutes } from './academy.js';
 
 const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Plans', registerPlansRoutes],
@@ -82,7 +83,8 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Avatar', registerAvatarRoutes],
   ['Audit', registerAuditRoutes],
   ['Dealers/Sectors', registerDealersRoutes],
-  ['Chat (внутренний чат сотрудников)', registerChatRoutes]
+  ['Chat (внутренний чат сотрудников)', registerChatRoutes],
+  ['T2 Academy (progress/XP/badges)', registerAcademyRoutes]
 ];
 
 /**

@@ -1467,3 +1467,30 @@ export interface CreateStoreRequest {
   open_time_sunday?: string;
   org_id?: string;
 }
+
+// ===== T2 Academy (redesigned tutorial) =====
+
+export interface AcademyProgressResponse {
+  completed_step_ids: string[];
+  xp_total: number;
+  badges: { code: string; title: string; earned_at: string }[];
+}
+
+export interface AcademyCompleteStepRequest {
+  step_id: string;
+}
+
+export interface AcademyCompleteStepResponse {
+  already_completed: boolean;
+  reward_granted: boolean;
+  xp_awarded: number;
+  badge?: { code: string; title: string };
+}
+
+export interface AcademyContextualStatusResponse {
+  dismissed: boolean;
+}
+
+export interface AcademyDismissContextualRequest {
+  context_id: string;
+}
