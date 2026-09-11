@@ -177,7 +177,7 @@ declare global {
   /** app/core.ts — role id -> Russian display label. */
   function roleLabel(role: string): string;
   /** app/nav.ts — paints a cached employee avatar image onto elementId, if one exists. */
-  function applyAvatarImg(elementId: string, employeeId: number): void;
+  function applyAvatarImg(elementId: string, employeeId: number): Promise<void>;
   /** app/core.ts — manager/admin/supervisor shorthand (Command Center + supervisor cabinet access). */
   function canViewAnalytics(): boolean;
   /** app/core.ts — metric id -> short_label (falls back to metricLabel()). */

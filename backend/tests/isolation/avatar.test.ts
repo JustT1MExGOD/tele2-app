@@ -28,9 +28,12 @@ describe('batch 3, п.19 — кастомная аватарка', () => {
 
   afterAll(() => fx.cleanup());
 
-  it('GET /avatars/:id — 404, если аватарка не загружена', async () => {
+  it('GET /avatars/:id — 404, если аватарка не загружена (запрошено сотрудником той же сети)', async () => {
+    // GET /avatars/:id теперь требует auth + ту же сеть (hotfix — был
+    // публичным IDOR, см. api/routes/me/avatar.ts) — без headers здесь
+    // будет 401, не 404.
     const app = await getApp();
-    const res = await app.inject({ method: 'GET', url: `/avatars/${employee.id}` });
+    const res = await app.inject({ method: 'GET', url: `/avatars/${employee.id}`, headers: authAs(employee.telegramId) });
     expect(res.statusCode).toBe(404);
   });
 
@@ -49,7 +52,7 @@ describe('batch 3, п.19 — кастомная аватарка', () => {
     });
     expect(upload.statusCode).toBe(200);
 
-    const res = await app.inject({ method: 'GET', url: `/avatars/${employee.id}` });
+    const res = await app.inject({ method: 'GET', url: `/avatars/${employee.id}`, headers: authAs(employee.telegramId) });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('image/jpeg');
     expect(Buffer.compare(res.rawPayload, fakeImage)).toBe(0);

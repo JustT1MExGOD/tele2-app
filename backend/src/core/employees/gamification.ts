@@ -36,8 +36,14 @@ export async function addXp(employeeId: number, amount: number, reason: string, 
   return { ...row, ...info };
 }
 
-export async function grantBadge(employeeId: number, code: string, title: string, meta: any = {}) {
-  await repo.insertBadge(employeeId, code, title, JSON.stringify(meta));
+/** Returns true iff this call was genuinely the first grant of (employeeId,
+ * code) — for the codes covered by the employee_badges_onetime_uq partial
+ * unique index (migrations/0033_onetime_badge_dedup.sql), a concurrent
+ * duplicate call reliably gets false here, never a second row. For
+ * repeatable codes (ideal_shift/streak_7/streak_30) every call inserts
+ * its own history row and returns true — no such index applies to them. */
+export async function grantBadge(employeeId: number, code: string, title: string, meta: any = {}): Promise<boolean> {
+  return repo.insertBadge(employeeId, code, title, JSON.stringify(meta));
 }
 
 export async function evaluateAfterSale(employeeId: number, metrics: Record<string, number>) {

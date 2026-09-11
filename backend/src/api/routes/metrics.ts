@@ -14,6 +14,31 @@ import * as metricsRepo from '../../data/repositories/metrics.js';
 import { withTransaction } from '../../data/db/index.js';
 import type { MetricsResponse, CreateMetricResponse, DeleteMetricResponse } from '../../shared/api-types.js';
 
+// plan_metrics has no org_id (see data/repositories/metrics.ts) — a
+// created metric becomes a real column on sales/store_plans/
+// employee_month_plans/store_month_plans, shared by EVERY org on the
+// platform, and is visible platform-wide via GET /metrics. That blast
+// radius doesn't match requireManager()'s scope (a manager of ONE org),
+// so create/delete additionally require platform admin, same pattern as
+// api/routes/org/branding.ts's admin-only routes. Hotfix — this route
+// used to let any single org's manager mutate shared platform schema.
+function requirePlatformAdmin(request: Parameters<typeof requireManager>[0], reply: FastifyReply): boolean {
+  if (!requireManager(request, reply)) return false;
+  if (request.user?.role !== 'admin') {
+    reply.code(403).send({ error: 'admin only' });
+    return false;
+  }
+  return true;
+}
+
+// Real ceiling is Postgres's ~1600 columns/table, but staying far below
+// that (row overhead, ALTER TABLE lock duration, realistic UI usability)
+// is the actual goal — this is a generous cap for legitimate use, not a
+// tuned-to-the-limit number. Hotfix — there was previously no cap at all
+// beyond the per-minute rate limit, which only slows a runaway platform-
+// wide schema-growth path, never stops it.
+const MAX_CUSTOM_METRICS = 100;
+
 const PostMetricBody = Type.Object({
   label: Type.String({ minLength: 1 }),
   short_label: Type.Optional(Type.String()),
@@ -68,7 +93,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
     // schema-мутация, не должна быть частой.
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: PostMetricBody } },
     async (request, reply): Promise<CreateMetricResponse | FastifyReply> => {
-    if (!requireManager(request, reply)) return;
+    if (!requirePlatformAdmin(request, reply)) return;
     const body = request.body as PostMetricBody;
     const label = String(body.label || '').trim();
     if (!label) return reply.code(400).send({ error: 'label_required' });
@@ -79,6 +104,16 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
     id = id.replace(/[^a-z0-9_]/g, '').slice(0, 30);
     if (!/^[a-z][a-z0-9_]{0,29}$/.test(id)) {
       return reply.code(400).send({ error: 'invalid_id', message: 'id: a-z, 0-9, _' });
+    }
+
+    // Только НОВЫЙ id считается ростом схемы — апдейт существующей метрики
+    // не добавляет колонку повторно (ensureColumn — IF NOT EXISTS).
+    const isNew = !(await metricsRepo.exists(id));
+    if (isNew) {
+      const total = await metricsRepo.count();
+      if (total >= MAX_CUSTOM_METRICS) {
+        return reply.code(400).send({ error: 'metric_limit_reached', message: `Достигнут лимит метрик платформы (${MAX_CUSTOM_METRICS})` });
+      }
     }
 
     // sort_order
@@ -124,7 +159,7 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
   );
 
   app.delete('/metrics/:id', async (request, reply): Promise<DeleteMetricResponse | FastifyReply> => {
-    if (!requireManager(request, reply)) return;
+    if (!requirePlatformAdmin(request, reply)) return;
     const id = String((request.params as any).id || '');
     if (!/^[a-z][a-z0-9_]{0,29}$/.test(id)) {
       return reply.code(400).send({ error: 'invalid_id' });

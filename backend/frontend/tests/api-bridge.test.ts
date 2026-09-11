@@ -12,11 +12,13 @@
 import { describe, it, expect } from 'vitest';
 import '../src/app/api-bridge.js';
 
-// Exact 134-name public surface of the former monolithic api-client.ts
+// Exact 135-name public surface of the former monolithic api-client.ts
 // (128 original + resolveStore + getShiftOpenMap, both added for the
 // replacement-shift feature, + getAcademyProgress/completeAcademyStep/
 // getAcademyContextualStatus/dismissAcademyContextual, added for T2
-// Academy), preserved verbatim by the split (see the architecture trace/plan).
+// Academy, + getAvatar, added for the avatar-IDOR hotfix — GET /avatars/:id
+// now requires auth, so a bare <img src> can no longer reach it), preserved
+// verbatim by the split (see the architecture trace/plan).
 const EXPECTED_KEYS = [
   'getOrgStores', 'getMetrics', 'getPromos', 'getPromoCard', 'createPromo',
   'markPromoUsed', 'keepPromo', 'getCashTable', 'saveCash', 'createMetric',
@@ -54,13 +56,13 @@ const EXPECTED_KEYS = [
   'markAnnouncementRead', 'getAnnouncementReads', 'getReportDay',
   'runWhatIf', 'applyWhatIf', 'getStoreProfile', 'updateStoreDisplayName',
   'getEmployeeProfile', 'createEmployee', 'deactivateEmployee',
-  'setEmployeeRole', 'createStore', 'getNetworkLive', 'uploadAvatar',
+  'setEmployeeRole', 'createStore', 'getNetworkLive', 'uploadAvatar', 'getAvatar',
   'exportCsv', 'getChatMessages', 'postChatMessage', 'uploadChatAttachment',
   'getChatAttachment'
 ] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 134-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 135-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
     expect(actualKeys.length).toBe(EXPECTED_KEYS.length);
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());

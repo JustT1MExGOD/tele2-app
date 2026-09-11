@@ -6,7 +6,7 @@
  * проверено вообще, только "правильно по построению".
  */
 import { describe, it, expect } from 'vitest';
-import { getApp } from '../helpers/app.js';
+import { getApp, authAs } from '../helpers/app.js';
 import { TestFixtures } from '../helpers/fixtures.js';
 import * as employeesRepo from '../../src/data/repositories/employees.js';
 
@@ -42,7 +42,9 @@ describe('Security headers — X-Content-Type-Options / Referrer-Policy / Cache-
       await employeesRepo.setAvatar(employee.id, Buffer.from('fake-jpeg-bytes'), 'image/jpeg');
 
       const app = await getApp();
-      const res = await app.inject({ method: 'GET', url: `/avatars/${employee.id}` });
+      // GET /avatars/:id теперь требует auth + ту же сеть (hotfix — был
+      // публичным IDOR, см. api/routes/me/avatar.ts).
+      const res = await app.inject({ method: 'GET', url: `/avatars/${employee.id}`, headers: authAs(employee.telegramId) });
       expect(res.statusCode).toBe(200);
       expect(res.headers['cache-control']).toBe('private, max-age=300');
     } finally {

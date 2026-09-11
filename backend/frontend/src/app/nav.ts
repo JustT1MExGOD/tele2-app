@@ -19,19 +19,26 @@
  */
 export {};
 
-// 19: кастомная аватарка. /avatars/:id отдаёт 404, если её нет — пробуем
-// загрузить через Image(), чтобы никогда не показать битую картинку; при
-// успехе подменяем содержимое элемента на <img>, при неудаче не трогаем то,
-// что там уже отрендерено (буква-инициал).
-export function applyAvatarImg(elementId: string, employeeId: number): void {
+// 19: кастомная аватарка. GET /avatars/:id теперь требует auth + ту же сеть
+// (hotfix — раньше был полностью публичным IDOR по угадываемому
+// последовательному id, см. api/routes/me/avatar.ts) — обычный <img src>
+// больше не может его получить (браузер не приложит Authorization/
+// Telegram-заголовки к <img>), поэтому байты фетчатся через apiClient с
+// теми же headers, что и остальные запросы, и подставляются как blob URL.
+// При 404/ошибке (нет аватарки, не своя сеть) не трогаем то, что уже
+// отрендерено (буква-инициал) — то же поведение, что раньше давал
+// Image().onerror.
+export async function applyAvatarImg(elementId: string, employeeId: number): Promise<void> {
   if (!employeeId) return;
   const el = document.getElementById(elementId);
   if (!el) return;
-  const img = new Image();
-  img.onload = () => {
-    el.innerHTML = `<img src="${API}/avatars/${employeeId}" alt="">`;
-  };
-  img.src = `${API}/avatars/${employeeId}`;
+  try {
+    const blob = await window.apiClient.getAvatar(authHeaders(), employeeId);
+    const url = URL.createObjectURL(blob);
+    el.innerHTML = `<img src="${url}" alt="">`;
+  } catch (_) {
+    // нет аватарки / не своя сеть / сеть недоступна — оставляем инициал как есть
+  }
 }
 
 // todayMoscow() живёт в app/core.ts — она нужна там уже на верхнем уровне

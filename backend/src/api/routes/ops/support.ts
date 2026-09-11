@@ -5,6 +5,7 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { requireActive } from '../../../auth/guards.js';
+import { employeeAwareKeyGenerator } from '../../../security/rate-limit.js';
 import * as supportRepo from '../../../data/repositories/support.js';
 import { notifyAdmin, notifyUser } from '../../../integrations/telegram/bot.js';
 import { supportTicketAdmin } from '../../../integrations/telegram/messages.js';
@@ -155,7 +156,31 @@ export async function registerSupportRoutes(app: FastifyInstance) {
   /** Создать тикет */
   app.post(
     '/support',
-    { schema: { body: CreateTicketBody } },
+    // Hotfix (adversarial review) — этот роут намеренно доступен гостю без
+    // карточки (см. identity-комментарий ниже), а значит и без
+    // requireActive()'s встроенного rate-эффекта. Раньше был вообще без
+    // собственного лимита, только общий 300/мин/IP на все роуты разом —
+    // каждый успешный тикет реально шлёт notifyAdmin() в Telegram, так что
+    // это был прямой вектор спама админ-чата. 5/мин — тот же лимит, что у
+    // единственного другого гостевого write-роута, POST /access/request.
+    // employeeAwareKeyGenerator (не голый IP) — этот роут одинаково
+    // обслуживает анонимных гостей И авторизованных сотрудников; для
+    // авторизованных ключ по employee_id (та же причина, что у chat/
+    // messages.ts: desktop-клиенты идут через один relay-IP и иначе
+    // делили бы одну общую квоту на всех). hook: 'preHandler' обязателен —
+    // request.user резолвится только к этому хуку, не к дефолтному
+    // onRequest (см. security/rate-limit.ts).
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          hook: 'preHandler',
+          keyGenerator: employeeAwareKeyGenerator('support_create')
+        }
+      },
+      schema: { body: CreateTicketBody }
+    },
     async (request, reply): Promise<CreateTicketResponse | FastifyReply | undefined> => {
     const b = (request.body || {}) as CreateTicketBody;
     const message = String(b.message || '').trim();

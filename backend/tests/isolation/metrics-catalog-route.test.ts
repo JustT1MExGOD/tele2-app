@@ -52,16 +52,35 @@ describe('Business metrics catalog (GET/POST/DELETE /metrics)', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('POST /metrics as manager creates a metric, then it appears in GET /metrics; DELETE deactivates it', async () => {
+  // Hotfix (adversarial review) — POST/DELETE /metrics mutate a genuinely
+  // platform-wide, unscoped catalog (see api/routes/metrics.ts's own
+  // hotfix note) and now require platform admin, not just any org's
+  // manager — a manager alone gets 403 here (see
+  // tests/adversarial/metrics-global-schema-pollution.test.ts for the
+  // dedicated coverage of that rejection + the lifetime cap).
+  it('POST /metrics as a non-admin manager is rejected (403) — only platform admin may mutate the shared catalog', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Metrics Route Manager Org');
     const manager = await fx.createEmployee(org, { role: 'manager' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/metrics',
+      headers: authAs(manager.telegramId),
+      payload: { label: 'Manager Attempt Metric' }
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('POST /metrics as platform admin creates a metric, then it appears in GET /metrics; DELETE deactivates it', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Metrics Route Admin Org');
+    const admin = await fx.createEmployee(org, { role: 'admin' });
     const label = `Regression Test Metric ${Date.now()}`;
 
     const create = await app.inject({
       method: 'POST',
       url: '/metrics',
-      headers: authAs(manager.telegramId),
+      headers: authAs(admin.telegramId, admin.telegramGrantToken),
       payload: { label }
     });
     expect(create.statusCode).toBe(200);
@@ -76,7 +95,7 @@ describe('Business metrics catalog (GET/POST/DELETE /metrics)', () => {
     const del = await app.inject({
       method: 'DELETE',
       url: `/metrics/${id}`,
-      headers: authAs(manager.telegramId)
+      headers: authAs(admin.telegramId, admin.telegramGrantToken)
     });
     expect(del.statusCode).toBe(200);
     expect(del.json()).toEqual({ ok: true, id, active: false });
@@ -92,7 +111,7 @@ describe('Business metrics catalog (GET/POST/DELETE /metrics)', () => {
   it('искусственный сбой ALTER TABLE на 2-м шаге — весь POST откатывается, метрика НЕ появляется в каталоге, колонка из 1-го (успешного) шага тоже откатывается', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Metrics Partial DDL Org');
-    const manager = await fx.createEmployee(org, { role: 'manager' });
+    const admin = await fx.createEmployee(org, { role: 'admin' });
     const label = `Partial DDL Metric ${Date.now()}`;
 
     const realEnsureColumn = metricsRepo.ensureColumn;
@@ -107,7 +126,7 @@ describe('Business metrics catalog (GET/POST/DELETE /metrics)', () => {
       const create = await app.inject({
         method: 'POST',
         url: '/metrics',
-        headers: authAs(manager.telegramId),
+        headers: authAs(admin.telegramId, admin.telegramGrantToken),
         payload: { label }
       });
       expect(create.statusCode).toBe(500);
@@ -140,11 +159,11 @@ describe('Business metrics catalog (GET/POST/DELETE /metrics)', () => {
   it('DELETE /metrics/:id refuses to remove a locked base metric', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Metrics Route Locked Org');
-    const manager = await fx.createEmployee(org, { role: 'manager' });
+    const admin = await fx.createEmployee(org, { role: 'admin' });
     const res = await app.inject({
       method: 'DELETE',
       url: '/metrics/sim',
-      headers: authAs(manager.telegramId)
+      headers: authAs(admin.telegramId, admin.telegramGrantToken)
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('locked');

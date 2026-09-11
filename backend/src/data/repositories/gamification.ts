@@ -24,13 +24,18 @@ export async function setLevel(employeeId: number, level: number): Promise<void>
   await query(`UPDATE employees SET level = $1 WHERE id = $2`, [level, employeeId]);
 }
 
-export async function insertBadge(employeeId: number, code: string, title: string, meta: string): Promise<void> {
-  await query(
+/** Returns true iff this call actually inserted a new row (vs. hit a
+ * unique-index conflict and was skipped) — the caller's only reliable
+ * signal of "was this genuinely the first grant," see grantBadge(). */
+export async function insertBadge(employeeId: number, code: string, title: string, meta: string): Promise<boolean> {
+  const res = await query(
     `INSERT INTO employee_badges (employee_id, badge_code, title, meta)
      VALUES ($1,$2,$3,$4)
-     ON CONFLICT DO NOTHING`,
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
     [employeeId, code, title, meta]
   );
+  return res.rows.length > 0;
 }
 
 export async function findXp(employeeId: number): Promise<number | null> {
@@ -73,13 +78,4 @@ export async function listBadges(employeeId: number): Promise<any[]> {
     [employeeId]
   );
   return res.rows;
-}
-
-/** POST /me/tutorial-complete — идемпотентность: не начислять XP второй раз. */
-export async function hasBadge(employeeId: number, code: string): Promise<boolean> {
-  const res = await query(
-    `SELECT 1 FROM employee_badges WHERE employee_id = $1 AND badge_code = $2`,
-    [employeeId, code]
-  );
-  return res.rows.length > 0;
 }

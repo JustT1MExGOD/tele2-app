@@ -12,7 +12,6 @@ import { todayMoscow } from '../../../utils/date.js';
 import * as salesRepo from '../../../data/repositories/sales.js';
 import { resolveActualOrScheduledStoreForDate } from '../../../core/shifts/actual-store.js';
 import * as plansRepo from '../../../data/repositories/plans.js';
-import * as gamificationRepo from '../../../data/repositories/gamification.js';
 import type { MyInsightResponse, SelfStatsResponse } from '../../../shared/api-types.js';
 
 const TutorialCompleteBody = Type.Object({
@@ -61,9 +60,14 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
   });
 
   // Обучение v3 (10-tutorial.js) даёт XP+бейдж за прохождение курса.
-  // Идемпотентно: повторный вызов (например, перезапуск курса вручную)
-  // не начисляет XP снова — grantBadge сам по себе ON CONFLICT DO NOTHING,
-  // но addXp нет, поэтому проверяем бейдж заранее.
+  // Идемпотентность — не check-then-act (было гонкой, см. hotfix note
+  // ниже), а сам INSERT ... ON CONFLICT DO NOTHING RETURNING id: badge_code
+  // здесь входит в employee_badges_onetime_uq (partial unique index,
+  // migrations/0033_onetime_badge_dedup.sql), так что под конкурентными
+  // запросами вставку реально выигрывает ровно один — только он получает
+  // XP. Раньше hasBadge()-предчек читался ДО вставки конкурирующим
+  // запросом, так что N параллельных вызовов проходили предчек все N раз и
+  // начисляли XP N раз (adversarial review, PASS finding).
   app.post(
     '/me/tutorial-complete',
     { schema: { body: TutorialCompleteBody } },
@@ -74,10 +78,9 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
     const code = isManagerMode ? 'tutorial_mgr_done' : 'tutorial_done';
     const title = isManagerMode ? 'Обучение управляющего пройдено' : 'Обучение пройдено';
 
-    const already = await gamificationRepo.hasBadge(employeeId, code);
-    if (!already) {
+    const firstGrant = await grantBadge(employeeId, code, title);
+    if (firstGrant) {
       await addXp(employeeId, 50, code);
-      await grantBadge(employeeId, code, title);
     }
     return { ok: true };
     }

@@ -63,29 +63,31 @@ export async function registerAvatarRoutes(app: FastifyInstance) {
     }
   );
 
-  // Публичный (не requireActive) — <img src> не может передать Authorization
-  // или Telegram initData-заголовок, а Telegram-канал (основной канал этого
-  // приложения) резолвит identity ИСКЛЮЧИТЕЛЬНО по заголовку
-  // (resolveTelegramIdentity), не по cookie — requireActive() здесь 401'ил
-  // бы каждую аватарку, загруженную из Telegram Mini App.
-  //
-  // Hotfix 20.57.1 PASS 3, finding #6 — исправлена вводящая в заблуждение
-  // формулировка выше: employees.id — обычный SERIAL (migrations/
-  // 0001_baseline.sql), т.е. ПОСЛЕДОВАТЕЛЬНЫЙ и полностью перечисляемый
-  // (1, 2, 3, ...), а не непредсказуемый идентификатор — раньше комментарий
-  // ошибочно утверждал обратное. Реальная защита сейчас — только rate-limit
-  // per-IP ниже, этого недостаточно против медленного полного перебора.
-  // Браузер/desktop-канал (phone-провайдер, cookie-сессия) технически МОГ
-  // бы получить auth здесь бесплатно — cookie летит на same-origin <img>
-  // автоматически — но условной авторизации "только для не-Telegram
-  // канала" тут нет: закрыть дыру по-настоящему для основного (Telegram)
-  // канала требует отдельного транспорта (напр. короткоживущий подписанный
-  // токен в query string, проверяемый на сервере отдельно от полной
-  // сессии) — не однострочный фикс в рамках hotfix-прохода. DEFERRED,
-  // см. PASS 3 finding #6 в финальном отчёте.
+  // Hotfix — PASS 3 finding #6, теперь реально закрыт (раньше был публичным
+  // и отдавал любую аватарку по угадываемому SERIAL id, см. git history для
+  // прежней формулировки и её "DEFERRED"-обоснования). requireActive() ниже
+  // означает, что <img src="/avatars/:id"> больше НЕ работает как раньше —
+  // браузер не может приложить Authorization/Telegram initData-заголовок к
+  // обычному <img>. Frontend теперь фетчит байты через apiClient (с теми же
+  // headers, что и остальные API-запросы) и подставляет blob URL в src —
+  // см. app/nav.ts::applyAvatarImg(). Авторизация — тот же belongsToOrg(),
+  // что и остальные cross-employee чтения в этом кодовом слое: сотрудник
+  // видит аватарки только своей сети, что соответствует тому, как аватарки
+  // фактически показываются в UI (команда/чат в пределах своей сети), не
+  // "только свою собственную".
   app.get('/avatars/:employeeId', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+    if (!requireActive(request, reply)) return;
     const { employeeId } = request.params as { employeeId: string };
-    const row = await employeesRepo.getAvatar(Number(employeeId));
+    const targetId = Number(employeeId);
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      return reply.code(404).send();
+    }
+    const requesterOrgId = request.user!.org_id || 'default';
+    const inSameOrg = await employeesRepo.belongsToOrg(requesterOrgId, targetId);
+    if (!inSameOrg) {
+      return reply.code(404).send();
+    }
+    const row = await employeesRepo.getAvatar(targetId);
     if (!row?.avatar_data) {
       return reply.code(404).send();
     }

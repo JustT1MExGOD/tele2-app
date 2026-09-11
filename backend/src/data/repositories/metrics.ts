@@ -82,3 +82,17 @@ export async function upsert(id: string, label: string, short: string, unit: str
 export async function softDeactivate(id: string): Promise<void> {
   await query(`UPDATE plan_metrics SET is_active = false WHERE id = $1`, [id]);
 }
+
+export async function exists(id: string): Promise<boolean> {
+  const res = await query(`SELECT 1 FROM plan_metrics WHERE id = $1`, [id]);
+  return res.rows.length > 0;
+}
+
+/** Total row count — plan_metrics/its shadow columns on sales/store_plans/
+ * employee_month_plans/store_month_plans are platform-wide (no org_id,
+ * see hotfix note in api/routes/metrics.ts), so this caps the whole
+ * platform's custom-column growth, not any one org's. */
+export async function count(): Promise<number> {
+  const res = await query(`SELECT COUNT(*)::int AS c FROM plan_metrics`);
+  return Number(res.rows[0]?.c) || 0;
+}

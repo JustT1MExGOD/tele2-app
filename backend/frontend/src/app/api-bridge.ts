@@ -99,7 +99,8 @@ import {
   getMyDay,
   getMyInsight,
   getSelfStats,
-  uploadAvatar
+  uploadAvatar,
+  getAvatar
 } from '../features/me/api.js';
 import {
   getPlansTemplate,
@@ -323,6 +324,7 @@ declare global {
       createStore: typeof createStore;
       getNetworkLive: typeof getNetworkLive;
       uploadAvatar: typeof uploadAvatar;
+      getAvatar: typeof getAvatar;
       exportCsv: typeof exportCsv;
       getAuditLog: typeof getAuditLog;
       getDealersTree: typeof getDealersTree;
@@ -462,6 +464,7 @@ window.apiClient = {
   createStore,
   getNetworkLive,
   uploadAvatar,
+  getAvatar,
   exportCsv,
   getAuditLog,
   getDealersTree,

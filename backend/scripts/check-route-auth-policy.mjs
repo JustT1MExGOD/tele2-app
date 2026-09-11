@@ -33,7 +33,12 @@ const ROUTES_DIR = path.join(ROOT, 'src/api/routes');
 
 const GUARD_PATTERNS = [
   'requireActive(', 'requireManager(', 'requireSupervisor(', 'requireManagerOrSupervisor(',
-  'requireAdmin(', 'assertStepUp(', 'requireStepUp(', 'requireStoreInOrg(', 'requireEmployeeInOrg('
+  'requireAdmin(', 'assertStepUp(', 'requireStepUp(', 'requireStoreInOrg(', 'requireEmployeeInOrg(',
+  // requirePlatformAdmin — local wrapper in api/routes/metrics.ts (hotfix,
+  // adversarial review): requireManager() + an inline role==='admin'
+  // check, same pattern org/branding.ts's admin-only routes already use
+  // inline. No shared requireAdmin() guard exists yet in auth/guards.ts.
+  'requirePlatformAdmin('
 ];
 
 /**
@@ -51,7 +56,9 @@ const PUBLIC_ROUTES = new Set([
   'POST /auth/login/mfa/webauthn/options', // pre-session, тот же mfa_token flow
   'POST /auth/logout', // должен работать даже с истёкшей/отсутствующей сессией (idempotent clear)
   'POST /auth/reset/:token', // токен в URL — сам секрет, это и есть доказательство личности
-  'GET /avatars/:employeeId', // <img src> не может послать auth-заголовок; rate-limited известный trade-off
+  // GET /avatars/:employeeId убран отсюда (hotfix) — раньше был публичным
+  // IDOR, теперь requireActive()+belongsToOrg() внутри самого хендлера,
+  // так что уже подхватывается статическим анализом ниже как guarded.
   'GET /me', // identity bootstrap — обязан отвечать 200/bound:false для не-привязанного пользователя
   'GET /me/day', // тот же bootstrap-паттерн, что /me — bound:false для неавторизованных
   'GET /me/access', // возвращает сам identity-объект, для ещё не активного пользователя тоже

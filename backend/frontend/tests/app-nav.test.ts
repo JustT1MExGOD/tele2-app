@@ -215,17 +215,36 @@ describe('app/nav (миграция frontend/js/02-nav-utils.js)', () => {
     expect((globalThis as any).loadTeam).toHaveBeenCalled();
   });
 
-  it('applyAvatarImg: без employeeId — no-op; при успешной загрузке подменяет innerHTML на <img>', async () => {
+  it('applyAvatarImg: без employeeId — no-op; при успешной загрузке фетчит blob через apiClient и подменяет innerHTML на <img>', async () => {
+    // GET /avatars/:id теперь требует auth (hotfix — был публичным IDOR),
+    // так что applyAvatarImg больше не может использовать голый <img src>
+    // (браузер не приложит auth-заголовки к нему) — фетчит через
+    // window.apiClient.getAvatar(authHeaders(), id) и подставляет blob URL.
+    const getAvatar = vi.fn().mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+    vi.stubGlobal('authHeaders', vi.fn(() => ({ Authorization: 'test' })));
+    vi.stubGlobal('apiClient', { getAvatar });
+    (window as any).URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url');
     const { applyAvatarImg } = await freshImport();
     document.body.innerHTML += '<div id="avatarEl"></div>';
-    applyAvatarImg('avatarEl', 0);
-    expect(document.getElementById('avatarEl')!.innerHTML).toBe('');
 
-    applyAvatarImg('avatarEl', 5);
+    await applyAvatarImg('avatarEl', 0);
+    expect(document.getElementById('avatarEl')!.innerHTML).toBe('');
+    expect(getAvatar).not.toHaveBeenCalled();
+
+    await applyAvatarImg('avatarEl', 5);
+    expect(getAvatar).toHaveBeenCalledWith({ Authorization: 'test' }, 5);
     const img = document.getElementById('avatarEl')!.querySelector('img');
-    // jsdom не грузит реальные картинки; проверяем, что src выставлен верно (onload сам jsdom не вызывает без реальной сети).
-    expect(document.getElementById('avatarEl')).toBeTruthy();
-    void img;
+    expect(img?.getAttribute('src')).toBe('blob:mock-url');
+  });
+
+  it('applyAvatarImg: getAvatar отклонился (404/не своя сеть/сеть недоступна) — не трогает уже отрендеренный инициал', async () => {
+    vi.stubGlobal('authHeaders', vi.fn(() => ({})));
+    vi.stubGlobal('apiClient', { getAvatar: vi.fn().mockRejectedValue(new Error('api_error:/avatars/5:404')) });
+    const { applyAvatarImg } = await freshImport();
+    document.body.innerHTML += '<div id="avatarEl">A</div>';
+
+    await applyAvatarImg('avatarEl', 5);
+    expect(document.getElementById('avatarEl')!.innerHTML).toBe('A');
   });
 
   it('initSwipePanels: без .swipe-track или < 2 панелей — no-op, не бросает; повторный вызов идемпотентен', async () => {
