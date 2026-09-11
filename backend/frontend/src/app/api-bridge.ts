@@ -188,7 +188,11 @@ import {
   createTask
 } from '../features/tasks/api.js';
 import {
-  tutorialComplete
+  tutorialComplete,
+  getAcademyProgress,
+  completeAcademyStep,
+  getAcademyContextualStatus,
+  dismissAcademyContextual
 } from '../features/tutorial/api.js';
 import { exportCsv } from '../shared/api/http-client.js';
 
@@ -288,6 +292,10 @@ declare global {
       replyTicket: typeof replyTicket;
       createSupportTicket: typeof createSupportTicket;
       tutorialComplete: typeof tutorialComplete;
+      getAcademyProgress: typeof getAcademyProgress;
+      completeAcademyStep: typeof completeAcademyStep;
+      getAcademyContextualStatus: typeof getAcademyContextualStatus;
+      dismissAcademyContextual: typeof dismissAcademyContextual;
       getStatsDaily: typeof getStatsDaily;
       getDashboard: typeof getDashboard;
       getEmployeeProgress: typeof getEmployeeProgress;
@@ -423,6 +431,10 @@ window.apiClient = {
   replyTicket,
   createSupportTicket,
   tutorialComplete,
+  getAcademyProgress,
+  completeAcademyStep,
+  getAcademyContextualStatus,
+  dismissAcademyContextual,
   getStatsDaily,
   getDashboard,
   getEmployeeProgress,

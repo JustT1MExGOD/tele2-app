@@ -64,7 +64,7 @@ export async function loadMyDay(): Promise<void> {
     const canChangeStore = !currentSession; // no open shift at all — store not fixed yet
 
     const changeStoreButtonHtml = canChangeStore
-      ? `<button class="btn-main" style="margin-top:6px;padding:6px 12px;font-size:12px;width:auto" onclick="openChangeStoreModal()">Сменить точку</button>`
+      ? `<button class="btn-main" data-tutorial-id="academy-change-store-btn" style="margin-top:6px;padding:6px 12px;font-size:12px;width:auto" onclick="openChangeStoreModal()">Сменить точку</button>`
       : currentSession
         ? `<div style="margin-top:6px;font-size:11px;color:var(--hint)">Закройте смену, чтобы сменить точку</div>`
         : '';
@@ -495,7 +495,7 @@ export function openAbout(): void {
           <b>Точки</b><br>
           Космонавтов 20А · Калинина 2 · Калинина 11
         </div>
-        <button class="btn-main" onclick="startTutorial('employee');closeModal()">Пройти обучение</button>
+        <button class="btn-main" onclick="startAcademy('employee');closeModal()">Пройти обучение</button>
         <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)" onclick="closeModal()">Закрыть</button>
       `;
   }

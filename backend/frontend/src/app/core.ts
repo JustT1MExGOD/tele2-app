@@ -579,6 +579,8 @@ declare global {
     metricShort: typeof metricShort;
     APP_VERSION: string;
     API: string;
+    startAcademy: typeof startAcademy;
+    __academyStart?: (role: string) => Promise<void>;
   }
 }
 window.todayMoscow = todayMoscow;
@@ -604,3 +606,35 @@ window.metricLabel = metricLabel;
 window.metricShort = metricShort;
 window.APP_VERSION = APP_VERSION;
 window.API = API;
+
+/**
+ * T2 Academy lazy-load stub — the actual Academy code/CSS-behind-classes
+ * only loads when a user opens it (dynamic <script> injection, this
+ * codebase's real "code splitting" mechanism — IIFE bundles aren't ESM,
+ * so import() isn't applicable here), never eagerly with the rest of the
+ * app boot. See frontend/vite.academy.config.ts's own doc comment.
+ */
+let academyBundlePromise: Promise<void> | null = null;
+function loadAcademyBundle(): Promise<void> {
+  if (window.__academyStart) return Promise.resolve();
+  if (!academyBundlePromise) {
+    academyBundlePromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/dist/features/academy.bundle.js';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Academy bundle failed to load'));
+      document.head.appendChild(s);
+    });
+  }
+  return academyBundlePromise;
+}
+export async function startAcademy(role: string): Promise<void> {
+  try {
+    await loadAcademyBundle();
+    await window.__academyStart(role);
+  } catch (e) {
+    console.error('startAcademy', e);
+    toast('Не удалось загрузить T2 Academy', 'err');
+  }
+}
+window.startAcademy = startAcademy;

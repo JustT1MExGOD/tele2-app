@@ -12,10 +12,11 @@
 import { describe, it, expect } from 'vitest';
 import '../src/app/api-bridge.js';
 
-// Exact 130-name public surface of the former monolithic api-client.ts
+// Exact 134-name public surface of the former monolithic api-client.ts
 // (128 original + resolveStore + getShiftOpenMap, both added for the
-// replacement-shift feature), preserved verbatim by the split (see the
-// architecture trace/plan).
+// replacement-shift feature, + getAcademyProgress/completeAcademyStep/
+// getAcademyContextualStatus/dismissAcademyContextual, added for T2
+// Academy), preserved verbatim by the split (see the architecture trace/plan).
 const EXPECTED_KEYS = [
   'getOrgStores', 'getMetrics', 'getPromos', 'getPromoCard', 'createPromo',
   'markPromoUsed', 'keepPromo', 'getCashTable', 'saveCash', 'createMetric',
@@ -43,7 +44,9 @@ const EXPECTED_KEYS = [
   'getSalesHistory', 'openShift', 'closeShift', 'getShiftCurrent', 'getShiftOpenMap', 'resolveStore',
   'parseSalePhrase', 'quickSale', 'getFaq', 'getMyTickets',
   'getSupportTickets', 'replyTicket', 'createSupportTicket',
-  'tutorialComplete', 'getStatsDaily', 'getDashboard', 'getEmployeeProgress',
+  'tutorialComplete', 'getAcademyProgress', 'completeAcademyStep',
+  'getAcademyContextualStatus', 'dismissAcademyContextual',
+  'getStatsDaily', 'getDashboard', 'getEmployeeProgress',
   'getMyInsight', 'getSelfStats', 'getBranding', 'getOrgsAdmin', 'saveOrg',
   'getAuditLog', 'getDealersTree', 'renameDealer', 'renameSector',
   'assignSupervisorSector', 'getHeatmapPrecise', 'getForecast',
@@ -57,7 +60,7 @@ const EXPECTED_KEYS = [
 ] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 130-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 134-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
     expect(actualKeys.length).toBe(EXPECTED_KEYS.length);
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());

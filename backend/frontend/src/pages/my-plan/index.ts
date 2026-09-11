@@ -302,10 +302,10 @@ export async function loadMyPlan(): Promise<void> {
             <div class="la-title">План дня</div>
             <div class="la-sub">Все точки</div>
           </button>
-          <button class="lk-action" onclick="startTutorial('employee')">
+          <button class="lk-action" onclick="startAcademy('employee')">
             <div class="la-ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /> </svg></div>
-            <div class="la-title">Обучение</div>
-            <div class="la-sub">Как пользоваться</div>
+            <div class="la-title">T2 Academy</div>
+            <div class="la-sub">Учись играя</div>
           </button>
           <button class="lk-action" onclick="openShiftSession()">
             <div class="la-ico"><span class="status-dot" style="background:var(--success)"></span></div>

@@ -3075,3 +3075,300 @@
    было мёртвым кодом. Реальная высота теперь считается одним
    универсальным правилом выше через --app-header-height. */
 
+/* ============================================================
+   T2 Academy (redesigned tutorial) — self-contained under .academy-*,
+   only ever painted while #academyRoot is mounted+visible (the Academy
+   bundle is lazy-loaded, see app/core.ts::loadAcademyBundle). Motion here
+   already inherits the global prefers-reduced-motion block above (line
+   ~2215): under reduced motion every animation-duration here collapses to
+   near-zero automatically, no separate handling needed.
+   ============================================================ */
+
+#academyRoot[hidden] { display: none !important; }
+
+.academy-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  overflow: hidden;
+  font-family: var(--font);
+  color: #fff;
+}
+
+/* ---------- Loading / entry cinematic ---------- */
+.academy-loading-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 50% at 20% 15%, rgba(122, 90, 248, 0.35), transparent 60%),
+    radial-gradient(55% 45% at 85% 80%, rgba(42, 171, 238, 0.30), transparent 60%),
+    linear-gradient(160deg, #0b0b14 0%, #14101f 55%, #0a0e1a 100%);
+}
+.academy-loading-content {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  text-align: center;
+  padding: var(--sp-6);
+  animation: academyFadeIn 0.5s var(--ease-out);
+}
+.academy-loading-logo {
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-black);
+  letter-spacing: 0.04em;
+  background: linear-gradient(90deg, #7a5af8, #2aabee 60%, #ffd966);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.academy-loading-tagline { color: rgba(255,255,255,0.7); font-size: var(--fs-md); }
+.academy-loading-mascot {
+  font-size: 56px;
+  animation: academyBob 2.4s ease-in-out infinite;
+}
+.academy-loading-mascot::before { content: '🍉'; }
+.academy-loading-bar {
+  width: 220px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.14);
+  overflow: hidden;
+  margin-top: var(--sp-2);
+}
+.academy-loading-bar-fill {
+  height: 100%;
+  width: 40%;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, #7a5af8, #2aabee);
+  animation: academyLoadingSweep 0.9s ease-in-out infinite;
+}
+@keyframes academyLoadingSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(340%); }
+}
+
+/* ---------- Scrim + spotlight (shared by both platforms) ---------- */
+.academy-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 6, 12, 0.72);
+  backdrop-filter: blur(1px);
+  animation: academyFadeIn 0.35s var(--ease-out);
+}
+.academy-spotlight {
+  position: fixed;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 3000px rgba(6, 6, 12, 0.72), 0 0 0 2px rgba(255, 217, 102, 0.9), 0 0 24px 6px rgba(255, 217, 102, 0.55);
+  pointer-events: none;
+  transition: top 0.28s var(--ease-out), left 0.28s var(--ease-out), width 0.28s var(--ease-out), height 0.28s var(--ease-out);
+  animation: academySpotlightPulse 1.8s ease-in-out infinite;
+}
+@keyframes academySpotlightPulse {
+  0%, 100% { box-shadow: 0 0 0 3000px rgba(6, 6, 12, 0.72), 0 0 0 2px rgba(255, 217, 102, 0.9), 0 0 24px 6px rgba(255, 217, 102, 0.55); }
+  50% { box-shadow: 0 0 0 3000px rgba(6, 6, 12, 0.72), 0 0 0 2px rgba(255, 217, 102, 1), 0 0 34px 10px rgba(255, 217, 102, 0.75); }
+}
+
+/* ---------- Арбузыч placeholder (see final report: swappable asset) ---------- */
+.academy-arbuzich {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.25), rgba(122,90,248,0.35) 70%);
+  border: 1px solid rgba(255,255,255,0.18);
+  flex: none;
+}
+.academy-arbuzich::before { content: '🍉'; }
+.academy-arbuzich.arb-idle { animation: academyBob 2.4s ease-in-out infinite; }
+.academy-arbuzich.arb-enter { animation: academyEnter 0.5s var(--ease-out); }
+.academy-arbuzich.arb-exit { animation: academyExit 0.4s var(--ease); }
+.academy-arbuzich.arb-talking,
+.academy-arbuzich.arb-explaining { animation: academyTalk 0.6s ease-in-out infinite; }
+.academy-arbuzich.arb-thinking { animation: academyBob 3.2s ease-in-out infinite; opacity: 0.85; }
+.academy-arbuzich.arb-pointing { animation: academyPoint 0.9s ease-in-out infinite; }
+.academy-arbuzich.arb-celebrating { animation: academyCelebrate 1.2s var(--ease-out); }
+.academy-arbuzich.arb-success { animation: academyCelebrate 0.7s var(--ease-out); }
+.academy-arbuzich.arb-mistake { animation: academyShake 0.5s ease-in-out; }
+.academy-arbuzich.arb-hint { animation: academyBob 1s ease-in-out infinite; }
+.academy-arbuzich.arb-surprised { animation: academyPop 0.5s var(--ease-out); }
+@keyframes academyBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes academyEnter { from { transform: translateY(24px) scale(0.85); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+@keyframes academyExit { from { transform: translateY(0) scale(1); opacity: 1; } to { transform: translateY(24px) scale(0.85); opacity: 0; } }
+@keyframes academyTalk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-4deg); } }
+@keyframes academyPoint { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+@keyframes academyCelebrate { 0% { transform: scale(1) rotate(0deg); } 30% { transform: scale(1.25) rotate(-8deg); } 60% { transform: scale(1.1) rotate(6deg); } 100% { transform: scale(1) rotate(0deg); } }
+@keyframes academyShake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+@keyframes academyPop { 0% { transform: scale(1); } 40% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+/* ---------- Dialogue / body / actions (shared content) ---------- */
+.academy-dialogue {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semi);
+  line-height: var(--lh);
+}
+.academy-step-body {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-md);
+  color: rgba(255,255,255,0.75);
+  line-height: var(--lh);
+}
+.academy-actions-mount { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
+.academy-primary-action {
+  flex: 1;
+}
+.academy-primary-action:disabled { opacity: 0.5; cursor: not-allowed; }
+.academy-discover-confirm {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--sp-4);
+  font-weight: var(--fw-semi);
+}
+.academy-close {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: var(--radius-sm);
+}
+
+.academy-progress-dots { display: flex; gap: 6px; }
+.academy-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.25); }
+.academy-dot.done { background: rgba(255,217,102,0.9); }
+.academy-dot.active { background: #fff; width: 16px; border-radius: var(--radius-full); }
+
+.academy-practice-mount input {
+  width: 100%;
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: var(--fs-lg);
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+.academy-practice-error { color: #ff8a8a; margin-top: var(--sp-2); font-size: var(--fs-sm); }
+.academy-practice-success {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: rgba(34,197,94,0.14);
+  border: 1px solid rgba(34,197,94,0.35);
+  animation: academyFadeIn 0.3s var(--ease-out);
+}
+.academy-practice-store-name { font-weight: var(--fw-bold); }
+.academy-practice-store-addr { font-size: var(--fs-sm); color: rgba(255,255,255,0.7); margin-top: 2px; }
+.academy-practice-sector-note { font-size: var(--fs-sm); color: #7ee0a0; margin-top: 4px; }
+.academy-practice-mode-note { font-size: var(--fs-xs); color: rgba(255,255,255,0.6); margin-top: 6px; }
+
+.academy-reward-reveal { text-align: center; animation: academyFadeIn 0.4s var(--ease-out); }
+.academy-reward-badge { font-size: 48px; }
+.academy-reward-title { font-weight: var(--fw-bold); font-size: var(--fs-lg); margin-top: var(--sp-2); }
+.academy-reward-xp {
+  display: inline-block;
+  margin-top: var(--sp-2);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, #7a5af8, #2aabee);
+  font-weight: var(--fw-bold);
+}
+
+@keyframes academyFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- Mobile: full-screen cinematic bottom sheet ---------- */
+.academy-mobile .academy-close {
+  position: absolute;
+  top: calc(var(--sp-4) + var(--app-safe-top));
+  right: var(--sp-4);
+  width: 36px;
+  height: 36px;
+}
+.academy-mobile .academy-chapter-badge {
+  position: absolute;
+  top: calc(var(--sp-6) + var(--app-safe-top));
+  left: var(--sp-5);
+  right: var(--sp-16, 64px);
+}
+.academy-mobile .academy-chapter-title { font-size: var(--fs-xl); font-weight: var(--fw-bold); color: #fff; }
+.academy-mobile .academy-chapter-subtitle { font-size: var(--fs-sm); color: rgba(255,255,255,0.65); margin-top: 2px; }
+.academy-mobile .academy-progress-dots-mount {
+  position: absolute;
+  top: calc(var(--sp-4) + var(--app-safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+}
+.academy-mobile .academy-sheet {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  max-height: 62vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #14121f 0%, #0c0b14 100%);
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+  padding: var(--sp-6) var(--sp-5) calc(var(--sp-6) + var(--app-safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  animation: academySheetUp 0.35s var(--ease-out);
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.4);
+}
+@keyframes academySheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.academy-mobile .academy-arbuzich { margin-bottom: var(--sp-2); }
+
+/* ---------- Desktop: HUD triptych (nav rail + mission panel) ---------- */
+.academy-desktop {
+  display: grid;
+  grid-template-columns: 260px 1fr 340px;
+}
+.academy-desktop .academy-nav-rail {
+  grid-column: 1;
+  position: relative;
+  background: linear-gradient(180deg, #12101c, #0a0912);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  padding: var(--sp-6) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  animation: academySlideInLeft 0.35s var(--ease-out);
+}
+@keyframes academySlideInLeft { from { transform: translateX(-24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.academy-desktop .academy-nav-brand {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-black);
+  letter-spacing: 0.12em;
+  background: linear-gradient(90deg, #7a5af8, #2aabee);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.academy-desktop .academy-chapter-title { font-size: var(--fs-lg); font-weight: var(--fw-bold); margin-top: var(--sp-2); }
+.academy-desktop .academy-chapter-subtitle { font-size: var(--fs-sm); color: rgba(255,255,255,0.6); }
+.academy-desktop .academy-progress-dots-mount { margin-top: auto; }
+.academy-desktop .academy-close { margin-top: var(--sp-4); width: 100%; padding: var(--sp-2) 0; }
+
+.academy-desktop .academy-mission-panel {
+  grid-column: 3;
+  position: relative;
+  background: linear-gradient(180deg, rgba(18,16,28,0.92), rgba(10,9,18,0.96));
+  border-left: 1px solid rgba(255,255,255,0.08);
+  padding: var(--sp-6) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  overflow-y: auto;
+  animation: academySlideInRight 0.35s var(--ease-out);
+}
+@keyframes academySlideInRight { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* The center column (grid-column 2) is the real, spotlighted app content
+   showing through the scrim — deliberately no third DOM layer here, the
+   .academy-scrim/.academy-spotlight already cover the full viewport. */
+
