@@ -1,5 +1,5 @@
 import type { AcademyCourse } from './types.js';
-import { employeeCourse } from '../courses/employee/chapter1.js';
+import { employeeCourse } from '../courses/employee/index.js';
 
 /** Manager/supervisor/admin courses are registry-ready extension points —
  * not authored in this pass (see final report). Adding one is: author a

@@ -11,6 +11,7 @@
  * WRITES to, not just reads — `declare let`, not `declare const`.
  */
 import type { CashTableResponse, MetricDef } from '../../../../src/shared/api-types.js';
+import { maybeShowContextualLesson } from '../../shared/contextual-lesson.js';
 
 function deltaTone(d: number): string {
   if (d < -100) return 'background:#ff3b3033;color:#ff453a;font-weight:800';
@@ -24,6 +25,9 @@ export async function loadCash(): Promise<void> {
   const box = document.getElementById('cashTable');
   const edit = document.getElementById('cashEditSection');
   if (edit) edit.style.display = 'block';
+  if (me?.role === 'employee') {
+    maybeShowContextualLesson({ contextId: 'cash', title: 'Касса', role: 'employee' }).catch(() => {});
+  }
   if (box) box.innerHTML = '<div class="skeleton"></div>';
   try {
     if (!stores.length) {

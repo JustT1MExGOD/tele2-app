@@ -29,6 +29,19 @@ export interface AcademyStep {
   cue?: ArbuzichCue;
   /** For quiz steps. */
   quiz?: { question: string; options: string[]; correctIndex: number };
+  /** Which sandboxed mission a PRACTICE/CHALLENGE step runs — selects
+   * which practice/*.ts module ui/shared/session.ts hands the step off to.
+   * Defaults to 'replacement' (the original Chapter 1 code-entry UI) when
+   * omitted, so existing course data needs no change. 'checklist' powers
+   * the multi-mission final challenge (see courses/employee/final.ts). */
+  practiceKind?: 'replacement' | 'sale' | 'shift-open' | 'shift-close' | 'checklist';
+  /** For practiceKind: 'sale' — the metric mix the sandboxed sale must match. */
+  saleTarget?: Record<string, number>;
+  /** For practiceKind: 'checklist' — an ordered list of sub-missions the
+   * final challenge combines; each id matches one of the OTHER
+   * practiceKind values, completed in this codebase's own UI without a
+   * separate arrow pointing at each one. */
+  checklist?: { id: string; label: string; kind: 'replacement' | 'sale' | 'shift-open' | 'shift-close' }[];
 }
 
 export interface AcademyChapter {

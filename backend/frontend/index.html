@@ -221,13 +221,13 @@
         <button class="nav-item" data-page="home" onclick="switchPage('home')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> </svg></span>Главная
         </button>
-        <button class="nav-item" data-page="my" onclick="switchPage('my')">
+        <button class="nav-item" data-page="my" data-tutorial-id="academy-nav-my" onclick="switchPage('my')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /> <circle cx="12" cy="7" r="4" /> </svg></span>Профиль
         </button>
-        <button class="nav-item" data-page="tasks" onclick="switchPage('tasks')">
+        <button class="nav-item" data-page="tasks" data-tutorial-id="academy-nav-tasks" onclick="switchPage('tasks')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></span>Задачи
         </button>
-        <button class="nav-item" data-page="schedule" onclick="switchPage('schedule')">
+        <button class="nav-item" data-page="schedule" data-tutorial-id="academy-nav-schedule" onclick="switchPage('schedule')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg></span>График
         </button>
         <!-- data-page="team" — на мобильном bottomNavMain (index.html
@@ -240,7 +240,7 @@
         <button class="nav-item" data-page="team" onclick="switchPage('team')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /> </svg></span>Команда
         </button>
-        <button class="nav-item" data-page="chat" onclick="switchPage('chat')">
+        <button class="nav-item" data-page="chat" data-tutorial-id="academy-nav-chat" onclick="switchPage('chat')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> </svg></span>Чат
         </button>
       </div>
@@ -337,7 +337,7 @@
           <div class="swipe-panel">
             <div class="section-title">Мой день</div>
             <div id="myDayStoreHead" data-tutorial-id="academy-store-card"></div>
-            <div id="myDayBody"><div class="skeleton"></div></div>
+            <div id="myDayBody" data-tutorial-id="academy-daily-progress"><div class="skeleton"></div></div>
           </div>
           <div class="swipe-panel">
             <div class="section-title">Сеть сегодня</div>
@@ -385,7 +385,7 @@
             <div class="section">
               <div class="section-title">Мой день</div>
               <div id="myDayStoreHeadDesktop"></div>
-              <div id="myDayBodyDesktop"><div class="skeleton"></div></div>
+              <div id="myDayBodyDesktop" data-tutorial-id="academy-daily-progress"><div class="skeleton"></div></div>
             </div>
             <div class="section">
               <div class="section-title">Топ за 7 дней</div>
@@ -504,7 +504,7 @@
 
       <div class="section" id="homeToolsSection">
         <div class="section-title">Инструменты</div>
-        <button class="row" onclick="switchPage('bfq')">
+        <button class="row" data-tutorial-id="academy-bfq-entry" onclick="switchPage('bfq')">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" /> <path d="M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" /> <path d="M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" /> <path d="M4 22h16" /> <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" /> <path d="M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" /> </svg></div>
           <div class="row-body">
             <div class="row-title">BFQ</div>
@@ -748,7 +748,7 @@
           <div class="row-body"><div class="row-title">История продаж</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('bfq')">
+        <button class="row" data-tutorial-id="academy-bfq-entry" onclick="switchPage('bfq')">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" /> <path d="M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" /> <path d="M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" /> <path d="M4 22h16" /> <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" /> <path d="M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" /> </svg></div>
           <div class="row-body"><div class="row-title">BFQ</div></div>
           <div class="row-chevron">›</div>
@@ -1164,7 +1164,7 @@
     </div>
   </div>
 
-  <button class="fab" onclick="openAddSale()" aria-label="Добавить">+</button>
+  <button class="fab" data-tutorial-id="academy-add-sale-fab" onclick="openAddSale()" aria-label="Добавить">+</button>
     </div>
 
 <nav class="bottom-nav" id="bottomNavMain">
@@ -1174,16 +1174,16 @@
     <button class="nav-item" data-page="plan" onclick="switchPage('plan')">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></span>План
     </button>
-    <button class="nav-item" data-page="schedule" onclick="switchPage('schedule')">
+    <button class="nav-item" data-page="schedule" data-tutorial-id="academy-nav-schedule" onclick="switchPage('schedule')">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg></span>График
     </button>
-    <button class="nav-item" data-page="my" onclick="switchPage('my')">
+    <button class="nav-item" data-page="my" data-tutorial-id="academy-nav-my" onclick="switchPage('my')">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /> <circle cx="12" cy="7" r="4" /> </svg></span>Профиль
     </button>
     <button class="nav-item" data-page="team" onclick="switchPage('team')">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /> </svg></span>Команда
     </button>
-    <button class="nav-item" data-page="chat" onclick="switchPage('chat')">
+    <button class="nav-item" data-page="chat" data-tutorial-id="academy-nav-chat" onclick="switchPage('chat')">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> </svg></span>Чат
     </button>
   </nav>

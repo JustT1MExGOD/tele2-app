@@ -62,6 +62,9 @@ describe('T2 Academy presenters (mobile/desktop parity)', () => {
     vi.stubGlobal('__academyExit', vi.fn());
     vi.stubGlobal('__academyCheckCode', vi.fn());
     vi.stubGlobal('__academyConfirmDiscover', vi.fn());
+    // Reduced-motion so the reward-reveal XP counter (render.ts::animateXpCounter)
+    // jumps straight to its target instead of depending on rAF timing here.
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('reduced-motion'), media: q } as MediaQueryList));
   });
 
   it('mobile shell has the academy-mobile class and every required mount point', () => {

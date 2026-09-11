@@ -12,8 +12,25 @@ export interface SpotlightRect {
   height: number;
 }
 
+/**
+ * The SAME data-tutorial-id legitimately appears on more than one element
+ * in this codebase — the desktop sidebar and mobile bottom-nav render
+ * separate DOM nodes for the same logical destination (data-page), only
+ * one of them visible at a time per CSS breakpoint. findTutorialTarget()
+ * returns the first VISIBLE match (non-zero rendered rect — CSS
+ * display:none collapses to a zero rect, which is exactly the signal
+ * used elsewhere in this file for "not really there"), never just the
+ * first DOM match, so targeting a nav item works correctly on both
+ * mobile and desktop without two different course step ids.
+ */
 export function findTutorialTarget(targetId: string): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-tutorial-id="${cssEscape(targetId)}"]`);
+  const matches = document.querySelectorAll<HTMLElement>(`[data-tutorial-id="${cssEscape(targetId)}"]`);
+  for (let i = 0; i < matches.length; i++) {
+    const el = matches[i];
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 || r.height > 0) return el;
+  }
+  return matches[0] || null;
 }
 
 /** Graceful recovery — a missing target (page not mounted yet, control

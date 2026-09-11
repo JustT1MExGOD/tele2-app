@@ -21,7 +21,10 @@ let schByEmp: Record<string, string> = {};
 declare global {
   interface Window {
     __tutorialDryRun?: boolean;
-    __tutorialDryRunCallback?: (() => void) | null;
+    // payload param added for T2 Academy's sale-practice mission (needs to
+    // validate what was actually entered, e.g. sim=1/mnp=1) — optional and
+    // backward compatible, the OLD tutorial's own callback still ignores it.
+    __tutorialDryRunCallback?: ((payload?: Record<string, any>) => void) | null;
   }
 }
 
@@ -302,7 +305,7 @@ export async function submitSale(): Promise<void> {
     closeModal();
     toast('Тренировка: ' + parts.join(', ') + ' — по-настоящему это уйдёт в базу и в чат', 'ok');
     saleSelection = {};
-    window.__tutorialDryRunCallback?.();
+    window.__tutorialDryRunCallback?.(payload);
     if (btn) btn.disabled = false;
     return;
   }

@@ -189,6 +189,10 @@ describe('Добавить продажу (миграция frontend/js/07-add-s
     await submitSale();
     expect(createSale).not.toHaveBeenCalled();
     expect(cb).toHaveBeenCalled();
+    // T2 Academy's sale-practice mission needs the actually-entered metrics
+    // to validate against (e.g. sim=1/mnp=1) — the callback must receive
+    // what was really selected, not just fire with no data.
+    expect(cb.mock.calls[0][0]).toMatchObject({ sim: 1, employee_id: 1, store_id: 's1' });
   });
 
   it('openCorrectSale: чужая продажа без прав manage — toast err, форма не рендерится', async () => {

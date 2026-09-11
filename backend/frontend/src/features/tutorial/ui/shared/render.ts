@@ -41,8 +41,32 @@ export function renderRewardReveal(xp: number, badgeTitle?: string): string {
     <div class="academy-reward-reveal">
       <div class="academy-reward-badge">${badgeTitle ? badgeIcon('') : '✨'}</div>
       ${badgeTitle ? `<div class="academy-reward-title">${esc(badgeTitle)}</div>` : ''}
-      <div class="academy-reward-xp">${esc(formatXpGain(xp))}</div>
+      <div class="academy-reward-xp" data-xp-target="${xp}">${esc(formatXpGain(0))}</div>
     </div>`;
+}
+
+/** Counts the reward-reveal's "+N XP" up from 0 to its target over a short
+ * duration — a deliberate motion beat for the milestone moment (§5), not
+ * used anywhere routine. Collapses to an instant jump under reduced
+ * motion, matching every other Academy animation's behavior. */
+export function animateXpCounter(container: ParentNode): void {
+  const el = container.querySelector<HTMLElement>('[data-xp-target]');
+  if (!el) return;
+  const target = Number(el.dataset.xpTarget) || 0;
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (reduceMotion || target <= 0) {
+    el.textContent = formatXpGain(target);
+    return;
+  }
+  const durationMs = 700;
+  const start = performance.now();
+  const tick = (now: number): void => {
+    const t = Math.min(1, (now - start) / durationMs);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = formatXpGain(Math.round(target * eased));
+    if (t < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 export function primaryActionLabelForStep(step: AcademyStep, canAdvance: boolean, isLastStepOfChapter: boolean): string {

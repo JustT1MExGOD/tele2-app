@@ -10,6 +10,27 @@ import { ARBUZICH_STATE_CLASS, ARBUZICH_STATE_DURATION_MS } from './states.js';
 
 const LOOPING_STATES: ReadonlySet<ArbuzichCue> = new Set(['idle', 'talking', 'explaining', 'thinking', 'waiting', 'pointing', 'hint']);
 
+// Mobile haptic feedback (§6/§7) — a real device signal for a real
+// outcome, not decoration on every state change. navigator.vibrate is a
+// no-op (returns false, throws nothing) on desktop/unsupported browsers,
+// so this needs no platform branch of its own.
+const HAPTIC_PATTERN_MS: Partial<Record<ArbuzichCue, number | number[]>> = {
+  success: 30,
+  celebrating: [20, 40, 20],
+  'chapter-complete': [20, 40, 20],
+  mistake: [40, 30, 40]
+};
+
+function triggerHaptic(state: ArbuzichCue): void {
+  const pattern = HAPTIC_PATTERN_MS[state];
+  if (!pattern) return;
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    // Best-effort only — never let a haptics call break the Academy flow.
+  }
+}
+
 export class ArbuzichController {
   private el: HTMLElement | null = null;
   private state: ArbuzichCue = 'idle';
@@ -37,6 +58,7 @@ export class ArbuzichController {
     }
     this.state = next;
     this.applyClass();
+    triggerHaptic(next);
     for (const fn of this.listeners) fn(next);
 
     if (!LOOPING_STATES.has(next)) {

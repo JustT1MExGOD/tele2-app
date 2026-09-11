@@ -727,12 +727,35 @@ export function beginPracticeReal(): void {
   }
 }
 
-export function maybeOfferTutorial(): void {
+/**
+ * Legacy-to-Academy migration (T2 Academy phase 2, corr. #16) — employee
+ * auto-onboarding on first login now offers T2 Academy, not this file's
+ * own OLD employee track (still fully intact and reachable manually —
+ * only the AUTO-OFFER entry point moved). Manager auto-onboarding never
+ * existed here (startTutorial('employee') was hardcoded even for this
+ * call site regardless of the logged-in user's actual role) — that
+ * unconditional targeting is preserved as-is, only WHICH system launches
+ * changed. t2_tutorial_done is deliberately left unread/unwritten by this
+ * function now — an employee who already finished the old tutorial still
+ * gets offered Academy once (its own chapter-completion state, read from
+ * the server, is the real gate against re-offering).
+ */
+export async function maybeOfferTutorial(): Promise<void> {
   try {
-    if (localStorage.getItem('t2_tutorial_done')) return;
-    // первое обучение — принудительно, без флага offered-skip
+    if (localStorage.getItem('t2_academy_ch1_offered')) return;
+    let alreadyDone = false;
+    try {
+      const progress = await window.apiClient.getAcademyProgress(authHeaders());
+      alreadyDone = progress.completed_step_ids.includes('employee-ch1-complete');
+    } catch (_) {
+      // Offline/API hiccup — don't block boot on it, and don't mark as
+      // "offered" either, so we simply try again on the next login.
+      return;
+    }
+    localStorage.setItem('t2_academy_ch1_offered', '1');
+    if (alreadyDone) return;
     setTimeout(() => {
-      if (!tutorialActive) startTutorial('employee');
+      if (!tutorialActive && typeof window.startAcademy === 'function') window.startAcademy('employee');
     }, 900);
   } catch (_) {}
 }

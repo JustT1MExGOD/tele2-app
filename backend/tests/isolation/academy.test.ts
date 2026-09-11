@@ -115,6 +115,63 @@ describe('T2 Academy — progress/XP/badges', () => {
     expect(other.json()).toEqual({ dismissed: false });
   });
 
+  it('every employee-course chapter reward (ch2/ch3/ch4/final) grants its own XP+badge exactly once and accumulates', async () => {
+    const org = await fx.createOrg('Academy Org 7');
+    const emp = await fx.createEmployee(org, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+
+    const rewards: Record<string, { xp: number; badge: string }> = {
+      'employee-ch1-complete': { xp: 50, badge: 'academy_employee_ch1' },
+      'employee-ch2-complete': { xp: 60, badge: 'academy_employee_ch2' },
+      'employee-ch3-complete': { xp: 60, badge: 'academy_employee_ch3' },
+      'employee-ch4-complete': { xp: 40, badge: 'academy_employee_ch4' },
+      'employee-final-complete': { xp: 150, badge: 'academy_employee_course_complete' }
+    };
+    let runningXp = 0;
+
+    for (const [stepId, expected] of Object.entries(rewards)) {
+      const first = await app.inject({
+        method: 'POST', url: '/academy/progress/complete-step',
+        headers, payload: { step_id: stepId }
+      });
+      expect(first.json()).toEqual({
+        already_completed: false, reward_granted: true, xp_awarded: expected.xp,
+        badge: { code: expected.badge, title: expect.any(String) }
+      });
+      runningXp += expected.xp;
+
+      // Replay — must not double-grant this specific step's reward.
+      const replay = await app.inject({
+        method: 'POST', url: '/academy/progress/complete-step',
+        headers, payload: { step_id: stepId }
+      });
+      expect(replay.json()).toEqual({ already_completed: true, reward_granted: false, xp_awarded: 0 });
+    }
+
+    const progress = await app.inject({ method: 'GET', url: '/academy/progress', headers: authAs(emp.telegramId) });
+    expect(progress.json().xp_total).toBe(runningXp);
+    expect(progress.json().badges).toHaveLength(Object.keys(rewards).length);
+    const badgeCodes = progress.json().badges.map((b: any) => b.code).sort();
+    expect(badgeCodes).toEqual(Object.values(rewards).map((r) => r.badge).sort());
+  });
+
+  it('progress resume — mid-course completed steps persist across separate requests (server is the source of truth)', async () => {
+    const org = await fx.createOrg('Academy Org 8');
+    const emp = await fx.createEmployee(org, { role: 'employee' });
+    const app = await getApp();
+    const headers = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+
+    await app.inject({ method: 'POST', url: '/academy/progress/complete-step', headers, payload: { step_id: 'employee-ch1-intro' } });
+    await app.inject({ method: 'POST', url: '/academy/progress/complete-step', headers, payload: { step_id: 'employee-ch1-complete' } });
+
+    // Simulate resuming later / on a different device: a fresh GET must
+    // reflect exactly what was persisted, in no particular client-side order.
+    const resumed = await app.inject({ method: 'GET', url: '/academy/progress', headers: authAs(emp.telegramId) });
+    expect(resumed.json().completed_step_ids.sort()).toEqual(['employee-ch1-complete', 'employee-ch1-intro'].sort());
+    expect(resumed.json().xp_total).toBe(50);
+  });
+
   it('progress is per-employee — one employee completing a step does not affect another', async () => {
     const org = await fx.createOrg('Academy Org 6');
     const empA = await fx.createEmployee(org, { role: 'employee' });

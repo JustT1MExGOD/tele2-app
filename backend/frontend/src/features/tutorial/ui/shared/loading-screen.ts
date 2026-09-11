@@ -6,6 +6,8 @@
  * takes — if the fetch is instant, this still shows briefly and moves on;
  * if the fetch is slow, this waits for it rather than faking readiness.
  */
+import { arbuzichSvgMarkup } from '../../character/arbuzich-svg.js';
+
 const MIN_MS = 450;
 
 export function renderLoadingScreen(root: HTMLElement): void {
@@ -15,7 +17,7 @@ export function renderLoadingScreen(root: HTMLElement): void {
     <div class="academy-loading-content">
       <div class="academy-loading-logo">T2 ACADEMY</div>
       <div class="academy-loading-tagline">Твоя история начинается здесь</div>
-      <div class="academy-loading-mascot"></div>
+      <div class="academy-loading-mascot">${arbuzichSvgMarkup()}</div>
       <div class="academy-loading-bar"><div class="academy-loading-bar-fill"></div></div>
     </div>`;
 }

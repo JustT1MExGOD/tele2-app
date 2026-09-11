@@ -3104,6 +3104,20 @@
     radial-gradient(55% 45% at 85% 80%, rgba(42, 171, 238, 0.30), transparent 60%),
     linear-gradient(160deg, #0b0b14 0%, #14101f 55%, #0a0e1a 100%);
 }
+
+/* Camera-like ambient drift (§5) on the journey map's background only —
+   a slow, transform-only Ken Burns pan/zoom, not a continuous
+   blur/shadow/filter animation. Stops for free whenever the Academy
+   overlay is torn down (#academyRoot[hidden] removes it from the render
+   tree) and collapses under the global prefers-reduced-motion block. */
+.academy-journey .academy-loading-bg {
+  animation: academyBgDrift 26s var(--academy-ease) infinite alternate;
+  will-change: transform;
+}
+@keyframes academyBgDrift {
+  from { transform: scale(1.08) translate3d(-1.5%, -1%, 0); }
+  to { transform: scale(1.08) translate3d(1.5%, 1%, 0); }
+}
 .academy-loading-content {
   position: relative;
   height: 100%;
@@ -3127,10 +3141,10 @@
 }
 .academy-loading-tagline { color: rgba(255,255,255,0.7); font-size: var(--fs-md); }
 .academy-loading-mascot {
-  font-size: 56px;
+  width: 96px;
+  height: 96px;
   animation: academyBob 2.4s ease-in-out infinite;
 }
-.academy-loading-mascot::before { content: '🍉'; }
 .academy-loading-bar {
   width: 220px;
   height: 4px;
@@ -3172,7 +3186,9 @@
   50% { box-shadow: 0 0 0 3000px rgba(6, 6, 12, 0.72), 0 0 0 2px rgba(255, 217, 102, 1), 0 0 34px 10px rgba(255, 217, 102, 0.75); }
 }
 
-/* ---------- Арбузыч placeholder (see final report: swappable asset) ---------- */
+/* ---------- Арбузыч container — Phase 1 sizing/glow, Phase 2 replaces the
+   emoji-via-::before placeholder with a real layered SVG face (see the
+   production-Арбузыч block further below in this file). ---------- */
 .academy-arbuzich {
   width: 64px;
   height: 64px;
@@ -3180,12 +3196,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 34px;
-  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.25), rgba(122,90,248,0.35) 70%);
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.18), rgba(122,90,248,0.22) 70%);
   border: 1px solid rgba(255,255,255,0.18);
   flex: none;
+  overflow: hidden;
 }
-.academy-arbuzich::before { content: '🍉'; }
 .academy-arbuzich.arb-idle { animation: academyBob 2.4s ease-in-out infinite; }
 .academy-arbuzich.arb-enter { animation: academyEnter 0.5s var(--ease-out); }
 .academy-arbuzich.arb-exit { animation: academyExit 0.4s var(--ease); }
@@ -3371,4 +3386,227 @@
 /* The center column (grid-column 2) is the real, spotlighted app content
    showing through the scrim — deliberately no third DOM layer here, the
    .academy-scrim/.academy-spotlight already cover the full viewport. */
+
+/* ============================================================
+   T2 Academy Phase 2 — journey/map, production Арбузыч SVG face, motion
+   tokens, contextual-lesson prompt. Same "only ever painted while
+   #academyRoot is mounted" cost model as the Phase 1 block above; the
+   .academy-contextual-* prompt is the one exception (see its own comment)
+   since it can appear outside the Academy overlay itself.
+   ============================================================ */
+
+/* ---------- Motion tokens (§5) — reused by name across this whole file,
+   not re-declared per rule, so a tuning pass touches one place. ---------- */
+:root {
+  --academy-dur-fast: 0.18s;
+  --academy-dur: 0.35s;
+  --academy-dur-slow: 0.6s;
+  --academy-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --academy-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --academy-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---------- Journey / map ---------- */
+.academy-journey { color: #fff; }
+.academy-journey .academy-close { position: absolute; top: calc(var(--sp-4) + var(--app-safe-top)); right: var(--sp-4); width: 36px; height: 36px; z-index: 2; }
+
+.academy-journey-header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.academy-journey-title { font-size: var(--fs-xl); font-weight: var(--fw-bold); }
+.academy-journey-stats { display: flex; gap: var(--sp-2); font-size: var(--fs-sm); font-weight: var(--fw-semi); }
+.academy-journey-xp, .academy-journey-badges {
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.16);
+}
+.academy-journey-xp {
+  background: linear-gradient(90deg, rgba(122,90,248,0.35), rgba(42,171,238,0.35));
+}
+
+.academy-journey-scroll { position: relative; height: 100%; overflow-y: auto; }
+.academy-journey-path { display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: var(--sp-6) var(--sp-5) calc(var(--sp-8) + var(--app-safe-bottom)); }
+
+.academy-journey-connector {
+  width: 3px;
+  height: 28px;
+  margin: 2px auto;
+  border-radius: var(--radius-full);
+  background: linear-gradient(180deg, rgba(255,217,102,0.6), rgba(255,255,255,0.12));
+}
+
+.academy-journey-node {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--academy-dur-fast) var(--academy-ease), border-color var(--academy-dur-fast) var(--academy-ease), background var(--academy-dur-fast) var(--academy-ease);
+  animation: academyNodeIn var(--academy-dur) var(--academy-ease-out) backwards;
+}
+.academy-journey-node:not(:disabled):hover,
+.academy-journey-node:not(:disabled):focus-visible { transform: translateY(-2px); border-color: rgba(255,217,102,0.5); }
+.academy-journey-node:not(:disabled):active { transform: translateY(0) scale(0.99); }
+@keyframes academyNodeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.academy-journey-node--current {
+  border-color: rgba(255,217,102,0.7);
+  background: linear-gradient(135deg, rgba(122,90,248,0.2), rgba(42,171,238,0.14));
+  box-shadow: 0 0 0 1px rgba(255,217,102,0.3), 0 8px 24px rgba(122,90,248,0.25);
+}
+.academy-journey-node--completed { border-color: rgba(34,197,94,0.45); background: rgba(34,197,94,0.08); }
+.academy-journey-node--locked { opacity: 0.45; cursor: not-allowed; }
+
+.academy-journey-node-icon {
+  width: 40px; height: 40px; flex: none;
+  border-radius: var(--radius-full);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: var(--fw-bold);
+  background: rgba(255,255,255,0.1);
+}
+.academy-journey-node--completed .academy-journey-node-icon { background: rgba(34,197,94,0.25); color: #7ee0a0; }
+.academy-journey-node--current .academy-journey-node-icon { background: rgba(255,217,102,0.25); color: #ffd966; }
+
+.academy-journey-node-title { font-weight: var(--fw-semi); }
+.academy-journey-node-subtitle { font-size: var(--fs-xs); color: rgba(255,255,255,0.6); margin-top: 2px; }
+.academy-journey-node-progress { font-size: var(--fs-xs); color: #ffd966; margin-top: 4px; }
+
+/* Mobile: straight vertical scroller, header pinned at top. */
+.academy-journey-mobile .academy-journey-header { padding: calc(var(--sp-6) + var(--app-safe-top)) var(--sp-5) var(--sp-3); }
+
+/* Desktop: staggered "path" (alternating left/right offset) + persistent
+   side panel — structurally different from mobile, not the same list
+   stretched wide. */
+.academy-journey-desktop {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+}
+.academy-journey-desktop .academy-journey-side {
+  grid-column: 1;
+  /* Must be positioned — .academy-loading-bg (position:absolute) is a
+     sibling, and per CSS painting order a non-positioned (static) box
+     always paints BEHIND any positioned sibling regardless of DOM order,
+     which fully hid this sidebar (found via Playwright visual QA:
+     getComputedStyle reported it visible/correct-rect, but every desktop
+     screenshot showed only the sidebar's own margin-top:auto footer
+     button, never its brand/title/XP content). .academy-journey-scroll
+     already has position:relative for this same reason, which is why the
+     journey nodes were never affected. */
+  position: relative;
+  background: linear-gradient(180deg, #12101c, #0a0912);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  padding: var(--sp-6) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.academy-journey-desktop .academy-journey-header { flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
+.academy-journey-desktop .academy-close { position: static; width: 100%; margin-top: auto; }
+.academy-journey-desktop .academy-journey-scroll { grid-column: 2; padding: var(--sp-8); display: flex; flex-direction: column; justify-content: center; min-height: 100%; }
+.academy-journey-desktop .academy-journey-path--staggered { max-width: min(80vw, 900px); width: 100%; margin: 0 auto; gap: 0; }
+.academy-journey-desktop .academy-journey-path--staggered .academy-journey-node { width: 78%; }
+.academy-journey-desktop .academy-journey-path--staggered .academy-journey-node:nth-child(4n+1) { align-self: flex-start; }
+.academy-journey-desktop .academy-journey-path--staggered .academy-journey-node:nth-child(4n+3) { align-self: flex-end; }
+.academy-journey-desktop .academy-journey-path--staggered .academy-journey-connector { align-self: center; }
+
+/* ---------- Checklist (final challenge) ---------- */
+.academy-checklist { display: flex; flex-direction: column; gap: var(--sp-2); }
+.academy-checklist-item {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.academy-checklist-item.done { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.35); }
+.academy-checklist-check { width: 20px; text-align: center; color: #7ee0a0; font-weight: var(--fw-bold); }
+.academy-checklist-label { flex: 1; }
+.academy-checklist-run {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semi);
+}
+
+/* ---------- Production Арбузыч — layered SVG face (§3), replaces the
+   flat emoji placeholder from Phase 1. Each state swaps eyes/mouth/pose
+   via CSS custom properties on the same markup rather than separate
+   images — zero new assets, visibly distinct per state, still trivially
+   swappable for real character art later (see final report). ---------- */
+.academy-arbuzich {
+  width: 64px; height: 64px; flex: none;
+  position: relative;
+}
+.academy-arbuzich .arb-svg { width: 100%; height: 100%; display: block; }
+.academy-arbuzich .arb-body { fill: url(#academyArbGrad); }
+.academy-arbuzich .arb-stripe { fill: #1f7a3d; opacity: 0.35; }
+.academy-arbuzich .arb-eye { fill: #17130f; transform-origin: center; transition: transform var(--academy-dur-fast) var(--academy-ease); }
+.academy-arbuzich .arb-mouth { stroke: #17130f; stroke-width: 2.4; stroke-linecap: round; fill: none; transition: d var(--academy-dur-fast) var(--academy-ease); }
+.academy-arbuzich .arb-brow { stroke: #17130f; stroke-width: 2; stroke-linecap: round; opacity: 0; transition: opacity var(--academy-dur-fast) var(--academy-ease); }
+
+/* Per-state pose (unchanged animation classes from Phase 1 still drive
+   the whole-element transform — this layer ADDS expressive eyes/mouth on
+   top of that motion). */
+.academy-arbuzich.arb-idle .arb-eye,
+.academy-arbuzich.arb-waiting .arb-eye { transform: scaleY(1); }
+.academy-arbuzich.arb-talking .arb-mouth,
+.academy-arbuzich.arb-explaining .arb-mouth { animation: academyMouthTalk 0.5s ease-in-out infinite; }
+@keyframes academyMouthTalk { 0%, 100% { d: path('M 24 42 Q 32 42 40 42'); } 50% { d: path('M 24 40 Q 32 50 40 40'); } }
+.academy-arbuzich.arb-thinking .arb-eye { transform: translateY(-2px); }
+.academy-arbuzich.arb-pointing .arb-brow { opacity: 1; }
+.academy-arbuzich.arb-hint .arb-brow { opacity: 1; }
+.academy-arbuzich.arb-success .arb-eye,
+.academy-arbuzich.arb-celebrating .arb-eye,
+.academy-arbuzich.arb-chapter-complete .arb-eye { transform: scaleY(0.25) translateY(3px); }
+.academy-arbuzich.arb-mistake .arb-brow { opacity: 1; }
+.academy-arbuzich.arb-mistake .arb-eye { transform: scaleX(0.85); }
+.academy-arbuzich.arb-surprised .arb-eye { transform: scale(1.3); }
+
+/* ---------- Contextual lesson prompt (§8) — can appear OUTSIDE the
+   Academy overlay (on a real app page), so it's styled with the app's
+   own light tokens, not the dark Academy palette. Compact, dismissible,
+   never blocks the page underneath. */
+.academy-contextual-prompt {
+  position: fixed;
+  left: var(--sp-4);
+  right: var(--sp-4);
+  bottom: calc(var(--sp-4) + var(--app-safe-bottom));
+  max-width: 420px;
+  margin: 0 auto;
+  z-index: 1500;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-4);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  animation: academyContextualIn var(--academy-dur) var(--academy-ease-out);
+}
+@keyframes academyContextualIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.academy-contextual-icon { font-size: 24px; flex: none; }
+.academy-contextual-body { flex: 1; }
+.academy-contextual-title { font-weight: var(--fw-semi); font-size: var(--fs-md); }
+.academy-contextual-actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); flex-wrap: wrap; }
+.academy-contextual-actions button {
+  font-size: var(--fs-sm);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.academy-contextual-actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+@media (min-width: 860px) {
+  .academy-contextual-prompt { left: auto; right: var(--sp-6); bottom: var(--sp-6); width: 380px; }
+}
 

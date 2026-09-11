@@ -73,4 +73,22 @@ describe('ArbuzichController', () => {
     c.setState('waiting');
     expect(c.getState()).toBe('waiting');
   });
+
+  it('vibrates on a meaningful outcome (success) but not on a routine state (talking)', () => {
+    const vibrate = vi.fn();
+    vi.stubGlobal('navigator', { vibrate } as unknown as Navigator);
+    const c = new ArbuzichController();
+    c.setState('talking');
+    expect(vibrate).not.toHaveBeenCalled();
+    c.setState('success');
+    expect(vibrate).toHaveBeenCalledWith(30);
+    c.setState('mistake');
+    expect(vibrate).toHaveBeenCalledWith([40, 30, 40]);
+  });
+
+  it('never throws when navigator.vibrate is unavailable (desktop / unsupported browser)', () => {
+    vi.stubGlobal('navigator', {} as unknown as Navigator);
+    const c = new ArbuzichController();
+    expect(() => c.setState('success')).not.toThrow();
+  });
 });

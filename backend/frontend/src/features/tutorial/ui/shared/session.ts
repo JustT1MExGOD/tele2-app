@@ -13,7 +13,9 @@ import { ArbuzichController } from '../../character/arbuzich-controller.js';
 import { genericLine } from '../../character/dialogue.js';
 import { completeStep as persistStepCompletion } from '../../model/progress.js';
 import { resolveTrainingStoreCode, TRAINING_STORE_CODE } from '../../practice/replacement-practice.js';
-import { renderDialogue, renderStepBody, renderProgressDots, renderRewardReveal, primaryActionLabelForStep } from './render.js';
+import { beginSalePractice as runSalePractice } from '../../practice/sale-practice.js';
+import { TrainingShiftSandbox } from '../../practice/shift-practice.js';
+import { renderDialogue, renderStepBody, renderProgressDots, renderRewardReveal, animateXpCounter, primaryActionLabelForStep } from './render.js';
 import type { AcademyStep } from '../../model/types.js';
 
 export interface AcademyMountRefs {
@@ -34,6 +36,9 @@ export class AcademySession {
   private onExit: () => void;
   private unsubscribeEngine: (() => void) | null = null;
   private lastRenderedStepId: string | null = null;
+  private shiftSandbox = new TrainingShiftSandbox();
+  private checklistDone = new Set<string>();
+  private salePracticeInFlight = false;
 
   constructor(engine: TutorialEngine, arbuzich: ArbuzichController, headers: Record<string, string>, refs: AcademyMountRefs, onExit: () => void) {
     this.engine = engine;
@@ -71,6 +76,7 @@ export class AcademySession {
         this.engine.getStepProgress().index,
         this.engine.getStepProgress().total
       );
+      this.checklistDone.clear();
       this.renderPracticeArea(step);
       this.lastRenderedStepId = step.id;
     }
@@ -79,16 +85,65 @@ export class AcademySession {
   }
 
   private renderPracticeArea(step: AcademyStep): void {
-    if (step.kind === 'practice') {
-      this.refs.practiceEl.hidden = false;
-      this.refs.practiceEl.innerHTML = `
-        <input type="text" id="academyPracticeCode" inputmode="numeric" placeholder="${TRAINING_STORE_CODE}" maxlength="10">
-        <div id="academyPracticeResult"></div>
-        <button type="button" class="btn-main" style="margin-top:8px" onclick="__academyCheckCode()">Проверить</button>`;
+    if (step.kind !== 'practice' && step.kind !== 'challenge') {
+      this.refs.practiceEl.hidden = true;
+      this.refs.practiceEl.innerHTML = '';
       return;
     }
-    this.refs.practiceEl.hidden = true;
-    this.refs.practiceEl.innerHTML = '';
+    this.refs.practiceEl.hidden = false;
+    const kind = step.practiceKind || 'replacement';
+    switch (kind) {
+      case 'sale':
+        this.refs.practiceEl.innerHTML = `
+          <div id="academyPracticeResult"></div>
+          <button type="button" class="btn-main" onclick="__academyBeginSale()">Открыть форму продажи</button>`;
+        return;
+      case 'shift-open':
+        // Deliberately does NOT auto-complete from pre-existing sandbox
+        // state (e.g. a shift left open by an earlier step/checklist item
+        // sharing this session's one sandbox instance) — render() calls
+        // this synchronously while still mid-render, and calling
+        // markRequiredActionDone() from in here would re-enter render()
+        // before lastRenderedStepId is even updated (infinite recursion).
+        // Completion is exclusively driven by the explicit toggleShift()
+        // click handler below.
+        this.refs.practiceEl.innerHTML = this.stepRequiresAction(step)
+          ? `<button type="button" class="btn-main" onclick="__academyToggleShift('open')">Открыть смену</button>`
+          : `<div class="academy-practice-success">Смена открыта (тренировка)</div>`;
+        return;
+      case 'shift-close':
+        this.refs.practiceEl.innerHTML = this.stepRequiresAction(step)
+          ? `<button type="button" class="btn-main" onclick="__academyToggleShift('close')">Закрыть смену</button>`
+          : `<div class="academy-practice-success">Смена закрыта (тренировка)</div>`;
+        return;
+      case 'checklist':
+        this.renderChecklist(step);
+        return;
+      case 'replacement':
+      default:
+        this.refs.practiceEl.innerHTML = `
+          <input type="text" id="academyPracticeCode" inputmode="numeric" placeholder="${TRAINING_STORE_CODE}" maxlength="10">
+          <div id="academyPracticeResult"></div>
+          <button type="button" class="btn-main" style="margin-top:8px" onclick="__academyCheckCode()">Проверить</button>`;
+        return;
+    }
+  }
+
+  private renderChecklist(step: AcademyStep): void {
+    const items = step.checklist || [];
+    this.refs.practiceEl.innerHTML = `
+      <div class="academy-checklist">
+        ${items
+          .map(
+            (item) => `
+          <div class="academy-checklist-item${this.checklistDone.has(item.id) ? ' done' : ''}">
+            <span class="academy-checklist-check">${this.checklistDone.has(item.id) ? '✓' : ''}</span>
+            <span class="academy-checklist-label">${escapeHtml(item.label)}</span>
+            ${this.checklistDone.has(item.id) ? '' : `<button type="button" class="academy-checklist-run" onclick="__academyChecklistItem('${item.id}')">Выполнить</button>`}
+          </div>`
+          )
+          .join('')}
+      </div>`;
   }
 
   checkPracticeCode(): void {
@@ -110,6 +165,83 @@ export class AcademySession {
         <div class="academy-practice-mode-note">Режим: ЗАМЕНА — график останется прежним, смена откроется на этой точке.</div>
       </div>`;
     this.engine.markRequiredActionDone();
+  }
+
+  async beginSalePractice(): Promise<void> {
+    const step = this.engine.getStep();
+    if (this.salePracticeInFlight || !step.saleTarget) return;
+    this.salePracticeInFlight = true;
+    const resultEl = this.refs.practiceEl.querySelector<HTMLElement>('#academyPracticeResult');
+    try {
+      const result = await runSalePractice({ metrics: step.saleTarget });
+      if (!resultEl) return;
+      if (result.matched) {
+        this.arbuzich.setState('success');
+        resultEl.innerHTML = `<div class="academy-practice-success">Именно то, что нужно — миссия выполнена.</div>`;
+        this.engine.markRequiredActionDone();
+      } else {
+        this.arbuzich.setState('mistake');
+        resultEl.innerHTML = `<div class="academy-practice-error">Не совсем — попробуй ещё раз с нужными метриками.</div>`;
+      }
+    } finally {
+      this.salePracticeInFlight = false;
+    }
+  }
+
+  toggleShift(action: 'open' | 'close'): void {
+    if (action === 'open') this.shiftSandbox.openShift();
+    else this.shiftSandbox.closeShift();
+    this.arbuzich.setState('success');
+    // markRequiredActionDone() emits -> re-enters render() -> since this is
+    // NOT a step change, isNewStep is false, so it only refreshes
+    // actions/spotlight, never re-invokes renderPracticeArea (no
+    // re-entrancy risk here, unlike the render()-time check this replaced).
+    this.engine.markRequiredActionDone();
+    // Paint the "done" confirmation explicitly — this call happens from the
+    // click handler's own stack, after markRequiredActionDone()'s render()
+    // has already returned, so it's a plain re-render, not a recursive one.
+    this.renderPracticeArea(this.engine.getStep());
+  }
+
+  /** True while the current practice/challenge step's required action has
+   * not yet been performed — single source of truth (engine state), never
+   * inspected mid-render from sandbox state directly (see shift-open/close
+   * cases above for why that recursed). */
+  private stepRequiresAction(_step: AcademyStep): boolean {
+    return !this.engine.canAdvance();
+  }
+
+  async runChecklistItem(itemId: string): Promise<void> {
+    const step = this.engine.getStep();
+    const item = step.checklist?.find((i) => i.id === itemId);
+    if (!item) return;
+    let ok = false;
+    switch (item.kind) {
+      case 'shift-open':
+        this.shiftSandbox.openShift();
+        ok = true;
+        break;
+      case 'shift-close':
+        this.shiftSandbox.closeShift();
+        ok = true;
+        break;
+      case 'sale': {
+        const result = await runSalePractice({ metrics: { sim: 1 } });
+        ok = result.matched;
+        break;
+      }
+      case 'replacement':
+        ok = true; // discovery-only checklist entries — no separate input UI
+        break;
+    }
+    if (ok) {
+      this.checklistDone.add(itemId);
+      this.arbuzich.setState('success');
+      this.renderChecklist(step);
+      if (step.checklist && step.checklist.every((i) => this.checklistDone.has(i.id))) {
+        this.engine.markRequiredActionDone();
+      }
+    }
   }
 
   private renderSpotlight(step: AcademyStep): void {
@@ -160,9 +292,10 @@ export class AcademySession {
     if (result.reward_granted) {
       this.arbuzich.setState('chapter-complete');
       this.refs.dialogueEl.innerHTML = renderRewardReveal(result.xp_awarded, result.badge?.title);
+      animateXpCounter(this.refs.dialogueEl);
       this.refs.bodyEl.innerHTML = '';
       this.refs.practiceEl.hidden = true;
-      this.refs.actionsEl.innerHTML = `<button type="button" class="btn-main academy-primary-action" onclick="__academyExit()">Вернуться на карту</button>`;
+      this.refs.actionsEl.innerHTML = `<button type="button" class="btn-main academy-primary-action" onclick="__academyBackToMap()">Вернуться на карту</button>`;
       return;
     }
     const { chapterComplete } = this.engine.advance();

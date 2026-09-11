@@ -7,6 +7,7 @@
  * written within this same file's functions (cache to avoid passing a
  * store name with quotes through an onclick attribute string).
  */
+import { maybeShowContextualLesson } from '../../shared/contextual-lesson.js';
 import type {
   MonthSummaryTableResponse,
   StoreMonthSummaryTableResponse,
@@ -64,6 +65,11 @@ let planDraftItems: EmployeeMonthPlanDraftItem[] = [];
 export async function loadBFQ(): Promise<void> {
   const box = document.getElementById('bfqList');
   if (!box) return;
+  // Academy only has an employee course this pass (see T2 Academy Phase 2
+  // final report) — offering it to a role with no course would just error.
+  if (me?.role === 'employee') {
+    maybeShowContextualLesson({ contextId: 'bfq', title: 'BFQ', role: 'employee' }).catch(() => {});
+  }
   box.innerHTML = '<div class="skeleton"></div>';
   try {
     const month = scheduleMonth || todayMoscow().slice(0, 7);

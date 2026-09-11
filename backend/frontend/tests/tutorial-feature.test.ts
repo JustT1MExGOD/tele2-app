@@ -32,8 +32,11 @@ function setupGlobals(overrides: { role?: string } = {}) {
   vi.stubGlobal('openAddSale', vi.fn());
 
   const tutorialComplete = vi.fn().mockResolvedValue({ ok: true });
-  (window as any).apiClient = { tutorialComplete };
-  return { tutorialComplete };
+  const getAcademyProgress = vi.fn().mockResolvedValue({ completed_step_ids: [], xp_total: 0, badges: [] });
+  (window as any).apiClient = { tutorialComplete, getAcademyProgress };
+  const startAcademy = vi.fn();
+  vi.stubGlobal('startAcademy', startAcademy);
+  return { tutorialComplete, getAcademyProgress, startAcademy };
 }
 
 describe('Обучение (миграция frontend/js/10-tutorial.js → src/features/tutorial)', () => {
@@ -157,24 +160,52 @@ describe('Обучение (миграция frontend/js/10-tutorial.js → src/
     expect(typeof (window as any).__tutorialDryRunCallback).toBe('function');
   });
 
-  it('maybeOfferTutorial: t2_tutorial_done не стоит — запускает обучение через таймаут', async () => {
+  // Legacy-to-Academy migration (T2 Academy phase 2, corr. #16) — first-login
+  // auto-onboarding now offers T2 Academy, not this file's own OLD employee
+  // track (still manually reachable, just no longer auto-offered).
+  it('maybeOfferTutorial: ещё не предлагали — запускает T2 Academy через таймаут', async () => {
     vi.useFakeTimers();
-    setupGlobals();
+    const { startAcademy } = setupGlobals();
     const { maybeOfferTutorial } = await import('../src/features/tutorial/index.js');
-    maybeOfferTutorial();
+    await maybeOfferTutorial();
     vi.advanceTimersByTime(1000);
-    expect(document.getElementById('tutorialScreen')!.classList.contains('show')).toBe(true);
+    expect(startAcademy).toHaveBeenCalledWith('employee');
     vi.useRealTimers();
   });
 
-  it('maybeOfferTutorial: t2_tutorial_done уже стоит — не запускает', async () => {
+  it('maybeOfferTutorial: t2_academy_ch1_offered уже стоит — не предлагает повторно', async () => {
     vi.useFakeTimers();
-    localStorage.setItem('t2_tutorial_done', '1');
-    setupGlobals();
+    localStorage.setItem('t2_academy_ch1_offered', '1');
+    const { startAcademy, getAcademyProgress } = setupGlobals();
     const { maybeOfferTutorial } = await import('../src/features/tutorial/index.js');
-    maybeOfferTutorial();
+    await maybeOfferTutorial();
     vi.advanceTimersByTime(1000);
-    expect(document.getElementById('tutorialScreen')!.classList.contains('show')).toBe(false);
+    expect(startAcademy).not.toHaveBeenCalled();
+    expect(getAcademyProgress).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('maybeOfferTutorial: сервер уже отмечает главу 1 пройденной — помечает как предложенное, но не запускает Academy снова', async () => {
+    vi.useFakeTimers();
+    const { startAcademy, getAcademyProgress } = setupGlobals();
+    getAcademyProgress.mockResolvedValue({ completed_step_ids: ['employee-ch1-complete'], xp_total: 50, badges: [] });
+    const { maybeOfferTutorial } = await import('../src/features/tutorial/index.js');
+    await maybeOfferTutorial();
+    vi.advanceTimersByTime(1000);
+    expect(startAcademy).not.toHaveBeenCalled();
+    expect(localStorage.getItem('t2_academy_ch1_offered')).toBe('1');
+    vi.useRealTimers();
+  });
+
+  it('maybeOfferTutorial: сеть недоступна — не падает, не помечает как предложенное (повторит попытку при следующем входе)', async () => {
+    vi.useFakeTimers();
+    const { startAcademy, getAcademyProgress } = setupGlobals();
+    getAcademyProgress.mockRejectedValue(new Error('network'));
+    const { maybeOfferTutorial } = await import('../src/features/tutorial/index.js');
+    await expect(maybeOfferTutorial()).resolves.toBeUndefined();
+    vi.advanceTimersByTime(1000);
+    expect(startAcademy).not.toHaveBeenCalled();
+    expect(localStorage.getItem('t2_academy_ch1_offered')).toBeNull();
     vi.useRealTimers();
   });
 
