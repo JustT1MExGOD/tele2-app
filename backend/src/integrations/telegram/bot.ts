@@ -148,6 +148,35 @@ export async function notifyUser(telegramId: number | string, text: string, stri
   }
 }
 
+/**
+ * Same photo/document delivery as notifyChatPhoto, but to a personal DM —
+ * deliberately does NOT call trackGroupMessage: that feeds
+ * message_cleanup.sweep, which later auto-deletes tracked messages
+ * (expected for ephemeral group reports, not for a personal DM the
+ * recipient presumably wants to keep).
+ */
+export async function notifyUserPhoto(
+  telegramId: number | string,
+  pngOrSvg: Buffer | string,
+  opts: { caption?: string; filename?: string; asDocument?: boolean } = {}
+) {
+  if (!bot || !telegramId) return { ok: false, error: 'no_bot_or_id' };
+  const caption = (opts.caption || 'T2 Sales').slice(0, 1024);
+  try {
+    if (Buffer.isBuffer(pngOrSvg) && !opts.asDocument) {
+      await bot.api.sendPhoto(Number(telegramId), new InputFile(pngOrSvg, opts.filename || 'report.png'), { caption } as any);
+      return { ok: true, type: 'photo' };
+    }
+    const buf = Buffer.isBuffer(pngOrSvg) ? pngOrSvg : Buffer.from(String(pngOrSvg), 'utf8');
+    const name = opts.filename || (Buffer.isBuffer(pngOrSvg) ? 'report.png' : 'report.svg');
+    await bot.api.sendDocument(Number(telegramId), new InputFile(buf, name), { caption } as any);
+    return { ok: true, type: 'document' };
+  } catch (e: any) {
+    console.error('notifyUserPhoto failed:', e?.message || e);
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 export async function startBot() {
   if (!bot) {
     console.warn('BOT_TOKEN missing — bot disabled');

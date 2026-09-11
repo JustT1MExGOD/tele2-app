@@ -7,7 +7,7 @@
  */
 import { todayMoscow } from '../utils/date.js';
 import { getSalesSumColumns } from '../core/shared/metrics-catalog.js';
-import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser } from '../integrations/telegram/bot.js';
+import { notifyChat, notifyChatPhoto, notifyChatMediaGroup, notifyUser, notifyUserPhoto } from '../integrations/telegram/bot.js';
 import { shiftReminder, microReport, finalReport, microLines, finalLines, monthClosingReport, esc } from '../integrations/telegram/messages.js';
 import { buildDailyReportPng, buildDailyReportSvg, buildStoryReportPngs, buildMonthClosingReportPng, buildMonthClosingReportSvg, loadMonthClosingData } from '../core/reports/image.js';
 import { generateDipComment } from '../integrations/ai/client.js';
@@ -22,12 +22,18 @@ import { runJob } from './job-logger.js';
 /**
  * Replacement-shift additional recipient (corr. #12) — the store's normal
  * micro/final report delivery is untouched; this ADDITIONALLY DMs the same
- * text to any employee who worked a REPLACEMENT shift at this store today.
- * Best-effort: a DM failure must never affect the store report itself. Text
- * only (notifyUser has no photo variant) — the employee gets the same
- * summary text the store chat saw, not the rendered image.
+ * report to any employee who worked a REPLACEMENT shift at this store
+ * today. Best-effort: a DM failure must never affect the store report
+ * itself. `photo`, when given, is the exact PNG/SVG buffer that was (or is
+ * about to be) sent to the store chat — the replacement employee gets the
+ * same rendered image, not just its caption text. Falls back to text-only
+ * whenever no image was available for this delivery attempt (e.g. the
+ * plain text-fallback path when both PNG and SVG generation failed).
  */
-async function notifyReplacementEmployees(storeId: string, date: string, text: string): Promise<void> {
+async function notifyReplacementEmployees(
+  storeId: string, date: string, text: string,
+  photo?: { data: Buffer | string; filename?: string; asDocument?: boolean }
+): Promise<void> {
   try {
     const reps = await shiftsRepo.findReplacementEmployeesForStoreDate(storeId, date);
     const seen = new Set<string>();
@@ -36,6 +42,14 @@ async function notifyReplacementEmployees(storeId: string, date: string, text: s
       const key = String(r.telegram_id);
       if (seen.has(key)) continue;
       seen.add(key);
+      if (photo) {
+        const sent = await notifyUserPhoto(r.telegram_id, photo.data, {
+          caption: text, filename: photo.filename, asDocument: photo.asDocument
+        });
+        if (sent.ok) continue;
+        // Photo delivery failed for this recipient specifically — still get
+        // them the text rather than nothing.
+      }
       await notifyUser(r.telegram_id, text, false);
     }
   } catch (e: any) {
@@ -99,10 +113,10 @@ async function sendStoreReportImage(
   const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
   const hourLabel = hour == null ? undefined : typeof hour === 'string' ? hour : `${String(hour).padStart(2,'0')}:00`;
   const caption = `📊 ${st.name} · ${date}${hourLabel ? ' · запланирован на ' + hourLabel + '; данные на момент отправки' : ''}`;
-  // Best-effort (never throws) — decoupled from group-delivery success/
-  // failure below; awaited so it can't be dropped if the process moves on
-  // before a fire-and-forget promise settles.
-  await notifyReplacementEmployees(st.store_id, date, caption);
+  // Best-effort (never throws), decoupled from group-delivery success/
+  // failure — but now attaches the exact PNG/SVG actually sent, whichever
+  // branch below wins, instead of always text-only (the DM used to carry
+  // just the caption even when the group got a rendered image).
 
   try {
     const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'micro', hourLabel });
@@ -112,19 +126,24 @@ async function sendStoreReportImage(
       chatId,
       threadId
     });
-    if (r.ok) return r;
+    if (r.ok) {
+      await notifyReplacementEmployees(st.store_id, date, caption, { data: png, filename: `micro_${st.store_id}_${date}.png` });
+      return r;
+    }
     throw new Error(r.error || 'photo_failed');
   } catch (e: any) {
     console.warn('PNG send failed, try SVG document:', e?.message || e);
     try {
       const svg = await buildDailyReportSvg(st.store_id, date, { kind: 'micro', hourLabel });
-      return await notifyChatPhoto(svg, {
+      const r2 = await notifyChatPhoto(svg, {
         caption,
         filename: `micro_${st.store_id}_${date}.svg`,
         asDocument: true,
         chatId,
         threadId
       });
+      await notifyReplacementEmployees(st.store_id, date, caption, { data: svg, filename: `micro_${st.store_id}_${date}.svg`, asDocument: true });
+      return r2;
     } catch (e2: any) {
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
       const staffNames = await cronRepo.listStaffNamesUnordered(date, st.store_id);
@@ -139,6 +158,7 @@ async function sendStoreReportImage(
         lines
       });
       await notifyChat(text, chatId, threadId,true);
+      await notifyReplacementEmployees(st.store_id, date, text);
       return { ok: true, type: 'text_fallback' };
     }
   }
@@ -185,7 +205,10 @@ async function sendStoreStoryReport(
     // внедряют её намеренно через prompt injection в исходных данных.
     const finalText = `🏁 <b>${esc(st.name)}</b> · итог дня · ${date}\n\n${esc(comment.text)}`;
     await notifyChat(finalText, chatId, threadId,true);
-    await notifyReplacementEmployees(st.store_id, date, finalText);
+    // Media groups aren't sent to personal DMs — the "факт" (итог) frame is
+    // the single most representative image of the three, sent alongside
+    // the same finalText caption.
+    await notifyReplacementEmployees(st.store_id, date, finalText, { data: fact, filename: `fact_${st.store_id}_${date}.png` });
     return r;
   } catch (e: any) {
     console.warn('Story report failed, fallback to single final image:', e?.message || e);
@@ -200,23 +223,27 @@ async function sendSingleFinalImage(
 ) {
   const { chatId, threadId } = await getStoreNotifyTarget(st.store_id, 'reports');
   const caption = `🏁 ${st.name} · ${date}`;
-  await notifyReplacementEmployees(st.store_id, date, caption);
   try {
     const { png } = await buildDailyReportPng(st.store_id, date, { kind: 'final' });
     const r = await notifyChatPhoto(png, { caption, filename: `final_${st.store_id}_${date}.png`, chatId, threadId });
-    if (r.ok) return r;
+    if (r.ok) {
+      await notifyReplacementEmployees(st.store_id, date, caption, { data: png, filename: `final_${st.store_id}_${date}.png` });
+      return r;
+    }
     throw new Error(r.error || 'photo_failed');
   } catch (e: any) {
     console.warn('Final PNG send failed, try SVG document:', e?.message || e);
     try {
       const svg = await buildDailyReportSvg(st.store_id, date, { kind: 'final' });
-      return await notifyChatPhoto(svg, {
+      const r2 = await notifyChatPhoto(svg, {
         caption,
         filename: `final_${st.store_id}_${date}.svg`,
         asDocument: true,
         chatId,
         threadId
       });
+      await notifyReplacementEmployees(st.store_id, date, caption, { data: svg, filename: `final_${st.store_id}_${date}.svg`, asDocument: true });
+      return r2;
     } catch (e2: any) {
       console.warn('SVG also failed, text fallback:', e2?.message || e2);
       const staffNames = await cronRepo.listStaffNamesUnordered(date, st.store_id);
@@ -231,6 +258,7 @@ async function sendSingleFinalImage(
         lines
       });
       await notifyChat(text, chatId, threadId,true);
+      await notifyReplacementEmployees(st.store_id, date, text);
       return { ok: true, type: 'text_fallback' };
     }
   }
