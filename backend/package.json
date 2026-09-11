@@ -26,6 +26,7 @@
     "test:frontend": "vitest run --config frontend/vitest.config.ts",
     "migrate": "tsx src/migrate-cli.ts",
     "backfill:support-encryption": "tsx src/scripts/backfill-support-encryption.ts",
+    "contain:employee": "tsx src/scripts/contain-compromised-employee.ts",
     "sbom": "node scripts/generate-sbom.mjs"
   },
   "dependencies": {
