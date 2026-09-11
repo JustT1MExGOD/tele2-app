@@ -30,6 +30,10 @@ export const ACADEMY_STEP_REWARDS: Record<string, AcademyReward> = {
     xp: 40,
     badge: { code: 'academy_employee_ch4', title: 'Исследователь' }
   },
+  'employee-ch5-complete': {
+    xp: 40,
+    badge: { code: 'academy_employee_ch5', title: 'Знаток инструментов' }
+  },
   'employee-final-complete': {
     xp: 150,
     badge: { code: 'academy_employee_course_complete', title: 'T2 Academy: Сотрудник' }

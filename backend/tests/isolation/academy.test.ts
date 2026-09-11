@@ -126,6 +126,7 @@ describe('T2 Academy — progress/XP/badges', () => {
       'employee-ch2-complete': { xp: 60, badge: 'academy_employee_ch2' },
       'employee-ch3-complete': { xp: 60, badge: 'academy_employee_ch3' },
       'employee-ch4-complete': { xp: 40, badge: 'academy_employee_ch4' },
+      'employee-ch5-complete': { xp: 40, badge: 'academy_employee_ch5' },
       'employee-final-complete': { xp: 150, badge: 'academy_employee_course_complete' }
     };
     let runningXp = 0;

@@ -11,17 +11,19 @@ import { chapter1 } from './chapter1.js';
 import { chapter2 } from './chapter2.js';
 import { chapter3 } from './chapter3.js';
 import { chapter4 } from './chapter4.js';
+import { chapter5 } from './chapter5.js';
 import { finalChapter } from './final.js';
 
 export { EMPLOYEE_CHAPTER_1_ID } from './chapter1.js';
 export { EMPLOYEE_CHAPTER_2_ID } from './chapter2.js';
 export { EMPLOYEE_CHAPTER_3_ID } from './chapter3.js';
 export { EMPLOYEE_CHAPTER_4_ID } from './chapter4.js';
+export { EMPLOYEE_CHAPTER_5_ID } from './chapter5.js';
 export { EMPLOYEE_FINAL_CHAPTER_ID } from './final.js';
 
 export const employeeCourse: AcademyCourse = {
   id: 'employee',
   role: 'employee',
   title: 'Сотрудник',
-  chapters: [chapter1, chapter2, chapter3, chapter4, finalChapter]
+  chapters: [chapter1, chapter2, chapter3, chapter4, chapter5, finalChapter]
 };
