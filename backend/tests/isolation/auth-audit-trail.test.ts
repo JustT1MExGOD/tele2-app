@@ -4,6 +4,15 @@ import { TestFixtures } from '../helpers/fixtures.js';
 import { hashPassword } from '../../src/auth/password.js';
 import { query } from '../../src/data/db/index.js';
 
+// Same generator as tests/isolation/phone-auth.test.ts — always a fixed
+// 7-digit tail (Math.floor(1000000 + Math.random()*8999999)), unlike a
+// raw `Date.now() % N` which can silently produce a too-short number
+// (normalizePhone() then rejects it) — a real, if rare, flake this file
+// hit once during verification, unrelated to anything else in this pass.
+function uniquePhone(): string {
+  return '+7900' + Math.floor(1000000 + Math.random() * 8999999);
+}
+
 /**
  * Security audit finding (17-layer hardening pass, Layer 7 — Журнал
  * аудита): the most auth-sensitive events — login success/failure,
@@ -39,7 +48,7 @@ describe('Audit trail — login/logout/session-revoke/access-approve-reject now 
     const app = await getApp();
     const org = await fx.createOrg('Audit Login Org');
     const passwordHash = await hashPassword('correct-horse-battery');
-    const phone = `+7900${Date.now() % 10000000}`;
+    const phone = uniquePhone();
     const { id: employeeId } = await fx.createPhoneEmployee(org, phone, passwordHash, { fullName: 'Audit Login Employee' });
 
     const wrong = await app.inject({ method: 'POST', url: '/auth/login', payload: { phone, password: 'wrong-one' } });
