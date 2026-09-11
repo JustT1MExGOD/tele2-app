@@ -32,14 +32,22 @@ export async function openAddSale(presetEmployeeId?: number | string): Promise<v
     // admin при просмотре чужой сети видел бы в форме добавления продажи
     // СВОИХ сотрудников, а не сети, которую смотрит.
     const empParam = me?.role === 'admin' && adminViewOrgId ? '?org_id=' + encodeURIComponent(adminViewOrgId) : '';
-    const [emps, storesData, schedules, openMap]: [EmployeeListItem[], any[], ScheduleRow[], { open: Record<string, string> }] = await Promise.all([
+    const [emps, storesData, schedules, openMap]: [EmployeeListItem[], any[], ScheduleRow[], { open: Record<string, string>; stores: { id: string; name: string }[] }] = await Promise.all([
       window.apiClient.getEmployees(authHeaders(), empParam),
       fetchOrgStores(),
       window.apiClient.getSchedules(authHeaders(), todayMoscow(), orgQueryParam()),
-      window.apiClient.getShiftOpenMap(authHeaders(), orgQueryParam()).catch(() => ({ open: {} }))
+      window.apiClient.getShiftOpenMap(authHeaders(), orgQueryParam()).catch(() => ({ open: {}, stores: [] }))
     ]);
     employees = emps;
     stores = storesData;
+    // A replacement employee's actual store is, by definition, NOT one of
+    // fetchOrgStores()'s own-network stores — without adding it as an
+    // extra option here, pre-selecting it below silently no-ops (no
+    // matching <option>) and the picker falls back to whatever store
+    // happens to render first instead.
+    for (const s of openMap.stores || []) {
+      if (!stores.some((st) => st.id === s.id)) stores.push(s);
+    }
 
     const byEmp: Record<string, string> = {};
     (Array.isArray(schedules) ? schedules : []).forEach((s) => {

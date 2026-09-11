@@ -1046,6 +1046,10 @@ export interface ShiftCurrentResponse {
 export interface ShiftOpenMapResponse {
   /** employee_id (string key) -> store_id of their currently open shift_session. */
   open: Record<string, string>;
+  /** Stores referenced by `open` that aren't necessarily in the caller's own
+   * network (a replacement employee's actual store) — pickers must inject
+   * these as extra options, they won't appear in fetchOrgStores(). */
+  stores: { id: string; name: string }[];
 }
 
 export interface SalesParseRequest {

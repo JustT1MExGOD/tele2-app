@@ -39,7 +39,7 @@ function setupGlobals(overrides: { role?: string; empId?: number } = {}) {
 
   const getEmployees = vi.fn().mockResolvedValue([{ id: 1, full_name: 'Иван', short_name: null, is_active: true, role: 'employee' }]);
   const getSchedules = vi.fn().mockResolvedValue([]);
-  const getShiftOpenMap = vi.fn().mockResolvedValue({ open: {} });
+  const getShiftOpenMap = vi.fn().mockResolvedValue({ open: {}, stores: [] });
   const createSale = vi.fn().mockResolvedValue({ ok: true, sale: null, parsed: {} });
   (window as any).apiClient = { getEmployees, getSchedules, getShiftOpenMap, createSale };
   return { getEmployees, getSchedules, getShiftOpenMap, createSale };
@@ -71,17 +71,19 @@ describe('Добавить продажу (миграция frontend/js/07-add-s
     expect(document.getElementById('overlay')!.classList.contains('show')).toBe(true);
   });
 
-  it('openAddSale: сотрудник на замене — точка предзаполняется по факту открытой смены, а не из графика', async () => {
+  it('openAddSale: сотрудник на замене на ЧУЖОЙ точке (не в своей сети) — точка добавляется в список и предзаполняется по факту смены, а не из графика', async () => {
     const { getSchedules, getShiftOpenMap } = setupGlobals({ role: 'employee' });
-    (globalThis as any).fetchOrgStores = vi.fn().mockResolvedValue([
-      { id: 's1', name: 'Мегалит' },
-      { id: 's2', name: 'Точка Б' }
-    ]);
+    // fetchOrgStores() deliberately never returns a foreign-network store —
+    // s2 (the replacement store) must come ONLY from getShiftOpenMap's own
+    // `stores` list, exactly like production (see fetchOrgStores' own doc
+    // comment: "сюда никогда не попадают чужие точки").
+    (globalThis as any).fetchOrgStores = vi.fn().mockResolvedValue([{ id: 's1', name: 'Мегалит' }]);
     getSchedules.mockResolvedValue([{ work_date: '2026-08-25', shift_text: '', hours: 8, store_id: 's1', employee_id: 1, full_name: 'Иван', store_name: 'Мегалит' }]);
-    getShiftOpenMap.mockResolvedValue({ open: { '1': 's2' } });
+    getShiftOpenMap.mockResolvedValue({ open: { '1': 's2' }, stores: [{ id: 's2', name: 'Точка Б (чужая сеть)' }] });
     const { openAddSale } = await import('../src/features/add-sale/index.js');
     await openAddSale();
     const select = document.getElementById('modalStore') as HTMLSelectElement;
+    expect(Array.from(select.options).some((o) => o.value === 's2')).toBe(true);
     expect(select.value).toBe('s2');
   });
 
@@ -92,7 +94,7 @@ describe('Добавить продажу (миграция frontend/js/07-add-s
       { id: 's2', name: 'Точка Б' }
     ]);
     getSchedules.mockResolvedValue([{ work_date: '2026-08-25', shift_text: '', hours: 8, store_id: 's1', employee_id: 1, full_name: 'Иван', store_name: 'Мегалит' }]);
-    getShiftOpenMap.mockResolvedValue({ open: {} });
+    getShiftOpenMap.mockResolvedValue({ open: {}, stores: [] });
     const { openAddSale } = await import('../src/features/add-sale/index.js');
     await openAddSale();
     const select = document.getElementById('modalStore') as HTMLSelectElement;

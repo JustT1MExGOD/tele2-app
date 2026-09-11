@@ -711,6 +711,13 @@ describe('Replacement shift — GET /shifts/open-map (add-sale store prefill by 
     expect(res.statusCode).toBe(200);
     expect(res.json().open[String(emp.id)]).toBe(storeB);
 
+    // The foreign store is NOT one of the manager's own network's stores —
+    // callers (the "Добавить продажу" picker) can't pre-select it unless
+    // it's also handed back here as a real, named option.
+    const returnedStore = res.json().stores.find((s: any) => s.id === storeB);
+    expect(returnedStore).toBeTruthy();
+    expect(returnedStore.name).toBe('RS Store OM-B1');
+
     await app.inject({ method: 'POST', url: '/shifts/close', headers: empHeaders, payload: {} });
   });
 
@@ -722,6 +729,7 @@ describe('Replacement shift — GET /shifts/open-map (add-sale store prefill by 
     const res = await app.inject({ method: 'GET', url: '/shifts/open-map', headers: authAs(manager.telegramId) });
     expect(res.statusCode).toBe(200);
     expect(res.json().open[String(emp.id)]).toBeUndefined();
+    expect(res.json().stores).toEqual([]);
   });
 });
 

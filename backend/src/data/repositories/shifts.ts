@@ -100,12 +100,19 @@ export async function findCurrentOpenWithStore(employeeId: number): Promise<any 
  * "which employees are mine" scoping — a replacement employee's open
  * session at a foreign store still shows up here under their home org,
  * correctly pointing at the foreign store they're actually working.
+ *
+ * Returns store_name too (not just the id): the replacement store, by
+ * definition, is NOT one of fetchOrgStores()'s home-network stores — the
+ * modal must inject it into its own store picker as an extra option (with
+ * a real label) for the pre-select to actually land on it, rather than
+ * silently falling through to whatever option happens to be first.
  */
-export async function findOpenSessionStoresForOrg(orgId: string): Promise<{ employee_id: number; store_id: string }[]> {
+export async function findOpenSessionStoresForOrg(orgId: string): Promise<{ employee_id: number; store_id: string; store_name: string | null }[]> {
   const res = await query(
-    `SELECT ss.employee_id, ss.store_id
+    `SELECT ss.employee_id, ss.store_id, COALESCE(st.display_name, st.name) as store_name
      FROM shift_sessions ss
      JOIN employees e ON e.id = ss.employee_id
+     LEFT JOIN stores st ON st.id = ss.store_id
      WHERE ss.status = 'open' AND COALESCE(e.org_id, 'default') = $1`,
     [orgId]
   );

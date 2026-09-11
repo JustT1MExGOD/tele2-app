@@ -350,8 +350,14 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
     const rows = await shiftsRepo.findOpenSessionStoresForOrg(orgId);
     const open: Record<string, string> = {};
-    for (const r of rows) open[String(r.employee_id)] = r.store_id;
-    return { open };
+    const storesById = new Map<string, { id: string; name: string }>();
+    for (const r of rows) {
+      open[String(r.employee_id)] = r.store_id;
+      if (!storesById.has(r.store_id)) {
+        storesById.set(r.store_id, { id: r.store_id, name: r.store_name || r.store_id });
+      }
+    }
+    return { open, stores: [...storesById.values()] };
   });
 
   // ========== NLP PARSE + OPTIONAL APPLY ==========
