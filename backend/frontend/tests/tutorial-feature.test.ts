@@ -7,6 +7,8 @@
  * than enumerating every step's text.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function setupGlobals(overrides: { role?: string } = {}) {
   document.body.innerHTML = `
@@ -215,5 +217,27 @@ describe('Обучение (миграция frontend/js/10-tutorial.js → src/
     for (const name of ['maybeOfferTutorial', 'startTutorial', 'startManagerTutorial', 'beginPracticeReal', 'nextTutorialStep', 'skipTutorial', 'onTutPractice']) {
       expect(typeof (window as any)[name]).toBe('function');
     }
+  });
+});
+
+describe('T2 Academy legacy-coexistence audit — index.html manual re-entry points', () => {
+  // Coverage-audit item #6: the employee course must have exactly ONE
+  // manual re-entry point in the live app, and it must launch Academy —
+  // found and fixed a stale row still wired to the OLD tutorial system
+  // (startTutorial('employee')), left over from before the Phase 2
+  // migration. The manager row must stay on its own legacy track
+  // unchanged (no manager Academy exists yet).
+  const html = readFileSync(join(__dirname, '..', 'index.html'), 'utf8');
+
+  it('the "Обучение сотрудника" home-page row launches Academy, not the legacy employee tutorial', () => {
+    expect(html).not.toContain(`onclick="startTutorial('employee')"`);
+    const rowMatch = html.match(/<button class="row" onclick="startAcademy\('employee'\)">[\s\S]{0,900}?<\/button>/);
+    expect(rowMatch, 'expected exactly one startAcademy(\'employee\') row with the "Обучение сотрудника" label').toBeTruthy();
+    expect(rowMatch![0]).toContain('Обучение сотрудника');
+  });
+
+  it('the manager training row is untouched — still on its own legacy startManagerTutorial() track', () => {
+    expect(html).toContain('onclick="startManagerTutorial()"');
+    expect(html).toContain('Обучение manager');
   });
 });
