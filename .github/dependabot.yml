@@ -1,0 +1,45 @@
+version: 2
+
+# 17-layer security hardening pass, new Layer 13 (Supply-chain Security).
+# Weekly, not daily — this repo's own dependency footprint is small and
+# stable (npm audit --audit-level=high already gates every push on known
+# vulnerabilities in real time, see .github/workflows/ci.yml); Dependabot
+# here is about staying current, not about urgent vulnerability response,
+# so a slower cadence avoids PR noise without weakening the actual
+# security gate (that gate is separate and immediate).
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Fastify's own plugin family tends to release together and is
+      # low-risk to batch — cuts down on individual PR noise for the
+      # single largest cluster of related packages in this project.
+      fastify:
+        patterns:
+          - '@fastify/*'
+          - fastify
+
+  - package-ecosystem: npm
+    directory: /relay
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Keeps the SHA-pinned actions in .github/workflows/*.yml current —
+  # Dependabot updates the pin (new SHA) AND the version comment together,
+  # so the "pinned by commit SHA, not a mutable tag" discipline (see each
+  # workflow's own header comment) survives routine updates instead of
+  # silently going stale.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

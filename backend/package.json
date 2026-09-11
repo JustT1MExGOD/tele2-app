@@ -13,16 +13,20 @@
     "smoke:frontend": "node scripts/smoke-frontend.mjs",
     "check:no-direct-sql": "node scripts/check-no-direct-sql.mjs",
     "check:dangerous-js": "node scripts/check-dangerous-js-patterns.mjs",
+    "check:inline-event-handlers": "node scripts/check-inline-event-handlers.mjs",
     "check:route-auth": "node scripts/check-route-auth-policy.mjs",
     "check:architecture": "node scripts/check-architecture-boundaries.mjs",
     "check:frontend-architecture": "node scripts/check-frontend-architecture.mjs",
     "check:frontend-legacy-globals": "node scripts/check-frontend-legacy-globals.mjs",
     "check:circular-deps": "node scripts/check-circular-deps.mjs",
     "check:frontend-version": "node scripts/check-frontend-version.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "security:verify": "node scripts/security-verify.mjs",
     "test": "vitest run",
     "test:frontend": "vitest run --config frontend/vitest.config.ts",
     "migrate": "tsx src/migrate-cli.ts",
-    "backfill:support-encryption": "tsx src/scripts/backfill-support-encryption.ts"
+    "backfill:support-encryption": "tsx src/scripts/backfill-support-encryption.ts",
+    "sbom": "node scripts/generate-sbom.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

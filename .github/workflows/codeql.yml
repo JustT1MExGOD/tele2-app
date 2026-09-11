@@ -1,0 +1,54 @@
+name: CodeQL
+
+# 17-layer security hardening pass, new Layer 13 (Supply-chain Security) /
+# Layer 16 (Continuous Security Verification) — the HEAVIER, scheduled
+# security scan, deliberately separate from ci.yml's fast PR gate
+# (route-auth/no-direct-sql/dangerous-js/inline-event-handlers/npm audit,
+# all of which complete in seconds). CodeQL's own analysis takes several
+# minutes — weekly + on-demand keeps normal push/PR velocity unaffected
+# while still giving real SAST coverage on a predictable cadence.
+on:
+  schedule:
+    # Sunday 03:00 UTC — outside normal working hours for this project's
+    # timezone (Europe/Moscow, per docs/DEVELOPMENT.md), so a long-running
+    # scan never competes with an active push for CI capacity.
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write # required for CodeQL to upload results to the repo's Security tab
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # One JS/TS codebase logically, but CodeQL's own guidance is to
+        # scan each language once — 'javascript-typescript' covers both
+        # backend (Fastify/Node) and every frontend/desktop/relay .ts file
+        # in a single pass (CodeQL's JS extractor doesn't need separate
+        # per-package runs the way `npm test` does).
+        language: ['javascript-typescript']
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended adds broader query coverage (e.g. some SSRF/
+          # path-injection/regex-DoS checks) beyond the default query pack —
+          # a deliberate choice for the scheduled deep scan, not the fast
+          # PR gate, since it also raises the false-positive rate somewhat.
+          queries: security-extended
+
+      # No manual build step — the JS/TS extractor doesn't need a compiled
+      # build the way a Java/C# extractor would; `tsc --noEmit` already
+      # runs as part of ci.yml separately for actual type-correctness.
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          category: '/language:${{ matrix.language }}'

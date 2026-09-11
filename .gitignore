@@ -11,3 +11,4 @@ update-staging/
 "node_modules/"
 sql/all_databases.sql
 *.pdf
+sbom.cdx.json

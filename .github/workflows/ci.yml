@@ -68,6 +68,22 @@ jobs:
       - name: Route auth policy — every route guarded or explicitly public
         run: npm run check:route-auth
 
+      # 17-layer security hardening pass — these two check scripts already
+      # existed (added for local/pre-commit use) but were never actually
+      # wired into CI, so a regression could only be caught by someone
+      # running them manually. Same discipline as the checks above.
+      - name: Architecture boundaries — module import discipline
+        run: npm run check:architecture
+
+      - name: Circular dependency check
+        run: npm run check:circular-deps
+
+      - name: Inline event-handler regression ratchet (onclick=/onchange=/oninput=/onsubmit=)
+        run: npm run check:inline-event-handlers
+
+      - name: Local secret-pattern pre-check (working tree only — see the dedicated gitleaks job for full-history scanning)
+        run: npm run check:secrets
+
       - name: Apply migrations to test database
         run: npm run migrate
 
@@ -88,6 +104,37 @@ jobs:
 
       - name: Test suite
         run: npm test
+
+  # 17-layer security hardening pass, new Layer 13 (Supply-chain Security)
+  # — real, full-git-history secret scanning (separate from the fast
+  # working-tree-only `check:secrets` step in the job above, which can't
+  # see anything already-committed-then-removed in an earlier commit).
+  # `fetch-depth: 0` is required — gitleaks needs full history, the
+  # default shallow checkout only has the tip commit.
+  secrets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # gitleaks-action annotates findings as a check run — needs write
+      # access to that one API, nothing else (no repo/package/release write).
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks — full git history secret scan
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only required if this repo is ever moved under a GitHub
+          # Organization (gitleaks-action's README: "Only required for
+          # Organizations, not personal accounts") — left unset here since
+          # no such secret is configured; if the org requirement ever
+          # applies, this step will fail with a clear licensing error
+          # rather than silently skipping the scan, which is the correct
+          # fail-closed behavior for a security gate.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
   # 20.55.0 — T2 Edge Relay (relay/) is a small, Node-only, independently
   # deployable service (§16 of the desktop brief: not merged into the
