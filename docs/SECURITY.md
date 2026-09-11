@@ -139,6 +139,12 @@ Defense-in-depth: ни один отдельный уровень не един�
 | 9 | Frontend | Экранирование вывода, CSP, typed-контракт | `frontend/src/*` (`frontend/js/` не существует с 20.30.0) |
 | 10 | Криптографическая защита данных | Конвертное шифрование на уровне приложения (Level 2) на чувствительных полях; E2EE (Level 3) — НЕ РЕАЛИЗОВАНО, см. ADR-008 | `security/crypto/*`, `data/repositories/support.ts` |
 | 11 | Многофакторная аутентификация и дополнительное подтверждение | WebAuthn/TOTP/recovery codes; токен дополнительного подтверждения, независимый от канала на опасные действия; запрет удаления последнего фактора | `auth/mfa/*`, `auth/step-up.ts`, `api/routes/auth/mfa.ts` |
+| 12 | Внутренний чат | Org-scope только из principal, WS ре-валидация на каждый heartbeat, file allowlist по 3 сигналам, идемпотентность | `core/chat/*`, `api/routes/chat/*` |
+| 13 | Supply-chain Security | CodeQL (еженедельно), gitleaks (полная история), Dependabot, `npm audit`, SHA-pinned Actions, SBOM on-demand | `.github/workflows/{ci,codeql}.yml`, `.github/dependabot.yml`, `scripts/{check-secrets,generate-sbom}.mjs` |
+| 14 | Secrets & Key Lifecycle | Секреты вне репозитория/логов, классификация К1-К5, документированная ротация (`BOT_TOKEN`, `ENCRYPTION_KEKS`) | `docs/RUNBOOK.md`, `src/config/validate.ts`, `scripts/check-secrets.mjs` |
+| 15 | Runtime / Infrastructure Isolation | Прод-гварды на старте, non-root Electron sandbox, TLS-проверка everywhere в relay/desktop, SSRF-guard | `src/index.ts`, `desktop/src/main/**`, `relay/src/ssrf-guard.ts` |
+| 16 | Continuous Security Verification | Единая команда, агрегирующая быстрые security-проверки; CodeQL — отдельный тяжёлый скан | `npm run security:verify`, `scripts/security-verify.mjs` |
+| 17 | Resilience / Recovery | Dry-run-by-default containment-скрипт, документированная ротация ключей, backup — платформенный (Railway), не код | `src/scripts/contain-compromised-employee.ts`, `docs/RUNBOOK.md` |
 
 ---
 
@@ -154,10 +160,19 @@ Defense-in-depth: ни один отдельный уровень не един�
   `Cross-Origin-Resource-Policy`). CSP разрешает inline-обработчики
   (`script-src-attr`/`style-src-attr: 'unsafe-inline'`) — вёрстка держится
   на `onclick=`/`style=`-атрибутах; Frontend Foundation (20.0.0-20.30.0,
-  переезд `js/*.js`→`src/**/*.ts`) перенесла этот паттерн, не убрала его —
-  подтверждено аудитом 20.49.0 (265+ мест, см. [известные
-  компромиссы](#известные-компромиссы)). Переход на строгую CSP —
-  отдельная запланированная эпоха, не начатая.
+  переезд `js/*.js`→`src/**/*.ts`) перенесла этот паттерн, не убрала его.
+  **17-layer security hardening pass** — точный текущий счёт (три разных
+  устаревших числа плавали по кодовой базе до этого прохода — комментарий
+  в `app.ts`, старая цифра "265+" здесь, и реальный текущий счёт — ни
+  один не совпадал): **310** `onclick=`/`onchange=`/`oninput=`/`onsubmit=`
+  (121 в `index.html` + 190 в `frontend/src/**/*.ts`), зафиксировано как
+  regression-барьер (`npm run check:inline-event-handlers`,
+  `scripts/check-inline-event-handlers.mjs`, теперь и в CI) — новый рост
+  числа падает сборку, снижение (реальная миграция экрана на
+  `addEventListener`) обновляет порог вручную. Переход на строгую CSP без
+  `unsafe-inline` — по-прежнему отдельная запланированная эпоха, не
+  начатая; этот ratchet — барьер против роста долга, не сама миграция.
+  См. также [известные компромиссы](#известные-компромиссы).
 - **`@fastify/rate-limit`** (19.14.0) — общий потолок **300 запросов/мин на
   IP**, плюс отдельные более жёсткие лимиты там, где злоупотребление дороже
   обычного:
@@ -213,11 +228,12 @@ Defense-in-depth: ни один отдельный уровень не един�
   `Host`/`X-Forwarded-Host`. Срабатывает от НАЛИЧИЯ `t2_session` cookie,
   не от списка роутов — Telegram-запросы (initData/заголовок, без этой
   cookie) не затронуты вообще. `/auth/login`/`/auth/register`/
-  `/auth/reset/:token` — явно исключены: не полагаются на ambient cookie
-  authority для авторизации действия (явные credentials в теле), а в
-  браузере уже может лежать старая/подставная `t2_session` (session
-  fixation) — без исключения честный вход падал бы в CSRF-отказ раньше,
-  чем доходил до своей логики.
+  `/auth/reset/:token`/`/auth/login/mfa`/`/auth/login/mfa/webauthn/options`
+  (полный текущий список — не только первые три) — явно исключены: не
+  полагаются на ambient cookie authority для авторизации действия (явные
+  credentials в теле/`mfa_token`), а в браузере уже может лежать старая/
+  подставная `t2_session` (session fixation) — без исключения честный
+  вход падал бы в CSRF-отказ раньше, чем доходил до своей логики.
 
   **`Cache-Control: no-store` (20.49.0)** — глобальный `onSend`-хук
   (`app.ts`): `if (!reply.getHeader('cache-control')) reply.header(
@@ -276,6 +292,18 @@ Telegram первым, phone-сессию вторым (гость внутри 
 — открытая, тот же flow «заявка → админ одобряет», что для Telegram
 (`access_requests.provider`); сброс пароля — только через админа (нет
 SMS-провайдера для self-service, решение владельца продукта).
+
+**Login timing side-channel (17-layer hardening pass)** — `POST
+/auth/login` раньше коротко замыкал JS (`!e ||`) до вызова
+`verifyPassword()` для несуществующего телефона, так что scrypt (десятки
+мс CPU) не выполнялся вообще; для существующего телефона выполнялся
+всегда. Разница в latency была рабочим oracle'ом для перебора
+зарегистрированных номеров — даже с идентичным телом и кодом ответа
+(«Одинаковый 401 для обоих случаев» было верно только по содержимому
+ответа, не по времени). `verifyPassword()` теперь вызывается ВСЕГДА —
+против `DUMMY_PASSWORD_HASH` (`auth/password.ts`, заведомо непарсящийся
+ни под какой реальный пароль), если аккаунта нет — так что оба случая
+платят одинаковую scrypt-стоимость.
 
 **Самопривязка телефона (20.36)** — `POST /me/link-phone` даёт уже
 авторизованному через Telegram сотруднику добавить телефон+пароль к
@@ -433,7 +461,31 @@ SELECT»: каждая tenant-функция репозитория берёт `
 SQL внутри уже несёт `WHERE COALESCE(org_id,'default') = $orgId`. Весь
 backend ходит в Postgres только через `data/repositories/*` — проверяется
 в CI (`npm run check:no-direct-sql`, ratchet-список файлов в
-`scripts/check-no-direct-sql.mjs`, 56 путей по состоянию на 20.11.0).
+`scripts/check-no-direct-sql.mjs`, 85 путей по состоянию на 17-layer
+hardening pass).
+
+**Известное ограничение самого ratchet'а** — `check-no-direct-sql.mjs`
+проверяет только файлы из своего списка (уже "мигрированные"), не
+требует присутствия в списке для новых файлов: новый `core/`-модуль,
+вызвавший `query()` напрямую в обход репозитория, не будет пойман этим
+чеком, пока кто-то вручную не добавит файл в список. Не баг, а
+осознанный компромисс инструмента (тот же паттерн, что
+`check-dangerous-js-patterns.mjs`'s отказ от `innerHTML`-эвристики) —
+дисциплина держится code review, не только автоматикой.
+
+**Найдено и закрыто (17-layer security hardening pass)**:
+- `employeesRepo.findUnclaimedDirectory(orgId)` — `orgId` был
+  опциональным на полностью анонимном роуте (`GET
+  /access/employees-directory`); его отсутствие отдавало
+  незарегистрированных сотрудников ВСЕХ сетей разом — cross-tenant
+  directory leak. Теперь `orgId` обязателен, без него роут отвечает
+  `400`. `tests/adversarial/employees-directory-org-leak.test.ts`.
+- `employeesRepo.updateRole(employeeId, role)` — не принимала `orgId`
+  вообще, была безопасна только потому, что единственный вызывающий код
+  (`PATCH /employees/:id/role`) уже применял `requireEmployeeInOrg()`
+  выше по стеку — без defense-in-depth на уровне самого репозитория.
+  Теперь принимает `orgId` и скоупит `UPDATE` им, как остальные
+  tenant-функции.
 
 ### 6. Целостность данных и конкурентность
 
@@ -893,6 +945,184 @@ TOTP уже полностью закрывает mandatory-политику б�
 
 ---
 
+### 13. Supply-chain Security
+
+Новый уровень (17-layer security hardening pass). Формат ниже — CONTROL/
+ENFORCEMENT/VERIFICATION/INCIDENT PATH для каждого под-контроля, не
+только текст.
+
+**Известные уязвимости зависимостей**
+- CONTROL: блокировать мёрдж при известной high/critical уязвимости в зависимости.
+- ENFORCEMENT: `npm audit --audit-level=high` — шаг CI (`ci.yml`), не только локальный совет.
+- VERIFICATION: сам факт non-zero exit code роняет workflow; регулярно перепроверяется Dependabot-обновлениями (ниже).
+- INCIDENT PATH: `npm audit fix` / ручное обновление конкретного пакета, новый коммит, CI перепроверяет.
+
+**SAST (статический анализ)**
+- CONTROL: находить уязвимые паттерны в самом коде (не только в зависимостях) — SSRF/инъекции/небезопасная десериализация и т.д.
+- ENFORCEMENT: CodeQL, `security-extended` query pack, `.github/workflows/codeql.yml`.
+- VERIFICATION: еженедельный запуск (воскресенье 03:00 UTC) + по требованию (`workflow_dispatch`); результаты — вкладка Security репозитория. Сознательно НЕ на каждый push — анализ занимает минуты, это тяжёлый скан, не быстрый PR-гейт (см. §16).
+- INCIDENT PATH: находка в CodeQL classифицируется (CONFIRMED/FALSE_POSITIVE/ACCEPTED_RISK/DEFERRED, см. финальный отчёт этого прохода), фиксится отдельным PR.
+
+**Secret scanning**
+- CONTROL: не дать секрету (токену, ключу, паролю) попасть в git-историю.
+- ENFORCEMENT: два слоя — (1) gitleaks по полной git-истории, CI job `secrets` (`ci.yml`, `fetch-depth: 0`); (2) `npm run check:secrets` (`scripts/check-secrets.mjs`) — быстрый, без зависимостей, только рабочее дерево, часть `security:verify`.
+- VERIFICATION: оба реально прогнаны на этом проходе — 0 находок (после аллоулиста 5 заведомых false-positive: тестовый TLS-fixture `.pem` в `desktop/relay`, заведомо фейковый `BOT_TOKEN` в adversarial-тесте).
+- INCIDENT PATH: см. [RUNBOOK.md — ротация BOT_TOKEN](./RUNBOOK.md#ротация-bot_token) / [ротация ENCRYPTION_KEKS](./RUNBOOK.md#ротация-encryption_keks) — засветившийся секрет всегда ротируется, никогда не "чистится и забывается".
+
+**SBOM**
+- CONTROL: инвентарь всех production-зависимостей на момент релиза (CycloneDX).
+- ENFORCEMENT: `npm run sbom` (`scripts/generate-sbom.mjs`, `@cyclonedx/cyclonedx-npm` через `npx`, не постоянная devDependency).
+- VERIFICATION: реально прогнано на этом проходе — 272 компонента, валидный CycloneDX 1.6 JSON. Не подключено к CI-гейту (SBOM — инвентарь, не pass/fail проверка) — запускается по требованию/из release-процесса.
+- INCIDENT PATH: N/A (инвентарь, не блокирующий контроль).
+
+**Build/release integrity**
+- CONTROL: не дать подменённый артефакт дойти до пользователя.
+- ENFORCEMENT: desktop-installer — SHA-256 хешируется в CI (`desktop-ci.yml`) и публикуется рядом с артефактом; Authenticode-подпись проверяется апдейтером (`desktop/src/main/updater/signature.ts`) с политикой `required` для стабильного канала. GitHub Actions — SHA-pinned (не мутируемые теги) на все security-релевантные шаги.
+- VERIFICATION: `desktop/tests/desktop-security.test.ts` включает regression-тест против `rejectUnauthorized: false`; подпись/хеш проверены реальным CI-прогоном (`desktop-ci.yml`).
+- INCIDENT PATH: см. [docs/DESKTOP-SECURITY.md — компрометация установщика](./DESKTOP-SECURITY.md#что-означает-компрометация-компонента).
+- **REQUIRED/EXTERNAL, не РЕАЛИЗОВАНО**: подписание самого installer'а сертификатом (сейчас unsigned dev build, см. `desktop-ci.yml`'s комментарий — нет сертификата в CI secrets) — внешняя зависимость (покупка/настройка code-signing сертификата), не то, что можно "реализовать в коде".
+
+### 14. Secrets & Key Lifecycle
+
+Инвентарь классов секретов (расширяет К4 в [классификации данных](#классификация-данных) ниже):
+
+| Секрет | Где МОЖЕТ существовать | Где НИКОГДА | Ротация |
+|---|---|---|---|
+| `BOT_TOKEN` | Railway env, `.env`/`.env.test.local` (gitignored, локально) | git-история, логи, ответы API | [RUNBOOK.md](./RUNBOOK.md#ротация-bot_token) |
+| `DATABASE_URL` | Railway env, `.env.test`/`.env.test.local` (read-only прокси для тестов, см. CLAUDE.md) | git-история, логи | Railway-панель (смена пароля Postgres) |
+| `GROQ_API_KEY` | Railway env | git-история, логи | ручная смена в Groq-консоли + Railway env |
+| `ENCRYPTION_KEKS` | Railway env | git-история, PostgreSQL (§10 — KEK намеренно ВНЕ БД), логи | [RUNBOOK.md](./RUNBOOK.md#ротация-encryption_keks) |
+| `MINI_APP_URL` | Railway env, публичная конфигурация (не секрет по природе, но проверяется как обязательная) | — | — |
+| Session/CSRF/reset-токены | Только `sha256`-хеш в БД, сырое значение — только у клиента (cookie/ссылка) | Открытый текст в БД, логи | Автоматически (TTL) + explicit revoke (`/auth/sessions`) |
+| WebAuthn challenge/counter | `mfa_webauthn_challenges`, одноразовое, короткий TTL | Логи | Автоматически (single-use consume) |
+
+CONTROL: секрет не должен существовать нигде, кроме перечисленных мест.
+ENFORCEMENT: `.gitignore` исключает все `.env*`; gitleaks + `check:secrets`
+(§13) сканируют на утечку; `tests/setup.ts` бросает исключение, если
+`DATABASE_URL` тестов не указывает на `localhost`/`127.0.0.1` (тесты не
+пишут в прод). VERIFICATION: этот проход подтвердил grep'ом по всему
+репозиторию — ни одного реального значения секрета, только имена
+переменных и заведомо тестовые/фейковые строки (см. §13, Secret
+scanning). INCIDENT PATH: RUNBOOK.md, отдельная процедура на каждый
+класс секрета (`BOT_TOKEN`/`ENCRYPTION_KEKS` — с 17-layer hardening pass;
+`DATABASE_URL`/`GROQ_API_KEY` — через панели соответствующих провайдеров,
+без отдельного in-repo скрипта, платформенная операция).
+
+Тесты никогда не печатают значения секретов в отчётах/выводе — `tests/setup.ts`
+использует детерминированный тестовый ключ (`Buffer.alloc(32,7)`), не
+похожий на реальный формат production-ключа, и нигде не логирует его.
+
+### 15. Runtime / Infrastructure Isolation
+
+**Прод-гварды при старте** (`src/index.ts`) — CONTROL: сервер не должен
+подниматься в небезопасной конфигурации молча. ENFORCEMENT: под
+`RAILWAY_ENVIRONMENT=production` — `ALLOW_INSECURE_AUTH`/отсутствие
+`BOT_TOKEN`/`DATA_ENCRYPTION_ENABLED`/невалидный `MINI_APP_URL` — каждый
+даёт `alertAndExit()` (уведомление админу + завершение процесса), не
+тихий запуск в слабом режиме. VERIFICATION: `tests/isolation/` покрывает
+каждый из этих гвардов отдельным тестом (существовало до этого прохода,
+подтверждено при аудите). INCIDENT PATH: неверная переменная окружения —
+`restartPolicyType: ON_FAILURE` (Railway) ретраит старт, не оставляет
+процесс в живых со сломанной конфигурацией.
+
+**Электрон/desktop sandbox** — CONTROL/ENFORCEMENT/VERIFICATION — см.
+[DESKTOP-SECURITY.md](./DESKTOP-SECURITY.md) целиком (contextIsolation/
+nodeIntegration/sandbox/webSecurity — все проверены этим проходом против
+актуального кода, не только доки, все совпали).
+
+**Relay SSRF/TLS** — CONTROL: relay не должен стать универсальным
+прокси/туннелем во внутреннюю сеть. ENFORCEMENT: `relay/src/ssrf-guard.ts`
+— кастомный DNS-resolver, перепроверяющий резолвнутый IP на КАЖДОЕ
+соединение (не только при старте) против loopback/RFC1918/link-local/
+cloud-metadata/unique-local-IPv6 диапазонов — защита от DNS rebinding.
+`RELAY_UPSTREAM_ORIGIN` фиксирован при загрузке конфигурации, не
+клиентский параметр. Ни одного `rejectUnauthorized: false` во всём
+`relay/`/`desktop/`. VERIFICATION: `desktop/tests/desktop-security.test.ts`
+включает regression-grep против этого паттерна. INCIDENT PATH: см.
+[DESKTOP-SECURITY.md — компрометация relay](./DESKTOP-SECURITY.md#что-означает-компрометация-компонента).
+
+**DB TLS** — REQUIRED/EXTERNAL, не полностью РЕАЛИЗОВАНО в коде:
+`data/db/index.ts`'s `ssl: process.env.PGSSL === 'false' ? false : undefined`
+делегирует TLS-режим строке подключения `DATABASE_URL` (`sslmode=...`),
+не требует его в коде явно для production. Railway-соединения по
+умолчанию идут через TLS на уровне платформы — это внешняя
+инфраструктурная гарантия, не подтверждённая этим кодом напрямую;
+задокументировано честно как REQUIRED/EXTERNAL, не заявлено как
+реализованный код-level контроль.
+
+**Контейнеризация** — REQUIRED/EXTERNAL: в репозитории нет Dockerfile;
+сборка/деплой — Nixpacks через Railway (`railway.json`,
+`numReplicas: 1`, `restartPolicyType: ON_FAILURE`). Non-root/read-only
+filesystem/минимальный base image — платформенные решения Railway,
+не представимые и не проверяемые из этого репозитория; не заявляются
+как РЕАЛИЗОВАНО здесь.
+
+### 16. Continuous Security Verification
+
+CONTROL: один воспроизводимый способ проверить security-релевантные
+инварианты локально и в CI, без необходимости помнить/собирать список
+отдельных команд вручную. ENFORCEMENT: `npm run security:verify`
+(`scripts/security-verify.mjs`) — агрегирует route-auth/no-direct-sql/
+dangerous-js/inline-event-handlers/secrets/architecture/circular-deps/
+`npm audit`, каждый как отдельный подпроцесс, с итоговым pass/fail
+summary; НЕ перезапускает весь test suite (это отдельный, более
+медленный шаг CI). VERIFICATION: прогнан на этом проходе end-to-end,
+все проверки зелёные. Разделение FAST/HEAVY явное: `security:verify` —
+секунды, CodeQL (§13) — минуты, по расписанию, не на каждый push.
+INCIDENT PATH: red-статус любой из агрегированных проверок — тот же
+инцидент-путь, что у соответствующей отдельной проверки (см. её
+собственный уровень выше).
+
+`ci.yml` теперь реально запускает `check:architecture`/`check:circular-deps`
+(существовали как npm-скрипты и раньше, но не были подключены к CI —
+регресс можно было поймать только ручным запуском) — тот же класс
+пробела, который этот уровень призван закрывать структурно.
+
+### 17. Resilience / Recovery
+
+**Восстановление БД** — REQUIRED/EXTERNAL, честно не РЕАЛИЗОВАНО в коде:
+Postgres на Railway управляется платформой (снапшоты/бэкапы volume —
+Railway dashboard, не этот репозиторий); RUNBOOK.md прямо называет эту
+внешнюю зависимость и требование проверить retention-настройки в
+дашборде перед реальным инцидентом, вместо того чтобы строить
+поддельный/непроверяемый backup-инструмент внутри репозитория.
+
+**Отзыв сессий/сдерживание скомпрометированного сотрудника** — CONTROL:
+безопасно и воспроизводимо отозвать доступ конкретному сотруднику после
+подозрения на компрометацию, без риска ошибиться в SQL посреди
+инцидента. ENFORCEMENT: `npm run contain:employee` (`src/scripts/
+contain-compromised-employee.ts`) — dry-run по умолчанию, `--confirm`
+обязателен для реальной мутации, отказывается запускаться без ни одного
+action-флага (никогда тихий no-op), использует ТЕ ЖЕ repository-функции,
+что и реальные API-роуты. VERIFICATION: `tests/isolation/
+contain-compromised-employee.test.ts` — 4 теста (unknown id, dry-run
+ничего не меняет, confirm применяет только запрошенное, deactivate
+реально блокирует доступ), core-логика экспортирована и тестируется
+напрямую, не через CLI-обвязку. INCIDENT PATH: [RUNBOOK.md —
+компрометация пароля/сессии сотрудника](./RUNBOOK.md#компрометация-паросессии-сотрудника-с-mfa-или-без).
+
+**Ротация секретов после компрометации** — см. §14 таблицу выше + сами
+RUNBOOK-процедуры (`BOT_TOKEN`, `ENCRYPTION_KEKS` — обе теперь
+задокументированы как операционные процедуры, не только в комментариях
+кода).
+
+**Массовый отзыв сессий (глобально, не по одному сотруднику)** — НЕ
+РЕАЛИЗОВАНО этим проходом: `sessionsRepo` не имеет функции "удалить все
+сессии всех сотрудников" — такая функция была бы genuinely деструктивной
+(разлогинивает вообще всех, включая непричастных) и не была запрошена
+конкретным сценарием этого прохода; при реальной необходимости —
+`DELETE FROM employee_sessions` напрямую, с тем же уровнем подтверждения
+владельца продукта, что любая другая прямая запись в прод-БД в обход
+приложения (см. CLAUDE.md).
+
+**Desktop/relay компрометация** — см. [DESKTOP-SECURITY.md — что
+означает компрометация компонента](./DESKTOP-SECURITY.md#что-означает-компрометация-компонента)
+— уже задокументированная таблица остаточного риска по каждому
+компоненту (relay/установщик/учётная запись ОС), не переписана заново
+здесь во избежание дублирования.
+
+---
+
 ## Известные компромиссы
 
 Не всё в этом списке — недосмотр; часть — осознанные решения с понятной
@@ -903,15 +1133,15 @@ TOTP уже полностью закрывает mandatory-политику б�
 
 | Риск | Текущая защита | Почему принято как есть |
 |------|-----------------|--------------------------|
-| Публичные аватарки (`GET /avatars/:employeeId`) без сессии | rate-limit 30/мин | `<img src>` физически не может послать `Authorization`-заголовок; подписанные ссылки с TTL — больший рефакторинг, отложен, не забыт |
-| CSP разрешает `unsafe-inline` для `script-src-attr`/`style-src-attr` | Остальная CSP строгая (`default-src 'self'`, `object-src 'none'` и т.д.); реальные XSS-дыры, которые эта строгость закрыла бы дополнительным слоем, устранены адресно в 20.49.0 (`esc()` у источника инъекции, не только у её исполнения) | Точный объём подтверждён аудитом 20.49.0: 265+ `onclick=`/`onchange=`/`oninput=` (21 TS-файл + `index.html`) + ~400 `style=`. Закрытие требует перевода на event-delegation/CSS-классы поэкранно с тестами — сопоставимо по объёму с Frontend rewrite (20.3.0-20.30.0, ~27 версий). Запланировано отдельной эпохой (Web Security & Trust Layer, следующая часть), не забыто |
+| ~~Публичные аватарки без сессии~~ — ЗАКРЫТО (adversarial-аудит) | `GET /avatars/:employeeId` теперь требует `requireActive()` + `belongsToOrg()` (та же org-граница, что остальные cross-employee чтения); фронтенд больше не использует голый `<img src>` — фетчит через `apiClient.getAvatar()` с реальными auth-заголовками, подставляет `blob:` URL (`app/nav.ts::applyAvatarImg`) | Была реальной подтверждённой уязвимостью (полностью анонимный запрос отдавал чужое фото по угадываемому SERIAL id) — не гипотетическим риском; regression-тест `tests/adversarial/avatar-cross-tenant-idor.test.ts` |
+| CSP разрешает `unsafe-inline` для `script-src-attr`/`style-src-attr` | Остальная CSP строгая (`default-src 'self'`, `object-src 'none'` и т.д.); реальные XSS-дыры, которые эта строгость закрыла бы дополнительным слоем, устранены адресно в 20.49.0 (`esc()` у источника инъекции, не только у её исполнения). **17-layer hardening pass** — точный текущий счёт теперь зафиксирован CI-ratchet'ом (`npm run check:inline-event-handlers`, 310 мест — рост запрещён, снижение обновляет порог вручную), не устаревающей цифрой в доке | Закрытие (перевод на event-delegation/CSS-классы поэкранно, с тестами) по-прежнему отдельная запланированная эпоха, не начатая — сопоставима по объёму с Frontend rewrite (20.3.0-20.30.0, ~27 версий). Ratchet — барьер против роста долга, не замена этой эпохи |
 | `styleSrc: 'unsafe-inline'` (block-level) | Единственный потребитель — `shift/index.ts`, keyframe-анимация конфетти через `document.createElement('style')` | Не убирать без замены (nonce/hash или отказ от динамического `<style>`) — сломает анимацию молча (CSP-нарушения для стилей не бросают JS-ошибку) |
 | Supervisor Scope Cache — in-memory, не Redis | 5-минутный TTL, точечная инвалидация при смене сектора/роли | Прод — 1 реплика Railway (`grammy`-бот на long-polling не переживёт вторую реплику без перехода на webhook); Redis добавил бы сетевой failure mode без выигрыша в корректности при одной реплике. **Уточнение (исправлено 20.54.0 — предыдущая формулировка здесь была неточной)**: кэш обслуживает только `resolveSupervisorStores()` (кабинет супервайзера/Command Center, `core/analytics/supervisor.ts`) — это же единственное место, где сектор супервайзера вообще ограничивает видимость. `getUserStoreIds()` (`auth/guards.ts`) существует, но не вызывается НИ ОДНИМ роутом — не «используется другими роутами», а мёртвый код; `GET /employees`, `GET /stores`, `/sales/history`, `/stores/:id/profile`, `/employees/:id/profile` отдают supervisor данные всей сети, не только сектора — сознательный (перепроверенный с владельцем продукта в 20.54.0, не переоткрыт) компромисс: сектор сегодня — только dashboard-scope для агрегатов, не confidentiality-граница на весь app; см. `docs/security/20.54-baseline.md`, §P1-C |
 | `check-dangerous-js-patterns.mjs` (CI) не проверяет `innerHTML`/`onclick=` эвристикой | Сознательный выбор (высокий false-positive без AST, см. сам скрипт) | Значит новый недоэкранированный sink не поймается автоматически — только ручным/периодическим аудитом, как этот. Четыре конкретных места такого класса (`promos.ts` список, `plans-bfq.ts`×2, `schedule.ts`/`my-plan.ts` `title=`) найдены этим документационным аудитом и закрыты в 20.50.1 — не гипотетический риск, реальный прецедент |
 | Динамические тела запроса (кастомные метрики, `sync/batch`, `what-if moves`) вне строгой TypeBox-схемы | `additionalProperties: true` + ручная фильтрация в обработчике (regex на ключи, `Number()`) | Схема не должна быть строже уже отлаженной ручной логики; форма тела определяется каталогом метрик динамически |
 | `GET /access/orgs` + `GET /access/employees-directory` публичны без сессии | Отдают только названия сетей и список имён/id для формы регистрации, не бизнес-данные (продажи/кассу/роли); с 20.50.0 — 30/мин лимит (раньше вообще без лимита) | Нужны гостю ДО того, как у него есть identity — пикер сети и «я из списка» на регистрации; разведка оргструктуры — реальная, но малая цена (см. [THREAT-MODEL.md](./THREAT-MODEL.md)) |
 | `normalizePhone()` (20.48.0) принимает только RU-формы, международные номера отклоняются | `validatePhone()` даёт понятный 400, не тихую порчу данных | Проект целиком русскоязычный (`Europe/Moscow`); `libphonenumber` ради узкой задачи не тянули — расширить при реальной потребности в международных номерах |
-| `POST /metrics`/`DELETE /metrics/:id` — любой manager (не только admin) мутирует ГЛОБАЛЬНЫЙ каталог кастомных метрик (`ALTER TABLE` на 3 таблицах), общий для всех сетей | `requireManager` — не гейтится по org, каталог метрик архитектурно один на всё приложение | Найдено security-аудитом 20.52.0, не исправлено — сужение до admin-only было бы продуктовым решением (кто должен заводить метрики), не чисто security-фиксом; см. финальный отчёт |
+| ~~`POST /metrics`/`DELETE /metrics/:id` — любой manager мутирует ГЛОБАЛЬНЫЙ каталог~~ — РЕШЕНО (adversarial-аудит) | Продуктовое решение принято: только `admin` (`requirePlatformAdmin` — `requireManager()` + явная проверка `role==='admin'`, тот же паттерн, что `org/branding.ts`) может создавать/удалять кастомные метрики — блast radius (ALTER TABLE на 4 таблицах, видно всем сетям) теперь соответствует уровню доступа. Добавлен пожизненный потолок (`MAX_CUSTOM_METRICS=100`) — раньше не было предела числа метрик вообще, только rate-limit по времени | `GET /metrics` остаётся публичным намеренно — каталог метрик (SIM/MNP/combo/...) это общий для платформы словарь, не приватные данные одной сети; это и есть корректное поведение, не утечка. `tests/adversarial/metrics-global-schema-pollution.test.ts` |
 | Distributed (Postgres-backed) rate-limit слой (20.54.0) применён только на credential-verification роутах (login/MFA/reset) | Остальные rate-limited роуты (см. таблицу выше) остаются только на in-memory `@fastify/rate-limit` — переживает не рестарт, а один процесс | Сознательный скоуп прохода — бóльшая ценность на брутфорс-чувствительной поверхности; полный перевод всех роутов отложен, см. `docs/security/20.54-baseline.md` |
 
 ## RBAC — таблица прав по ролям
@@ -935,7 +1165,7 @@ TOTP уже полностью закрывает mandatory-политику б�
 |-----------|:---:|----------------|
 | `tests/unit/` | 12 | Чистые функции — RBAC-примитивы (`auth-boundary`, `middleware-auth`), forecast-модель, job-logger, phone-нормализация, observability, cron-идемпотентность |
 | `tests/isolation/` | 59 | Org-scoping, race conditions, идемпотентность, auth/session/CSRF/rate-limit — реальные роуты через `app.inject()`. Отдельно по auth-периметру: `csrf.test.ts`, `identities.test.ts`, `login-rate-limit.test.ts`, `phone-auth.test.ts`, `session-lifecycle.test.ts`, `sessions-admin.test.ts`, `api-abuse-rate-limits.test.ts` |
-| `tests/adversarial/` | 5 | Конкретные прошлые инциденты: `auth-bypass-unverified-header`, `cross-tenant-write`, `identity-spoofing`, `input-validation`, `unauthenticated-disclosure` — не «работает ли», а «не повторится ли снова» |
+| `tests/adversarial/` | 11 | Конкретные прошлые инциденты: `auth-bypass-unverified-header`, `cross-tenant-write`, `identity-spoofing`, `input-validation`, `unauthenticated-disclosure`, `avatar-cross-tenant-idor`, `metrics-global-schema-pollution`, `race-condition-tutorial-xp-duplication`, `support-ticket-unthrottled-admin-spam`, `employees-directory-org-leak`, `academy-cannot-escalate` (17-layer hardening pass добавил последние 6) — не «работает ли», а «не повторится ли снова» |
 
 Adversarial-тесты — не общая проверка happy path, а закреплённая память о
 реальных прошлых дырах: каждый тест назван по классу проблемы, которую он
@@ -974,9 +1204,9 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
 | Отдельная временная блокировка аккаунта после N неудачных попыток входа | Нет — только rate-limit по времени (10/мин, хешированный телефон, см. [threat-model](./THREAT-MODEL.md)) | Порог + временная блокировка на `/auth/*`, отдельно от общего rate-limit |
 | Полноценная WebAuthn-церемония в тестах | Покрыты только граничные проверки (malformed input, чужой credential id, "не настроено", UV-опции) — реальный authenticator response не симулируется | Виртуальный/software authenticator в test suite |
 | Frontend UI для WebAuthn (enrollment/login) | TOTP-путь реализован (login-challenge, mandatory enrollment, recovery codes once — 20.52.1); WebAuthn browser-ceremony UI сознательно отложен — TOTP уже закрывает mandatory-политику без риска лишить доступа | Экраны WebAuthn register/authenticate в `frontend/src/**` |
-| Журнал допуска со стабильными кодами | Часть событий в `audit_log` (роль, деактивация, экспорт, MFA enable/disable/reset, recovery-code use — 20.52.1), но без единой таксономии кодов и без структурного event-stream отдельно от audit_log | Стабильные коды `AUTH_FAILURE`/`SESSION_REVOKED`/`MASS_EXPORT`/`ACCESS_DENIED` |
+| Журнал допуска со стабильными кодами | Часть событий в `audit_log` (роль, деактивация, экспорт, MFA enable/disable/reset, recovery-code use — 20.52.1; **17-layer hardening pass добавил** `auth.login_success`/`auth.login_failed`/`auth.logout`/`auth.session_revoked(_others)`/`access_request.approve`/`access_request.reject` — раньше самые auth-чувствительные события не писали вообще ничего, хотя RUNBOOK.md's compromise-response процедура уже предполагала, что там есть что искать), но без единой таксономии кодов и без структурного event-stream отдельно от audit_log | Стабильные коды `AUTH_FAILURE`/`SESSION_REVOKED`/`MASS_EXPORT`/`ACCESS_DENIED` (сами события теперь есть, единой code-таксономии над `action`-строками ещё нет) |
 | Строгий CSP без inline | `scriptSrc`/`default-src`/`object-src` уже строгие; `script-src-attr`/`style-src-attr`/`styleSrc` — `unsafe-inline` (см. [известные компромиссы](#известные-компромиссы)) | Event-delegation вместо `onclick=`, nonce/hash для нужных `<style>` — отдельная эпоха по объёму, сопоставимая с Frontend rewrite |
-| SAST / secret-scanning в CI | `npm audit --audit-level=high` — только известные уязвимости зависимостей; нет CodeQL/Semgrep/gitleaks/trufflehog, нет Dependabot | Хотя бы один SAST-скан + secret-scanning как gate CI |
+| ~~SAST / secret-scanning в CI~~ — РЕАЛИЗОВАНО (17-layer hardening pass) | CodeQL (`security-extended` query pack, `.github/workflows/codeql.yml`, еженедельно + по требованию — тяжёлый скан отдельно от быстрого PR-гейта) + gitleaks (полная git-история, `ci.yml`, job `secrets`) + лёгкий локальный `check:secrets` (рабочее дерево, часть `security:verify`) + Dependabot (`.github/dependabot.yml`, npm × 3 пакета + github-actions, еженедельно) | — |
 | Отдельная временная блокировка аккаунта после N неудачных попыток MFA-кода | Только rate-limit по времени (20/мин на `/auth/mfa/*`) | Порог + временная блокировка, отдельно от общего rate-limit |
 | Idempotency-based ключ по `employee_id` вместо IP для уже аутентифицированных лимитов | Все лимиты выше `/auth/login` — по IP (сознательно, 20.50.0) | Отдельное архитектурное решение, не запрошено в текущем скоупе — см. [20.50.0 в CHANGELOG](../CHANGELOG.md) |
 
