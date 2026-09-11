@@ -59,10 +59,10 @@ export async function findById(employeeId: number): Promise<EmployeeAuthRow | nu
  * идёт по горячему пути каждого запроса через principal.ts, незачем
  * тянуть password_hash туда, где он не нужен). */
 export async function findByIdWithPassword(employeeId: number): Promise<
-  { id: number; full_name: string; role: string; password_hash: string | null; is_active: boolean; access_status: string | null } | null
+  { id: number; full_name: string; role: string; password_hash: string | null; is_active: boolean; access_status: string | null; org_id: string | null } | null
 > {
   const res = await query(
-    `SELECT id, full_name, role, password_hash, is_active, access_status
+    `SELECT id, full_name, role, password_hash, is_active, access_status, org_id
      FROM employees
      WHERE id = $1
      LIMIT 1`,
@@ -304,27 +304,39 @@ export async function softDeactivate(
   return row;
 }
 
+/** orgId — defense-in-depth (hotfix, security audit): this function
+ * previously had no tenant scope at all, safe only because its one caller
+ * (PATCH /employees/:id/role) already applies requireEmployeeInOrg() as a
+ * preHandler before reaching here. A future caller that forgot that guard
+ * would have updated any employee row by numeric id, cross-tenant, with no
+ * defense at this layer — now it can't, matching the "orgId is a required
+ * repository parameter" invariant the rest of data/repositories/* follows. */
 export async function updateRole(
-  employeeId: number, role: string, q: typeof query = query
+  employeeId: number, role: string, orgId: string, q: typeof query = query
 ): Promise<{ id: number; full_name: string; role: string } | null> {
-  const res = await q(`UPDATE employees SET role = $1 WHERE id = $2 RETURNING id, full_name, role`, [role, employeeId]);
+  const res = await q(
+    `UPDATE employees SET role = $1 WHERE id = $2 AND COALESCE(org_id,'default') = $3 RETURNING id, full_name, role`,
+    [role, employeeId, orgId]
+  );
   return res.rows[0] || null;
 }
 
-/** /access/employees-directory — «я вот этот» пикер незарегистрированного гостя. */
-export async function findUnclaimedDirectory(orgId?: string): Promise<{ id: number; full_name: string }[]> {
-  const params: any[] = [];
-  let orgFilter = '';
-  if (orgId) {
-    params.push(orgId);
-    orgFilter = ` AND COALESCE(org_id,'default') = $${params.length}`;
-  }
+/** /access/employees-directory — «я вот этот» пикер незарегистрированного
+ * гостя. orgId ОБЯЗАТЕЛЕН (hotfix, security audit) — раньше был опциональным,
+ * и при его отсутствии запрос возвращал незарегистрированных сотрудников
+ * ВСЕХ сетей разом на полностью анонимном, неаутентифицированном роуте
+ * (cross-tenant directory leak). Комментарий у вызывающего роута
+ * (api/routes/org/access.ts) уже описывал намерение «сузить до сети,
+ * которую гость выбрал в пикере, иначе он мог бы заклеймить сотрудника
+ * чужой сети» — но ничего не заставляло org_id реально присутствовать;
+ * теперь заставляет: без него роут отвечает 400, не отдаёт список. */
+export async function findUnclaimedDirectory(orgId: string): Promise<{ id: number; full_name: string }[]> {
   const res = await query(
     `SELECT id, full_name FROM employees
      WHERE is_active = true AND (telegram_id IS NULL OR telegram_id = 0)
-       AND (access_status = 'active' OR access_status IS NULL)${orgFilter}
+       AND (access_status = 'active' OR access_status IS NULL) AND COALESCE(org_id,'default') = $1
      ORDER BY full_name`,
-    params
+    [orgId]
   );
   return res.rows;
 }

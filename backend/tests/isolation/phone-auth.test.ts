@@ -169,6 +169,7 @@ describe('Не-Telegram вход — телефон + пароль', () => {
     expect(unknownPhone.json().error).toBe(wrongPassword.json().error); // не различить по ответу
   });
 
+
   it('POST /auth/login — не-active сотрудник получает 403, не 401', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Phone Pending Org');

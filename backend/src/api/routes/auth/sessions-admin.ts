@@ -12,6 +12,7 @@ import { requireActive } from '../../../auth/guards.js';
 import { COOKIE_NAME } from '../../../auth/providers/phone.js';
 import { CSRF_COOKIE_NAME } from '../../../auth/csrf.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
+import { record as recordAudit } from '../../../data/repositories/audit.js';
 import type { ListSessionsResponse, RevokeSessionResponse, RevokeOtherSessionsResponse } from '../../../shared/api-types.js';
 
 function clearAuthCookies(reply: FastifyReply) {
@@ -48,6 +49,20 @@ export async function registerSessionsAdminRoutes(app: FastifyInstance) {
     if (currentToken && sessionsRepo.hashToken(currentToken) === removed.token_hash) {
       clearAuthCookies(reply);
     }
+    // Audit trail gap (security audit) — self-service session revocation
+    // is exactly the signal RUNBOOK.md's compromise-response section asks
+    // an investigator to look for ("сотрудник сам заметил и отозвал"),
+    // but left no audit_log trace before this.
+    await recordAudit({
+      orgId: request.user!.org_id,
+      actorEmployeeId: request.user!.employee_id,
+      actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+      actorRole: request.user!.role,
+      action: 'auth.session_revoked',
+      targetType: 'employee',
+      targetId: String(request.user!.employee_id),
+      targetOrgId: request.user!.org_id
+    }).catch(() => {});
     return { ok: true };
   });
 
@@ -58,6 +73,16 @@ export async function registerSessionsAdminRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'no_current_session', message: 'Нет активной browser-сессии для сравнения' });
     }
     await sessionsRepo.deleteAllExcept(request.user!.employee_id!, sessionsRepo.hashToken(currentToken));
+    await recordAudit({
+      orgId: request.user!.org_id,
+      actorEmployeeId: request.user!.employee_id,
+      actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+      actorRole: request.user!.role,
+      action: 'auth.session_revoked_others',
+      targetType: 'employee',
+      targetId: String(request.user!.employee_id),
+      targetOrgId: request.user!.org_id
+    }).catch(() => {});
     return { ok: true };
   });
 }

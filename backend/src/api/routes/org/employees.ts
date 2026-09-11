@@ -237,7 +237,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     // отдельных запроса — упасть между ними означало роль сменилась, а
     // сектор остался старым (или наоборот), без какого-либо следа в логах.
     const row = await withTransaction(async (q) => {
-      const res = await employeesRepo.updateRole(Number(id), role, q);
+      const res = await employeesRepo.updateRole(Number(id), role, orgId, q);
       if (role === 'supervisor' && b.sector_id) {
         await supervisorSectorsRepo.replaceForSupervisor(Number(id), b.sector_id, q);
       }

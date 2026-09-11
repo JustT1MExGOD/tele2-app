@@ -18,7 +18,7 @@ import {
   requireEmployeeInOrg,
   resolveViewOrgId
 } from '../../../auth/guards.js';
-import { hashPassword, verifyPassword } from '../../../auth/password.js';
+import { hashPassword, verifyPassword, DUMMY_PASSWORD_HASH } from '../../../auth/password.js';
 import { COOKIE_NAME } from '../../../auth/providers/phone.js';
 import { CSRF_COOKIE_NAME, setCsrfCookie } from '../../../auth/csrf.js';
 import { normalizePhone } from '../../../utils/phone.js';
@@ -29,6 +29,7 @@ import * as identitiesRepo from '../../../data/repositories/identities.js';
 import * as accessRequestsRepo from '../../../data/repositories/access-requests.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
 import * as mfaRepo from '../../../data/repositories/mfa.js';
+import { record as recordAudit } from '../../../data/repositories/audit.js';
 import { hasConfirmedMfaFactor } from '../../../auth/mfa/index.js';
 import { isTotpConfirmed } from '../../../auth/mfa/totp.js';
 import { assertStepUp } from '../../../auth/step-up.js';
@@ -240,9 +241,38 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       // 20.48.0 — identities, не employeesRepo.findByPhone напрямую.
       const employeeId = phone ? await identitiesRepo.findEmployeeId('phone', phone) : null;
       const e = employeeId ? await employeesRepo.findByIdWithPassword(employeeId) : null;
-      // Одинаковый 401 для "нет такого телефона" и "неверный пароль" —
-      // иначе ответ сам подтверждает/опровергает, что номер зарегистрирован.
-      if (!e || !e.password_hash || !(await verifyPassword(b.password, e.password_hash))) {
+      // Одинаковый 401 для "нет такого телефона" и "неверный пароль" — И по
+      // ответу, И по времени (security audit hotfix): раньше `!e ||`
+      // коротко замыкал JS до вызова verifyPassword() для незарегистрированного
+      // номера, так что scrypt (десятки мс CPU) вообще не выполнялся — для
+      // существующего номера выполнялся всегда. Разница в latency сама по
+      // себе была рабочим oracle'ом для перебора зарегистрированных
+      // номеров, даже с идентичным телом/кодом ответа. Теперь verifyPassword
+      // вызывается ВСЕГДА, с фиктивным хешем при отсутствии аккаунта —
+      // одинаковая scrypt-работа в обоих случаях; DUMMY_PASSWORD_HASH
+      // не парсится ни под какой реальный пароль (см. auth/password.ts).
+      const passwordOk = await verifyPassword(b.password, e?.password_hash || DUMMY_PASSWORD_HASH);
+      if (!e || !e.password_hash || !passwordOk) {
+        // Audit trail gap (security audit) — login failure previously left
+        // no trace at all; RUNBOOK.md's compromise-response procedure
+        // already queries audit_log by target_id to reconstruct what
+        // happened during a suspected compromise window, but had nothing
+        // to find here. target_id is the phone HASH, never the raw phone
+        // (same principle as the rate-limiter's identityDimension key,
+        // above) — audit_log is broadly readable by managers/admins
+        // (GET /audit), so raw PII doesn't belong in it either.
+        if (e) {
+          await recordAudit({
+            orgId: e.org_id,
+            actorEmployeeId: null,
+            actorTelegramId: null,
+            actorRole: null,
+            action: 'auth.login_failed',
+            targetType: 'employee',
+            targetId: String(e.id),
+            targetOrgId: e.org_id
+          }).catch(() => {});
+        }
         return reply.code(401).send({ error: 'invalid_credentials', message: 'Неверный телефон или пароль' });
       }
       if (e.is_active === false || e.access_status !== 'active') {
@@ -267,13 +297,43 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
       const token = await sessionsRepo.createSession(e.id, false, e.role);
       setSessionCookie(reply, token);
+      await recordAudit({
+        orgId: e.org_id,
+        actorEmployeeId: e.id,
+        actorTelegramId: null,
+        actorRole: e.role,
+        action: 'auth.login_success',
+        targetType: 'employee',
+        targetId: String(e.id),
+        targetOrgId: e.org_id
+      }).catch(() => {});
       return { ok: true };
     }
   );
 
   app.post('/auth/logout', async (request, reply): Promise<LogoutResponse> => {
     const token = request.cookies?.[COOKIE_NAME];
-    if (token) await sessionsRepo.deleteSession(token);
+    if (token) {
+      // Best-effort actor context for the audit event — logout is
+      // idempotent by design (works even with an expired/absent cookie,
+      // see the route's own PUBLIC_ROUTES allowlist reason), so a session
+      // lookup failing here must never block the actual logout below.
+      const session = await sessionsRepo.resolveSession(token).catch(() => null);
+      await sessionsRepo.deleteSession(token);
+      if (session?.employee_id) {
+        const emp = await employeesRepo.findByIdWithPassword(session.employee_id).catch(() => null);
+        await recordAudit({
+          orgId: emp?.org_id ?? null,
+          actorEmployeeId: session.employee_id,
+          actorTelegramId: null,
+          actorRole: emp?.role ?? null,
+          action: 'auth.logout',
+          targetType: 'employee',
+          targetId: String(session.employee_id),
+          targetOrgId: emp?.org_id ?? null
+        }).catch(() => {});
+      }
+    }
     reply.clearCookie(COOKIE_NAME, { path: '/' });
     reply.clearCookie(CSRF_COOKIE_NAME, { path: '/' });
     return { ok: true };

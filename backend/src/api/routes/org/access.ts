@@ -30,6 +30,7 @@ import * as storesRepo from '../../../data/repositories/stores.js';
 import * as sessionsRepo from '../../../data/repositories/sessions.js';
 import * as mfaRepo from '../../../data/repositories/mfa.js';
 import { invalidate as invalidateScope } from '../../../core/shared/scope-cache.js';
+import { record as recordAudit } from '../../../data/repositories/audit.js';
 import type {
   AccessStatusResponse,
   AccessOrgsResponse,
@@ -124,14 +125,20 @@ export async function registerAccessRoutes(app: FastifyInstance) {
   );
 
   // Список сотрудников для «я вот этот» (только имена, без чувствительного).
-  // ?org_id= — сузить до сети, которую гость уже выбрал в пикере, иначе
-  // выбрав сеть B он всё равно мог «заклеймить» сотрудника сети A.
+  // org_id ОБЯЗАТЕЛЕН (hotfix, security audit) — сузить до сети, которую
+  // гость уже выбрал в пикере; раньше был опциональным query-параметром,
+  // и его отсутствие на этом полностью анонимном роуте отдавало
+  // незарегистрированных сотрудников ВСЕХ сетей разом — cross-tenant
+  // directory leak, не то намерение, что уже описывал этот же комментарий.
   app.get(
     '/access/employees-directory',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
-    async (request): Promise<AccessDirectoryResponse> => {
+    async (request, reply): Promise<AccessDirectoryResponse | FastifyReply> => {
     const { org_id } = request.query as { org_id?: string };
-    return employeesRepo.findUnclaimedDirectory(org_id ? String(org_id) : undefined);
+    if (!org_id) {
+      return reply.code(400).send({ error: 'org_id_required', message: 'Сначала выбери сеть' });
+    }
+    return employeesRepo.findUnclaimedDirectory(String(org_id));
     }
   );
 
@@ -277,6 +284,7 @@ export async function registerAccessRoutes(app: FastifyInstance) {
       const claimed = await accessRequestsRepo.markApproved(Number(id), request.user!.employee_id, q);
       if (!claimed) return null;
 
+      let resultId: number;
       if (req.claimed_employee_id) {
         const existingId = Number(req.claimed_employee_id);
         if (isPhone) {
@@ -288,20 +296,41 @@ export async function registerAccessRoutes(app: FastifyInstance) {
             existingId, req.telegram_id!, role === 'employee' ? null : role, request.user!.employee_id, req.full_name, q
           );
         }
-        return existingId;
+        resultId = existingId;
+      } else {
+        // Создать нового — попадает в сеть заявки (гость выбрал в пикере при
+        // регистрации), а не в сеть одобряющего. Важно с тех пор, как admin
+        // получает cc по заявкам любой сети (эпик 16.0) — иначе admin,
+        // одобряя чужую заявку из своей сессии, молча создал бы сотрудника
+        // в СВОЕЙ сети. Фолбэк на сеть одобряющего только если у заявки
+        // вообще нет org_id (не должно происходить после миграции, кроме
+        // как для уже неактуальных пред-миграционных строк).
+        const newOrgId = req.org_id || request.user!.org_id;
+        resultId = isPhone
+          ? await employeesRepo.createFromApprovalPhone(req.full_name, req.phone!, req.password_hash!, role, request.user!.employee_id, newOrgId, q)
+          : await employeesRepo.createFromApproval(req.full_name, req.telegram_id!, role, request.user!.employee_id, newOrgId, q);
       }
-      // Создать нового — попадает в сеть заявки (гость выбрал в пикере при
-      // регистрации), а не в сеть одобряющего. Важно с тех пор, как admin
-      // получает cc по заявкам любой сети (эпик 16.0) — иначе admin,
-      // одобряя чужую заявку из своей сессии, молча создал бы сотрудника
-      // в СВОЕЙ сети. Фолбэк на сеть одобряющего только если у заявки
-      // вообще нет org_id (не должно происходить после миграции, кроме
-      // как для уже неактуальных пред-миграционных строк).
-      const orgId = req.org_id || request.user!.org_id;
-      if (isPhone) {
-        return employeesRepo.createFromApprovalPhone(req.full_name, req.phone!, req.password_hash!, role, request.user!.employee_id, orgId, q);
-      }
-      return employeesRepo.createFromApproval(req.full_name, req.telegram_id!, role, request.user!.employee_id, orgId, q);
+
+      // Audit trail gap (security audit) — approve/reject previously left
+      // no audit_log trace at all, despite being exactly the kind of
+      // org-sensitive admin action §7 (Журнал аудита) says should be
+      // recorded; same transaction as the mutation, so it commits/rolls
+      // back together with it (see this file's own top-of-file rationale).
+      await recordAudit(
+        {
+          orgId,
+          actorEmployeeId: request.user!.employee_id,
+          actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+          actorRole: request.user!.role,
+          action: 'access_request.approve',
+          targetType: 'employee',
+          targetId: String(resultId),
+          after: { request_id: Number(id), role, claimed_existing: !!req.claimed_employee_id },
+          targetOrgId: orgId
+        },
+        q
+      );
+      return resultId;
     });
 
     if (employeeId === null) {
@@ -365,6 +394,19 @@ export async function registerAccessRoutes(app: FastifyInstance) {
     if (!rejected) {
       return { ok: true, deduped: true };
     }
+
+    // Audit trail gap (security audit) — see the matching comment on
+    // /access/requests/:id/approve above.
+    await recordAudit({
+      orgId,
+      actorEmployeeId: request.user!.employee_id,
+      actorTelegramId: request.user!.telegram_id ? Number(request.user!.telegram_id) : null,
+      actorRole: request.user!.role,
+      action: 'access_request.reject',
+      targetType: 'access_request',
+      targetId: String(id),
+      targetOrgId: orgId
+    });
 
     if (bot && req.telegram_id) {
       await bot.api

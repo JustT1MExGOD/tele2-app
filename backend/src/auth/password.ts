@@ -27,3 +27,21 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   const derived = (await scryptAsync(plain, salt, KEY_LENGTH)) as Buffer;
   return timingSafeEqual(derived, expected);
 }
+
+/**
+ * A fixed-format, fixed-salt scrypt hash of no real password — security
+ * audit hotfix. `POST /auth/login`'s short-circuit (`!e || !e.password_hash
+ * || !(await verifyPassword(...))`) never ran the scrypt derivation at all
+ * for an unknown phone number (short-circuits on `!e` before reaching
+ * `verifyPassword`), while a known phone always paid the full scrypt cost
+ * — a real, measurable timing side-channel letting an attacker distinguish
+ * "this phone isn't registered" from "this phone exists, wrong password"
+ * purely from response latency, without ever seeing a different status
+ * code or message. `login()` in session.ts now always calls
+ * `verifyPassword(plain, employee?.password_hash || DUMMY_PASSWORD_HASH)`
+ * regardless of whether the account exists, so the same scrypt work
+ * happens on every call — the boolean result is then additionally ANDed
+ * with "the account actually exists and has a password set" before being
+ * treated as a real match, so this constant never authenticates anyone.
+ */
+export const DUMMY_PASSWORD_HASH = `scrypt$${'0'.repeat(32)}$${'0'.repeat(128)}`;
