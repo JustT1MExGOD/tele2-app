@@ -24,6 +24,6 @@
     "esbuild": "^0.28.2",
     "otplib": "^13.5.0",
     "typescript": "^5.7.2",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.0"
   }
 }
