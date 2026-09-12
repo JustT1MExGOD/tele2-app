@@ -1,5 +1,5 @@
 /**
- * T2 Academy — employee course, Final Challenge "Начало рабочего дня".
+ * T2 Academy — employee course, Final Challenge "Первая самостоятельная смена".
  * Combines skills from Chapters 1-2 into one CHALLENGE step with no
  * per-item pointer — the checklist labels state the GOAL, not the how
  * (spec §12: "verify the user actually learned the workflow" rather than
@@ -12,14 +12,14 @@ export const EMPLOYEE_FINAL_CHAPTER_ID = 'employee-final';
 
 export const finalChapter: AcademyChapter = {
   id: EMPLOYEE_FINAL_CHAPTER_ID,
-  title: 'Финальный вызов · Начало рабочего дня',
+  title: 'Финальный вызов · Первая самостоятельная смена',
   subtitle: 'Без подсказок — ты справишься',
   steps: [
     {
       id: 'employee-final-intro',
       kind: 'story',
       cue: 'surprised',
-      say: 'Финальная проверка! Никаких стрелочек и подсказок — просто пройди обычное начало рабочего дня, как ты уже умеешь.'
+      say: 'Финальная проверка! Никаких стрелочек и подсказок — просто пройди полный цикл смены, как ты уже умеешь.'
     },
     {
       id: 'employee-final-challenge',
@@ -29,7 +29,7 @@ export const finalChapter: AcademyChapter = {
       practiceKind: 'checklist',
       checklist: [
         { id: 'open', label: 'Открой смену', kind: 'shift-open' },
-        { id: 'sale', label: 'Внеси продажу', kind: 'sale' },
+        { id: 'sale', label: 'Внеси продажу: 1 SIM', kind: 'sale' },
         { id: 'close', label: 'Закрой смену', kind: 'shift-close' }
       ]
     },

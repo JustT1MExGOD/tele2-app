@@ -14,12 +14,14 @@ export function renderLoadingScreen(root: HTMLElement): void {
   root.className = 'academy-shell academy-loading';
   root.innerHTML = `
     <div class="academy-loading-bg"></div>
+    <button type="button" class="academy-close" aria-label="Закрыть обучение" style="position:absolute;top:20px;right:20px;z-index:3">✕</button>
     <div class="academy-loading-content">
       <div class="academy-loading-logo">T2 ACADEMY</div>
       <div class="academy-loading-tagline">Твоя история начинается здесь</div>
       <div class="academy-loading-mascot">${arbuzichSvgMarkup()}</div>
       <div class="academy-loading-bar"><div class="academy-loading-bar-fill"></div></div>
     </div>`;
+  root.querySelector<HTMLButtonElement>('.academy-close')!.onclick = () => window.__academyExit();
 }
 
 export async function withLoadingScreen<T>(root: HTMLElement, load: () => Promise<T>): Promise<T> {

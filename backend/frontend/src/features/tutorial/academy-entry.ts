@@ -1,20 +1,7 @@
-/**
- * T2 Academy bundle entry point — lazy-loaded (see app/core.ts's
- * loadAcademyBundle() stub, injected as a <script> tag only when the user
- * actually opens the Academy, never eagerly on every page load). Wires
- * the engine/model/character/presenter layers together and exposes the
- * window bridge the stub calls into.
- *
- * Flow: startAcademy(role) -> loading cinematic -> journey map (chapter
- * nodes, locked/unlocked/completed) -> pick an unlocked chapter -> runs
- * that one chapter through TutorialEngine/AcademySession as before ->
- * chapter completion returns to the (now up to date) map, not straight
- * out of the Academy.
- */
 import { TutorialEngine } from './engine/tutorial-engine.js';
 import { ArbuzichController } from './character/arbuzich-controller.js';
 import { getCourseForRole } from './model/registry.js';
-import { loadProgress, getCachedProgress } from './model/progress.js';
+import { loadProgress, getCachedProgress, clearProgressCache } from './model/progress.js';
 import { computeJourney } from './model/journey.js';
 import { AcademySession, collectMountRefs } from './ui/shared/session.js';
 import { renderMobileShell, renderMobileJourney } from './ui/mobile/present.js';
@@ -22,100 +9,93 @@ import { renderDesktopShell, renderDesktopJourney } from './ui/desktop/present.j
 import { withLoadingScreen } from './ui/shared/loading-screen.js';
 import type { AcademyCourse } from './model/types.js';
 
-const DESKTOP_BREAKPOINT = 860;
-
+import { mountGame, destroyGame } from './ui/game/director.js';
 let activeSession: AcademySession | null = null;
 let activeCourse: AcademyCourse | null = null;
-
-function isDesktopViewport(): boolean {
-  return window.innerWidth >= DESKTOP_BREAKPOINT;
-}
-
+let generation = 0;
+let opened = false;
+let loading = false;
+let returnFocus: HTMLElement | null = null;
+let previousOverflow = '';
+const inertState = new Map<HTMLElement, boolean>();
+const isDesktopViewport = () => window.innerWidth >= 860;
 function ensureRoot(): HTMLElement {
   let root = document.getElementById('academyRoot');
-  if (!root) {
-    root = document.createElement('div');
-    root.id = 'academyRoot';
-    document.body.appendChild(root);
-  }
+  if (!root) { root = document.createElement('div'); root.id = 'academyRoot'; document.body.append(root); }
+  root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', 'Академия T2'); root.tabIndex = -1;
   return root;
 }
-
+function stopScene() { activeSession?.destroy(); activeSession = null; const root = document.getElementById('academyRoot'); if (root) destroyGame(root); }
+function keyboard(event: KeyboardEvent) {
+  if (event.key === 'Escape') { event.preventDefault(); exitAcademy(); return; }
+  if (event.key !== 'Tab') return;
+  const root = ensureRoot();
+  const elements = Array.from(root.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href],[tabindex="0"]')).filter(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+  if (!elements.length) { event.preventDefault(); root.focus(); return; }
+  const first = elements[0], last = elements[elements.length - 1];
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === root)) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && (document.activeElement === last || document.activeElement === root)) { event.preventDefault(); first.focus(); }
+}
 export async function startAcademy(role: string): Promise<void> {
-  if (typeof window.switchPage === 'function') window.switchPage('home');
   const course = getCourseForRole(role);
-  if (!course || !course.chapters.length) {
-    window.toast?.('Курс для этой роли пока не готов', 'err');
-    return;
+  if (!course || !course.chapters.length) { window.toast?.('Курс для этой роли пока не готов', 'err'); return; }
+  const token = ++generation; stopScene(); activeCourse = course; loading = true;
+  const root = ensureRoot(); root.hidden = false;
+  if (!opened) {
+    opened = true; returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    previousOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden';
+    for (const child of Array.from(document.body.children)) if (child instanceof HTMLElement && child !== root && !['SCRIPT', 'STYLE'].includes(child.tagName)) { inertState.set(child, child.inert); child.inert = true; }
+    document.addEventListener('keydown', keyboard);
   }
-  activeCourse = course;
-  const root = ensureRoot();
-  root.hidden = false;
-
-  await withLoadingScreen(root, () => loadProgress(window.authHeaders ? window.authHeaders() : {}));
-  renderJourney();
+  window.switchPage?.('home'); root.focus();
+  try {
+    await withLoadingScreen(root, () => loadProgress(window.authHeaders ? window.authHeaders() : {}));
+    if (token !== generation || !opened) return;
+    loading = false; renderJourney();
+  } catch {
+    if (token !== generation || !opened) return;
+    loading = false; root.className = 'academy-shell';
+    root.innerHTML = '<div class="academy-sheet"><h2>Не удалось загрузить обучение</h2><p>Проверь соединение и повтори попытку.</p><button type="button" class="btn-main">Повторить</button><button type="button" class="btn-secondary">Закрыть</button></div>';
+    root.querySelector<HTMLButtonElement>('.btn-main')!.onclick = () => { void startAcademy(role); };
+    root.querySelector<HTMLButtonElement>('.btn-secondary')!.onclick = exitAcademy; root.focus();
+  }
 }
-
 function renderJourney(): void {
-  if (!activeCourse) return;
-  const root = ensureRoot();
-  const progress = getCachedProgress();
+  if (!activeCourse || !opened) return;
+  stopScene(); const root = ensureRoot(), progress = getCachedProgress();
   const nodes = computeJourney(activeCourse, progress?.completed_step_ids || []);
-  const xpTotal = progress?.xp_total || 0;
-  const badgeCount = progress?.badges.length || 0;
-  if (isDesktopViewport()) renderDesktopJourney(root, activeCourse.title, nodes, xpTotal, badgeCount);
-  else renderMobileJourney(root, activeCourse.title, nodes, xpTotal, badgeCount);
+  const render = isDesktopViewport() ? renderDesktopJourney : renderMobileJourney;
+  render(root, activeCourse.title, nodes, progress?.xp_total || 0, progress?.badges.length || 0);
+  mountGame(root); root.focus();
 }
-
 function openChapter(chapterId: string): void {
-  if (!activeCourse) return;
-  const chapter = activeCourse.chapters.find((c) => c.id === chapterId);
-  if (!chapter) return;
-  const root = ensureRoot();
-  // A single-chapter "sub-course" — TutorialEngine always runs chapters[0],
-  // so running one chapter at a time from the map means handing it a
-  // course shaped around just that chapter, not touching the engine's own
-  // multi-chapter logic (unused here on purpose, see final report).
-  const singleChapterCourse: AcademyCourse = { ...activeCourse, chapters: [chapter] };
-  const engine = new TutorialEngine(singleChapterCourse);
-  const arbuzich = new ArbuzichController();
-
-  const desktop = isDesktopViewport();
-  if (desktop) renderDesktopShell(root, chapter.title, chapter.subtitle);
-  else renderMobileShell(root, chapter.title, chapter.subtitle);
-
-  const refs = collectMountRefs(root);
-  const session = new AcademySession(
-    engine,
-    arbuzich,
-    window.authHeaders ? window.authHeaders(true) : {},
-    refs,
-    () => backToMap()
-  );
-  activeSession = session;
-  session.start();
+  if (!activeCourse || !opened || loading) return;
+  const node = computeJourney(activeCourse, getCachedProgress()?.completed_step_ids || []).find(n => n.chapter.id === chapterId);
+  if (!node?.unlocked) return;
+  stopScene(); const chapter = node.chapter, root = ensureRoot();
+  const engine = new TutorialEngine({ ...activeCourse, chapters: [chapter] });
+  if (!node.completed) { const next = chapter.steps.find(step => !getCachedProgress()?.completed_step_ids.includes(step.id)); if (next) engine.jumpToStep(next.id); }
+  (isDesktopViewport() ? renderDesktopShell : renderMobileShell)(root, chapter.title, chapter.subtitle);
+  mountGame(root);
+  activeSession = new AcademySession(engine, new ArbuzichController(), window.authHeaders ? window.authHeaders(true) : {}, collectMountRefs(root), () => { void backToMap(); });
+  activeSession.start(); root.focus();
 }
-
 async function backToMap(): Promise<void> {
-  activeSession?.destroy();
-  activeSession = null;
-  // Refresh from the server so the map reflects whatever was just
-  // completed (and any reward XP/badge) before repainting it.
-  await loadProgress(window.authHeaders ? window.authHeaders() : {}).catch(() => {});
-  renderJourney();
+  if (!opened || loading) return;
+  const token = ++generation; loading = true; stopScene();
+  try { await loadProgress(window.authHeaders ? window.authHeaders() : {}); } catch { window.toast?.('Не удалось обновить карту. Показан сохранённый прогресс.', 'err'); }
+  if (token !== generation || !opened) return;
+  loading = false; renderJourney();
 }
-
 function exitAcademy(): void {
-  activeSession?.destroy();
-  activeSession = null;
-  activeCourse = null;
-  const root = document.getElementById('academyRoot');
-  if (root) {
-    root.hidden = true;
-    root.innerHTML = '';
+  generation++; stopScene(); activeCourse = null; loading = false; clearProgressCache();
+  const root = document.getElementById('academyRoot'); if (root) { root.hidden = true; root.innerHTML = ''; }
+  if (opened) {
+    opened = false; document.removeEventListener('keydown', keyboard); document.body.style.overflow = previousOverflow;
+    for (const [element, inert] of inertState) element.inert = inert; inertState.clear();
+    if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null;
   }
 }
-
 window.__academyStart = startAcademy;
 window.__academyOpenChapter = (chapterId: string) => openChapter(chapterId);
 window.__academyBackToMap = () => { void backToMap(); };

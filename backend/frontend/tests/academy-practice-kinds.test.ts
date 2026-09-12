@@ -93,7 +93,7 @@ describe('T2 Academy practiceKind variants (Phase 2)', () => {
     expect(engine.canAdvance()).toBe(false);
   });
 
-  it('sale: opens the real sale form via __academyBeginSale flow and unlocks advance on a matching submission', async () => {
+  it('sale: opens the local training terminal via __academyBeginSale flow and unlocks advance on a matching submission', async () => {
     vi.stubGlobal('openAddSale', vi.fn());
     const { session, engine } = await setup();
     session.toggleShift('open');
@@ -101,7 +101,7 @@ describe('T2 Academy practiceKind variants (Phase 2)', () => {
     expect(engine.getStep().id).toBe('sale1');
     expect(engine.canAdvance()).toBe(false);
     const promise = session.beginSalePractice();
-    window.__tutorialDryRunCallback?.({ sim: 1, mnp: 1 });
+    submitSale({ sim: 1, mnp: 1 });
     await promise;
     expect(engine.canAdvance()).toBe(true);
   });
@@ -112,7 +112,9 @@ describe('T2 Academy practiceKind variants (Phase 2)', () => {
     session.toggleShift('open');
     await session.advance();
     const promise = session.beginSalePractice();
-    window.__tutorialDryRunCallback?.({ sim: 5 });
+    submitSale({ sim: 5 });
+    expect(document.querySelector('.academy-training-feedback')?.textContent).toContain('Проверь');
+    document.querySelector<HTMLButtonElement>('.academy-training-terminal .btn-secondary')!.click();
     await promise;
     expect(engine.canAdvance()).toBe(false);
   });
@@ -122,7 +124,7 @@ describe('T2 Academy practiceKind variants (Phase 2)', () => {
     session.toggleShift('open');
     await session.advance(); // sale1
     const promiseSale = session.beginSalePractice();
-    window.__tutorialDryRunCallback?.({ sim: 1, mnp: 1 });
+    submitSale({ sim: 1, mnp: 1 });
     await promiseSale;
     await session.advance(); // close1
     session.toggleShift('close');
@@ -142,7 +144,7 @@ describe('T2 Academy practiceKind variants (Phase 2)', () => {
     session.toggleShift('open');
     await session.advance();
     const promiseSale = session.beginSalePractice();
-    window.__tutorialDryRunCallback?.({ sim: 1, mnp: 1 });
+    submitSale({ sim: 1, mnp: 1 });
     await promiseSale;
     await session.advance();
     session.toggleShift('close');
@@ -170,3 +172,9 @@ describe('T2 Academy practiceKind variants (Phase 2)', () => {
     expect(engine.canAdvance()).toBe(true);
   });
 });
+
+function submitSale(values: Record<string, number>) {
+  const form = document.querySelector<HTMLFormElement>('.academy-training-terminal')!;
+  for (const [name, value] of Object.entries(values)) form.querySelector<HTMLInputElement>(`[name="${name}"]`)!.value = String(value);
+  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+}

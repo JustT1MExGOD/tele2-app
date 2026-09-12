@@ -7,11 +7,14 @@
 import { getAcademyProgress, completeAcademyStep } from '../api.js';
 import type { AcademyCompleteStepResponse, AcademyProgressResponse } from '../../../../../src/shared/api-types.js';
 
+let generation = 0;
 let cache: AcademyProgressResponse | null = null;
 
 export async function loadProgress(headers: Record<string, string>): Promise<AcademyProgressResponse> {
-  cache = await getAcademyProgress(headers);
-  return cache;
+  const token = ++generation;
+  const result = await getAcademyProgress(headers);
+  if (token === generation) cache = result;
+  return result;
 }
 
 export function isStepCompleted(stepId: string): boolean {
@@ -19,8 +22,9 @@ export function isStepCompleted(stepId: string): boolean {
 }
 
 export async function completeStep(headers: Record<string, string>, stepId: string): Promise<AcademyCompleteStepResponse> {
+  const token = generation;
   const result = await completeAcademyStep(headers, stepId);
-  if (cache && !cache.completed_step_ids.includes(stepId)) {
+  if (token === generation && cache && !cache.completed_step_ids.includes(stepId)) {
     cache = { ...cache, completed_step_ids: [...cache.completed_step_ids, stepId] };
     if (result.reward_granted) {
       cache = {
@@ -39,5 +43,8 @@ export function getCachedProgress(): AcademyProgressResponse | null {
 
 /** Test-only reset — avoids cross-test leakage of the module-level cache. */
 export function __resetProgressCache(): void {
+  generation++;
   cache = null;
 }
+
+export const clearProgressCache = __resetProgressCache;

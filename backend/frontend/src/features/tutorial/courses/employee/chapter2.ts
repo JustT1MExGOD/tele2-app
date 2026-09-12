@@ -1,11 +1,4 @@
-/**
- * T2 Academy — employee course, Chapter 2 "Смена и продажи". Both
- * practice steps are sandboxed real-UI missions: shift open/close never
- * calls POST /shifts/open|close (practice/shift-practice.ts is pure local
- * state), and the sale mission opens the REAL "Добавить продажу" form in
- * dry-run mode (practice/sale-practice.ts, reusing features/add-sale's
- * own existing __tutorialDryRun guard) — never writes to the database.
- */
+/** Смена и продажи в локальном учебном магазине. */
 import type { AcademyChapter } from '../../model/types.js';
 
 export const EMPLOYEE_CHAPTER_2_ID = 'employee-ch2';
@@ -20,7 +13,7 @@ export const chapter2: AcademyChapter = {
       kind: 'story',
       cue: 'explaining',
       say: 'Смена — это твоё рабочее время на точке: с открытия и до закрытия все продажи считаются твоими.',
-      body: 'Потренируемся открыть смену и внести продажу — по-настоящему, но в тренировочном режиме: в базу это не уйдёт.'
+      body: 'Потренируемся открыть смену и внести продажу — в учебном магазине. Рабочие данные останутся прежними.'
     },
     {
       id: 'employee-ch2-shift-open',
@@ -35,7 +28,7 @@ export const chapter2: AcademyChapter = {
       kind: 'practice',
       cue: 'pointing',
       say: 'Отлично, смена открыта! Теперь внеси продажу: 1 SIM и 1 MNP.',
-      body: 'Откроется настоящая форма продажи — заполни её как обычно. В базу и в чат команде это не уйдёт.',
+      body: 'Открой учебную кассу и укажи 1 SIM и 1 MNP. Учебная продажа не попадёт в рабочие отчёты.',
       practiceKind: 'sale',
       saleTarget: { sim: 1, mnp: 1 }
     },

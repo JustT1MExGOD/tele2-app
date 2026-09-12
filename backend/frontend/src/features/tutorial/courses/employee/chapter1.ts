@@ -47,7 +47,7 @@ export const chapter1: AcademyChapter = {
       id: 'employee-ch1-complete',
       kind: 'cutscene',
       cue: 'chapter-complete',
-      say: 'Отлично! Ты понял, чем план отличается от факта, и как работает замена. Идём дальше?'
+      say: 'Отлично! Ты нашёл свою точку и попробовал выбрать магазин для замены. Идём дальше?'
     }
   ]
 };

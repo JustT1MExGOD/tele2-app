@@ -33,7 +33,7 @@ export function computeJourney(course: AcademyCourse, completedStepIds: string[]
       stepsDone,
       stepsTotal: chapter.steps.length
     });
-    previousCompleted = completed;
+    previousCompleted = previousCompleted && completed;
   });
   return nodes;
 }

@@ -618,13 +618,14 @@ let academyBundlePromise: Promise<void> | null = null;
 function loadAcademyBundle(): Promise<void> {
   if (window.__academyStart) return Promise.resolve();
   if (!academyBundlePromise) {
-    academyBundlePromise = new Promise((resolve, reject) => {
+    academyBundlePromise = new Promise<void>((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = '/dist/features/academy.bundle.js';
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Academy bundle failed to load'));
+      s.src = `/dist/features/academy.bundle.js?v=${encodeURIComponent(APP_VERSION)}-academy-game-1`;
+      const fail = () => { s.remove(); reject(new Error('Academy bundle failed to load')); };
+      s.onload = () => { if (window.__academyStart) resolve(); else fail(); };
+      s.onerror = fail;
       document.head.appendChild(s);
-    });
+    }).catch(error => { academyBundlePromise = null; throw error; });
   }
   return academyBundlePromise;
 }

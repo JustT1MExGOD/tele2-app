@@ -4,7 +4,7 @@
  * updated) map, using the real registry/employee course, not a synthetic
  * test course, so this also exercises the actual chapter content wiring.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const completeAcademyStepMock = vi.fn();
 const getAcademyProgressMock = vi.fn();
@@ -17,6 +17,7 @@ vi.mock('../src/features/tutorial/api.js', () => ({
 import { EMPLOYEE_CHAPTER_1_ID } from '../src/features/tutorial/courses/employee/index.js';
 
 describe('T2 Academy entry flow (map <-> chapter)', () => {
+  afterEach(() => window.__academyExit?.());
   beforeEach(() => {
     vi.resetModules();
     document.body.innerHTML = '';
@@ -66,11 +67,7 @@ describe('T2 Academy entry flow (map <-> chapter)', () => {
     // prove the entry point itself doesn't trust chapter ids blindly.
     window.__academyOpenChapter('employee-ch2');
     const after = document.getElementById('academyRoot')!.innerHTML;
-    // openChapter() only checks the id EXISTS in the course, not whether the
-    // map considers it unlocked — this documents that as current behavior:
-    // the real gate against skipping ahead is that the map never renders a
-    // clickable button for a locked node in the first place.
-    expect(after).not.toBe(before);
+    expect(after).toBe(before);
   });
 
   it('completing a chapter returns to the map with progress refreshed from the server', async () => {

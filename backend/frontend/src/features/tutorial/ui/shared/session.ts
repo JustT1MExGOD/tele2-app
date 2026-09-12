@@ -13,7 +13,8 @@ import { ArbuzichController } from '../../character/arbuzich-controller.js';
 import { genericLine } from '../../character/dialogue.js';
 import { completeStep as persistStepCompletion } from '../../model/progress.js';
 import { resolveTrainingStoreCode, TRAINING_STORE_CODE } from '../../practice/replacement-practice.js';
-import { beginSalePractice as runSalePractice } from '../../practice/sale-practice.js';
+import { openTrainingSale } from '../game/training-sale.js';
+import { getGame } from '../game/director.js';
 import { TrainingShiftSandbox } from '../../practice/shift-practice.js';
 import { renderDialogue, renderStepBody, renderProgressDots, renderRewardReveal, animateXpCounter, primaryActionLabelForStep } from './render.js';
 import type { AcademyStep } from '../../model/types.js';
@@ -39,6 +40,13 @@ export class AcademySession {
   private shiftSandbox = new TrainingShiftSandbox();
   private checklistDone = new Set<string>();
   private salePracticeInFlight = false;
+  private busy = false;
+  private destroyed = false;
+  private rewarded = false;
+  private checklistInFlight = false;
+  private abortController = new AbortController();
+  private get game() { return getGame(this.refs.dialogueEl.closest<HTMLElement>('#academyRoot')); }
+  private refreshSpotlight = () => this.renderSpotlight(this.engine.getStep());
 
   constructor(engine: TutorialEngine, arbuzich: ArbuzichController, headers: Record<string, string>, refs: AcademyMountRefs, onExit: () => void) {
     this.engine = engine;
@@ -49,17 +57,24 @@ export class AcademySession {
   }
 
   start(): void {
+    window.addEventListener('resize', this.refreshSpotlight);
+    window.addEventListener('scroll', this.refreshSpotlight, true);
     if (this.refs.arbuzichEl) this.arbuzich.attach(this.refs.arbuzichEl);
     this.unsubscribeEngine = this.engine.subscribe(() => this.render());
     this.render();
   }
 
   destroy(): void {
+    this.destroyed = true;
+    this.abortController.abort();
+    window.removeEventListener('resize', this.refreshSpotlight);
+    window.removeEventListener('scroll', this.refreshSpotlight, true);
     this.unsubscribeEngine?.();
     this.arbuzich.destroy();
   }
 
   private render(): void {
+    if (this.destroyed) return;
     const step = this.engine.getStep();
     // Rebuilding dialogue/body/practice on EVERY engine change (not just a
     // step change) would wipe out checkPracticeCode()'s own success/error
@@ -79,9 +94,26 @@ export class AcademySession {
       this.checklistDone.clear();
       this.renderPracticeArea(step);
       this.lastRenderedStepId = step.id;
+      const progress = this.engine.getStepProgress();
+      this.game?.setStep(step, progress.index, progress.total);
+      if (step.kind === 'quiz' && step.quiz) this.renderQuiz(step);
     }
     this.renderSpotlight(step);
     this.renderActions(step);
+  }
+
+  private renderQuiz(step: AcademyStep): void {
+    const quiz = step.quiz!;
+    this.refs.practiceEl.hidden = false;
+    this.refs.practiceEl.innerHTML = '<div class="academy-quiz"></div>';
+    const box = this.refs.practiceEl.firstElementChild!;
+    const question = document.createElement('p'); question.textContent = quiz.question; box.append(question);
+    const status = document.createElement('p'); status.setAttribute('role', 'status');
+    quiz.options.forEach((option, index) => {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = option;
+      button.onclick = () => { if (this.busy || this.destroyed) return; const ok = this.engine.answerQuiz(index); this.game?.feedback(ok); status.textContent = ok ? 'Верно! Можно двигаться дальше.' : 'Попробуй ещё раз — подумай о задании.'; };
+      box.append(button);
+    }); box.append(status);
   }
 
   private renderPracticeArea(step: AcademyStep): void {
@@ -96,7 +128,7 @@ export class AcademySession {
       case 'sale':
         this.refs.practiceEl.innerHTML = `
           <div id="academyPracticeResult"></div>
-          <button type="button" class="btn-main" onclick="__academyBeginSale()">Открыть форму продажи</button>`;
+          <button type="button" class="btn-main" onclick="__academyBeginSale()">Открыть учебную кассу</button>`;
         return;
       case 'shift-open':
         // Deliberately does NOT auto-complete from pre-existing sandbox
@@ -139,7 +171,7 @@ export class AcademySession {
           <div class="academy-checklist-item${this.checklistDone.has(item.id) ? ' done' : ''}">
             <span class="academy-checklist-check">${this.checklistDone.has(item.id) ? '✓' : ''}</span>
             <span class="academy-checklist-label">${escapeHtml(item.label)}</span>
-            ${this.checklistDone.has(item.id) ? '' : `<button type="button" class="academy-checklist-run" onclick="__academyChecklistItem('${item.id}')">Выполнить</button>`}
+            ${this.checklistDone.has(item.id) ? '' : `<button type="button" class="academy-checklist-run" ${this.checklistInFlight || items.find((i) => !this.checklistDone.has(i.id))?.id !== item.id ? 'disabled' : ''} onclick="__academyChecklistItem('${item.id}')">Выполнить</button>`}
           </div>`
           )
           .join('')}
@@ -153,10 +185,12 @@ export class AcademySession {
     const result = resolveTrainingStoreCode(input.value);
     if (!result.allowed || !result.store) {
       this.arbuzich.setState('mistake');
+      this.game?.feedback(false);
       resultEl.innerHTML = `<div class="academy-practice-error">${escapeHtml(result.message || genericLine('mistake') || 'Не то')}</div>`;
       return;
     }
     this.arbuzich.setState('success');
+    this.game?.feedback(true);
     resultEl.innerHTML = `
       <div class="academy-practice-success">
         <div class="academy-practice-store-name">${escapeHtml(result.store.name)}</div>
@@ -169,18 +203,20 @@ export class AcademySession {
 
   async beginSalePractice(): Promise<void> {
     const step = this.engine.getStep();
-    if (this.salePracticeInFlight || !step.saleTarget) return;
+    if (this.destroyed || this.busy || this.salePracticeInFlight || step.practiceKind !== 'sale' || !step.saleTarget || this.engine.canAdvance()) return;
     this.salePracticeInFlight = true;
     const resultEl = this.refs.practiceEl.querySelector<HTMLElement>('#academyPracticeResult');
     try {
-      const result = await runSalePractice({ metrics: step.saleTarget });
-      if (!resultEl) return;
+      const result = await openTrainingSale(this.refs.practiceEl, step.saleTarget, this.abortController.signal);
+      if (this.destroyed || this.engine.getStep() !== step || result.cancelled || !resultEl) return;
       if (result.matched) {
         this.arbuzich.setState('success');
+    this.game?.feedback(true);
         resultEl.innerHTML = `<div class="academy-practice-success">Именно то, что нужно — миссия выполнена.</div>`;
         this.engine.markRequiredActionDone();
       } else {
         this.arbuzich.setState('mistake');
+      this.game?.feedback(false);
         resultEl.innerHTML = `<div class="academy-practice-error">Не совсем — попробуй ещё раз с нужными метриками.</div>`;
       }
     } finally {
@@ -189,9 +225,11 @@ export class AcademySession {
   }
 
   toggleShift(action: 'open' | 'close'): void {
+    if (this.destroyed || this.busy || this.engine.getStep().practiceKind !== `shift-${action}` || this.engine.canAdvance()) return;
     if (action === 'open') this.shiftSandbox.openShift();
     else this.shiftSandbox.closeShift();
     this.arbuzich.setState('success');
+    this.game?.feedback(true);
     // markRequiredActionDone() emits -> re-enters render() -> since this is
     // NOT a step change, isNewStep is false, so it only refreshes
     // actions/spotlight, never re-invokes renderPracticeArea (no
@@ -214,9 +252,11 @@ export class AcademySession {
   async runChecklistItem(itemId: string): Promise<void> {
     const step = this.engine.getStep();
     const item = step.checklist?.find((i) => i.id === itemId);
-    if (!item) return;
+    if (!item || this.destroyed || this.busy || this.checklistInFlight || step.practiceKind !== 'checklist' || step.checklist?.find((i) => !this.checklistDone.has(i.id))?.id !== itemId) return;
+    this.checklistInFlight = true;
+    this.renderChecklist(step);
     let ok = false;
-    switch (item.kind) {
+    try { switch (item.kind) {
       case 'shift-open':
         this.shiftSandbox.openShift();
         ok = true;
@@ -226,17 +266,21 @@ export class AcademySession {
         ok = true;
         break;
       case 'sale': {
-        const result = await runSalePractice({ metrics: { sim: 1 } });
+        const result = await openTrainingSale(this.refs.practiceEl, { sim: 1 }, this.abortController.signal);
         ok = result.matched;
         break;
       }
       case 'replacement':
-        ok = true; // discovery-only checklist entries — no separate input UI
+        ok = false; // Для такого пункта требуется отдельная проверка ввода.
         break;
     }
+    } finally { this.checklistInFlight = false; }
+    if (this.destroyed || this.engine.getStep() !== step) return;
+    this.renderChecklist(step);
     if (ok) {
       this.checklistDone.add(itemId);
       this.arbuzich.setState('success');
+    this.game?.feedback(true);
       this.renderChecklist(step);
       if (step.checklist && step.checklist.every((i) => this.checklistDone.has(i.id))) {
         this.engine.markRequiredActionDone();
@@ -246,7 +290,7 @@ export class AcademySession {
 
   private renderSpotlight(step: AcademyStep): void {
     if (!this.refs.spotlightEl) return;
-    if (!step.targetId) {
+    if (step.kind !== 'discover' || !step.targetId) {
       this.refs.spotlightEl.hidden = true;
       return;
     }
@@ -268,7 +312,7 @@ export class AcademySession {
   private renderActions(step: AcademyStep): void {
     const canAdvance = this.engine.canAdvance();
     const label = primaryActionLabelForStep(step, canAdvance, this.engine.isLastStepOfChapter());
-    const disabled = step.kind === 'discover' ? false : !canAdvance;
+    const disabled = this.busy || !canAdvance;
     this.refs.actionsEl.innerHTML = `<button type="button" class="btn-main academy-primary-action" ${disabled ? 'disabled' : ''} onclick="__academyAdvance()">${escapeHtml(label)}</button>`;
     if (step.kind === 'discover') {
       // Discover steps are confirmed by the user, not gated behind a real
@@ -280,6 +324,7 @@ export class AcademySession {
   }
 
   confirmDiscover(): void {
+    if (this.destroyed || this.busy || this.engine.getStep().kind !== 'discover') return;
     this.engine.markRequiredActionDone();
   }
 
@@ -288,8 +333,16 @@ export class AcademySession {
     // Every step's completion is persisted server-side before the engine
     // moves on — reward amounts are looked up server-side by step.id
     // (core/academy/rewards.ts); the client never decides its own payout.
+    if (this.destroyed || this.busy || this.rewarded || !this.engine.canAdvance()) return;
+    this.busy = true;
+    this.refs.actionsEl.querySelector('.academy-save-error')?.remove();
+    this.renderActions(step);
+    try {
     const result = await persistStepCompletion(this.headers, step.id);
+    if (this.destroyed || this.engine.getStep() !== step) return;
     if (result.reward_granted) {
+      this.rewarded = true;
+      this.game?.reward();
       this.arbuzich.setState('chapter-complete');
       this.refs.dialogueEl.innerHTML = renderRewardReveal(result.xp_awarded, result.badge?.title);
       animateXpCounter(this.refs.dialogueEl);
@@ -301,6 +354,16 @@ export class AcademySession {
     const { chapterComplete } = this.engine.advance();
     if (chapterComplete) {
       this.onExit();
+    }
+    } catch {
+      if (!this.destroyed) {
+        const error = document.createElement('p'); error.className = 'academy-save-error'; error.setAttribute('role', 'alert');
+        error.textContent = 'Не удалось сохранить шаг. Проверь соединение и попробуй ещё раз.';
+        this.refs.bodyEl.querySelector('.academy-save-error')?.remove(); this.refs.bodyEl.append(error);
+      }
+    } finally {
+      this.busy = false;
+      if (!this.destroyed && !this.rewarded) this.renderActions(this.engine.getStep());
     }
   }
 
