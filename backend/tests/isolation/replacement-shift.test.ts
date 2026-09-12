@@ -12,6 +12,7 @@ import { query } from '../../src/data/db/index.js';
 import { findReplacementEmployeesForStoreDate } from '../../src/data/repositories/shifts.js';
 import { findUnderperformingRaw, findTopEmployees } from '../../src/data/repositories/supervisor-analytics.js';
 import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../src/shared/replacement.js';
+import { todayMoscow } from '../../src/utils/date.js';
 
 const fx = new TestFixtures();
 const sectorIds: string[] = [];
@@ -695,7 +696,10 @@ describe('Replacement shift — GET /shifts/open-map (add-sale store prefill by 
     const manager = await fx.createEmployee(orgA, { role: 'manager' });
     const app = await getApp();
     const empHeaders = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
-    const date = '2026-07-25';
+    // A genuine same-day replacement: the open session's own work_date is
+    // today, so it correctly overrides the schedule (see the stale-session
+    // regression test below for the opposite, prior-day case).
+    const date = todayMoscow();
 
     await query(
       `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'10-21',12)`,
@@ -719,6 +723,42 @@ describe('Replacement shift — GET /shifts/open-map (add-sale store prefill by 
     expect(returnedStore.name).toBe('RS Store OM-B1');
 
     await app.inject({ method: 'POST', url: '/shifts/close', headers: empHeaders, payload: {} });
+  });
+
+  it('a hanging open session from a PRIOR day (never closed) is excluded — today\'s schedule wins instead, not the stale store', async () => {
+    // Regression for a real production incident: an employee opened a
+    // REPLACEMENT session yesterday, never closed it, and the stale store
+    // kept overriding today's "Добавить продажу" prefill even though today
+    // has its own (different) schedule.
+    const sector = await createSector('RS Sector OpenMapStale');
+    const orgA = await fx.createOrg('RS Org OMS-A');
+    const orgB = await fx.createOrg('RS Org OMS-B');
+    await setOrgSector(orgA, sector);
+    await setOrgSector(orgB, sector);
+    const storeA = await fx.createStore(orgA, 'RS Store OMS-A');
+    const storeB = await fx.createStore(orgB, 'RS Store OMS-B');
+    const emp = await fx.createEmployee(orgA, { role: 'employee' });
+    const manager = await fx.createEmployee(orgA, { role: 'manager' });
+    const app = await getApp();
+    const empHeaders = { ...authAs(emp.telegramId), 'content-type': 'application/json' };
+    const yesterday = new Date(Date.parse(todayMoscow() + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+    const today = todayMoscow();
+
+    await query(
+      `INSERT INTO schedules (employee_id, work_date, store_id, shift_text, hours) VALUES ($1,$2,$3,'10-21',12)`,
+      [emp.id, today, storeA]
+    );
+    const storeBRow = await query(`SELECT code FROM stores WHERE id = $1`, [storeB]);
+    await app.inject({
+      method: 'POST', url: '/shifts/open',
+      headers: empHeaders, payload: { store_code: storeBRow.rows[0].code, work_date: yesterday }
+    });
+    // Never closed — this is the hanging session.
+
+    const res = await app.inject({ method: 'GET', url: '/shifts/open-map', headers: authAs(manager.telegramId) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().open[String(emp.id)]).toBeUndefined();
+    expect(res.json().stores.find((s: any) => s.id === storeB)).toBeUndefined();
   });
 
   it('an employee with no open shift is simply absent from the map', async () => {

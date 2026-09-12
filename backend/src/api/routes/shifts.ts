@@ -348,7 +348,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
   app.get('/shifts/open-map', async (request, reply): Promise<ShiftOpenMapResponse | undefined> => {
     if (!requireActive(request, reply)) return;
     const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
-    const rows = await shiftsRepo.findOpenSessionStoresForOrg(orgId);
+    const rows = await shiftsRepo.findOpenSessionStoresForOrg(orgId, todayMoscow());
     const open: Record<string, string> = {};
     const storesById = new Map<string, { id: string; name: string }>();
     for (const r of rows) {

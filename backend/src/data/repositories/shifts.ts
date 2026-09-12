@@ -106,15 +106,22 @@ export async function findCurrentOpenWithStore(employeeId: number): Promise<any 
  * modal must inject it into its own store picker as an extra option (with
  * a real label) for the pre-select to actually land on it, rather than
  * silently falling through to whatever option happens to be first.
+ *
+ * `ss.work_date = today` is required, not just `status = 'open'`: a
+ * session opened for a past date that was simply never closed (a real
+ * incident, see id 89/Плюхин 2026-09) is stale, not a live replacement —
+ * without this filter it would keep overriding today's schedule
+ * indefinitely. A genuine same-day replacement always has
+ * `work_date = today`, so this changes nothing for that case.
  */
-export async function findOpenSessionStoresForOrg(orgId: string): Promise<{ employee_id: number; store_id: string; store_name: string | null }[]> {
+export async function findOpenSessionStoresForOrg(orgId: string, today: string): Promise<{ employee_id: number; store_id: string; store_name: string | null }[]> {
   const res = await query(
     `SELECT ss.employee_id, ss.store_id, COALESCE(st.display_name, st.name) as store_name
      FROM shift_sessions ss
      JOIN employees e ON e.id = ss.employee_id
      LEFT JOIN stores st ON st.id = ss.store_id
-     WHERE ss.status = 'open' AND COALESCE(e.org_id, 'default') = $1`,
-    [orgId]
+     WHERE ss.status = 'open' AND ss.work_date = $2::date AND COALESCE(e.org_id, 'default') = $1`,
+    [orgId, today]
   );
   return res.rows;
 }
