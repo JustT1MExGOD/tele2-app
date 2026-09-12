@@ -43,7 +43,7 @@
     "@sinclair/typebox": "^0.34.52",
     "dotenv": "^16.4.5",
     "fastify": "^5.1.0",
-    "grammy": "^1.30.0",
+    "grammy": "^1.46.0",
     "javascript-lp-solver": "^1.0.3",
     "node-cron": "^4.6.0",
     "otplib": "^13.5.0",
