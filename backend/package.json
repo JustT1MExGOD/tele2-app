@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
-    "@fastify/cors": "^10.0.1",
+    "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
     "@fastify/multipart": "^10.1.1",
     "@fastify/rate-limit": "^11.2.0",
@@ -42,7 +42,7 @@
     "@simplewebauthn/server": "^13.3.3",
     "@sinclair/typebox": "^0.34.52",
     "dotenv": "^16.4.5",
-    "fastify": "^5.1.0",
+    "fastify": "^5.12.3",
     "grammy": "^1.30.0",
     "javascript-lp-solver": "^1.0.3",
     "node-cron": "^4.6.0",
