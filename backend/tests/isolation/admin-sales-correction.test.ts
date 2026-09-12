@@ -156,6 +156,114 @@ describe('Admin Control Center — Sales Correction Center', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('GET /admin/sales/:id returns a metrics map covering both integer and numeric sales columns', async () => {
+    const app = await getApp();
+    const row = await seedSale(employeeA.id, storeA, '2024-02-01', { sim: 3, settings: 2 });
+    const res = await app.inject({ method: 'GET', url: `/admin/sales/${row.id}`, headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
+    expect(res.statusCode).toBe(200);
+    const { metrics } = res.json();
+    expect(metrics.sim.value).toBe(3);
+    expect(metrics.sim.label).toBeTruthy();
+    expect(metrics.settings.value).toBe(2);
+    expect(metrics.settings.label).toBeTruthy();
+  });
+
+  it('correct-metric updates a single metric, bumps version, and writes SALE_METRIC_CORRECTED audit', async () => {
+    const app = await getApp();
+    const row = await seedSale(employeeA.id, storeA, '2024-02-02', { sim: 3, mnp: 1 });
+    const res = await app.inject({
+      method: 'POST', url: `/admin/sales/${row.id}/correct-metric`,
+      headers: { ...authAs(adminA.telegramId, adminA.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { metric: 'sim', value: 8, version: row.version, reason: 'сотрудник ввёл неверное количество' }
+    });
+    expect(res.statusCode).toBe(200);
+    const updated = res.json().row;
+    expect(Number(updated.sim)).toBe(8);
+    expect(Number(updated.mnp)).toBe(1);
+    expect(Number(updated.version)).toBe(Number(row.version) + 1);
+    expect(res.json().metrics.sim.value).toBe(8);
+
+    const audit = await query(
+      `SELECT * FROM audit_log WHERE action = 'SALE_METRIC_CORRECTED' AND target_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [String(row.id)]
+    );
+    expect(audit.rows[0].before.sim).toBe(3);
+    expect(audit.rows[0].after.sim).toBe(8);
+    expect(audit.rows[0].after.reason).toBe('сотрудник ввёл неверное количество');
+  });
+
+  it('correct-metric requires a reason', async () => {
+    const app = await getApp();
+    const row = await seedSale(employeeA.id, storeA, '2024-02-03', { sim: 3 });
+    const res = await app.inject({
+      method: 'POST', url: `/admin/sales/${row.id}/correct-metric`,
+      headers: { ...authAs(adminA.telegramId, adminA.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { metric: 'sim', value: 8, version: row.version }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('correct-metric rejects an unknown metric name', async () => {
+    const app = await getApp();
+    const row = await seedSale(employeeA.id, storeA, '2024-02-04', { sim: 3 });
+    const res = await app.inject({
+      method: 'POST', url: `/admin/sales/${row.id}/correct-metric`,
+      headers: { ...authAs(adminA.telegramId, adminA.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { metric: 'store_id', value: 8, version: row.version, reason: 'x' }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('correct-metric rejects a negative or out-of-range value', async () => {
+    const app = await getApp();
+    const row = await seedSale(employeeA.id, storeA, '2024-02-05', { sim: 3 });
+    const negative = await app.inject({
+      method: 'POST', url: `/admin/sales/${row.id}/correct-metric`,
+      headers: { ...authAs(adminA.telegramId, adminA.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { metric: 'sim', value: -1, version: row.version, reason: 'x' }
+    });
+    expect(negative.statusCode).toBe(400);
+  });
+
+  it('correct-metric on a voided row is rejected', async () => {
+    const app = await getApp();
+    const row = await seedSale(employeeA.id, storeA, '2024-02-06', { sim: 3 });
+    const voidRes = await app.inject({
+      method: 'POST', url: `/admin/sales/${row.id}/void`,
+      headers: { ...authAs(adminA.telegramId, adminA.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { version: row.version, reason: 'ошибка' }
+    });
+    const voided = voidRes.json().row;
+    const res = await app.inject({
+      method: 'POST', url: `/admin/sales/${row.id}/correct-metric`,
+      headers: { ...authAs(adminA.telegramId, adminA.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { metric: 'sim', value: 8, version: voided.version, reason: 'x' }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('a stale version on correct-metric is rejected with a conflict', async () => {
+    const app = await getApp();
+    const row = await seedSale(employeeA.id, storeA, '2024-02-07', { sim: 3 });
+    const res = await app.inject({
+      method: 'POST', url: `/admin/sales/${row.id}/correct-metric`,
+      headers: { ...authAs(adminA.telegramId, adminA.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { metric: 'sim', value: 8, version: Number(row.version) + 99, reason: 'x' }
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('non-admin is blocked from correct-metric', async () => {
+    const app = await getApp();
+    const row = await seedSale(employeeA.id, storeA, '2024-02-08', { sim: 3 });
+    const res = await app.inject({
+      method: 'POST', url: `/admin/sales/${row.id}/correct-metric`,
+      headers: { ...authAs(managerA.telegramId), 'content-type': 'application/json' },
+      payload: { metric: 'sim', value: 8, version: row.version, reason: 'x' }
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('correct-store within the same org succeeds without step-up', async () => {
     const app = await getApp();
     const row = await seedSale(employeeA.id, storeA, '2024-01-16', { sim: 9 });

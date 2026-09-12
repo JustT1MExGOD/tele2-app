@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import '../src/app/api-bridge.js';
 
-// Exact 159-name public surface of the former monolithic api-client.ts
+// Exact 160-name public surface of the former monolithic api-client.ts
 // (128 original + resolveStore + getShiftOpenMap, both added for the
 // replacement-shift feature, + getAcademyProgress/completeAcademyStep/
 // getAcademyContextualStatus/dismissAcademyContextual, added for T2
@@ -68,13 +68,14 @@ const EXPECTED_KEYS = [
   'adminGetStore', 'adminEditStore', 'adminDeactivateStore', 'adminReactivateStore',
   'adminSearchSales', 'adminGetSale', 'adminPreviewVoidSale', 'adminVoidSale',
   'adminRestoreSale', 'adminPreviewCorrectStore', 'adminCorrectSaleStore',
+  'adminCorrectSaleMetric',
   'issueStepUpTicket'
 ] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 159-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 160-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 159
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 160
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 

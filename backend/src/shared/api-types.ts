@@ -1597,10 +1597,18 @@ export interface AdminSalesListResponse {
 
 export interface AdminSaleDetailResponse {
   row: AdminSaleRow;
+  metrics: Record<string, { value: number; label: string }>;
 }
 
 export interface AdminSaleActionResponse {
   row: AdminSaleRow;
+}
+
+export interface AdminSaleMetricCorrectRequest {
+  metric: string;
+  value: number;
+  version: number;
+  reason: string;
 }
 
 export interface AdminSaleVoidPreviewResponse {

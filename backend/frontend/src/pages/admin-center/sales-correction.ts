@@ -8,7 +8,7 @@
  * derived from stores.org_id — see AdminSaleCorrectStorePreviewResponse's
  * crossOrg flag and the step-up requirement below).
  */
-import { confirmDangerousAction, requestStepUpTicket } from './shared/dialogs.js';
+import { confirmDangerousAction, requestStepUpTicket, promptMetricCorrection } from './shared/dialogs.js';
 import { fetchOrgStores } from '../../app/core.js';
 import type { AdminSaleRow } from '../../../../src/shared/api-types.js';
 
@@ -77,15 +77,18 @@ async function renderSaleDetail(saleId: string): Promise<void> {
   try {
     const d = await window.apiClient.adminGetSale(authHeaders(), saleId);
     const row = d.row;
-    const metrics = Object.entries(row)
-      .filter(([k, v]) => !['id', 'employee_id', 'store_id', 'sale_date', 'employee_name', 'store_name', 'voided_at', 'voided_by', 'void_reason', 'version'].includes(k) && typeof v === 'number')
-      .map(([k, v]) => `<span class="mchip" style="cursor:default">${esc(k)}: ${esc(String(v))}</span>`)
+    const canEdit = !row.voided_at;
+    const metrics = Object.entries(d.metrics)
+      .map(
+        ([metricId, m]) =>
+          `<button type="button" class="mchip" data-metric-id="${esc(metricId)}" data-metric-value="${esc(String(m.value))}" ${canEdit ? '' : 'disabled'} style="${canEdit ? 'cursor:pointer' : 'cursor:default'}">${esc(m.label)}: ${esc(String(m.value))}</button>`
+      )
       .join(' ');
 
     box.innerHTML = `
       <div class="section">
         <div class="section-title">${esc(row.employee_name)} · ${esc(row.store_name)} · ${esc(row.sale_date)}</div>
-        <div style="padding:0 16px 8px;display:flex;gap:6px;flex-wrap:wrap">${metrics || '<span class="empty">нет метрик</span>'}</div>
+        <div id="saleMetricChips" style="padding:0 16px 8px;display:flex;gap:6px;flex-wrap:wrap">${metrics || '<span class="empty">нет метрик</span>'}</div>
         ${row.voided_at ? `<div style="padding:0 16px 8px;color:var(--text-secondary,#8e8e93);font-size:13px">Аннулировано: ${esc(row.void_reason || '')}</div>` : ''}
         <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
           ${row.voided_at
@@ -99,6 +102,16 @@ async function renderSaleDetail(saleId: string): Promise<void> {
     document.getElementById('saleVoidBtn')?.addEventListener('click', () => onVoidSale(row));
     document.getElementById('saleRestoreBtn')?.addEventListener('click', () => onRestoreSale(row));
     document.getElementById('saleCorrectStoreBtn')?.addEventListener('click', () => onCorrectStore(row));
+    if (canEdit) {
+      document.getElementById('saleMetricChips')?.addEventListener('click', (e) => {
+        const chip = (e.target as Element | null)?.closest<HTMLElement>('[data-metric-id]');
+        if (!chip) return;
+        const metricId = chip.dataset.metricId!;
+        const currentValue = Number(chip.dataset.metricValue) || 0;
+        const label = d.metrics[metricId]?.label || metricId;
+        onCorrectMetric(row, metricId, label, currentValue);
+      });
+    }
   } catch (e) {
     console.error(e);
     box.innerHTML = '<div class="empty">Не удалось загрузить строку</div>';
@@ -137,6 +150,18 @@ async function onRestoreSale(row: AdminSaleRow): Promise<void> {
   try {
     await window.apiClient.adminRestoreSale(authHeaders(true), row.id, row.version, reason);
     toast('Строка восстановлена', 'ok');
+    renderSaleDetail(row.id);
+  } catch (e) {
+    toast('Ошибка (возможно, версия устарела)', 'err');
+  }
+}
+
+async function onCorrectMetric(row: AdminSaleRow, metricId: string, label: string, currentValue: number): Promise<void> {
+  const result = await promptMetricCorrection({ label, currentValue });
+  if (result === null) return;
+  try {
+    await window.apiClient.adminCorrectSaleMetric(authHeaders(true), row.id, metricId, result.value, row.version, result.reason);
+    toast('Метрика изменена', 'ok');
     renderSaleDetail(row.id);
   } catch (e) {
     toast('Ошибка (возможно, версия устарела)', 'err');

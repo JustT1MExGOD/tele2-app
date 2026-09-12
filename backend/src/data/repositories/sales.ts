@@ -492,6 +492,22 @@ export async function zeroMetric(saleId: string, metric: string, q: typeof query
   return res.rows[0] || null;
 }
 
+/** Admin Control Center (20.59.0) — sets one metric to an arbitrary value
+ * (not just 0, unlike zeroMetric() above) with the same optimistic-
+ * concurrency check the void/restore/correct-store primitives use.
+ * `metric` must already be validated against getSalesSumColumns() by the
+ * caller (core/admin/sales-correction.ts) — same allowlist-before-
+ * interpolation discipline as zeroMetric/voidSaleRow/restoreSaleRow. */
+export async function setMetric(
+  saleId: string, metric: string, value: number, expectedVersion: number, q: typeof query = query
+): Promise<any | null> {
+  const res = await q(
+    `UPDATE sales SET ${metric} = $3, version = version + 1, updated_at = now() WHERE id = $1 AND version = $2 RETURNING *`,
+    [saleId, expectedVersion, value]
+  );
+  return res.rows[0] || null;
+}
+
 export async function insertCorrectionAudit(
   data: { employeeId: number; storeId: string; saleDate: string; metric: string; delta: number; createdByTelegramId: number | null },
   q: typeof query = query

@@ -220,6 +220,7 @@ import {
   adminRestoreSale,
   adminPreviewCorrectStore,
   adminCorrectSaleStore,
+  adminCorrectSaleMetric,
   issueStepUpTicket
 } from '../features/admin-center/api.js';
 
@@ -384,6 +385,7 @@ declare global {
       adminRestoreSale: typeof adminRestoreSale;
       adminPreviewCorrectStore: typeof adminPreviewCorrectStore;
       adminCorrectSaleStore: typeof adminCorrectSaleStore;
+      adminCorrectSaleMetric: typeof adminCorrectSaleMetric;
       issueStepUpTicket: typeof issueStepUpTicket;
     };
   }
@@ -548,5 +550,6 @@ window.apiClient = {
   adminRestoreSale,
   adminPreviewCorrectStore,
   adminCorrectSaleStore,
+  adminCorrectSaleMetric,
   issueStepUpTicket
 };

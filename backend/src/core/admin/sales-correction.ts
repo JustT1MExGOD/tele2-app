@@ -35,7 +35,9 @@
 import { withTransaction, query } from '../../data/db/index.js';
 import * as salesRepo from '../../data/repositories/sales.js';
 import * as auditRepo from '../../data/repositories/audit.js';
-import { getSalesSumColumns } from '../shared/metrics-catalog.js';
+import { getSalesSumColumns, metricLabelMap } from '../shared/metrics-catalog.js';
+
+const MAX_METRIC_VALUE = 2_147_483_647;
 
 export class SaleVersionConflictError extends Error {
   constructor() {
@@ -74,6 +76,30 @@ export class SaleDestinationExistsError extends Error {
     super('На выбранной точке уже есть запись за этот день у этого сотрудника — перенос невозможен');
     this.name = 'SaleDestinationExistsError';
     Object.assign(this, { statusCode: 409 });
+  }
+}
+
+export class SaleUnknownMetricError extends Error {
+  constructor(metric: string) {
+    super(`Неизвестная метрика "${metric}"`);
+    this.name = 'SaleUnknownMetricError';
+    Object.assign(this, { statusCode: 400 });
+  }
+}
+
+export class SaleMetricValueRangeError extends Error {
+  constructor(metric: string, value: number) {
+    super(`Значение метрики "${metric}" (${value}) вне допустимого диапазона`);
+    this.name = 'SaleMetricValueRangeError';
+    Object.assign(this, { statusCode: 400 });
+  }
+}
+
+export class SaleVoidedCannotCorrectError extends Error {
+  constructor() {
+    super('Продажа аннулирована — сначала восстановите её, затем корректируйте метрики');
+    this.name = 'SaleVoidedCannotCorrectError';
+    Object.assign(this, { statusCode: 400 });
   }
 }
 
@@ -225,6 +251,69 @@ export async function correctSaleStore(opts: {
       requestId: opts.requestId ?? null,
       actorRole: opts.actor.role,
       targetOrgId: newStore?.org_id ?? null
+    }, q);
+
+    return updated;
+  });
+}
+
+/**
+ * Canonical (id, label, value) view of every known metric on a row, for
+ * GET /admin/sales/:id. Built from getSalesSumColumns() (the same
+ * allowlist reports/void-preview already trust as the source of truth
+ * for "what is a metric column") rather than introspecting the row's own
+ * keys — introspection previously undercounted, since Postgres `numeric`
+ * columns (settings/accessories/insurance/phones/wink/focus/credit_issued/
+ * plotter/hb/imp/import/esim/tst) come back from node-postgres as
+ * strings, not numbers, so a naive `typeof v === 'number'` filter on the
+ * frontend silently dropped roughly half the metrics.
+ */
+export async function saleMetricsView(row: any): Promise<Record<string, { value: number; label: string }>> {
+  const cols = await getSalesSumColumns();
+  const labels = await metricLabelMap();
+  const out: Record<string, { value: number; label: string }> = {};
+  for (const c of cols) {
+    out[c] = { value: Number(row[c]) || 0, label: labels[c] || c };
+  }
+  return out;
+}
+
+export async function correctSaleMetric(opts: {
+  saleId: string; metric: string; value: number; version: number; reason: string; actor: Actor; requestId?: string | null;
+}) {
+  const metricCols = await getSalesSumColumns();
+  if (!metricCols.includes(opts.metric)) throw new SaleUnknownMetricError(opts.metric);
+  if (!Number.isFinite(opts.value) || opts.value < 0 || opts.value > MAX_METRIC_VALUE) {
+    throw new SaleMetricValueRangeError(opts.metric, opts.value);
+  }
+
+  return withTransaction(async (q) => {
+    const row = await salesRepo.findByIdForAdmin(opts.saleId, true, q);
+    if (!row) throw new SaleNotFoundError();
+    if (row.voided_at) throw new SaleVoidedCannotCorrectError();
+    if (Number(row.version) !== opts.version) throw new SaleVersionConflictError();
+
+    const prevVal = Number(row[opts.metric]) || 0;
+    const updated = await salesRepo.setMetric(opts.saleId, opts.metric, opts.value, opts.version, q);
+    if (!updated) throw new SaleVersionConflictError();
+
+    if (prevVal !== opts.value) {
+      await salesRepo.insertCorrectionAudit(
+        { employeeId: row.employee_id, storeId: row.store_id, saleDate: row.sale_date, metric: opts.metric, delta: opts.value - prevVal, createdByTelegramId: opts.actor.telegramId },
+        q
+      );
+    }
+    await auditRepo.record({
+      orgId: row.store_org_id,
+      actorEmployeeId: opts.actor.employeeId,
+      actorTelegramId: opts.actor.telegramId,
+      action: 'SALE_METRIC_CORRECTED',
+      targetType: 'sale',
+      targetId: String(opts.saleId),
+      before: { [opts.metric]: prevVal },
+      after: { [opts.metric]: opts.value, reason: opts.reason },
+      requestId: opts.requestId ?? null,
+      actorRole: opts.actor.role
     }, q);
 
     return updated;

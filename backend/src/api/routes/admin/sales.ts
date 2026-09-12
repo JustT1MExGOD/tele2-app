@@ -49,7 +49,8 @@ export async function registerAdminSalesRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const row = await salesRepo.findByIdForAdmin(id);
     if (!row) return reply.code(404).send({ error: 'not_found' });
-    return { row };
+    const metrics = await correction.saleMetricsView(row);
+    return { row, metrics };
   });
 
   app.post('/admin/sales/:id/void/preview', async (request, reply) => {
@@ -79,6 +80,22 @@ export async function registerAdminSalesRoutes(app: FastifyInstance) {
     try {
       const row = await correction.restoreSale({ saleId: id, version: Number(body.version), reason: body.reason.trim(), actor: actorFrom(request), requestId: request.id });
       return { row };
+    } catch (e) { return errorReply(reply, e); }
+  });
+
+  app.post('/admin/sales/:id/correct-metric', async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const body = request.body as { metric: string; value: number; version: number; reason: string };
+    if (!body?.reason?.trim()) return reply.code(400).send({ error: 'reason_required', message: 'Укажите причину' });
+    if (!body?.metric) return reply.code(400).send({ error: 'metric_required', message: 'Укажите метрику' });
+    try {
+      const row = await correction.correctSaleMetric({
+        saleId: id, metric: body.metric, value: Number(body.value), version: Number(body.version),
+        reason: body.reason.trim(), actor: actorFrom(request), requestId: request.id
+      });
+      const metrics = await correction.saleMetricsView(row);
+      return { row, metrics };
     } catch (e) { return errorReply(reply, e); }
   });
 

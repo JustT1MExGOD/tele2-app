@@ -16,6 +16,7 @@ import type {
   AdminSaleActionResponse,
   AdminSaleVoidPreviewResponse,
   AdminSaleCorrectStorePreviewResponse,
+  AdminSaleMetricCorrectRequest,
   StepUpTicketResponse
 } from '../../../../src/shared/api-types.js';
 import { request } from '../../shared/api/http-client.js';
@@ -129,6 +130,11 @@ export async function adminVoidSale(headers: Record<string, string>, id: string,
 
 export async function adminRestoreSale(headers: Record<string, string>, id: string, version: number, reason: string): Promise<AdminSaleActionResponse> {
   return request(`/admin/sales/${encodeURIComponent(id)}/restore`, headers, { method: 'POST', body: { version, reason } });
+}
+
+export async function adminCorrectSaleMetric(headers: Record<string, string>, id: string, metric: string, value: number, version: number, reason: string): Promise<AdminSaleDetailResponse> {
+  const body: AdminSaleMetricCorrectRequest = { metric, value, version, reason };
+  return request(`/admin/sales/${encodeURIComponent(id)}/correct-metric`, headers, { method: 'POST', body });
 }
 
 export async function adminPreviewCorrectStore(headers: Record<string, string>, id: string, newStoreId: string): Promise<AdminSaleCorrectStorePreviewResponse> {
