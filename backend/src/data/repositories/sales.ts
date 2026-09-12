@@ -452,8 +452,8 @@ export async function findByDayForOrgOrSelf(
 }
 
 /** Дедуп-путь POST /sales: если idempotency-ключ уже применён, вернуть существующую строку. */
-export async function findOne(employeeId: number, storeId: string, saleDate: string): Promise<any | null> {
-  const res = await query(
+export async function findOne(employeeId: number, storeId: string, saleDate: string, q: typeof query = query): Promise<any | null> {
+  const res = await q(
     `SELECT * FROM sales WHERE employee_id = $1 AND store_id = $2 AND sale_date = $3`,
     [employeeId, storeId, saleDate]
   );
@@ -512,4 +512,109 @@ export async function csvExportPage(opts:{from:string;to:string;orgId:string;sto
       AND ($4::text IS NULL OR s.store_id=$4)
       AND ($5::date IS NULL OR (s.sale_date,s.id)>($5::date,$6::bigint))
     ORDER BY s.sale_date,s.id LIMIT 500`,[opts.from,opts.to,opts.orgId,opts.storeId,cursor?.date ?? null,cursor?.id ?? null])).rows;
+}
+
+// --- Admin Control Center (20.59.0) — sales day-row search/void/restore/
+// store-correction. "sale" here is always the (employee, store, sale_date)
+// additive aggregate row — there is no per-transaction sale entity in this
+// schema, see core/admin/sales-correction.ts's own comment for why.
+
+export interface AdminSalesSearchFilter {
+  orgId: string;
+  employeeId?: number;
+  storeId?: string;
+  from?: string;
+  to?: string;
+  includeVoided?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function adminSearchSales(f: AdminSalesSearchFilter): Promise<any[]> {
+  const conditions = [`COALESCE(st.org_id,'default') = $1`];
+  const params: any[] = [f.orgId];
+  if (f.employeeId) { params.push(f.employeeId); conditions.push(`s.employee_id = $${params.length}`); }
+  if (f.storeId) { params.push(f.storeId); conditions.push(`s.store_id = $${params.length}`); }
+  if (f.from) { params.push(f.from); conditions.push(`s.sale_date >= $${params.length}`); }
+  if (f.to) { params.push(f.to); conditions.push(`s.sale_date <= $${params.length}`); }
+  if (!f.includeVoided) conditions.push('s.voided_at IS NULL');
+  const limit = Math.min(f.limit || 50, 200);
+  const offset = Math.max(f.offset || 0, 0);
+  params.push(limit, offset);
+  const res = await query(
+    `SELECT s.*, e.full_name as employee_name, COALESCE(st.display_name, st.name) as store_name, st.org_id as store_org_id
+     FROM sales s
+     JOIN employees e ON e.id = s.employee_id
+     JOIN stores st ON st.id = s.store_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY s.sale_date DESC, s.id DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+  return res.rows;
+}
+
+export async function findByIdForAdmin(saleId: string, lock = false, q: typeof query = query): Promise<any | null> {
+  const res = await q(
+    `SELECT s.*, e.full_name as employee_name, e.org_id as employee_org_id,
+            COALESCE(st.display_name, st.name) as store_name, st.org_id as store_org_id
+     FROM sales s
+     JOIN employees e ON e.id = s.employee_id
+     JOIN stores st ON st.id = s.store_id
+     WHERE s.id = $1 ${lock ? 'FOR UPDATE OF s' : ''}`,
+    [saleId]
+  );
+  return res.rows[0] || null;
+}
+
+/** Zeroes every non-zero metric column in one UPDATE and bumps `version` —
+ * the "void" primitive. Caller records the pre-image (all metric values)
+ * in audit_log.before so restoreSaleRow() can replay it exactly. */
+export async function voidSaleRow(
+  saleId: string, expectedVersion: number, voidedBy: number, reason: string,
+  metricColumns: string[], q: typeof query = query
+): Promise<any | null> {
+  const sets = metricColumns.map(m => `${m} = 0`).join(', ');
+  const res = await q(
+    `UPDATE sales SET ${sets}, voided_at = now(), voided_by = $3, void_reason = $4, version = version + 1, updated_at = now()
+     WHERE id = $1 AND version = $2
+     RETURNING *`,
+    [saleId, expectedVersion, voidedBy, reason]
+  );
+  return res.rows[0] || null;
+}
+
+/** Restore primitive — writes back a specific pre-void metric snapshot
+ * (read from the SALE_VOIDED audit_log row by the caller) and clears the
+ * void markers. */
+export async function restoreSaleRow(
+  saleId: string, expectedVersion: number, metrics: Record<string, number>, q: typeof query = query
+): Promise<any | null> {
+  const cols = Object.keys(metrics);
+  if (!cols.length) return findByIdForAdmin(saleId, false, q);
+  const sets = cols.map((c, i) => `${c} = $${i + 3}`).join(', ');
+  const res = await q(
+    `UPDATE sales SET ${sets}, voided_at = NULL, voided_by = NULL, void_reason = NULL, version = version + 1, updated_at = now()
+     WHERE id = $1 AND version = $2
+     RETURNING *`,
+    [saleId, expectedVersion, ...cols.map(c => metrics[c])]
+  );
+  return res.rows[0] || null;
+}
+
+/** Moves the day-row to a different store — this IS the org correction,
+ * since org attribution is always derived from stores.org_id, never
+ * stored on `sales` itself. Fails (unique violation surfaces to caller)
+ * if a row already exists at (employee_id, new_store_id, sale_date) —
+ * merging two real day-rows is a separate, not-yet-designed operation. */
+export async function moveSaleRowStore(
+  saleId: string, expectedVersion: number, newStoreId: string, q: typeof query = query
+): Promise<any | null> {
+  const res = await q(
+    `UPDATE sales SET store_id = $3, version = version + 1, updated_at = now()
+     WHERE id = $1 AND version = $2
+     RETURNING *`,
+    [saleId, expectedVersion, newStoreId]
+  );
+  return res.rows[0] || null;
 }

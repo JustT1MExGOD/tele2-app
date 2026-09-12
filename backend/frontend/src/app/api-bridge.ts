@@ -196,6 +196,32 @@ import {
   dismissAcademyContextual
 } from '../features/tutorial/api.js';
 import { exportCsv } from '../shared/api/http-client.js';
+import {
+  adminGetOverview,
+  adminSearch,
+  adminGetEmployee,
+  adminEditEmployee,
+  adminChangeEmployeeRole,
+  adminDeactivateEmployee,
+  adminReactivateEmployee,
+  adminRevokeEmployeeSession,
+  adminRevokeAllEmployeeSessions,
+  adminResetEmployeeMfa,
+  adminInitiatePasswordReset,
+  adminListStores,
+  adminGetStore,
+  adminEditStore,
+  adminDeactivateStore,
+  adminReactivateStore,
+  adminSearchSales,
+  adminGetSale,
+  adminPreviewVoidSale,
+  adminVoidSale,
+  adminRestoreSale,
+  adminPreviewCorrectStore,
+  adminCorrectSaleStore,
+  issueStepUpTicket
+} from '../features/admin-center/api.js';
 
 declare global {
   interface Window {
@@ -335,6 +361,30 @@ declare global {
       postChatMessage: typeof postChatMessage;
       uploadChatAttachment: typeof uploadChatAttachment;
       getChatAttachment: typeof getChatAttachment;
+      adminGetOverview: typeof adminGetOverview;
+      adminSearch: typeof adminSearch;
+      adminGetEmployee: typeof adminGetEmployee;
+      adminEditEmployee: typeof adminEditEmployee;
+      adminChangeEmployeeRole: typeof adminChangeEmployeeRole;
+      adminDeactivateEmployee: typeof adminDeactivateEmployee;
+      adminReactivateEmployee: typeof adminReactivateEmployee;
+      adminRevokeEmployeeSession: typeof adminRevokeEmployeeSession;
+      adminRevokeAllEmployeeSessions: typeof adminRevokeAllEmployeeSessions;
+      adminResetEmployeeMfa: typeof adminResetEmployeeMfa;
+      adminInitiatePasswordReset: typeof adminInitiatePasswordReset;
+      adminListStores: typeof adminListStores;
+      adminGetStore: typeof adminGetStore;
+      adminEditStore: typeof adminEditStore;
+      adminDeactivateStore: typeof adminDeactivateStore;
+      adminReactivateStore: typeof adminReactivateStore;
+      adminSearchSales: typeof adminSearchSales;
+      adminGetSale: typeof adminGetSale;
+      adminPreviewVoidSale: typeof adminPreviewVoidSale;
+      adminVoidSale: typeof adminVoidSale;
+      adminRestoreSale: typeof adminRestoreSale;
+      adminPreviewCorrectStore: typeof adminPreviewCorrectStore;
+      adminCorrectSaleStore: typeof adminCorrectSaleStore;
+      issueStepUpTicket: typeof issueStepUpTicket;
     };
   }
 }
@@ -474,5 +524,29 @@ window.apiClient = {
   getChatMessages,
   postChatMessage,
   uploadChatAttachment,
-  getChatAttachment
+  getChatAttachment,
+  adminGetOverview,
+  adminSearch,
+  adminGetEmployee,
+  adminEditEmployee,
+  adminChangeEmployeeRole,
+  adminDeactivateEmployee,
+  adminReactivateEmployee,
+  adminRevokeEmployeeSession,
+  adminRevokeAllEmployeeSessions,
+  adminResetEmployeeMfa,
+  adminInitiatePasswordReset,
+  adminListStores,
+  adminGetStore,
+  adminEditStore,
+  adminDeactivateStore,
+  adminReactivateStore,
+  adminSearchSales,
+  adminGetSale,
+  adminPreviewVoidSale,
+  adminVoidSale,
+  adminRestoreSale,
+  adminPreviewCorrectStore,
+  adminCorrectSaleStore,
+  issueStepUpTicket
 };

@@ -288,6 +288,27 @@ export async function update(orgId: string, storeId: string, patch: StorePatch):
   return res.rows[0] || null;
 }
 
+/** Admin Control Center (20.59.0) — global search fan-out, org-scoped. */
+export async function searchByNameOrCode(orgId: string, term: string, limit: number): Promise<{ id: string; name: string; code: string }[]> {
+  const like = `%${term}%`;
+  const res = await query(
+    `SELECT id, COALESCE(display_name, name) as name, code FROM stores
+     WHERE COALESCE(org_id,'default') = $1 AND (name ILIKE $2 OR code ILIKE $2)
+     ORDER BY name LIMIT $3`,
+    [orgId, like, limit]
+  );
+  return res.rows;
+}
+
+/** Admin Control Center (20.59.0) — overview counters. */
+export async function countByOrg(orgId: string): Promise<{ active: number; total: number }> {
+  const res = await query(
+    `SELECT COUNT(*) FILTER (WHERE is_active) as active, COUNT(*) as total FROM stores WHERE COALESCE(org_id,'default') = $1`,
+    [orgId]
+  );
+  return { active: Number(res.rows[0].active), total: Number(res.rows[0].total) };
+}
+
 /** false — точки нет или она не в этой сети; и в том, и в другом случае
  * ничего не удалено. */
 export async function softDelete(orgId: string, storeId: string): Promise<boolean> {

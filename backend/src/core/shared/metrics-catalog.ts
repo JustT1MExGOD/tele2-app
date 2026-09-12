@@ -105,7 +105,11 @@ export function invalidateMetricsCache() {
  * ни одна метрика с продажами не пропадёт из отчётов молча.
  */
 const NON_METRIC_COLUMNS = new Set([
-  'id', 'employee_id', 'store_id', 'sale_date', 'created_at', 'updated_at'
+  'id', 'employee_id', 'store_id', 'sale_date', 'created_at', 'updated_at',
+  // 20.59.0 (Admin Control Center) — voided_by/version are bookkeeping
+  // columns on `sales`, not sale facts; version is `integer` so without
+  // this exclusion it would otherwise get picked up as a real metric.
+  'voided_by', 'version'
 ]);
 
 let colCache: string[] | null = null;

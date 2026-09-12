@@ -160,6 +160,17 @@ export function requireManager(request: FastifyRequest, reply: FastifyReply) {
   return true;
 }
 
+/** Admin Control Center и всё, что реально должно быть admin-only (не
+ * "manager и выше" — admin здесь единственная разрешённая роль). */
+export function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
+  if (!requireActive(request, reply)) return false;
+  if (request.user!.role !== 'admin') {
+    reply.code(403).send({ error: 'forbidden', message: 'Только для администратора' });
+    return false;
+  }
+  return true;
+}
+
 export function requireManagerOrSupervisor(request: FastifyRequest, reply: FastifyReply) {
   if (!requireActive(request, reply)) return false;
   const role = request.user!.role;

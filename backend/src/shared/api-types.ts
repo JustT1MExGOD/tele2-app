@@ -1494,3 +1494,126 @@ export interface AcademyContextualStatusResponse {
 export interface AcademyDismissContextualRequest {
   context_id: string;
 }
+
+// ===== Admin Control Center (20.59.0) =====
+
+export interface AdminOverviewResponse {
+  stores: { active: number; total: number };
+  employees: { active: number; total: number };
+  shifts_today: number;
+  pending_access_requests: number;
+  open_support_tickets: number;
+  active_alerts: number;
+}
+
+export interface AdminSearchEmployeeHit {
+  id: number;
+  full_name: string;
+  short_name: string | null;
+  role: string;
+}
+
+export interface AdminSearchStoreHit {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface AdminSearchResponse {
+  employees: AdminSearchEmployeeHit[];
+  stores: AdminSearchStoreHit[];
+}
+
+export interface AdminEmployeeProfile {
+  id: number;
+  full_name: string;
+  short_name: string | null;
+  role: string;
+  telegram_id: number | string | null;
+  access_status: string | null;
+  is_active: boolean;
+  org_id: string | null;
+  hire_date: string | null;
+}
+
+export interface AdminEmployeeSession {
+  id: number;
+  created_at: string;
+  last_seen_at: string;
+  token_hash: string;
+}
+
+export interface AdminEmployeeDetailResponse {
+  employee: AdminEmployeeProfile;
+  sessions: AdminEmployeeSession[];
+}
+
+export interface AdminEmployeeEditRequest {
+  full_name?: string;
+  short_name?: string;
+  org_id?: string;
+}
+
+export interface AdminEmployeeRoleChangeRequest {
+  role: string;
+  org_id?: string;
+}
+
+export interface AdminStoreRecord {
+  id: string;
+  name: string;
+  display_name?: string | null;
+  code: string;
+  org_id: string | null;
+  is_active: boolean;
+  [key: string]: unknown;
+}
+
+export interface AdminStoresListResponse {
+  items: AdminStoreRecord[];
+}
+
+export interface AdminStoreDetailResponse {
+  store: AdminStoreRecord;
+}
+
+export interface AdminSaleRow {
+  id: string;
+  employee_id: number;
+  store_id: string;
+  sale_date: string;
+  employee_name: string;
+  store_name: string;
+  voided_at: string | null;
+  voided_by: number | null;
+  void_reason: string | null;
+  version: number;
+  [metric: string]: unknown;
+}
+
+export interface AdminSalesListResponse {
+  items: AdminSaleRow[];
+}
+
+export interface AdminSaleDetailResponse {
+  row: AdminSaleRow;
+}
+
+export interface AdminSaleActionResponse {
+  row: AdminSaleRow;
+}
+
+export interface AdminSaleVoidPreviewResponse {
+  metrics: Record<string, number>;
+  [key: string]: unknown;
+}
+
+export interface AdminSaleCorrectStorePreviewResponse {
+  crossOrg: boolean;
+  [key: string]: unknown;
+}
+
+export interface StepUpTicketResponse {
+  ok: true;
+  step_up_token: string;
+}

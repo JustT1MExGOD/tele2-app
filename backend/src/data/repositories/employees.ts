@@ -438,6 +438,42 @@ export async function getContactInfo(employeeId: number): Promise<{ telegram_id:
   return res.rows[0] || null;
 }
 
+/** Admin Control Center (20.59.0) — overview counters. */
+export async function countByOrg(orgId: string): Promise<{ active: number; total: number }> {
+  const res = await query(
+    `SELECT COUNT(*) FILTER (WHERE is_active) as active, COUNT(*) as total FROM employees WHERE COALESCE(org_id,'default') = $1`,
+    [orgId]
+  );
+  return { active: Number(res.rows[0].active), total: Number(res.rows[0].total) };
+}
+
+/** Admin Control Center (20.59.0) — global search fan-out, org-scoped. */
+export async function searchByName(orgId: string, term: string, limit: number): Promise<{ id: number; full_name: string; short_name: string | null; role: string }[]> {
+  const res = await query(
+    `SELECT id, full_name, short_name, role FROM employees
+     WHERE COALESCE(org_id,'default') = $1 AND full_name ILIKE $2
+     ORDER BY full_name LIMIT $3`,
+    [orgId, `%${term}%`, limit]
+  );
+  return res.rows;
+}
+
+/** Admin Control Center (20.59.0) — employee detail view. Unlike findById()
+ * (aliases id as employee_id for the hot auth path, EmployeeAuthRow), this
+ * returns the real `id` plus the fuller profile the admin detail page needs. */
+export async function findAdminProfileById(employeeId: number): Promise<{
+  id: number; full_name: string; short_name: string | null; role: string;
+  telegram_id: number | string | null; access_status: string | null;
+  is_active: boolean; org_id: string | null; hire_date: string | null;
+} | null> {
+  const res = await query(
+    `SELECT id, full_name, short_name, role, telegram_id, access_status, is_active, org_id, hire_date
+     FROM employees WHERE id = $1 LIMIT 1`,
+    [employeeId]
+  );
+  return res.rows[0] || null;
+}
+
 export async function setAvatar(employeeId: number, data: Buffer, mime: string): Promise<void> {
   await query(`UPDATE employees SET avatar_data = $1, avatar_mime = $2 WHERE id = $3`, [data, mime, employeeId]);
 }

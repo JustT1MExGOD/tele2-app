@@ -286,6 +286,13 @@
         <button class="nav-item" data-page="dealers" onclick="switchPage('dealers')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 21h18" /> <path d="M5 21V7l8-4v18" /> <path d="M19 21V11l-6-4" /> <path d="M9 9v.01" /> <path d="M9 12v.01" /> <path d="M9 15v.01" /> <path d="M9 18v.01" /> </svg></span>Дилеры/Секторы
         </button>
+        <!-- data-page-trigger, not onclick=: app/nav.ts's delegated
+             [data-page-trigger] click listener dispatches switchPage() for
+             this button — check-inline-event-handlers.mjs's baseline (310)
+             has zero headroom for a new inline onclick=. -->
+        <button class="nav-item" data-page="admin-center" data-page-trigger="admin-center" id="navAdminCenter">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /> </svg></span>Admin Center
+        </button>
       </div>
     </aside>
 
@@ -879,6 +886,18 @@
       </div>
     </div>
 
+    <!-- ===== ADMIN CENTER (20.59.0, admin-only) =====
+         All interactivity is wired via addEventListener in
+         pages/admin-center/*.ts — no inline onclick=/onchange= anywhere
+         below (check-inline-event-handlers.mjs baseline has zero
+         headroom). -->
+    <div id="page-admin-center" class="page">
+      <div class="section">
+        <div class="data-table-toolbar" id="adminCenterTabs" style="flex-wrap:wrap;gap:8px;justify-content:flex-start"></div>
+      </div>
+      <div id="adminCenterBody"><div class="skeleton"></div></div>
+    </div>
+
     <!-- ===== MONTH PLAN (по сотрудникам) ===== -->
     <div id="page-monthplan" class="page">
       <div class="section">
@@ -1236,6 +1255,7 @@
        loaded above) — только на клик, не при загрузке, порядок не
        критичен, но держим рядом с network-admin по смыслу страницы. -->
   <script src="/dist/pages/dealers.bundle.js"></script>
+  <script src="/dist/pages/admin-center.bundle.js"></script>
   <script src="/dist/features/tutorial.bundle.js"></script>
   <script src="/dist/pages/chat.bundle.js"></script>
   <!-- access-supervisor.bundle.js calls bootApp() at load time — must load

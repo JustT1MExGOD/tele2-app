@@ -305,6 +305,9 @@ export function loadPage(name: string): void {
   if (name === 'chat') {
     loadChatPage();
   }
+  if (name === 'admin-center') {
+    renderAdminCenter();
+  }
 }
 
 export async function refreshAll(): Promise<void> {
@@ -492,6 +495,15 @@ export function initSwipePanels(containerEl: (HTMLElement & { dataset: DOMString
   // пересчитать высоту, когда контент реально готов.
   containerEl._swipeRefreshHeight = () => settle(current, false);
 }
+
+// Admin Center (20.59.0) nav entry — delegated listener instead of a new
+// inline onclick=, since check-inline-event-handlers.mjs's baseline (310)
+// has zero headroom. Any future non-inline-wired nav button can reuse this
+// same [data-page-trigger] convention instead of growing more onclick=.
+document.addEventListener('click', (e) => {
+  const el = (e.target as Element | null)?.closest<HTMLElement>('[data-page-trigger]');
+  if (el?.dataset.pageTrigger) switchPage(el.dataset.pageTrigger);
+});
 
 declare global {
   interface Window {

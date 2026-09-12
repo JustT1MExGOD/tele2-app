@@ -5,22 +5,20 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import * as auditRepo from '../../data/repositories/audit.js';
-import { requireManager, resolveViewOrgId } from '../../auth/guards.js';
+import { requireAdmin, resolveViewOrgId } from '../../auth/guards.js';
 import type { AuditListResponse } from '../../shared/api-types.js';
 
 export async function registerAuditRoutes(app: FastifyInstance) {
   app.get('/audit', async (request, reply): Promise<AuditListResponse | FastifyReply | undefined> => {
-    if (!requireManager(request, reply)) return;
-    if (request.user!.role !== 'admin') {
-      return reply.code(403).send({ error: 'admin only' });
-    }
-    const q = request.query as { action?: string; target_type?: string; from?: string; to?: string; limit?: string; offset?: string; org_id?: string };
+    if (!requireAdmin(request, reply)) return;
+    const q = request.query as { action?: string; target_type?: string; target_id?: string; from?: string; to?: string; limit?: string; offset?: string; org_id?: string };
     const orgId = resolveViewOrgId(request.user!, q.org_id);
 
     const items = await auditRepo.list({
       orgId,
       action: q.action,
       targetType: q.target_type,
+      targetId: q.target_id,
       from: q.from,
       to: q.to,
       limit: Number(q.limit) || undefined,

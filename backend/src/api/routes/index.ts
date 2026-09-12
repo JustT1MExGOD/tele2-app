@@ -44,6 +44,11 @@ import { registerAuditRoutes } from './audit.js';
 import { registerDealersRoutes } from './org/dealers.js';
 import { registerChatRoutes } from './chat/index.js';
 import { registerAcademyRoutes } from './academy.js';
+import { registerAdminSalesRoutes } from './admin/sales.js';
+import { registerAdminEmployeesRoutes } from './admin/employees.js';
+import { registerAdminStoresRoutes } from './admin/stores.js';
+import { registerAdminSearchRoutes } from './admin/search.js';
+import { registerAdminOverviewRoutes } from './admin/overview.js';
 
 const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Plans', registerPlansRoutes],
@@ -84,7 +89,12 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Audit', registerAuditRoutes],
   ['Dealers/Sectors', registerDealersRoutes],
   ['Chat (внутренний чат сотрудников)', registerChatRoutes],
-  ['T2 Academy (progress/XP/badges)', registerAcademyRoutes]
+  ['T2 Academy (progress/XP/badges)', registerAcademyRoutes],
+  ['Admin Control Center — Sales corrections', registerAdminSalesRoutes],
+  ['Admin Control Center — Employees', registerAdminEmployeesRoutes],
+  ['Admin Control Center — Stores', registerAdminStoresRoutes],
+  ['Admin Control Center — Search', registerAdminSearchRoutes],
+  ['Admin Control Center — Overview', registerAdminOverviewRoutes]
 ];
 
 /**

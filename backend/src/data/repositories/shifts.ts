@@ -55,6 +55,18 @@ export async function countOpenForStoreDay(storeId: string, date: string): Promi
   return Number(res.rows[0]?.c) || 0;
 }
 
+/** Admin Control Center (20.59.0) — overview counters for today. */
+export async function countOpenTodayForOrg(orgId: string, date: string): Promise<{ active: number; replacement: number }> {
+  const res = await query(
+    `SELECT COUNT(*) FILTER (WHERE status = 'open') as active,
+            COUNT(*) FILTER (WHERE work_mode = 'REPLACEMENT' AND status = 'open') as replacement
+     FROM shift_sessions
+     WHERE COALESCE(org_id,'default') = $1 AND work_date = $2::date`,
+    [orgId, date]
+  );
+  return { active: Number(res.rows[0]?.active) || 0, replacement: Number(res.rows[0]?.replacement) || 0 };
+}
+
 export async function findLatestHandoverForStore(
   storeId: string
 ): Promise<{ handover_note: string; closed_at: string; from_employee_name: string } | null> {

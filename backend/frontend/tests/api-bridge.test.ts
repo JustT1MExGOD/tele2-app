@@ -12,13 +12,15 @@
 import { describe, it, expect } from 'vitest';
 import '../src/app/api-bridge.js';
 
-// Exact 135-name public surface of the former monolithic api-client.ts
+// Exact 159-name public surface of the former monolithic api-client.ts
 // (128 original + resolveStore + getShiftOpenMap, both added for the
 // replacement-shift feature, + getAcademyProgress/completeAcademyStep/
 // getAcademyContextualStatus/dismissAcademyContextual, added for T2
 // Academy, + getAvatar, added for the avatar-IDOR hotfix — GET /avatars/:id
-// now requires auth, so a bare <img src> can no longer reach it), preserved
-// verbatim by the split (see the architecture trace/plan).
+// now requires auth, so a bare <img src> can no longer reach it, + 24
+// admin-prefixed entries from features/admin-center/api.ts (20.59.0 Admin
+// Control Center) + issueStepUpTicket), preserved verbatim by the split
+// (see the architecture trace/plan).
 const EXPECTED_KEYS = [
   'getOrgStores', 'getMetrics', 'getPromos', 'getPromoCard', 'createPromo',
   'markPromoUsed', 'keepPromo', 'getCashTable', 'saveCash', 'createMetric',
@@ -58,13 +60,21 @@ const EXPECTED_KEYS = [
   'getEmployeeProfile', 'createEmployee', 'deactivateEmployee',
   'setEmployeeRole', 'createStore', 'getNetworkLive', 'uploadAvatar', 'getAvatar',
   'exportCsv', 'getChatMessages', 'postChatMessage', 'uploadChatAttachment',
-  'getChatAttachment'
+  'getChatAttachment',
+  'adminGetOverview', 'adminSearch', 'adminGetEmployee', 'adminEditEmployee',
+  'adminChangeEmployeeRole', 'adminDeactivateEmployee', 'adminReactivateEmployee',
+  'adminRevokeEmployeeSession', 'adminRevokeAllEmployeeSessions',
+  'adminResetEmployeeMfa', 'adminInitiatePasswordReset', 'adminListStores',
+  'adminGetStore', 'adminEditStore', 'adminDeactivateStore', 'adminReactivateStore',
+  'adminSearchSales', 'adminGetSale', 'adminPreviewVoidSale', 'adminVoidSale',
+  'adminRestoreSale', 'adminPreviewCorrectStore', 'adminCorrectSaleStore',
+  'issueStepUpTicket'
 ] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 135-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 159-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length);
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 159
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 

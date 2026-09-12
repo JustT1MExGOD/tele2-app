@@ -72,6 +72,7 @@ export interface AuditListFilter {
   orgId: string;
   action?: string;
   targetType?: string;
+  targetId?: string;
   from?: string;
   to?: string;
   limit?: number;
@@ -89,6 +90,10 @@ export async function list(filter: AuditListFilter): Promise<AuditLogItem[]> {
   if (filter.targetType) {
     params.push(filter.targetType);
     conditions.push(`a.target_type = $${params.length}`);
+  }
+  if (filter.targetId) {
+    params.push(filter.targetId);
+    conditions.push(`a.target_id = $${params.length}`);
   }
   if (filter.from) {
     params.push(filter.from);
