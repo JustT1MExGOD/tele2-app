@@ -1120,12 +1120,17 @@ function renderSvOverview(d: any): void {
 
 // Общий примитив строки-бара — используется и на «Точки» (сегодня), и на
 // «Тренд» (месячный план/прогноз, сектор и по точкам).
-export function svBarRowHTML(label: string, fact: number, plan: number): string {
+// range — «типичный диапазон» прогноза (низ/верх, 1σ, см. forecast.ts::CONFIDENCE_Z),
+// только для прогнозных строк ('total'); у факта ('fact') диапазона нет — он уже случился.
+export function svBarRowHTML(label: string, fact: number, plan: number, range?: { low: number; high: number }): string {
   const p = plan > 0 ? Math.round((fact / plan) * 100) : fact > 0 ? 100 : 0;
+  const rangeHtml = range && Math.round(range.high) > Math.round(range.low)
+    ? ` <span style="opacity:.6">(${Math.round(range.low)}–${Math.round(range.high)})</span>`
+    : '';
   return `<div class="sv-bar-row">
         <div>${esc(label)}</div>
         <div class="sv-bar-track"><div class="sv-bar-fill" style="width:${Math.min(100, p)}%;background:${svBarColor(p)}"></div></div>
-        <div style="text-align:right">${fact || 0}/${plan || 0}</div>
+        <div style="text-align:right">${fact || 0}${rangeHtml}/${plan || 0}</div>
       </div>`;
 }
 
@@ -1213,7 +1218,8 @@ function svMonthPlanBlock(idPrefix: string, values: any, valueKey: string): stri
     list
       .map((id) => {
         const v = values[id] || {};
-        return svBarRowHTML(metricLabel(id), v[valueKey] || 0, v.plan || 0);
+        const range = valueKey === 'total' && v.low !== undefined ? { low: v.low, high: v.high } : undefined;
+        return svBarRowHTML(metricLabel(id), v[valueKey] || 0, v.plan || 0, range);
       })
       .join('');
   return `<div class="sv-bars">${rowsFor(main)}</div>${svExtraToggleHTML(idPrefix, rowsFor(extra))}`;

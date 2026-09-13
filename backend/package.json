@@ -27,6 +27,8 @@
     "migrate": "tsx src/migrate-cli.ts",
     "backfill:support-encryption": "tsx src/scripts/backfill-support-encryption.ts",
     "contain:employee": "tsx src/scripts/contain-compromised-employee.ts",
+    "forecast:backtest": "tsx src/scripts/forecast-backtest.ts",
+    "forecast:month-backtest": "tsx src/scripts/forecast-month-backtest.ts",
     "sbom": "node scripts/generate-sbom.mjs"
   },
   "dependencies": {

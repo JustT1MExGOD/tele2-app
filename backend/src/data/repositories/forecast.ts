@@ -9,7 +9,13 @@ export async function findSalesHistory(storeId: string, fromDate: string): Promi
   const res = await query(
     `SELECT sale_date::text as d,
             COALESCE(SUM(sim),0) sim, COALESCE(SUM(mnp),0) mnp,
-            COALESCE(SUM(pa),0) pa, COALESCE(SUM(combo),0) combo
+            COALESCE(SUM(pa),0) pa, COALESCE(SUM(combo),0) combo,
+            COALESCE(SUM(phones),0) phones, COALESCE(SUM(accessories),0) accessories,
+            COALESCE(SUM(settings),0) settings, COALESCE(SUM(insurance),0) insurance,
+            COALESCE(SUM(wink),0) wink, COALESCE(SUM(shpd),0) shpd,
+            COALESCE(SUM(focus),0) focus, COALESCE(SUM(credit_request),0) credit_request,
+            COALESCE(SUM(credit_issued),0) credit_issued, COALESCE(SUM(plotter),0) plotter,
+            COALESCE(SUM(hb),0) hb
      FROM sales
      WHERE store_id = $1
        AND sale_date >= ($2::date - interval '120 days')

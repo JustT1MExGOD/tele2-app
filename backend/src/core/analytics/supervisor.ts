@@ -7,7 +7,7 @@
  * супервайзера показывали вообще все сети сразу.
  */
 import { todayMoscow, currentMonthMoscow } from '../../utils/date.js';
-import { buildSesModel, projectDay } from './forecast.js';
+import { buildSesModel, projectDayStdev, CONFIDENCE_Z } from './forecast.js';
 import { getCached, setCached } from '../shared/scope-cache.js';
 import * as repo from '../../data/repositories/supervisor-analytics.js';
 import * as supervisorSectorsRepo from '../../data/repositories/supervisor-sectors.js';
@@ -51,32 +51,63 @@ function metricsBreakdown(factRow: any, planRow: any) {
 // запросом на весь список точек сразу (там это один store_id за раз,
 // приемлемо для одной точки, не для сектора из 10-50 точек × 15 метрик).
 
-/** store_id -> {metric: прогноз суммы по ОСТАВШИМСЯ дням месяца (не считая date)} */
+/** Точка прогноза остатка месяца по одной метрике: total — сумма ожидаемых
+ * значений по оставшимся дням, stdev — стандартное отклонение ЭТОЙ суммы
+ * (не одного дня), дни считаются независимыми, поэтому дисперсии складываются,
+ * а не стандартные отклонения — иначе диапазон на 25 дней вперёд был бы
+ * неправдоподобно широким. */
+interface RemainingForecast {
+  total: number;
+  stdev: number;
+}
+
+/** store_id -> {metric: прогноз суммы по ОСТАВШИМСЯ дням месяца (не считая date)}
+ *
+ * Точечная оценка — run-rate (факт с начала месяца / прошедшие дни ×
+ * оставшиеся дни), а не сумма SES-прогноза по каждому оставшемуся дню.
+ * Раньше было наоборот: SES + сезонность на день недели, по гипотезе, что
+ * учёт дня недели остатка месяца точнее плоского пейса. Backtest
+ * (`forecast:month-backtest --runrate-check`, 748 чек-поинтов) показал
+ * обратное — плоский run-rate давал SMAPE 3.94% против 5.01% у SES на
+ * идентичных чек-поинтах, и выигрывал на КАЖДОМ горизонте (день 5/10/15/
+ * 20/25) и на каждой из 4 метрик по отдельности, не только в среднем.
+ * Гипотеза о пользе дня недели для остатка месяца (сезонность из SES
+ * поверх фактического пейса) тоже проверена и не подтвердилась (4.25%,
+ * хуже плоского run-rate) — актуальный факт месяца уже несёт в себе
+ * фактическую пропорцию будних/выходных с начала месяца, а деление на
+ * seasonal[dow] остатка вносит лишний шум короче полного цикла недели.
+ * SES-модель здесь всё равно строится — только для stdev/доверительного
+ * интервала (spread по дню недели), не для самой точки прогноза.
+ */
 async function forecastRemainingOfMonth(
   storeIds: string[],
   date: string,
-  month: string
-): Promise<Map<string, Record<string, number>>> {
-  const result = new Map<string, Record<string, number>>();
+  month: string,
+  monthFactMap: Map<string, any>
+): Promise<Map<string, Record<string, RemainingForecast>>> {
+  const result = new Map<string, Record<string, RemainingForecast>>();
   if (!storeIds.length) return result;
+
+  const dayOfMonth = new Date(date + 'T12:00:00').getDate();
 
   const lastDayDate = new Date(month + '-01T12:00:00');
   lastDayDate.setMonth(lastDayDate.getMonth() + 1);
   lastDayDate.setDate(0);
   const lastDay = lastDayDate.toISOString().slice(0, 10);
 
-  const remainingDates: { dow: number }[] = [];
+  const remainingDates: { dow: number; step: number }[] = [];
   const cursor = new Date(date + 'T12:00:00');
   cursor.setDate(cursor.getDate() + 1);
   const end = new Date(lastDay + 'T12:00:00');
+  let step = 1;
   while (cursor <= end) {
-    remainingDates.push({ dow: cursor.getDay() });
+    remainingDates.push({ dow: cursor.getDay(), step: step++ });
     cursor.setDate(cursor.getDate() + 1);
   }
   if (!remainingDates.length) {
     for (const id of storeIds) {
-      const zero: Record<string, number> = {};
-      for (const m of METRICS) zero[m] = 0;
+      const zero: Record<string, RemainingForecast> = {};
+      for (const m of METRICS) zero[m] = { total: 0, stdev: 0 };
       result.set(id, zero);
     }
     return result;
@@ -118,13 +149,19 @@ async function forecastRemainingOfMonth(
 
   for (const storeId of storeIds) {
     const rows = byStore.get(storeId) || [];
-    const projected: Record<string, number> = {};
+    const monthFact = monthFactMap.get(storeId) || {};
+    const projected: Record<string, RemainingForecast> = {};
     for (const m of METRICS) {
-      if (!rows.length) { projected[m] = 0; continue; }
+      if (!rows.length) { projected[m] = { total: 0, stdev: 0 }; continue; }
       const model = buildSesModel(rows.map((r) => ({ dow: r.dow, value: r[m] })));
-      let sum = 0;
-      for (const rd of remainingDates) sum += projectDay(model, rd.dow);
-      projected[m] = Math.round(sum);
+      let varianceSum = 0;
+      for (const rd of remainingDates) {
+        const dayStdev = projectDayStdev(model, rd.dow, rd.step);
+        varianceSum += dayStdev * dayStdev;
+      }
+      const pace = n(monthFact[m]) / dayOfMonth;
+      const sum = pace * remainingDates.length;
+      projected[m] = { total: Math.round(sum), stdev: Math.sqrt(varianceSum) };
     }
     result.set(storeId, projected);
   }
@@ -253,7 +290,7 @@ export async function buildSupervisorDashboard(opts: {
 
   // Прогноз до конца месяца — SES + сезонность на день недели (см.
   // forecastRemainingOfMonth выше), один батч-запрос на весь сектор.
-  const forecastMap = await forecastRemainingOfMonth(storeIds, date, month);
+  const forecastMap = await forecastRemainingOfMonth(storeIds, date, month, monthMap);
 
   // assemble store cards
   const storeCards = [];
@@ -263,7 +300,8 @@ export async function buildSupervisorDashboard(opts: {
   const netMonthFact: Record<string, number> = {};
   const netMonthPlan: Record<string, number> = {};
   const netMonthForecast: Record<string, number> = {};
-  for (const m of METRICS) { netMonthFact[m] = 0; netMonthPlan[m] = 0; netMonthForecast[m] = 0; }
+  const netMonthForecastVariance: Record<string, number> = {};
+  for (const m of METRICS) { netMonthFact[m] = 0; netMonthPlan[m] = 0; netMonthForecast[m] = 0; netMonthForecastVariance[m] = 0; }
 
   for (const st of stores) {
     const f = factMap.get(st.id) || {};
@@ -287,15 +325,19 @@ export async function buildSupervisorDashboard(opts: {
     // плюс прогноз на конец месяца (факт с начала месяца + прогноз остатка).
     const todayMetrics = metricsBreakdown(f, p);
     const monthMetrics = metricsBreakdown(mf, mp);
-    const monthForecastMetrics: Record<string, { total: number; plan: number; pct: number }> = {};
+    const monthForecastMetrics: Record<string, { total: number; low: number; high: number; plan: number; pct: number }> = {};
     for (const m of METRICS) {
       const factVal = n(mf[m]);
       const planVal = n(mp[m]);
-      const total = factVal + n(remaining[m]);
-      monthForecastMetrics[m] = { total, plan: planVal, pct: pct(total, planVal) };
+      const rem = remaining[m] || { total: 0, stdev: 0 };
+      const total = factVal + rem.total;
+      const low = Math.max(0, total - CONFIDENCE_Z * rem.stdev);
+      const high = total + CONFIDENCE_Z * rem.stdev;
+      monthForecastMetrics[m] = { total, low, high, plan: planVal, pct: pct(total, planVal) };
       netMonthFact[m] += factVal;
       netMonthPlan[m] += planVal;
       netMonthForecast[m] += total;
+      netMonthForecastVariance[m] = (netMonthForecastVariance[m] || 0) + rem.stdev * rem.stdev;
     }
 
     const alerts: string[] = [];
@@ -404,10 +446,17 @@ export async function buildSupervisorDashboard(opts: {
   // до конца месяца (не пересчитано заново на объединённой истории — сумма
   // отдельных прогнозов точнее, у разных точек разные дни-недели-паттерны).
   const monthMetricsNet: Record<string, { fact: number; plan: number; pct: number }> = {};
-  const monthForecastNet: Record<string, { total: number; plan: number; pct: number }> = {};
+  const monthForecastNet: Record<string, { total: number; low: number; high: number; plan: number; pct: number }> = {};
   for (const m of METRICS) {
     monthMetricsNet[m] = { fact: netMonthFact[m], plan: netMonthPlan[m], pct: pct(netMonthFact[m], netMonthPlan[m]) };
-    monthForecastNet[m] = { total: netMonthForecast[m], plan: netMonthPlan[m], pct: pct(netMonthForecast[m], netMonthPlan[m]) };
+    const netStdev = Math.sqrt(netMonthForecastVariance[m] || 0);
+    monthForecastNet[m] = {
+      total: netMonthForecast[m],
+      low: Math.max(0, netMonthForecast[m] - CONFIDENCE_Z * netStdev),
+      high: netMonthForecast[m] + CONFIDENCE_Z * netStdev,
+      plan: netMonthPlan[m],
+      pct: pct(netMonthForecast[m], netMonthPlan[m])
+    };
   }
 
   return {

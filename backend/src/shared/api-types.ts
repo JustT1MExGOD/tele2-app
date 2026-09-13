@@ -1239,7 +1239,7 @@ export interface HeatmapPreciseResponse {
 export interface ForecastResponse {
   store_id: string;
   history_days: number;
-  items: Array<{ date: string; predicted: MetricValues }>;
+  items: Array<{ date: string; predicted: MetricValues; predicted_low?: MetricValues; predicted_high?: MetricValues }>;
   ai_summary?: string | null;
 }
 

@@ -163,13 +163,34 @@ export async function loadForecast(): Promise<void> {
     const cards = items
       .map((it) => {
         const p: any = it.predicted || {};
+        const lo: any = it.predicted_low || {};
+        const hi: any = it.predicted_high || {};
         const n = (v: unknown) => Math.round(Number(v) || 0);
+        // Диапазон показываем, только если он реально шире точки прогноза
+        // (при малой истории он совпадает с ней — тогда лишняя строка не
+        // добавляет информации, только шум).
+        const range = (key: string) => {
+          const l = n(lo[key]), h = n(hi[key]);
+          return h > l ? `<div class="l" style="opacity:.6">${l}–${h}</div>` : '';
+        };
+        // Остальные метрики (кроме уже показанных SIM/MNP/ПА/Комбо на сетке
+        // 4х) — под «Ещё метрики», тот же паттерн, что месячный план в
+        // кабинете супервайзера (svExtraToggleHTML/toggleMonthExtra).
+        const shown = new Set(['sim', 'mnp', 'pa', 'combo']);
+        const extraIds = window.METRICS.map((m) => m.id).filter((id) => !shown.has(id));
+        const extraRows = extraIds
+          .map((id) => `<div class="sv-bar-row"><div>${esc(window.metricLabel(id))}</div><div style="text-align:right">${n(p[id])}${range(id) ? ` <span style="opacity:.6">(${n(lo[id])}–${n(hi[id])})</span>` : ''}</div></div>`)
+          .join('');
+        const idPrefix = `fcExtra-${it.date}`;
+        const extraBlock = extraRows
+          ? `<div class="mt-more"><button type="button" class="sv-toggle" onclick="toggleMonthExtra('${idPrefix}', this)">Ещё метрики ▾</button><div class="sv-extra" id="${idPrefix}">${extraRows}</div></div>`
+          : '';
         return `<div class="mt-card"><div class="mt-name">${it.date}</div><div class="mt-grid mt-grid-4">
-            <div class="mt-cell"><div class="v">${n(p.sim)}</div><div class="l">SIM</div></div>
-            <div class="mt-cell"><div class="v">${n(p.mnp)}</div><div class="l">MNP</div></div>
-            <div class="mt-cell"><div class="v">${n(p.pa)}</div><div class="l">ПА</div></div>
-            <div class="mt-cell"><div class="v">${n(p.combo)}</div><div class="l">Комбо</div></div>
-          </div></div>`;
+            <div class="mt-cell"><div class="v">${n(p.sim)}</div><div class="l">SIM</div>${range('sim')}</div>
+            <div class="mt-cell"><div class="v">${n(p.mnp)}</div><div class="l">MNP</div>${range('mnp')}</div>
+            <div class="mt-cell"><div class="v">${n(p.pa)}</div><div class="l">ПА</div>${range('pa')}</div>
+            <div class="mt-cell"><div class="v">${n(p.combo)}</div><div class="l">Комбо</div>${range('combo')}</div>
+          </div>${extraBlock}</div>`;
       })
       .join('');
     box.innerHTML = cards ? note + trendBars + aiBlock + cards : '<div class="empty">🍉 Пока нет истории для прогноза по этой точке</div>';

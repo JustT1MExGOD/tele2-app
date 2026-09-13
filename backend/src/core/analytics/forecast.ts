@@ -5,13 +5,22 @@ function num(v: any) {
   return Number(v) || 0;
 }
 
-const METRICS = ['sim', 'mnp', 'pa', 'combo'] as const;
+// Тот же полный список, что METRICS в core/analytics/supervisor.ts —
+// раньше здесь были только sim/mnp/pa/combo, остальные 11 метрик
+// (phones/accessories/settings/... /hb) не прогнозировались вообще, хотя
+// supervisor.ts::forecastRemainingOfMonth их уже считает для месячного
+// прогноза. Единообразие ради дневного /forecast/:storeId и staffing hints.
+const METRICS = [
+  'sim', 'mnp', 'pa', 'combo', 'phones', 'accessories', 'settings',
+  'insurance', 'wink', 'shpd', 'focus', 'credit_request', 'credit_issued',
+  'plotter', 'hb'
+] as const;
 type Metric = (typeof METRICS)[number];
 
 /**
- * Прогноз: простое экспоненциальное сглаживание (уровень тренда) ×
- * сезонная поправка на день недели с усадкой (shrinkage) к нейтральной 1.0,
- * пока по этому дню недели мало наблюдений.
+ * Прогноз: экспоненциальное сглаживание с демпфированным линейным трендом
+ * (Holt/Gardner damped-trend) × сезонная поправка на день недели с усадкой
+ * (shrinkage) к нейтральной 1.0, пока по этому дню недели мало наблюдений.
  *
  * Раньше прогноз брал среднее только по ТОЧНО тому же дню недели за 8 недель —
  * с датасетом короче 8 недель (как сейчас, всего несколько дней истории)
@@ -19,12 +28,69 @@ type Metric = (typeof METRICS)[number];
  * Новая модель даёт осмысленное число с первого дня: без сезонной истории
  * поправка ~1.0 (просто продолжает сглаженный уровень), а по мере накопления
  * данных по каждому дню недели поправка сама уточняется.
+ *
+ * Тренд-компонента (Holt/damped-trend) добавлена в модель по гипотезе:
+ * чистое SES без тренда систематически занижало итог месяца в начале
+ * месяца (bias стабильно отрицательный, 6-9% SMAPE на 5-10 числе в
+ * бэктесте `src/scripts/forecast-month-backtest.ts`). Тренд демпфирован
+ * (phi<1, сумма phi+phi²+...+phiʰ вместо trend×h) — без демпфирования
+ * линейный тренд, экстраполированный на 25+ дней вперёд (месячный
+ * прогноз в начале месяца), мог бы уйти в отрыв от реальности
+ * (Gardner & McKenzie damped-trend, стандартный приём для длинных
+ * горизонтов).
+ *
+ * ALPHA/BETA/PHI/SHRINK_K подобраны grid-search'ем по 748 реальным
+ * историческим чек-поинтам (`forecast:month-backtest --grid-search`), не
+ * заданы на глаз.
+ *
+ * Первый проход (см. историю в git) перебирал SHRINK_K только в диапазоне
+ * 10-80 и на нём BETA=0 (тренд выключен) выигрывал — вывод был "тренд
+ * только шумит". Это оказалось артефактом диапазона: диагностика по
+ * чек-поинтам (день 5/10 месяца) показала устойчивый отрицательный bias
+ * именно на длинных горизонтах прогноза, который SHRINK_K≥10 маскирует
+ * (обнуляя сезонность), а не устраняет. Повторный grid-search с SHRINK_K,
+ * ограниченным безопасной зоной (≤7 — см. ограничение ниже), нашёл, что
+ * BETA>0 внутри этой зоны даёт большой честный выигрыш: SMAPE месячного
+ * прогноза 9.59% → 5.01% на актуальной истории (748 чек-поинтов,
+ * 2026-09-12), без приближения к границе, ломающей anomaly-детектор.
+ * Тренд остаётся демпфированным (PHI<1, сумма phi+phi²+...+phiʰ вместо
+ * trend×h) — без демпфирования линейный тренд, экстраполированный на
+ * 25+ дней вперёд (месячный прогноз в начале месяца), мог бы уйти в
+ * отрыв от реальности (Gardner & McKenzie damped-trend, стандартный
+ * приём для длинных горизонтов).
+ *
+ * SHRINK_K намеренно НЕ поднят выше 7, хотя более широкий grid-search по
+ * этому же скрипту показывал дальнейший рост точности вплоть до
+ * SHRINK_K=80: при SHRINK_K→∞ сезонная поправка по дню недели
+ * вырождается в 1.0 для всех дней, т.е. "лучший" результат по месячному
+ * SMAPE в этой зоне — это фактически модель БЕЗ поправки на день недели.
+ * Проверено на практике: SHRINK_K=10 ломает
+ * `tests/isolation/anomaly.test.ts` ("факт близко к типичному — алерт не
+ * создаётся") — при 18 неделях плотной истории и чистом недельном
+ * паттерне (целевой день стабильно вдвое выше буднего) модель с
+ * SHRINK_K=10 недооценивает прогноз настолько, что обычный факт
+ * ошибочно детектируется как аномалия. Прод-история ограничена 120
+ * днями (~17 недель) — это ровно тот режим, в котором живут реальные
+ * магазины, так что это не артефакт теста. SHRINK_K=7 — сознательный
+ * компромисс, на одну ступень grid'а ниже 10 (шаг сетки: 3/5/7),
+ * подтверждённый прогоном того же теста после смены констант (см.
+ * `npx vitest run tests/isolation/anomaly.test.ts`), а не найденный
+ * максимум по одной метрике.
  */
 const ALPHA = 0.3; // вес свежих данных в сглаживании уровня
-const SHRINK_K = 3; // сколько наблюдений нужно дню недели, чтобы его поправка "перевесила" нейтральную
+const BETA = 0.05; // вес свежих данных в сглаживании тренда
+const PHI = 0.9; // демпфирование тренда на горизонте
+const SHRINK_K = 7; // сколько наблюдений нужно дню недели, чтобы его поправка "перевесила" нейтральную
 
 export interface SesModel {
   level: number;
+  /** Сглаженный линейный тренд (ед./день) — применяется демпфированно, см. projectDay. */
+  trend: number;
+  /** Коэффициент демпфирования, с которым построена именно эта модель —
+   * хранится на модели (не берётся из общего PHI), чтобы grid-search
+   * (forecast:month-backtest --grid-search) мог перебирать phi и
+   * projectDay всегда использовал тот же phi, что и buildSesModel. */
+  phi: number;
   seasonal: Record<number, number>;
   /** Разброс (стандартное отклонение) ratio по дню недели — насколько
    * типично скачет факт вокруг seasonal[dow] в единицах ratio, не в
@@ -33,6 +99,13 @@ export interface SesModel {
    * это поле не читают, только прогнозируют вперёд по seasonal. */
   spread: Record<number, number>;
   sampleCount: Record<number, number>;
+}
+
+/** phi + phi² + ... + phiʰ — демпфированная сумма шагов тренда до h включительно. */
+function dampedTrendSum(phi: number, h: number): number {
+  if (h <= 0) return 0;
+  if (Math.abs(phi - 1) < 1e-9) return h;
+  return (phi * (1 - phi ** h)) / (1 - phi);
 }
 
 /**
@@ -51,12 +124,15 @@ export interface SesModel {
 export function buildSesModel(
   dailyValues: { dow: number; value: number }[],
   alpha = ALPHA,
-  shrinkK = SHRINK_K
+  shrinkK = SHRINK_K,
+  beta = BETA,
+  phi = PHI
 ): SesModel {
-  if (!dailyValues.length) return { level: 0, seasonal: {}, spread: {}, sampleCount: {} };
+  if (!dailyValues.length) return { level: 0, trend: 0, phi, seasonal: {}, spread: {}, sampleCount: {} };
   const seriesMean = dailyValues.reduce((a, r) => a + r.value, 0) / dailyValues.length;
   const coldBaseline = seriesMean > 0.01 ? seriesMean : 1;
   let level = seriesMean;
+  let trend = 0;
   const ratioSum: Record<number, number> = {};
   const ratioSumSq: Record<number, number> = {};
   const ratioCount: Record<number, number> = {};
@@ -66,7 +142,9 @@ export function buildSesModel(
     ratioSum[r.dow] = (ratioSum[r.dow] || 0) + ratio;
     ratioSumSq[r.dow] = (ratioSumSq[r.dow] || 0) + ratio * ratio;
     ratioCount[r.dow] = (ratioCount[r.dow] || 0) + 1;
-    level = alpha * r.value + (1 - alpha) * level;
+    const prevLevel = level;
+    level = alpha * r.value + (1 - alpha) * (prevLevel + phi * trend);
+    trend = beta * (level - prevLevel) + (1 - beta) * phi * trend;
   }
   const seasonal: Record<number, number> = {};
   const spread: Record<number, number> = {};
@@ -85,11 +163,53 @@ export function buildSesModel(
       spread[dow] = 1;
     }
   }
-  return { level, seasonal, spread, sampleCount: ratioCount };
+  return { level, trend, phi, seasonal, spread, sampleCount: ratioCount };
 }
 
-export function projectDay(model: SesModel, dow: number): number {
-  return Math.max(0, model.level * (model.seasonal[dow] ?? 1));
+/**
+ * stepsAhead — на сколько дней вперёд от конца окна модели прогнозируем
+ * (1 = следующий день сразу после окна). Тренд применяется демпфированно
+ * через dampedTrendSum, а не level + trend*stepsAhead напрямую — иначе на
+ * длинных горизонтах (конец месяца, до 27+ дней вперёд) линейный тренд
+ * уводит прогноз в отрыв от реальности.
+ */
+export function projectDay(model: SesModel, dow: number, stepsAhead = 1): number {
+  const trended = model.level + (model.trend ?? 0) * dampedTrendSum(model.phi ?? PHI, stepsAhead);
+  return Math.max(0, trended * (model.seasonal[dow] ?? 1));
+}
+
+/** Ширина «типичного диапазона» в стандартных отклонениях вокруг
+ * прогноза одного дня — 1σ, а не 2σ, как в anomaly.ts (Z_THRESHOLD=2 там
+ * отвечает на другой вопрос: "это уже аномалия?"; здесь — "какой разброс
+ * нормален?"). Экспортируется, чтобы вызывающий код (supervisor.ts) мог
+ * складывать дисперсии нескольких дней тем же множителем. */
+export const CONFIDENCE_Z = 1;
+
+/** Абсолютное стандартное отклонение прогноза на конкретный день — та же
+ * величина, что уже неявно считает anomaly.ts (level*spread, с полом
+ * 20% от level, чтобы дни без истории по этому dow не давали ложно узкий
+ * диапазон). Вынесено сюда, а не задублировано, чтобы confidence-интервал
+ * и anomaly-порог всегда считались из одной формулы. */
+export function projectDayStdev(model: SesModel, dow: number, stepsAhead = 1): number {
+  const trended = model.level + (model.trend ?? 0) * dampedTrendSum(model.phi ?? PHI, stepsAhead);
+  const spreadRatio = model.spread[dow] ?? 1;
+  return Math.max(trended * spreadRatio, trended * 0.2, 0);
+}
+
+/** Прогноз одного дня вместе с «типичным диапазоном» (predicted ± CONFIDENCE_Z·σ,
+ * снизу отрезано в 0 — отрицательных продаж не бывает). */
+export function projectDayInterval(
+  model: SesModel,
+  dow: number,
+  stepsAhead = 1
+): { predicted: number; low: number; high: number } {
+  const predicted = projectDay(model, dow, stepsAhead);
+  const stdev = projectDayStdev(model, dow, stepsAhead);
+  return {
+    predicted,
+    low: Math.max(0, predicted - CONFIDENCE_Z * stdev),
+    high: predicted + CONFIDENCE_Z * stdev
+  };
 }
 
 export async function forecastStore(storeId: string, fromDate: string, days = 7) {
@@ -126,10 +246,15 @@ export async function forecastStore(storeId: string, fromDate: string, days = 7)
     const dow = d.getDay();
 
     const predicted: Record<string, number> = {};
+    const predictedLow: Record<string, number> = {};
+    const predictedHigh: Record<string, number> = {};
     for (const m of METRICS) {
-      predicted[m] = Math.round(projectDay(model[m], dow));
+      const iv = projectDayInterval(model[m], dow, i + 1);
+      predicted[m] = Math.round(iv.predicted);
+      predictedLow[m] = Math.round(iv.low);
+      predictedHigh[m] = Math.round(iv.high);
     }
-    out.push({ date: iso, dow, predicted, model: 'ses_dow_seasonal' });
+    out.push({ date: iso, dow, predicted, predicted_low: predictedLow, predicted_high: predictedHigh, model: 'ses_dow_seasonal' });
   }
   // history_days — сколько дней окна реально содержали хотя бы одну
   // продажу (не длина заполненного нулями массива для модели) — тем же
