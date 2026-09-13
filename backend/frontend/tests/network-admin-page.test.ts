@@ -42,6 +42,14 @@ function setupGlobals(overrides: { role?: string } = {}) {
   vi.stubGlobal('stores', []);
   vi.stubGlobal('fetchOrgStores', vi.fn().mockResolvedValue([{ id: 's1', name: 'Точка А' }]));
   vi.stubGlobal('loadMonthSchedule', vi.fn());
+  vi.stubGlobal('toggleMonthExtra', vi.fn());
+  vi.stubGlobal('metricLabel', (id: string) => id.toUpperCase());
+  vi.stubGlobal('METRICS', [
+    { id: 'sim', label: 'SIM', short_label: 'SIM', unit: 'count' },
+    { id: 'mnp', label: 'MNP', short_label: 'MNP', unit: 'count' },
+    { id: 'pa', label: 'ПА', short_label: 'ПА', unit: 'count' },
+    { id: 'combo', label: 'Комбо', short_label: 'Комбо', unit: 'count' }
+  ]);
   (window as any).__stores = null;
 
   const getBranding = vi.fn().mockResolvedValue({ org_id: 'o1', name: 'Сеть', brand_name: 'T2', primary_color: '#2AABEE', logo_url: null, app_title: 'T2 Sales' });
