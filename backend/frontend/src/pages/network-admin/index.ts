@@ -182,9 +182,7 @@ export async function loadForecast(): Promise<void> {
           .map((id) => `<div class="sv-bar-row"><div>${esc(window.metricLabel(id))}</div><div style="text-align:right">${n(p[id])}${range(id) ? ` <span style="opacity:.6">(${n(lo[id])}–${n(hi[id])})</span>` : ''}</div></div>`)
           .join('');
         const idPrefix = `fcExtra-${it.date}`;
-        const extraBlock = extraRows
-          ? `<div class="mt-more"><button type="button" class="sv-toggle" onclick="toggleMonthExtra('${idPrefix}', this)">Ещё метрики ▾</button><div class="sv-extra" id="${idPrefix}">${extraRows}</div></div>`
-          : '';
+        const extraBlock = extraRows ? svExtraToggleHTML(idPrefix, extraRows) : '';
         return `<div class="mt-card"><div class="mt-name">${it.date}</div><div class="mt-grid mt-grid-4">
             <div class="mt-cell"><div class="v">${n(p.sim)}</div><div class="l">SIM</div>${range('sim')}</div>
             <div class="mt-cell"><div class="v">${n(p.mnp)}</div><div class="l">MNP</div>${range('mnp')}</div>
