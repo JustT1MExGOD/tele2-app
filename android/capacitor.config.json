@@ -1,0 +1,12 @@
+{
+  "appId": "com.t2sales.android",
+  "appName": "T2 Sales",
+  "webDir": "www",
+  "server": {
+    "url": "https://tele2-app-production.up.railway.app",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

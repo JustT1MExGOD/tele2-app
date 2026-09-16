@@ -15,3 +15,15 @@ sbom.cdx.json
 graphify-out/
 accepted-releases/
 backend/data/geoip/
+
+# Android (Gradle) build artifacts — mirrors dist/release/ above, same
+# reasoning: generated on every build, never something to diff/review.
+android/android/**/build/
+android/android/.gradle/
+android/android/local.properties
+android/android/**/*.iml
+android/android/.idea/
+android/android/captures/
+android/android/app/release/
+android/android/app/debug/
+

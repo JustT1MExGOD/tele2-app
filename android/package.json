@@ -1,0 +1,19 @@
+{
+  "name": "t2sales-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "T2 Sales — Android native shell (Capacitor WebView around the same production web app, mirrors desktop/'s Electron shell)",
+  "scripts": {
+    "android:sync": "cap sync android",
+    "android:open": "cap open android",
+    "android:build:debug": "cap sync android && cd android && ./gradlew assembleDebug",
+    "android:build:release": "cap sync android && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2"
+  }
+}
