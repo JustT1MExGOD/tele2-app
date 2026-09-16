@@ -495,8 +495,10 @@ export function openAbout(): void {
           <b>Точки</b><br>
           Космонавтов 20А · Калинина 2 · Калинина 11
         </div>
-        <button class="btn-main" onclick="startAcademy('employee');closeModal()">Пройти обучение</button>
-        <button class="btn-main" style="margin-top:8px;background:var(--surface-2);color:var(--text)" onclick="closeModal()">Закрыть</button>
+        <!-- "Пройти обучение" temporarily removed — Academy is disabled while
+             the illustrated-story rework is iterated on, see
+             app/core.ts's ACADEMY_ENABLED. -->
+        <button class="btn-main" onclick="closeModal()">Закрыть</button>
       `;
   }
   if (typeof openModal === 'function') openModal();

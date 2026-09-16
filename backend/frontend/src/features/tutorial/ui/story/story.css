@@ -1,0 +1,177 @@
+/* Академия: иллюстрированная история (заменяет прежний 3D-эпизод).
+   Сцена (academy-3d-world/story-stage) занимает весь экран; существующая
+   2D-панель миссии (academy-nav-rail/academy-mission-panel — DOM не
+   менялся, см. ui/desktop/present.ts) сжата в компактную карточку поверх
+   иллюстрации. Палитра — фирменный градиент T2 Академии (см.
+   styles.css .academy-loading-logo), а не красный/чёрный ориентир из
+   референс-видео. См. CLAUDE-ACADEMY-MOTION-BRIEF.md. */
+#academyRoot.academy-game { position: fixed; inset: 0; height: 100dvh; z-index: 20000; overflow: hidden; background: #0d0b16; color: #f4f2fb; isolation: isolate; font-family: var(--font, Inter, Arial, sans-serif); --story-accent: #7a5af8; --story-accent-2: #2aabee; --story-warm: #ffd966; --muted: #b8aee0; }
+#academyRoot.academy-game[hidden], .academy-game [hidden] { display: none !important; }
+.academy-game * { box-sizing: border-box; }
+.academy-game button { font: inherit; cursor: pointer; min-height: 44px; }
+.academy-game button:disabled { opacity: .4; cursor: not-allowed; }
+.academy-game :focus-visible { outline: 3px solid var(--story-accent-2); outline-offset: 4px; }
+.academy-game .academy-loading-bg, .academy-game .academy-scrim { display: none; }
+
+/* ---------- Illustrated stage (fills the screen) ---------- */
+.story-stage { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(180deg, #14101f, #0a0912); }
+.story-scene-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.story-sky { fill: #241d3a; }
+.story-sky-dusk { fill: #2c1f3e; }
+.story-sky-celebrate { fill: #241d3a; }
+.story-sun { fill: var(--story-warm); opacity: 0.9; }
+.story-sun-celebrate { fill: var(--story-warm); opacity: 0.95; }
+.story-ground { fill: #171029; }
+.story-wall { fill: #1a1430; }
+.story-floor { fill: #120d21; }
+.story-building-far { fill: #2a2244; stroke: none; }
+
+.story-shop-wall { fill: #2f2650; stroke: var(--story-accent-2); stroke-width: 3; }
+.story-shop-awning { fill: var(--story-accent); }
+.story-shop-door { fill: #120d21; }
+.story-shop-window { fill: var(--story-warm); opacity: 0.85; }
+.story-shop-sign { fill: #fff; font-size: 34px; font-weight: 900; letter-spacing: 4px; font-family: var(--font, Inter, Arial, sans-serif); }
+
+.story-shelf { fill: #241c40; stroke: var(--story-accent); stroke-width: 2; }
+.story-shelf-line { fill: var(--story-accent-2); opacity: 0.6; }
+.story-window { fill: var(--story-warm); opacity: 0.5; }
+.story-counter-body { fill: #2a2148; stroke: var(--story-accent-2); stroke-width: 3; }
+.story-terminal { fill: #1c1533; stroke: var(--story-accent); stroke-width: 2; }
+.story-terminal-screen { fill: var(--story-accent-2); opacity: 0.85; }
+
+.story-counter-close .story-nameplate { fill: var(--story-accent); }
+.story-nameplate-text { fill: #14101f; font-size: 22px; font-weight: 800; letter-spacing: 2px; font-family: var(--font, Inter, Arial, sans-serif); }
+
+.story-shop-a, .story-shop-b { fill: #2f2650; stroke: var(--story-accent-2); stroke-width: 3; }
+.story-route-line { fill: none; stroke: var(--story-warm); stroke-width: 3; stroke-dasharray: 2 12; stroke-linecap: round; }
+.story-route-dot { fill: var(--story-warm); }
+
+/* ---------- Characters ---------- */
+.story-figure-slot { transform-box: fill-box; }
+.story-figure-shadow { fill: #000; opacity: 0.28; }
+.story-figure-body { fill: var(--story-accent-2); }
+.story-customer-body { fill: #ff8fb1; }
+.story-figure-legs { fill: #1c1533; }
+.story-figure-head { fill: #f0c9a0; }
+.story-figure-hair { fill: #241c40; }
+.story-customer-hair { fill: #6b4226; }
+.story-figure-arm-l path, .story-figure-arm-r path { fill: none; stroke: #f0c9a0; stroke-width: 7; stroke-linecap: round; }
+
+.story-arb-robe { fill: #3f9e4d; }
+.story-arb-robe-shade { fill: #14101f; }
+.story-arb-belt { fill: #2c7a39; }
+.story-arb-arm-l path, .story-arb-arm-r path { fill: none; stroke: #3f9e4d; stroke-width: 9; stroke-linecap: round; }
+.story-arb-face .arb-svg { width: 64px; height: 64px; overflow: visible; }
+
+/* Poses — transform-only, GSAP handles the transition tweens; these
+   classes are the RESTING pose applied after a tween completes so a
+   re-render (not just a fresh mount) still looks correct without motion. */
+.story-pose-idle .story-arb-body { transform: translateY(0); }
+.story-pose-talk .story-arb-arm-r { animation: storyTalk 0.6s ease-in-out infinite; }
+.story-pose-point .story-arb-arm-r { animation: storyPoint 0.9s ease-in-out infinite; }
+.story-pose-think .story-arb { animation: storyBob 3.2s ease-in-out infinite; opacity: 0.92; }
+.story-pose-wave .story-arb-arm-l { animation: storyWave 0.7s ease-in-out infinite; }
+.story-pose-celebrate .story-arb { animation: storyCelebrate 1.1s var(--ease-out, ease-out); }
+.story-pose-success .story-arb { animation: storyCelebrate 0.6s var(--ease-out, ease-out); }
+.story-pose-mistake .story-arb { animation: storyShake 0.5s ease-in-out; }
+@keyframes storyTalk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-12deg); } }
+@keyframes storyPoint { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(6px); } }
+@keyframes storyWave { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(24deg); } }
+@keyframes storyBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes storyCelebrate { 0% { transform: scale(1) rotate(0deg); } 30% { transform: scale(1.15) rotate(-6deg); } 60% { transform: scale(1.06) rotate(4deg); } 100% { transform: scale(1) rotate(0deg); } }
+@keyframes storyShake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+.story-employee-walk .story-figure-legs { animation: storyWalk 0.5s ease-in-out infinite; }
+@keyframes storyWalk { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+/* ---------- Wipe transition mask ---------- */
+.story-wipe { position: absolute; inset: 0; z-index: 8; display: none; pointer-events: none; }
+.story-wipe-svg { width: 100%; height: 100%; display: block; }
+.story-wipe-shape { fill: var(--story-accent); }
+
+/* ---------- Toolbar (sound / motion toggles) ---------- */
+.story-toolbar { position: absolute; top: max(18px, env(safe-area-inset-top)); right: 18px; z-index: 7; display: flex; gap: 6px; }
+.story-toolbar button { padding: 8px 11px; border: 1px solid #4a3d78; border-radius: 9px; background: #1c1533eb; color: #e6e0fb; font-size: 12px; min-height: 36px; }
+.story-toolbar button[aria-pressed="true"] { border-color: var(--story-accent-2); color: var(--story-accent-2); }
+
+/* ---------- Existing 2D mission panel, compacted (world visible behind) ---------- */
+.academy-game .academy-nav-rail { position: absolute; inset: auto auto auto 18px; top: max(18px, env(safe-area-inset-top)); width: auto; padding: 0; background: none; border: 0; display: flex; align-items: center; gap: 10px; z-index: 5; }
+.academy-game .academy-nav-rail .academy-nav-brand { font-size: 13px; letter-spacing: 2px; color: var(--story-accent-2); font-weight: 800; }
+.academy-game .academy-nav-rail .academy-chapter-title, .academy-game .academy-nav-rail .academy-chapter-subtitle { display: none; }
+.academy-game .academy-nav-rail .academy-progress-dots-mount { display: none; }
+.academy-game .academy-nav-rail .academy-close { min-width: 36px; min-height: 36px; padding: 0 10px; border-radius: 9px; background: #1c1533eb; border: 1px solid #4a3d78; color: #e6e0fb; font-size: 11px; }
+
+.academy-game .academy-mission-panel { position: absolute; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); top: auto; transform: translateX(-50%); width: min(92vw, 460px); max-height: 40dvh; padding: 16px 18px; border: 1px solid #4a3d78; border-radius: 16px; background: linear-gradient(150deg, #221a3af0, #120e21f5); box-shadow: 0 18px 40px #0006; display: flex; flex-direction: column; gap: 10px; overflow: auto; z-index: 5; }
+.academy-game .academy-arbuzich { width: 56px; height: 56px; margin: 0 auto; }
+.academy-game .academy-dialogue-mount { font-size: 15px; line-height: 1.55; }
+.academy-game .academy-body-mount { color: #beb3e6; font-size: 12px; line-height: 1.7; }
+.academy-game .academy-body-mount:not(:empty) { border-left: 2px solid var(--story-accent); padding-left: 10px; }
+.academy-game .academy-actions-mount { display: grid; gap: 8px; padding-top: 6px; }
+.academy-game .btn-main { width: 100%; border: 0; border-radius: 9px; background: linear-gradient(90deg, var(--story-accent), var(--story-accent-2)); color: #fff; font-weight: 750; padding: 12px 16px; box-shadow: 0 5px 18px #7a5af833; transition: filter .18s, transform .18s; }
+.academy-game .btn-main:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.academy-game .btn-secondary { width: 100%; background: #1c1533; color: #e6e0fb; border: 1px solid #4a3d78; border-radius: 9px; padding: 11px 14px; }
+.academy-game input { display: block; width: 100%; min-height: 46px; margin: 8px 0 12px; padding: 10px 12px; border: 1px solid #4a3d78; border-radius: 8px; background: #120e21; color: #f4f2fb; font: inherit; }
+.academy-game .academy-practice-success { color: #b6f0c0; font-size: 13px; line-height: 1.6; padding: 10px 0; }
+.academy-game .academy-practice-error, .academy-save-error { color: #ffb4a9; font-size: 13px; line-height: 1.6; }
+.academy-training-terminal { display: grid; gap: 10px; margin-top: 12px; padding: 14px; background: #150f26; border: 1px solid var(--story-accent); border-radius: 12px; }
+.academy-training-terminal h3 { margin: 0; font-size: 16px; }
+.academy-training-terminal p, .academy-training-terminal label, .academy-training-feedback { font-size: 12px; line-height: 1.6; }
+.academy-training-feedback { color: var(--story-warm); }
+.academy-game .academy-checklist { display: grid; gap: 8px; }
+.academy-game .academy-checklist-item { display: flex; align-items: center; gap: 9px; padding: 9px; background: #150f26; border-radius: 10px; font-size: 12px; }
+.academy-game .academy-checklist-label { flex: 1; }
+.academy-game .academy-checklist-run { border: 1px solid var(--story-accent); background: var(--story-accent-2); color: #0d0b16; border-radius: 8px; padding: 8px; font-size: 11px; }
+.academy-quiz { display: grid; gap: 8px; }
+.academy-quiz button { padding: 11px; border: 1px solid #4a3d78; background: #150f26; color: #f4f2fb; border-radius: 9px; text-align: left; }
+.academy-quiz p { font-size: 13px; line-height: 1.6; }
+.academy-game .academy-progress-dot.active { background: var(--story-accent-2); box-shadow: 0 0 12px #2aabee55; }
+
+/* ---------- Journey (chapter map) — illustration visible full-bleed behind it ---------- */
+.academy-game .academy-journey-side { position: absolute; inset: 0 440px 0 0; background: none; padding: 0; border: 0; }
+.academy-game .academy-journey-side .academy-journey-header { position: absolute; left: 48px; bottom: 44px; text-align: left; }
+.academy-game .academy-journey-side .academy-close { position: absolute; left: 48px; bottom: 150px; top: auto; }
+.academy-game .academy-journey-scroll { position: absolute; right: 24px; top: 84px; bottom: 24px; width: 392px; padding: 20px; background: #150f26e8; border: 1px solid #4a3d78; border-radius: 16px; overflow-y: auto; z-index: 3; }
+.academy-game .academy-journey-node { width: 100%; margin: 0 0 12px; padding: 18px; text-align: left; border: 1px solid #4a3d78; border-radius: 12px; background: #1c1533; color: #f4f2fb; box-shadow: none; transform: none; }
+.academy-game .academy-journey-node:not(:disabled):hover { border-color: var(--story-warm); background: #241c40; }
+.academy-game .academy-journey-node--locked { opacity: .45; }
+.academy-game .academy-journey-node--completed { border-color: var(--story-accent-2); }
+.academy-game .academy-journey-connector { display: none; }
+.academy-game .academy-journey-header h1, .academy-game .academy-journey-header h2 { color: #fff; }
+.academy-game .academy-close { z-index: 9; color: #e6e0fb; background: #1c1533e6; border: 1px solid #4a3d78; border-radius: 9px; min-width: 44px; }
+.academy-game .academy-chapter-badge { display: none; }
+.academy-game .academy-spotlight { z-index: 2; border: 2px solid var(--story-warm); box-shadow: 0 0 0 9999px #0a0912aa; pointer-events: none; }
+.academy-game-compact .academy-mission-panel, .academy-game-compact .academy-sheet { visibility: hidden; }
+.academy-game-victory .academy-mission-panel, .academy-game-victory .academy-sheet { border-color: var(--story-warm); box-shadow: 0 0 60px #ffd96622; }
+
+.academy-game .academy-journey-path { display: block !important; max-width: none; width: 100%; padding: 0; }
+.academy-game .academy-journey-node:nth-child(n) { align-self: stretch; transform: none; margin-left: 0; margin-right: 0; max-width: none; }
+.academy-game .academy-journey-title { font-size: 24px; font-weight: 800; letter-spacing: -.6px; }
+.academy-game .academy-journey-stats { display: flex; gap: 16px; margin-top: 10px; color: var(--story-warm); }
+#academyRoot.academy-game .academy-journey-node { width: 100%; }
+.academy-game .academy-journey-side .academy-nav-brand { position: absolute; left: 48px; top: 30px; color: var(--story-accent-2); font-weight: 900; letter-spacing: 3px; }
+.academy-game .academy-journey-side .academy-close { width: auto; padding: 10px 16px; right: auto; height: auto; }
+
+@media (max-width: 859px) {
+  .story-toolbar { top: max(14px, env(safe-area-inset-top)); right: 14px; }
+  .academy-game .academy-nav-rail { top: max(14px, env(safe-area-inset-top)); left: 14px; }
+  .academy-game .academy-nav-rail .academy-nav-brand { display: none; }
+  /* styles.css's .academy-mobile .academy-close AND .academy-journey
+     .academy-close both pin the close button top-right, which collides
+     with .story-toolbar there on narrow viewports — move it to the
+     left, next to the nav rail, in both modes. */
+  .academy-game.academy-mobile .academy-close,
+  .academy-game.academy-journey .academy-close { left: 14px; right: auto; top: max(14px, env(safe-area-inset-top)); }
+  .academy-game .academy-mission-panel { width: calc(100vw - 24px); max-height: 44dvh; bottom: max(12px, env(safe-area-inset-bottom)); }
+  .academy-game .academy-journey-side { position: relative; inset: auto; padding: calc(43dvh - 50px) 20px 12px; }
+  .academy-game .academy-journey-side .academy-journey-header { position: static; }
+  .academy-game .academy-journey-scroll { position: relative; inset: auto; width: auto; margin: 0 12px 20px; padding: 12px; overflow: visible; }
+  .academy-game .academy-journey-header h1, .academy-game .academy-journey-header h2 { font-size: 20px; }
+  .academy-game[data-mode=discover] .academy-mission-panel { position: fixed; left: 12px; right: 12px; bottom: 12px; top: auto; max-height: 45dvh; overflow: auto; margin: 0; }
+  .academy-game .academy-journey-node { padding: 14px; }
+}
+
+.academy-game-low * { animation: none !important; transition: none !important; backdrop-filter: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .academy-game * { animation: none !important; transition: none !important; }
+  .story-wipe { display: none !important; }
+}

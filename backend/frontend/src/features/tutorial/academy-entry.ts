@@ -9,7 +9,7 @@ import { renderDesktopShell, renderDesktopJourney } from './ui/desktop/present.j
 import { withLoadingScreen } from './ui/shared/loading-screen.js';
 import type { AcademyCourse } from './model/types.js';
 
-import { mountGame, destroyGame } from './ui/game/director.js';
+import { mountGame, destroyGame } from './ui/story/director.js';
 let activeSession: AcademySession | null = null;
 let activeCourse: AcademyCourse | null = null;
 let generation = 0;

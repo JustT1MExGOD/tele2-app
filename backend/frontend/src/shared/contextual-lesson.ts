@@ -9,6 +9,8 @@
  * actual Academy code only loads when the user taps "Показать", never
  * just from visiting a page that happens to offer a contextual lesson.
  */
+import { ACADEMY_ENABLED } from '../app/core.js';
+
 export interface ContextualLessonOptions {
   contextId: string;
   title: string;
@@ -21,6 +23,7 @@ const PROMPT_ID = 'academyContextualPrompt';
  * prompt. Safe to call on every page load — one cheap GET, "once per
  * feature until dismissed" by design, never spams. */
 export async function maybeShowContextualLesson(opts: ContextualLessonOptions): Promise<void> {
+  if (!ACADEMY_ENABLED) return;
   try {
     const status = await window.apiClient.getAcademyContextualStatus(authHeaders(), opts.contextId);
     if (status.dismissed) return;

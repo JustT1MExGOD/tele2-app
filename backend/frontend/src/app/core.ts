@@ -629,7 +629,17 @@ function loadAcademyBundle(): Promise<void> {
   }
   return academyBundlePromise;
 }
+/**
+ * T2 Academy is being reworked (illustrated story episode, see
+ * CLAUDE-ACADEMY-MOTION-BRIEF.md) and is intentionally unreachable from the
+ * main app while it's iterated on — every entry point (home/my-plan buttons,
+ * contextual-lesson prompts, the auto-start in tutorial/index.ts) funnels
+ * through this single function, so gating it here is enough; nothing else
+ * needed to change. Flip ACADEMY_ENABLED back to true to restore access.
+ */
+export const ACADEMY_ENABLED = false;
 export async function startAcademy(role: string): Promise<void> {
+  if (!ACADEMY_ENABLED) return;
   try {
     await loadAcademyBundle();
     await window.__academyStart(role);

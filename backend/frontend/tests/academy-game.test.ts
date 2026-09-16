@@ -1,15 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const api = vi.hoisted(() => ({ complete: vi.fn() }));
 vi.mock('../src/features/tutorial/api.js', () => ({ completeAcademyStep: api.complete, getAcademyProgress: vi.fn() }));
-import * as THREE from 'three';
 import { TutorialEngine } from '../src/features/tutorial/engine/tutorial-engine.js';
 import { ArbuzichController } from '../src/features/tutorial/character/arbuzich-controller.js';
 import { AcademySession, collectMountRefs } from '../src/features/tutorial/ui/shared/session.js';
 import { renderMobileShell } from '../src/features/tutorial/ui/mobile/present.js';
-import { mountGame, getGame, destroyGame } from '../src/features/tutorial/ui/game/director.js';
-import { InteractionSystem } from '../src/features/tutorial/ui/game/interaction/interactables.js';
-import { buildShop } from '../src/features/tutorial/ui/game/world/shop.js';
-import { openTrainingSale } from '../src/features/tutorial/ui/game/training-sale.js';
+import { mountGame, getGame, destroyGame } from '../src/features/tutorial/ui/story/director.js';
+import { sceneForStep } from '../src/features/tutorial/ui/story/scenes.js';
+import { openTrainingSale } from '../src/features/tutorial/ui/shared/training-sale.js';
 import type { AcademyStep } from '../src/features/tutorial/model/types.js';
 let session: AcademySession | undefined;
 const response = { already_completed: false, reward_granted: false, xp_awarded: 0 };
@@ -20,39 +18,34 @@ function setup(steps: AcademyStep[]) {
   const engine = new TutorialEngine({ id: 'test', title: 'Тест', role: 'employee', chapters: [{ id: 'ch', title: 'Глава', steps }] });
   session = new AcademySession(engine, new ArbuzichController(), {}, collectMountRefs(root), vi.fn()); session.start(); return { root, engine, session };
 }
-it('находит ближайший доступный интерактивный объект в радиусе', () => {
-  const system = new InteractionSystem();
-  const near = new THREE.Object3D(); near.position.set(1, 0, 0);
-  const far = new THREE.Object3D(); far.position.set(5, 0, 0);
-  const onInteract = vi.fn();
-  system.register({ id: 'terminal', object: far, radius: 1.5, label: 'Далеко', enabled: () => true, onInteract: vi.fn() });
-  system.register({ id: 'register', object: near, radius: 1.5, label: 'Рядом', enabled: () => true, onInteract });
-  const hit = system.update(new THREE.Vector3(0, 0, 0));
-  expect(hit?.id).toBe('register');
-  system.triggerCurrent();
-  expect(onInteract).toHaveBeenCalledOnce();
-});
-it('игнорирует отключённый интерактивный объект даже в радиусе', () => {
-  const system = new InteractionSystem();
-  const obj = new THREE.Object3D();
-  system.register({ id: 'register', object: obj, radius: 2, label: 'X', enabled: () => false, onInteract: vi.fn() });
-  expect(system.update(new THREE.Vector3(0, 0, 0))).toBeNull();
-});
-it('строит магазин с непересекающимися координатами точек интереса внутри пола', () => {
-  const shop = buildShop();
-  const spots = [shop.anchors.arbuzychSpot, shop.anchors.terminalSpot, shop.anchors.registerSpot, shop.anchors.playerSpawn];
-  for (const spot of spots) { expect(Math.abs(spot.x)).toBeLessThan(5.5); expect(Math.abs(spot.z)).toBeLessThan(4.5); }
-  expect(shop.colliders.length).toBeGreaterThan(0);
-  expect(shop.anchors.introPath.length).toBeGreaterThan(1);
-});
-it('без доступного WebGL-контекста не монтирует игру и не оставляет сломанный DOM — 2D-панель остаётся рабочей', () => {
+it('монтирует иллюстрированную сцену без исключений и её можно демонтировать', () => {
   const root = document.createElement('div'); document.body.append(root);
   const before = root.className;
-  const game = mountGame(root); // jsdom has no real WebGL context, so this exercises the fallback path
-  expect(game).toBeUndefined();
+  const story = mountGame(root);
+  expect(story).toBeDefined();
+  expect(getGame(root)).toBe(story);
+  expect(root.querySelector('.story-stage svg.story-scene-svg')).toBeTruthy();
+  destroyGame(root);
   expect(getGame(root)).toBeUndefined();
   expect(root.className).toBe(before);
   destroyGame(root); // must be a safe no-op when nothing was mounted
+});
+it('перерисовывает сцену при смене шага и не падает на feedback/reward', () => {
+  const root = document.createElement('div'); document.body.append(root);
+  const story = mountGame(root)!;
+  const step: AcademyStep = { id: 'employee-ch1-welcome', kind: 'cutscene', cue: 'enter' };
+  expect(() => story.setStep(step, 0, 1)).not.toThrow();
+  expect(() => story.feedback(true)).not.toThrow();
+  expect(() => story.feedback(false)).not.toThrow();
+  expect(() => story.reward()).not.toThrow();
+  destroyGame(root);
+});
+it('для каждого известного вида шага подбирается сцена, включая непортированные главы', () => {
+  const kinds: AcademyStep['kind'][] = ['story', 'discover', 'practice', 'challenge', 'quiz', 'cutscene'];
+  for (const kind of kinds) {
+    const scene = sceneForStep({ id: 'unmapped-step', kind });
+    expect(scene.markup).toContain('story-scene-svg');
+  }
 });
 it('не сохраняет незавершённую практику', async () => { const { session } = setup([{ id: 'a', kind: 'practice' }]); await session.advance(); expect(api.complete).not.toHaveBeenCalled(); });
 it('объединяет двойное нажатие в один переход', async () => { let resolve!: (value: unknown) => void; api.complete.mockImplementation(() => new Promise(r => { resolve = r; })); const { session, engine } = setup([{ id: 'a', kind: 'story' }, { id: 'b', kind: 'story' }, { id: 'c', kind: 'story' }]); const first = session.advance(); await session.advance(); expect(api.complete).toHaveBeenCalledOnce(); resolve(response); await first; expect(engine.getStep().id).toBe('b'); });

@@ -47,7 +47,7 @@ const SRC_DIR = path.join(ROOT, 'frontend', 'src');
 // is the intended way this debt shrinks over time. Never raise it to
 // make a new addition pass; add addEventListener/event delegation
 // instead (see docs/SECURITY.md §9).
-const BASELINE = 310;
+const BASELINE = 308;
 
 const PATTERN = /on(?:click|change|input|submit)=["']/g;
 

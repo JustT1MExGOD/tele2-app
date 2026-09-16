@@ -12,3 +12,5 @@ update-staging/
 sql/all_databases.sql
 *.pdf
 sbom.cdx.json
+graphify-out/
+accepted-releases/
