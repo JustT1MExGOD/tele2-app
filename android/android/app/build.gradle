@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+// Real signing credentials never live in the repo — same policy as
+// desktop/'s CSC_LINK/CSC_KEY_PASSWORD (see docs/DESKTOP-RELEASE.md).
+// keystore.properties is gitignored; see keystore.properties.example
+// and docs/ANDROID-RELEASE.md for how to generate it. Its absence
+// (the default in a fresh checkout) must not break the build — it
+// just means `assembleRelease` produces an unsigned APK, same as
+// desktop-ci.yml's "unsigned dev build" until a real cert exists.
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+def hasKeystoreConfig = keystorePropertiesFile.exists()
+if (hasKeystoreConfig) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.t2sales.android"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +30,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasKeystoreConfig) {
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig hasKeystoreConfig ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

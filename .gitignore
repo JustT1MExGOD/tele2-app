@@ -27,3 +27,9 @@ android/android/captures/
 android/android/app/release/
 android/android/app/debug/
 
+# Android release signing — real credentials never committed (same policy
+# as desktop/'s CSC_LINK/CSC_KEY_PASSWORD), see keystore.properties.example.
+android/android/keystore.properties
+android/android/*.jks
+android/android/*.keystore
+

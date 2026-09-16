@@ -76,3 +76,52 @@ jobs:
           # preceding step's working-directory.
           path: android/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      # Real signing credentials never live in the repo (docs/ANDROID-RELEASE.md,
+      # same policy as desktop's CSC_LINK/CSC_KEY_PASSWORD) — this step only
+      # writes a keystore when the secret is actually configured. Until then
+      # it's a no-op and the release build below stays unsigned, same as
+      # desktop-ci.yml's "unsigned dev build" before a cert exists.
+      # The shell-level [ -n ... ] guard (rather than a step-level `if:` on
+      # `secrets.*`) is deliberate — keeps this step un-skipped so its
+      # absence is visible in the log either way, and sidesteps editor/
+      # schema linters that don't universally agree `secrets` is valid in
+      # step `if:` conditions. build.gradle's own keystorePropertiesFile
+      # existence check is what actually decides signed-vs-unsigned.
+      - name: Decode release keystore (if configured)
+        working-directory: android/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret configured — release build will be unsigned."
+            exit 0
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > t2sales-release.jks
+          cat > keystore.properties <<PROPS
+          storeFile=t2sales-release.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          PROPS
+
+      - name: Build release APK + AAB
+        working-directory: android/android
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: t2sales-android-release-apk
+          path: android/android/app/build/outputs/apk/release/app-release*.apk
+          if-no-files-found: error
+
+      - name: Upload release AAB artifact (Play Store submission format)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: t2sales-android-release-aab
+          path: android/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
