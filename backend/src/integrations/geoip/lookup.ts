@@ -31,10 +31,7 @@ async function getReader(): Promise<Reader<CityResponse> | null> {
     reader = null;
     if (!warnedMissing) {
       warnedMissing = true;
-      console.warn(
-        '[geoip] GeoLite2-City.mmdb not found — session locations will be empty until `npm run geoip:update` is run ' +
-          '(needs MAXMIND_ACCOUNT_ID/MAXMIND_LICENSE_KEY).'
-      );
+      console.warn('[geoip] GeoLite2-City.mmdb not found — session locations will be empty until `npm run geoip:update` is run.');
     }
   }
   return reader;

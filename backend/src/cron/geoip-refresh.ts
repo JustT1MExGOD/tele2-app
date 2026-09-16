@@ -1,14 +1,15 @@
 /**
- * GeoLite2-City is republished by MaxMind roughly weekly (Tuesdays) — this
- * refreshes our copy on the same cadence, same "cron.schedule('* * * * *',
- * ...) + manual day/time gate" pattern as the rest of src/cron/. Missing
- * MAXMIND_ACCOUNT_ID/MAXMIND_LICENSE_KEY is a normal, expected state (geo-IP
- * is optional — sessions just show no location) and quietly no-ops, same
- * as BOT_TOKEN-gated features elsewhere in this codebase.
+ * GeoLite2-City is republished roughly weekly — this refreshes our copy
+ * on the same cadence, same "cron.schedule('* * * * *', ...) + manual
+ * day/time gate" pattern as the rest of src/cron/. A download failure
+ * (mirror unreachable, network blip) is a normal, expected state
+ * (geo-IP is optional — sessions just show no location) and is logged
+ * but never rethrown, same as BOT_TOKEN-gated features elsewhere in
+ * this codebase.
  */
 import cron, { type ScheduledTask } from 'node-cron';
 import { nowTimeMoscow, nowDayOfWeekMoscow } from '../utils/date.js';
-import { downloadLatestDb, GeoipCredentialsMissingError } from '../integrations/geoip/refresh.js';
+import { downloadLatestDb } from '../integrations/geoip/refresh.js';
 import { runJob, jobLogger } from './job-logger.js';
 
 export async function refreshGeoipDb(): Promise<void> {
@@ -16,9 +17,8 @@ export async function refreshGeoipDb(): Promise<void> {
     try {
       await downloadLatestDb();
       jobLogger.info({ job: 'geoip.refresh' }, 'GeoLite2-City.mmdb updated');
-    } catch (e) {
-      if (e instanceof GeoipCredentialsMissingError) return; // expected, not an error
-      throw e;
+    } catch (e: any) {
+      jobLogger.error({ job: 'geoip.refresh', err: e?.message || String(e) }, 'download failed, keeping existing db');
     }
   });
 }
