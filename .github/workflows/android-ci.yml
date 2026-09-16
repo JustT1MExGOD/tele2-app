@@ -1,0 +1,70 @@
+name: Android CI
+
+on:
+  push:
+  workflow_dispatch:
+
+# Same discipline as ci.yml/desktop-ci.yml: read-only GITHUB_TOKEN, nothing
+# in this workflow writes to the repo/packages/releases — the APK is
+# uploaded via actions/upload-artifact, not published anywhere.
+permissions:
+  contents: read
+
+jobs:
+  android:
+    # android/ is a Capacitor WebView shell around the same production web
+    # app (mirrors desktop/'s Electron shell) — there's no frontend to
+    # build/test here, only the native Gradle project under android/android.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: android/package-lock.json
+
+      - name: Install Capacitor CLI dependencies
+        working-directory: android
+        run: npm ci
+
+      # Regenerates android/android/app/src/main/assets/capacitor.config.json
+      # (and any plugin wiring) from android/capacitor.config.json — keeps
+      # the committed native project in sync with config changes instead of
+      # relying on whoever last ran `cap add`/`cap sync` locally.
+      - name: Capacitor sync
+        working-directory: android
+        run: npx cap sync android
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # compileSdk/targetSdk 36 (android/android/variables.gradle) — the
+      # Android SDK preinstalled on ubuntu-latest can lag a freshly released
+      # platform level, so install it explicitly rather than hoping it's
+      # already there.
+      - name: Install Android SDK platform 36 + matching build-tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-36" "build-tools;36.0.0"
+
+      # §50/§64 of the desktop brief applies the same way here: unsigned
+      # this pass (no keystore configured in CI secrets yet) —
+      # `assembleDebug` proves the app actually builds against a real
+      # Android SDK, not that it's production-signed/ready for the Play
+      # Store.
+      - name: Build debug APK (unsigned dev build)
+        working-directory: android/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: t2sales-android-debug-apk
+          # Same working-directory gotcha noted in desktop-ci.yml: `uses:`
+          # steps resolve paths relative to GITHUB_WORKSPACE, not the
+          # preceding step's working-directory.
+          path: android/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
