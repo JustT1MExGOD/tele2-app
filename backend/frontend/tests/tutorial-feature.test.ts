@@ -227,16 +227,22 @@ describe('T2 Academy legacy-coexistence audit — index.html manual re-entry poi
   // (startTutorial('employee')), left over from before the Phase 2
   // migration. The manager row must stay on its own legacy track
   // unchanged (no manager Academy exists yet).
+  //
+  // Both home-page rows are currently commented out of index.html while
+  // T2 Academy is disabled app-wide (core.ts: ACADEMY_ENABLED = false —
+  // illustrated-story rework in progress), so there is no manual re-entry
+  // point to audit right now. Re-enable these assertions once the rows
+  // come back.
   const html = readFileSync(join(__dirname, '..', 'index.html'), 'utf8');
 
-  it('the "Обучение сотрудника" home-page row launches Academy, not the legacy employee tutorial', () => {
+  it.skip('the "Обучение сотрудника" home-page row launches Academy, not the legacy employee tutorial', () => {
     expect(html).not.toContain(`onclick="startTutorial('employee')"`);
     const rowMatch = html.match(/<button class="row" onclick="startAcademy\('employee'\)">[\s\S]{0,900}?<\/button>/);
     expect(rowMatch, 'expected exactly one startAcademy(\'employee\') row with the "Обучение сотрудника" label').toBeTruthy();
     expect(rowMatch![0]).toContain('Обучение сотрудника');
   });
 
-  it('the manager training row is untouched — still on its own legacy startManagerTutorial() track', () => {
+  it.skip('the manager training row is untouched — still on its own legacy startManagerTutorial() track', () => {
     expect(html).toContain('onclick="startManagerTutorial()"');
     expect(html).toContain('Обучение manager');
   });

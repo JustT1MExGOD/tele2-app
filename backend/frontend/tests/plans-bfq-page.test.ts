@@ -95,17 +95,23 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
     vi.unstubAllGlobals();
   });
 
+  // Import first, THEN setupGlobals: importing this module transitively
+  // imports contextual-lesson.ts → core.ts, whose top-level code assigns
+  // real implementations onto window (todayMoscow/authHeaders/canManage/
+  // etc.). Stubbing before the import gets silently overwritten by that —
+  // letting the real bridge run once first, then stubbing last, wins.
+
   it('loadBFQ: пусто — "Нет данных BFQ"', async () => {
-    setupGlobals();
     const { loadBFQ } = await import('../src/pages/plans-bfq/index.js');
+    setupGlobals();
     await loadBFQ();
     expect(document.getElementById('bfqList')!.textContent).toContain('Нет данных BFQ');
   });
 
   it('loadBFQ: список — рендерит строки с рейтингом', async () => {
+    const { loadBFQ } = await import('../src/pages/plans-bfq/index.js');
     const { getBfqList } = setupGlobals();
     getBfqList.mockResolvedValue({ month: '2026-08', items: [{ employee_id: 1, full_name: 'Иван', total: 80, quality: 90, profit: 70, vmr: 12 }] });
-    const { loadBFQ } = await import('../src/pages/plans-bfq/index.js');
     await loadBFQ();
     const html = document.getElementById('bfqList')!.innerHTML;
     expect(html).toContain('Иван');
@@ -113,44 +119,44 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('openBFQCard: manager видит форму ручного ввода VMR/штрафа', async () => {
-    setupGlobals({ role: 'manager' });
     const { openBFQCard } = await import('../src/pages/plans-bfq/index.js');
+    setupGlobals({ role: 'manager' });
     await openBFQCard(1);
     expect(document.getElementById('modalTitle')!.textContent).toBe('BFQ');
     expect(document.getElementById('modalBody')!.innerHTML).toContain('saveBFQManual(1)');
   });
 
   it('openBFQCard: не-manager — форма ввода скрыта', async () => {
-    setupGlobals({ role: 'employee' });
     const { openBFQCard } = await import('../src/pages/plans-bfq/index.js');
+    setupGlobals({ role: 'employee' });
     await openBFQCard(1);
     expect(document.getElementById('modalBody')!.innerHTML).not.toContain('saveBFQManual');
   });
 
   it('saveBFQManual: успех — тостит и перезагружает список', async () => {
+    const { saveBFQManual } = await import('../src/pages/plans-bfq/index.js');
     const { saveBfqManual, getBfqList } = setupGlobals({ role: 'manager' });
     document.body.innerHTML += '<input id="bfqVmr" value="15"><input id="bfqPenalty" value="0">';
-    const { saveBFQManual } = await import('../src/pages/plans-bfq/index.js');
     await saveBFQManual(1);
     expect(saveBfqManual).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ employee_id: 1, vmr_avg: 15 }));
     expect(getBfqList).toHaveBeenCalled();
   });
 
   it('loadMonthPlans: пусто — сообщение с месяцем', async () => {
-    setupGlobals();
     const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
+    setupGlobals();
     await loadMonthPlans();
     expect(document.getElementById('monthPlanList')!.textContent).toContain('Нет данных за 2026-08');
   });
 
   it('loadMonthPlans: строки — рендерит карточки сотрудников и "Итого сеть"', async () => {
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
     getPlansEmployeesMonth.mockResolvedValue({
       rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: { sim: 10 }, fact: { sim: 5 }, pct: { sim: 50 } }],
       remaining_days: 5,
       totals: { fact: { sim: 5 }, plan: { sim: 10 }, pct: { sim: 50 } }
     });
-    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     await loadMonthPlans();
     const html = document.getElementById('monthPlanList')!.innerHTML;
     expect(html).toContain('Иван');
@@ -161,6 +167,7 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   // ===== Desktop .data-table (20.44, Schedule/Plans — следующий шаг после Team в 20.42.0) =====
 
   it('loadMonthPlans: desktop-таблица рендерит тот же состав, что #monthPlanList, плюс "Итого сеть"', async () => {
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
     getPlansEmployeesMonth.mockResolvedValue({
       rows: [
@@ -170,7 +177,6 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
       remaining_days: 5,
       totals: { fact: { sim: 14 }, pct: { sim: 70 } }
     });
-    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     await loadMonthPlans();
     const body = document.getElementById('monthPlanTableBody')!.innerHTML;
     expect(body).toContain('Иван');
@@ -183,6 +189,7 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   // закрыт в dealers.ts/cash-metrics.ts (20.49.0), но пропущен здесь:
   // full_name с " разрывал onclick="..." и на карточке, и в desktop-строке.
   it('full_name с " не разрывает onclick="..." ни на карточке, ни в desktop-строке — атрибут-breakout невозможен', async () => {
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
     const payload = `Иван" onmouseover="window.__pwned=1`;
     getPlansEmployeesMonth.mockResolvedValue({
@@ -190,7 +197,6 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
       remaining_days: 5,
       totals: { fact: { sim: 5 }, plan: { sim: 10 }, pct: { sim: 50 } }
     });
-    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     await loadMonthPlans();
 
     // jsdom реально парсит HTML — если бы " разорвал атрибут, здесь
@@ -205,13 +211,14 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('loadMonthPlans: пустой список — таблица показывает то же сообщение с месяцем', async () => {
-    setupGlobals({ role: 'manager' });
     const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
+    setupGlobals({ role: 'manager' });
     await loadMonthPlans();
     expect(document.getElementById('monthPlanTableBody')!.innerHTML).toContain('Нет данных за 2026-08');
   });
 
   it('sortMonthPlanTable: числовая сортировка по метрике, направление разворачивается повторным кликом', async () => {
+    const { loadMonthPlans, sortMonthPlanTable } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
     getPlansEmployeesMonth.mockResolvedValue({
       rows: [
@@ -220,7 +227,6 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
       ],
       remaining_days: 5
     });
-    const { loadMonthPlans, sortMonthPlanTable } = await import('../src/pages/plans-bfq/index.js');
     await loadMonthPlans();
 
     sortMonthPlanTable('metric:sim');
@@ -237,6 +243,7 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('toggleMonthPlanExtraColumns: добавляет/убирает EXTRA-колонки для всей таблицы разом', async () => {
+    const { loadMonthPlans, toggleMonthPlanExtraColumns } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
     // setupGlobals() уже застабила METRICS двумя пунктами — переопределяем
     // ПОСЛЕ неё, иначе внутренний вызов vi.stubGlobal('METRICS', ...) внутри
@@ -254,7 +261,6 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
       rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: {}, fact: { wink: 3 }, pct: {} }],
       remaining_days: 5
     });
-    const { loadMonthPlans, toggleMonthPlanExtraColumns } = await import('../src/pages/plans-bfq/index.js');
     await loadMonthPlans();
     expect(document.querySelector('#monthPlanTable th[data-sort-key="metric:wink"]')).toBeNull();
 
@@ -267,12 +273,12 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('monthplan-таблица: строка кликабельна и открывает редактирование плана только при canManage()', async () => {
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth } = setupGlobals({ role: 'employee' });
     getPlansEmployeesMonth.mockResolvedValue({
       rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: {}, fact: { sim: 1 }, pct: {} }],
       remaining_days: 5
     });
-    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     await loadMonthPlans();
     const row = document.querySelector('#monthPlanTableBody tr');
     expect(row?.hasAttribute('data-clickable')).toBe(false);
@@ -280,13 +286,13 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('monthplan-таблица: строка "Итого сеть" не кликабельна', async () => {
+    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth } = setupGlobals({ role: 'manager' });
     getPlansEmployeesMonth.mockResolvedValue({
       rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: {}, fact: { sim: 1 }, pct: {} }],
       remaining_days: 5,
       totals: { fact: { sim: 1 }, pct: { sim: 100 } }
     });
-    const { loadMonthPlans } = await import('../src/pages/plans-bfq/index.js');
     await loadMonthPlans();
     const totalsRow = document.querySelector('#monthPlanTableBody tr.dt-totals');
     expect(totalsRow?.hasAttribute('data-clickable')).toBe(false);
@@ -294,14 +300,15 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('shiftPlanMonth: сдвигает planMonth и перезагружает', async () => {
-    const { getPlansEmployeesMonth } = setupGlobals();
     const { shiftPlanMonth } = await import('../src/pages/plans-bfq/index.js');
+    const { getPlansEmployeesMonth } = setupGlobals();
     shiftPlanMonth(1);
     expect((globalThis as any).planMonth).toBe('2026-09');
     expect(getPlansEmployeesMonth).toHaveBeenCalledWith(expect.anything(), '2026-09', '');
   });
 
   it('loadNetMonth: рендерит барные строки сети, по сотрудникам И по точкам (20.41 — "Динамика выполнения" без "...по сотрудникам")', async () => {
+    const { loadNetMonth } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth, getPlansStoresMonth } = setupGlobals();
     getPlansEmployeesMonth.mockResolvedValue({
       rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: { sim: 10 }, fact: { sim: 5 }, pct: { sim: 50 } }],
@@ -313,7 +320,6 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
       remaining_days: 5,
       totals: { fact: { sim: 8 }, plan: { sim: 20 } }
     });
-    const { loadNetMonth } = await import('../src/pages/plans-bfq/index.js');
     await loadNetMonth();
     expect(getPlansStoresMonth).toHaveBeenCalledWith(expect.anything(), '2026-08', '');
     const html = document.getElementById('netMonthBody')!.innerHTML;
@@ -329,6 +335,7 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('loadNetMonth: пустой список точек — секция "По точкам" не рендерится вообще (не пустой заголовок)', async () => {
+    const { loadNetMonth } = await import('../src/pages/plans-bfq/index.js');
     const { getPlansEmployeesMonth, getPlansStoresMonth } = setupGlobals();
     getPlansEmployeesMonth.mockResolvedValue({
       rows: [{ employee_id: 1, full_name: 'Иван', role: 'employee', shifts: 10, remaining_shifts: 2, plan: { sim: 10 }, fact: { sim: 5 }, pct: { sim: 50 } }],
@@ -336,7 +343,6 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
       totals: { fact: { sim: 5 }, plan: { sim: 10 } }
     });
     getPlansStoresMonth.mockResolvedValue({ rows: [], remaining_days: 5 });
-    const { loadNetMonth } = await import('../src/pages/plans-bfq/index.js');
     await loadNetMonth();
     const html = document.getElementById('netMonthBody')!.innerHTML;
     expect(html).toContain('По сотрудникам');
@@ -344,9 +350,9 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('toggleMonthExtra: переключает класс open и текст кнопки', async () => {
+    const { toggleMonthExtra } = await import('../src/pages/plans-bfq/index.js');
     setupGlobals();
     document.body.innerHTML += '<div id="mpx-0"></div><button id="btn1"></button>';
-    const { toggleMonthExtra } = await import('../src/pages/plans-bfq/index.js');
     const btn = document.getElementById('btn1') as HTMLElement;
     toggleMonthExtra('mpx-0', btn, 'Свернуть ▴', 'Ещё метрики ▾');
     expect(document.getElementById('mpx-0')!.classList.contains('open')).toBe(true);
@@ -354,15 +360,15 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('editEmployeeMonthPlan: не-manage — no-op', async () => {
-    const { getEmployeeMonthPlan } = setupGlobals({ role: 'employee' });
     const { editEmployeeMonthPlan } = await import('../src/pages/plans-bfq/index.js');
+    const { getEmployeeMonthPlan } = setupGlobals({ role: 'employee' });
     await editEmployeeMonthPlan(1, 'Иван');
     expect(getEmployeeMonthPlan).not.toHaveBeenCalled();
   });
 
   it('editEmployeeMonthPlan: manager — рендерит поля метрик', async () => {
-    setupGlobals({ role: 'manager' });
     const { editEmployeeMonthPlan } = await import('../src/pages/plans-bfq/index.js');
+    setupGlobals({ role: 'manager' });
     await editEmployeeMonthPlan(1, 'Иван');
     expect(document.getElementById('modalTitle')!.textContent).toContain('Иван');
     expect(document.getElementById('modalBody')!.innerHTML).toContain('mp_sim');
@@ -372,10 +378,10 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   // GET /metrics) подставлялся без esc() в modalBody.innerHTML — та же
   // метка уже правильно экранируется на "своей" странице (cash-metrics).
   it('editEmployeeMonthPlan: вредоносная метка метрики не создаёт реальный <img>/не исполняет JS', async () => {
+    const { editEmployeeMonthPlan } = await import('../src/pages/plans-bfq/index.js');
     setupGlobals({ role: 'manager' });
     const payload = `<img src=x onerror="window.__labelXss=1">`;
     vi.stubGlobal('METRICS', [{ id: 'sim', label: payload, short_label: 'SIM', unit: 'count' }]);
-    const { editEmployeeMonthPlan } = await import('../src/pages/plans-bfq/index.js');
     await editEmployeeMonthPlan(1, 'Иван');
 
     expect(document.querySelectorAll('img').length).toBe(0);
@@ -384,11 +390,11 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('editStoreMonthPlan: вредоносная метка метрики не создаёт реальный <img>/не исполняет JS', async () => {
+    const { editStoreMonthPlan } = await import('../src/pages/plans-bfq/index.js');
     const { getStoreMonthPlan } = setupGlobals({ role: 'manager' });
     const payload = `<img src=x onerror="window.__labelXss2=1">`;
     vi.stubGlobal('METRICS', [{ id: 'sim', label: payload, short_label: 'SIM', unit: 'count' }]);
     getStoreMonthPlan.mockResolvedValue({});
-    const { editStoreMonthPlan } = await import('../src/pages/plans-bfq/index.js');
     await editStoreMonthPlan('s1');
 
     expect(document.querySelectorAll('img').length).toBe(0);
@@ -397,33 +403,33 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('saveEmployeeMonthPlan: успех — сохраняет и закрывает модалку', async () => {
+    const { saveEmployeeMonthPlan: save } = await import('../src/pages/plans-bfq/index.js');
     const { saveEmployeeMonthPlan } = setupGlobals({ role: 'manager' });
     document.body.innerHTML += '<input id="mp_sim" value="7"><input id="mp_mnp" value="2">';
-    const { saveEmployeeMonthPlan: save } = await import('../src/pages/plans-bfq/index.js');
     await save(1);
     expect(saveEmployeeMonthPlan).toHaveBeenCalledWith(expect.anything(), 1, expect.objectContaining({ sim: 7, mnp: 2 }));
     expect((globalThis as any).closeModal).toHaveBeenCalled();
   });
 
   it('loadStoreDailyPlans: пусто — "Нет данных"', async () => {
-    setupGlobals();
     const { loadStoreDailyPlans } = await import('../src/pages/plans-bfq/index.js');
+    setupGlobals();
     await loadStoreDailyPlans();
     expect(document.getElementById('storeDailyPlans')!.textContent).toContain('Нет данных');
   });
 
   it('loadStoreDailyPlans: manager — карточки кликабельны через editStoreMonthPlan', async () => {
+    const { loadStoreDailyPlans } = await import('../src/pages/plans-bfq/index.js');
     const { getStoreDailyPlans } = setupGlobals({ role: 'manager' });
     getStoreDailyPlans.mockResolvedValue({ stores: [{ store_id: 's1', name: 'Точка А', code: '1', has_plan: true, plan: { sim: 5 } }] });
-    const { loadStoreDailyPlans } = await import('../src/pages/plans-bfq/index.js');
     await loadStoreDailyPlans();
     expect(document.getElementById('storeDailyPlans')!.innerHTML).toContain("editStoreMonthPlan('s1')");
   });
 
   it('saveStoreMonthPlan: успех — сохраняет и перезагружает дневные планы', async () => {
+    const { saveStoreMonthPlan: save } = await import('../src/pages/plans-bfq/index.js');
     const { saveStoreMonthPlan, getStoreDailyPlans } = setupGlobals({ role: 'manager' });
     document.body.innerHTML += '<input id="smp_sim" value="9">';
-    const { saveStoreMonthPlan: save } = await import('../src/pages/plans-bfq/index.js');
     await save('s1');
     expect(saveStoreMonthPlan).toHaveBeenCalledWith(expect.anything(), 's1', expect.objectContaining({ sim: 9 }));
     expect(getStoreDailyPlans).toHaveBeenCalled();
@@ -431,6 +437,7 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
 
   // ===== Черновик автоматических персональных планов: форматирование метрик =====
   it('generateEmployeePlanDrafts: значения метрик в карточках округляются до целых с русским разделителем тысяч', async () => {
+    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
     const { generateEmployeeMonthPlanDrafts } = setupGlobals({ role: 'manager' });
     generateEmployeeMonthPlanDrafts.mockResolvedValue({
       draft_id: 1, month: '2026-09-01', status: 'draft', blocking_errors: [],
@@ -442,7 +449,6 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
         }
       ]
     });
-    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
     await generateEmployeePlanDrafts();
     const html = document.getElementById('employeePlanDraftBody')!.innerHTML;
     expect(html).toContain('7&nbsp;973');
@@ -452,6 +458,7 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('generateEmployeePlanDrafts: floating-point артефакты (20907.120000000003) не просачиваются в UI', async () => {
+    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
     const { generateEmployeeMonthPlanDrafts } = setupGlobals({ role: 'manager' });
     generateEmployeeMonthPlanDrafts.mockResolvedValue({
       draft_id: 1, month: '2026-09-01', status: 'draft', blocking_errors: [],
@@ -463,7 +470,6 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
         }
       ]
     });
-    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
     await generateEmployeePlanDrafts();
     const html = document.getElementById('employeePlanDraftBody')!.innerHTML;
     expect(html).toContain('20&nbsp;907');
@@ -473,6 +479,7 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
   });
 
   it('generateEmployeePlanDrafts: total_shifts (уже целое поле) не ломается форматированием метрик', async () => {
+    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
     const { generateEmployeeMonthPlanDrafts } = setupGlobals({ role: 'manager' });
     generateEmployeeMonthPlanDrafts.mockResolvedValue({
       draft_id: 1, month: '2026-09-01', status: 'draft', blocking_errors: [],
@@ -484,15 +491,14 @@ describe('Планы/BFQ (миграция frontend/js/06b-plans-bfq.js → src/
         }
       ]
     });
-    const { generateEmployeePlanDrafts } = await import('../src/pages/plans-bfq/index.js');
     await generateEmployeePlanDrafts();
     const html = document.getElementById('employeePlanDraftBody')!.innerHTML;
     expect(html).toContain('смен: 12');
   });
 
   it('window.* мост — все 15 функций', async () => {
-    setupGlobals();
     await import('../src/pages/plans-bfq/index.js');
+    setupGlobals();
     for (const name of [
       'loadBFQ',
       'openBFQCard',
