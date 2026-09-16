@@ -55,6 +55,14 @@ jobs:
       # `assembleDebug` proves the app actually builds against a real
       # Android SDK, not that it's production-signed/ready for the Play
       # Store.
+      # Windows-checked-out repos don't preserve the Unix executable bit,
+      # so `git update-index --chmod=+x` on gradlew (done once, committed)
+      # is the real fix — this chmod is only a defensive backstop in case
+      # a future commit from a Windows checkout clobbers it again.
+      - name: Ensure gradlew is executable
+        working-directory: android/android
+        run: chmod +x gradlew
+
       - name: Build debug APK (unsigned dev build)
         working-directory: android/android
         run: ./gradlew assembleDebug --no-daemon
