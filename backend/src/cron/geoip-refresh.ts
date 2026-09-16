@@ -8,8 +8,10 @@
  * this codebase.
  */
 import cron, { type ScheduledTask } from 'node-cron';
+import { existsSync } from 'fs';
 import { nowTimeMoscow, nowDayOfWeekMoscow } from '../utils/date.js';
 import { downloadLatestDb } from '../integrations/geoip/refresh.js';
+import { getDbPath } from '../integrations/geoip/paths.js';
 import { runJob, jobLogger } from './job-logger.js';
 
 export async function refreshGeoipDb(): Promise<void> {
@@ -21,6 +23,19 @@ export async function refreshGeoipDb(): Promise<void> {
       jobLogger.error({ job: 'geoip.refresh', err: e?.message || String(e) }, 'download failed, keeping existing db');
     }
   });
+}
+
+/** Railway's filesystem is ephemeral — every deploy/restart wipes the disk,
+ * so a freshly booted instance has no .mmdb until the next Wed 04:00 МСК
+ * cron tick (up to a week of empty session locations). Called once at
+ * startup, fire-and-forget (same pattern as startBot() in index.ts) — a
+ * slow/failed download must never delay server boot or the healthcheck. */
+export function ensureGeoipDbOnStartup(): void {
+  if (existsSync(getDbPath())) return;
+  jobLogger.info({ job: 'geoip.refresh' }, 'GeoLite2-City.mmdb missing on boot, downloading now');
+  refreshGeoipDb().catch((e) =>
+    jobLogger.error({ job: 'geoip.refresh', err: e?.message || String(e) }, 'startup download failed')
+  );
 }
 
 /** Возвращает handle — graceful shutdown (index.ts) должен уметь снять таймер. */

@@ -18,14 +18,33 @@ export interface DeviceInfo {
 
 const UNKNOWN: DeviceInfo = { icon: '🌐', label: 'Неизвестное устройство' };
 
+/** Android UAs put the real hardware model right in the string (e.g.
+ * "Linux; Android 14; Pixel 8 Pro Build/..." or "...; SM-G991B)") — the one
+ * case a browser UA exposes an actual device model, no extra headers or
+ * client-hints round-trip needed. iOS/desktop UAs never contain this
+ * (Apple has omitted the iPhone/iPad model since iOS 13; desktop UAs never
+ * carried a PC model at all), so there's nothing to extract there. */
+function extractAndroidModel(ua: string): string | null {
+  const m = ua.match(/Android [\d.]+;\s*([^;)]+?)(?:\s+Build\/|\))/);
+  if (!m) return null;
+  const model = m[1].trim();
+  return model.length > 1 ? model : null;
+}
+
 export function describeUserAgent(ua: string | null | undefined): DeviceInfo {
   if (!ua) return UNKNOWN;
 
-  const isMobile = /Mobi|Android|iPhone|iPad/.test(ua);
+  const isTablet = /iPad/.test(ua) || (/Android/.test(ua) && !/Mobile/.test(ua));
+  const isMobile = /Mobi|Android|iPhone|iPod/.test(ua) || isTablet;
 
   let os = 'Неизвестная ОС';
-  if (/iPhone|iPad|iPod/.test(ua)) os = 'iOS';
-  else if (/Android/.test(ua)) os = 'Android';
+  if (/iPad/.test(ua)) os = 'iPadOS';
+  else if (/iPhone/.test(ua)) os = 'iOS';
+  else if (/iPod/.test(ua)) os = 'iOS (iPod touch)';
+  else if (/Android/.test(ua)) {
+    const model = extractAndroidModel(ua);
+    os = model ? `Android (${model})` : 'Android';
+  }
   else if (/Windows/.test(ua)) os = 'Windows';
   else if (/Mac OS X/.test(ua)) os = 'macOS';
   else if (/Linux/.test(ua)) os = 'Linux';
