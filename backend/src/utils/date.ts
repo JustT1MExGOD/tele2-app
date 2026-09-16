@@ -26,6 +26,13 @@ export function nowTimeMoscow(): string {
   }).format(new Date());
 }
 
+/** 0=вс..6=сб, в московской таймзоне — для cron-джобов, идущих реже, чем
+ * раз в день (см. cron/geoip-refresh.ts). */
+export function nowDayOfWeekMoscow(): number {
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Moscow', weekday: 'short' }).format(new Date());
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday);
+}
+
 /**
  * Нормализация любого значения из pg/JS в YYYY-MM-DD.
  * ВАЖНО: нельзя String(date).slice(0,10) — для Date это "Tue Aug 04", не дата.

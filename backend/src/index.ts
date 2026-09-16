@@ -9,6 +9,7 @@ import { startDigestCron } from './cron/digest.js';
 import { startAlertCron } from './cron/alerts.js';
 import { startMessageCleanupCron } from './cron/message-cleanup.js';
 import { startChatAttachmentCleanupCron } from './cron/chat-attachment-cleanup.js';
+import { startGeoipRefreshCron } from './cron/geoip-refresh.js';
 import { todayMoscow } from './utils/date.js';
 import { runSmartAlertsTick } from './core/alerts/service.js';
 import { announceReleaseIfNeeded } from './platform/notifications/release-announce.js';
@@ -137,6 +138,7 @@ try {
   const alertCronTask = startAlertCron();
   const messageCleanupTask = startMessageCleanupCron();
   const chatAttachmentCleanupTask = startChatAttachmentCleanupCron();
+  const geoipRefreshTask = startGeoipRefreshCron();
   announceReleaseIfNeeded().catch((e) => console.error('release announce:', e?.message || e));
 
   // умные алерты каждые 30 мин (внутри — только 11–21 МСК)
@@ -184,6 +186,7 @@ try {
     alertCronTask.stop();
     messageCleanupTask.stop();
     chatAttachmentCleanupTask.stop();
+    geoipRefreshTask.stop();
     clearInterval(smartAlertsHandle);
 
     try {

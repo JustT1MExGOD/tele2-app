@@ -31,7 +31,11 @@ export async function registerSessionsAdminRoutes(app: FastifyInstance) {
         id: r.id,
         created_at: r.created_at,
         last_seen_at: r.last_seen_at,
-        current: currentHash !== null && r.token_hash === currentHash
+        current: currentHash !== null && r.token_hash === currentHash,
+        user_agent: r.user_agent,
+        city: r.city,
+        country: r.country,
+        country_code: r.country_code
       }))
     };
   });

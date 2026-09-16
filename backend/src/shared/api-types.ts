@@ -912,6 +912,12 @@ export interface SessionListItem {
   /** Всегда false для Telegram-контекста запроса (нет t2_session cookie
    * для сравнения) — это ожидаемо, не баг. */
   current: boolean;
+  /** Снято один раз при логине, см. sessions.ts::createSession. Может быть
+   * null (сессии, созданные до 20.59.0, или геолокация недоступна). */
+  user_agent: string | null;
+  city: string | null;
+  country: string | null;
+  country_code: string | null;
 }
 
 export interface ListSessionsResponse {
@@ -1541,6 +1547,10 @@ export interface AdminEmployeeSession {
   created_at: string;
   last_seen_at: string;
   token_hash: string;
+  user_agent: string | null;
+  city: string | null;
+  country: string | null;
+  country_code: string | null;
 }
 
 export interface AdminEmployeeDetailResponse {

@@ -11,7 +11,7 @@
  * SMS-провайдера для self-service — решение владельца продукта.
  */
 import { createHash } from 'crypto';
-import { FastifyInstance, FastifyReply } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import {
   requireManager,
@@ -99,6 +99,17 @@ async function buildMfaChallengeResponse(employeeId: number): Promise<LoginRespo
  * 20.48.0 — t2_csrf ставится/ротируется ВМЕСТЕ с t2_session на каждый
  * новый логин (double-submit cookie, см. auth/csrf.ts::setCsrfCookie).
  */
+/** Snapshot of the request's own User-Agent/IP for sessionsRepo.createSession
+ * — reused by mfa.ts's /auth/mfa/login (the other place a real
+ * t2_session gets minted). request.ip already goes through Fastify's
+ * trustProxy hop-count config (app.ts), not raw X-Forwarded-For. */
+export function deviceFromRequest(request: FastifyRequest): { userAgent: string | null; ip: string | null } {
+  return {
+    userAgent: (request.headers['user-agent'] as string) || null,
+    ip: request.ip || null
+  };
+}
+
 export function setSessionCookie(reply: FastifyReply, token: string) {
   reply.setCookie(COOKIE_NAME, token, {
     httpOnly: true,
@@ -295,7 +306,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         return buildMfaChallengeResponse(e.id);
       }
 
-      const token = await sessionsRepo.createSession(e.id, false, e.role);
+      const token = await sessionsRepo.createSession(e.id, false, e.role, deviceFromRequest(request));
       setSessionCookie(reply, token);
       await recordAudit({
         orgId: e.org_id,
@@ -398,7 +409,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       }
 
       const role = await employeesRepo.getRole(reset.employee_id);
-      const sessionToken = await sessionsRepo.createSession(reset.employee_id, false, role);
+      const sessionToken = await sessionsRepo.createSession(reset.employee_id, false, role, deviceFromRequest(request));
       setSessionCookie(reply, sessionToken);
       return { ok: true };
     }

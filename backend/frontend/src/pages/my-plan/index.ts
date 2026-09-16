@@ -9,6 +9,7 @@
  * this is its real owner/reassigner, previously only read elsewhere.
  */
 import type { EmployeeProgressResponse } from '../../../../src/shared/api-types.js';
+import { describeUserAgent, escapeHtml } from '../../shared/device-label.js';
 
 function ringSVG(pct: number): string {
   const r = 36;
@@ -398,16 +399,21 @@ async function loadSessionsSection(): Promise<void> {
     return;
   }
   const rows = data.sessions
-    .map(
-      (s) => `
+    .map((s) => {
+      const device = describeUserAgent(s.user_agent);
+      const location = [s.city, s.country].filter(Boolean).map(escapeHtml).join(', ');
+      const subtitle = s.current
+        ? [location, 'сейчас активна'].filter(Boolean).join(' · ')
+        : [location, 'посл. активность ' + formatSessionDateTime(s.last_seen_at)].filter(Boolean).join(' · ');
+      return `
           <div class="row" style="cursor:default">
             <div class="row-body">
-              <div class="row-title">${s.current ? 'Эта сессия' : 'Активна с ' + formatSessionDateTime(s.created_at)}</div>
-              <div class="row-sub">Последняя активность: ${formatSessionDateTime(s.last_seen_at)}</div>
+              <div class="row-title">${device.icon} ${device.label}${s.current ? ' · это устройство' : ''}</div>
+              <div class="row-sub">${subtitle}</div>
             </div>
             ${s.current ? '' : `<button class="mchip" onclick="revokeSessionRow(${s.id})">Завершить</button>`}
-          </div>`
-    )
+          </div>`;
+    })
     .join('');
   const revokeOthers =
     data.sessions.length > 1

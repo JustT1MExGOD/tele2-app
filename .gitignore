@@ -14,3 +14,4 @@ sql/all_databases.sql
 sbom.cdx.json
 graphify-out/
 accepted-releases/
+backend/data/geoip/

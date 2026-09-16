@@ -29,7 +29,7 @@ import * as sessionsRepo from '../../../data/repositories/sessions.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
 import { EncryptionDisabledError } from '../../../security/crypto/errors.js';
 import { consume, ipDimension, accountDimension } from '../../../security/rate-limit.js';
-import { setSessionCookie } from './session.js';
+import { setSessionCookie, deviceFromRequest } from './session.js';
 import type { MfaStatusResponse } from '../../../shared/api-types.js';
 
 const LoginMfaBody = Type.Object({
@@ -157,7 +157,7 @@ export async function registerMfaRoutes(app: FastifyInstance) {
           actorRole: role
         });
       }
-      const token = await sessionsRepo.createSession(pending.employee_id, true, role);
+      const token = await sessionsRepo.createSession(pending.employee_id, true, role, deviceFromRequest(request));
       setSessionCookie(reply, token);
       return { ok: true };
     }

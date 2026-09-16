@@ -5,6 +5,7 @@
  * detail panel with safe actions.
  */
 import { confirmDangerousAction, requestStepUpTicket } from './shared/dialogs.js';
+import { describeUserAgent } from '../../shared/device-label.js';
 
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
@@ -97,16 +98,18 @@ async function renderEmployeeDetail(employeeId: number): Promise<void> {
         <div class="section-title">Сессии</div>
         ${d.sessions.length
           ? d.sessions
-              .map(
-                (s) => `
+              .map((s) => {
+                const device = describeUserAgent(s.user_agent);
+                const location = [s.city, s.country].filter(Boolean).map((v) => esc(v as string)).join(', ');
+                return `
           <div class="row" style="cursor:default">
             <div class="row-body">
-              <div class="row-title">Сессия #${s.id}</div>
-              <div class="row-sub">Последняя активность: ${esc(formatDateRu(s.last_seen_at?.slice(0, 10) || ''))}</div>
+              <div class="row-title">${device.icon} ${device.label}</div>
+              <div class="row-sub">${location ? location + ' · ' : ''}посл. активность ${esc(formatDateRu(s.last_seen_at?.slice(0, 10) || ''))}</div>
             </div>
             <button type="button" class="btn-ghost" data-revoke-session="${s.id}">Отозвать</button>
-          </div>`
-              )
+          </div>`;
+              })
               .join('')
           : '<div class="empty">Нет активных сессий</div>'}
         ${d.sessions.length ? '<div style="padding:8px 16px"><button type="button" class="btn-ghost" id="empRevokeAll">Отозвать все сессии</button></div>' : ''}

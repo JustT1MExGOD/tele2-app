@@ -328,8 +328,7 @@ describe('Мой план (миграция frontend/js/05-my-plan.js → src/pa
     await loadMyPlan();
     const html = document.getElementById('lkSessions')!.innerHTML;
     expect(html).not.toContain('T13:24:26.937Z');
-    expect(html).toMatch(/28\.08\.2026/);
-    expect(html).toMatch(/20\.08\.2026/);
+    expect(html).toMatch(/27\.08\.2026/);
   });
 
   it('loadMyPlan: кнопка "Завершить" — не .btn-ghost (full-width, наезжает на текст)', async () => {

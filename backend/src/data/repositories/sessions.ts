@@ -9,6 +9,7 @@
  */
 import { randomBytes, createHash } from 'crypto';
 import { query } from '../db/index.js';
+import { lookupCity } from '../../integrations/geoip/lookup.js';
 
 export function generateToken(): string {
   return randomBytes(32).toString('hex');
@@ -50,14 +51,36 @@ const PRIVILEGED_ROLES = new Set(['admin', 'supervisor']);
  * `role` — определяет абсолютный TTL (см. ABSOLUTE_TTL_DAYS_PRIVILEGED);
  * необязателен для обратной совместимости существующих вызовов, но без
  * него privileged-роли получают дефолтный (более длинный) TTL.
+ * `device` — User-Agent/IP снятые один раз, в момент создания сессии
+ * (self-service "активные сессии", см. listForEmployee) — не
+ * пересчитываются позже, даже если employee_sessions.ip меняется бы (не
+ * меняется — сессия живёт с одним IP от логина до логаута/истечения).
+ * Геолокация — офлайн (см. integrations/geoip/lookup.ts), best-effort:
+ * отсутствие MaxMind-базы никогда не блокирует создание сессии.
  */
-export async function createSession(employeeId: number, mfaVerified = false, role?: string | null): Promise<string> {
+export async function createSession(
+  employeeId: number,
+  mfaVerified = false,
+  role?: string | null,
+  device?: { userAgent?: string | null; ip?: string | null }
+): Promise<string> {
   const token = generateToken();
   const ttlDays = role && PRIVILEGED_ROLES.has(role) ? ABSOLUTE_TTL_DAYS_PRIVILEGED : ABSOLUTE_TTL_DAYS_DEFAULT;
+  const geo = await lookupCity(device?.ip).catch(() => null);
   await query(
-    `INSERT INTO employee_sessions (employee_id, token_hash, expires_at, mfa_verified_at)
-     VALUES ($1, $2, now() + ($3 || ' days')::interval, ${mfaVerified ? 'now()' : 'NULL'})`,
-    [employeeId, hashToken(token), String(ttlDays)]
+    `INSERT INTO employee_sessions
+       (employee_id, token_hash, expires_at, mfa_verified_at, user_agent, ip_address, city, country, country_code)
+     VALUES ($1, $2, now() + ($3 || ' days')::interval, ${mfaVerified ? 'now()' : 'NULL'}, $4, $5, $6, $7, $8)`,
+    [
+      employeeId,
+      hashToken(token),
+      String(ttlDays),
+      device?.userAgent || null,
+      device?.ip || null,
+      geo?.city || null,
+      geo?.country || null,
+      geo?.countryCode || null
+    ]
   );
   return token;
 }
@@ -124,11 +147,21 @@ export async function deleteAllForEmployee(employeeId: number, q: typeof query =
 }
 
 /** GET /auth/sessions — список своих сессий, самообслуживание (my-plan). */
-export async function listForEmployee(
-  employeeId: number
-): Promise<{ id: number; created_at: string; last_seen_at: string; token_hash: string }[]> {
+export async function listForEmployee(employeeId: number): Promise<
+  {
+    id: number;
+    created_at: string;
+    last_seen_at: string;
+    token_hash: string;
+    user_agent: string | null;
+    city: string | null;
+    country: string | null;
+    country_code: string | null;
+  }[]
+> {
   const res = await query(
-    `SELECT id, created_at, last_seen_at, token_hash FROM employee_sessions
+    `SELECT id, created_at, last_seen_at, token_hash, user_agent, city, country, country_code
+     FROM employee_sessions
      WHERE employee_id = $1 ORDER BY last_seen_at DESC`,
     [employeeId]
   );
