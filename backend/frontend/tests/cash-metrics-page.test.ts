@@ -56,23 +56,31 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
     vi.unstubAllGlobals();
   });
 
+  // Import first, THEN stub globals: importing this module transitively
+  // imports contextual-lesson.ts → core.ts, whose top-level code assigns
+  // real implementations onto window (todayMoscow/authHeaders/canManage/
+  // etc. — see core.ts's own `window.x = x` bridge section). Stubbing
+  // before the import gets silently overwritten by that; the fix is to
+  // let the real bridge run once, then stub last so the stub wins.
+
   it('loadCash: пусто (нет дат) — сообщение "внеси первую строку"', async () => {
-    setupGlobals();
     const { loadCash } = await import('../src/pages/cash-metrics/index.js');
+    setupGlobals();
     await loadCash();
     expect(document.getElementById('cashTable')!.textContent).toContain('внеси первую строку');
   });
 
   it('loadCash: подгружает stores, если ещё не загружены (мутирует shared глобал)', async () => {
+    const { loadCash } = await import('../src/pages/cash-metrics/index.js');
     const { getCashTable } = setupGlobals({ storesSeed: [] });
     getCashTable.mockResolvedValue({ from: '', to: '', stores: [], dates: [], cells: {} });
-    const { loadCash } = await import('../src/pages/cash-metrics/index.js');
     await loadCash();
     expect((globalThis as any).fetchOrgStores).toHaveBeenCalled();
     expect((globalThis as any).stores.length).toBe(1);
   });
 
   it('loadCash: рендерит последние 2 дня сразу, остальные — под "Ещё дни"', async () => {
+    const { loadCash } = await import('../src/pages/cash-metrics/index.js');
     const { getCashTable } = setupGlobals({ storesSeed: [{ id: 's1', name: 'Точка А' }] });
     getCashTable.mockResolvedValue({
       from: '', to: '',
@@ -80,7 +88,6 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
       dates: ['2026-08-20', '2026-08-21', '2026-08-22'],
       cells: { '2026-08-22': { s1: { cash_fact: 5000, cash_1c: 4800, delta: 200, comment: null } } }
     });
-    const { loadCash } = await import('../src/pages/cash-metrics/index.js');
     await loadCash();
     const html = document.getElementById('cashTable')!.innerHTML;
     expect(html).toContain('22.08.26');
@@ -89,26 +96,26 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
   });
 
   it('loadCash: ошибка API — не падает, показывает сообщение', async () => {
+    const { loadCash } = await import('../src/pages/cash-metrics/index.js');
     const { getCashTable } = setupGlobals();
     getCashTable.mockRejectedValue(new Error('network'));
-    const { loadCash } = await import('../src/pages/cash-metrics/index.js');
     await loadCash();
     expect(document.getElementById('cashTable')!.textContent).toContain('недоступна');
   });
 
   it('fillCashForm: заполняет форму значениями из клика по строке', async () => {
+    const { fillCashForm } = await import('../src/pages/cash-metrics/index.js');
     setupGlobals();
     (document.getElementById('cashStore') as HTMLSelectElement).innerHTML = '<option value="s1">Точка А</option>';
-    const { fillCashForm } = await import('../src/pages/cash-metrics/index.js');
     fillCashForm('s1', '2026-08-20', 1000, 900);
     expect((document.getElementById('cashStore') as HTMLSelectElement).value).toBe('s1');
     expect((document.getElementById('cashFact') as HTMLInputElement).value).toBe('1000');
   });
 
   it('saveCash: успех — сохраняет и перезагружает таблицу', async () => {
+    const { saveCash } = await import('../src/pages/cash-metrics/index.js');
     const { saveCash: apiSaveCash, getCashTable } = setupGlobals();
     document.body.innerHTML += '<option></option>'; // no-op, keep inputs as-is
-    const { saveCash } = await import('../src/pages/cash-metrics/index.js');
     (document.getElementById('cashStore') as HTMLSelectElement).innerHTML = '<option value="s1" selected>Точка А</option>';
     (document.getElementById('cashFact') as HTMLInputElement).value = '5000';
 
@@ -120,15 +127,15 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
   });
 
   it('openAddMetric: не-manager — no-op', async () => {
-    setupGlobals({ role: 'employee' });
     const { openAddMetric } = await import('../src/pages/cash-metrics/index.js');
+    setupGlobals({ role: 'employee' });
     await openAddMetric();
     expect(document.getElementById('modalBody')!.innerHTML).toBe('');
   });
 
   it('openAddMetric: manager — показывает свои метрики (без базовых) + форму добавления', async () => {
-    setupGlobals({ role: 'manager' });
     const { openAddMetric } = await import('../src/pages/cash-metrics/index.js');
+    setupGlobals({ role: 'manager' });
     await openAddMetric();
     const modalBody = document.getElementById('modalBody')!;
     expect(modalBody.innerHTML).toContain('eSIM');
@@ -147,13 +154,13 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
   // HTML-attribute-safe — метка кастомной метрики с " разрывала
   // onclick="..." и внедряла произвольный обработчик на элемент.
   it('custom-метрика с " в названии не разрывает onclick="..." — атрибут-breakout невозможен', async () => {
+    const { openAddMetric } = await import('../src/pages/cash-metrics/index.js');
     setupGlobals({ role: 'manager' });
     const payload = `x" onmouseover="window.__pwned=1`;
     vi.stubGlobal('METRICS', [
       { id: 'sim', label: 'SIM', short_label: 'SIM', unit: 'count', unit_type: 'count' },
       { id: 'esim_custom', label: payload, short_label: 'eSIM', unit: 'count', unit_type: 'count' }
     ]);
-    const { openAddMetric } = await import('../src/pages/cash-metrics/index.js');
     await openAddMetric();
     const buttons = Array.from(document.getElementById('modalBody')!.querySelectorAll('button'));
     for (const b of buttons) {
@@ -163,27 +170,27 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
   });
 
   it('deleteMetric: без подтверждения (confirm=false) — API не вызывается', async () => {
+    const { deleteMetric } = await import('../src/pages/cash-metrics/index.js');
     const { deleteMetric: apiDelete } = setupGlobals({ role: 'manager' });
     (globalThis as any).confirm.mockReturnValue(false);
-    const { deleteMetric } = await import('../src/pages/cash-metrics/index.js');
     await deleteMetric('esim_custom', 'eSIM');
     expect(apiDelete).not.toHaveBeenCalled();
   });
 
   it('saveMetric: пустое название — toast err, API не вызывается', async () => {
+    const { saveMetric } = await import('../src/pages/cash-metrics/index.js');
     const { createMetric } = setupGlobals({ role: 'manager' });
     document.body.innerHTML += '<input id="nm_label" value=""><input id="nm_short" value=""><select id="nm_unit"><option value="count" selected></option></select>';
-    const { saveMetric } = await import('../src/pages/cash-metrics/index.js');
     await saveMetric();
     expect(createMetric).not.toHaveBeenCalled();
     expect((globalThis as any).toast).toHaveBeenCalledWith('Укажи название', 'err');
   });
 
   it('saveMetric: успех — создаёт метрику, тостит, закрывает модалку', async () => {
+    const { saveMetric } = await import('../src/pages/cash-metrics/index.js');
     const { createMetric } = setupGlobals({ role: 'manager' });
     createMetric.mockResolvedValue({ ok: true, item: { label: 'eSIM' } });
     document.body.innerHTML += '<input id="nm_label" value="eSIM"><input id="nm_short" value=""><select id="nm_unit"><option value="count" selected></option></select>';
-    const { saveMetric } = await import('../src/pages/cash-metrics/index.js');
     await saveMetric();
     expect(createMetric).toHaveBeenCalled();
     expect((globalThis as any).closeModal).toHaveBeenCalled();
@@ -191,8 +198,8 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
   });
 
   it('window.* мост — все 6 функций', async () => {
-    setupGlobals();
     await import('../src/pages/cash-metrics/index.js');
+    setupGlobals();
     for (const name of ['loadCash', 'fillCashForm', 'saveCash', 'openAddMetric', 'deleteMetric', 'saveMetric']) {
       expect(typeof (window as any)[name]).toBe('function');
     }

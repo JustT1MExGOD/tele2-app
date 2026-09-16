@@ -5,6 +5,17 @@
  * bundle — only tapping "Показать" triggers window.startAcademy()).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// T2 Academy is currently disabled app-wide (core.ts: ACADEMY_ENABLED = false —
+// illustrated-story rework in progress), which short-circuits
+// maybeShowContextualLesson() before it ever touches the DOM/API. This suite
+// tests the prompt logic itself (still shipped, just gated), so it force-enables
+// the flag here rather than testing a permanently-skipped code path.
+vi.mock('../src/app/core.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/app/core.js')>();
+  return { ...actual, ACADEMY_ENABLED: true };
+});
+
 import { maybeShowContextualLesson, removeContextualPrompt } from '../src/shared/contextual-lesson.js';
 
 function setupGlobals() {
