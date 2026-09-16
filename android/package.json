@@ -2,17 +2,20 @@
   "name": "t2sales-android",
   "version": "1.0.0",
   "private": true,
-  "description": "T2 Sales — Android native shell (Capacitor WebView around the same production web app, mirrors desktop/'s Electron shell)",
+  "description": "T2 Sales — Android/iOS native shells (Capacitor WebView around the same production web app, mirrors desktop/'s Electron shell). Folder kept as 'android' from the original Android-only scaffold.",
   "scripts": {
     "android:sync": "cap sync android",
     "android:open": "cap open android",
     "android:build:debug": "cap sync android && cd android && ./gradlew assembleDebug",
     "android:build:release": "cap sync android && cd android && ./gradlew assembleRelease",
-    "android:bundle:release": "cap sync android && cd android && ./gradlew bundleRelease"
+    "android:bundle:release": "cap sync android && cd android && ./gradlew bundleRelease",
+    "ios:sync": "cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
-    "@capacitor/core": "^8.5.2"
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2"

@@ -33,3 +33,17 @@ android/android/keystore.properties
 android/android/*.jks
 android/android/*.keystore
 
+# iOS (Xcode) build artifacts — same reasoning as the Android block above.
+android/ios/App/build/
+android/ios/App/Pods/
+android/ios/App/App.xcworkspace/xcuserdata/
+android/ios/App/App.xcodeproj/xcuserdata/
+android/ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+android/ios/DerivedData/
+
+# iOS release signing — same policy as Android's keystore.properties above:
+# real distribution certificates/provisioning profiles never committed.
+android/ios/App/*.p12
+android/ios/App/*.mobileprovision
+android/ios/ExportOptions.plist
+

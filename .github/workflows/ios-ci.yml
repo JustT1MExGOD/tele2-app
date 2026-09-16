@@ -12,10 +12,8 @@ permissions:
 
 jobs:
   ios:
-    # macos-latest ships Xcode + CocoaPods preinstalled — the only way to
-    # build an iOS Capacitor project (`cap add ios`/`pod install`/xcodebuild
-    # all require macOS, none of it can run on the Windows dev machine this
-    # was scaffolded from).
+    # macos-latest ships Xcode preinstalled — xcodebuild only runs on macOS,
+    # none of it can run on the Windows dev machine this was scaffolded from.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -30,29 +28,25 @@ jobs:
         working-directory: android
         run: npm ci
 
-      # No Mac was available to run this once and commit the result (the way
-      # android/android was committed after `cap add android`), so the native
-      # ios/ project is generated fresh on every run instead of being tracked
-      # in git. Once real customization is needed (icons, Info.plist usage
-      # descriptions, entitlements), generate it once here, download the
-      # artifact, and commit ios/ the same way android/android was — then
-      # replace this step with `cap sync ios` like android-ci.yml does.
-      - name: Add + sync iOS platform
+      # android/ios is committed (like android/android) — `cap add ios` ran
+      # once locally to generate it, this only refreshes web assets/plugins,
+      # same role as android-ci.yml's "Capacitor sync" step.
+      - name: Capacitor sync
         working-directory: android
-        run: |
-          npx cap add ios
-          npx cap sync ios
+        run: npx cap sync ios
 
-      # Unsigned build for the iOS Simulator only — proves the app actually
-      # builds and runs, same purpose as android-ci.yml's assembleDebug.
-      # A real device/App Store .ipa needs code signing, which needs an
-      # Apple Developer Program enrollment (docs/ANDROID-RELEASE.md's
-      # keystore.properties has no iOS equivalent yet — nothing to sign
-      # with until that enrollment exists).
+      # Capacitor 8's iOS template uses Swift Package Manager, not CocoaPods
+      # — no Podfile/`pod install`, so App.xcodeproj (not an .xcworkspace) is
+      # the actual build unit. Unsigned build for the iOS Simulator only,
+      # proves the app builds/runs, same purpose as android-ci.yml's
+      # assembleDebug. A real device/App Store .ipa needs code signing,
+      # which needs an Apple Developer Program enrollment (docs/ANDROID-
+      # RELEASE.md's keystore.properties has no iOS equivalent yet — nothing
+      # to sign with until that enrollment exists).
       - name: Build for iOS Simulator (unsigned)
         working-directory: android/ios/App
         run: |
-          xcodebuild -workspace App.xcworkspace -scheme App \
+          xcodebuild -project App.xcodeproj -scheme App \
             -sdk iphonesimulator -configuration Debug \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
