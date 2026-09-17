@@ -17,15 +17,31 @@ import { renderOverviewTab } from './overview.js';
 import { renderEmployeesTab } from './employees.js';
 import { renderStoresTab } from './stores.js';
 import { renderSalesCorrectionTab } from './sales-correction.js';
+import { renderShiftCorrectionTab } from './shift-correction.js';
+import { renderScheduleCorrectionTab } from './schedule-correction.js';
+import { renderPlanCorrectionTab } from './plan-correction.js';
+import { renderFeatureFlagsTab } from './feature-flags.js';
+import { renderOrgSettingsTab } from './org-settings.js';
+import { renderBusinessRulesTab } from './business-rules.js';
+import { renderOperationsTab } from './operations.js';
 import { renderAuditTab } from './audit.js';
 
-type AdminTab = 'overview' | 'employees' | 'stores' | 'sales' | 'audit';
+type AdminTab =
+  | 'overview' | 'employees' | 'stores' | 'sales' | 'shifts' | 'schedules' | 'plans'
+  | 'feature-flags' | 'org-settings' | 'business-rules' | 'operations' | 'audit';
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: 'overview', label: 'Обзор' },
   { id: 'employees', label: 'Сотрудники' },
   { id: 'stores', label: 'Точки' },
   { id: 'sales', label: 'Коррекции продаж' },
+  { id: 'shifts', label: 'Коррекции смен' },
+  { id: 'schedules', label: 'Коррекции графика' },
+  { id: 'plans', label: 'Коррекции планов' },
+  { id: 'feature-flags', label: 'Флаги функциональности' },
+  { id: 'org-settings', label: 'Настройки сети' },
+  { id: 'business-rules', label: 'Бизнес-правила' },
+  { id: 'operations', label: 'Операционный центр' },
   { id: 'audit', label: 'Аудит' }
 ];
 
@@ -74,6 +90,27 @@ async function renderTabBody(body: HTMLElement): Promise<void> {
       break;
     case 'sales':
       renderSalesCorrectionTab(body);
+      break;
+    case 'shifts':
+      renderShiftCorrectionTab(body);
+      break;
+    case 'schedules':
+      renderScheduleCorrectionTab(body);
+      break;
+    case 'plans':
+      renderPlanCorrectionTab(body);
+      break;
+    case 'feature-flags':
+      renderFeatureFlagsTab(body);
+      break;
+    case 'org-settings':
+      renderOrgSettingsTab(body);
+      break;
+    case 'business-rules':
+      renderBusinessRulesTab(body);
+      break;
+    case 'operations':
+      renderOperationsTab(body);
       break;
     case 'audit':
       await renderAuditTab(body);

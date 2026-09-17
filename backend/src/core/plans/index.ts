@@ -13,7 +13,11 @@
 export * from './ports/read-model.js';
 export {
   upsertEmployeeMonthPlan,
-  upsertStoreMonthPlan
+  upsertStoreMonthPlan,
+  findEmployeeMonthPlanById,
+  correctEmployeeMonthPlanMetric,
+  findStoreMonthPlanById,
+  correctStoreMonthPlanMetric
 } from './application/read-model.js';
 export {
   generateDraft,

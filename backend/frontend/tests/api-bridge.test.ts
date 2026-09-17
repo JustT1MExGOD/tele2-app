@@ -12,15 +12,17 @@
 import { describe, it, expect } from 'vitest';
 import '../src/app/api-bridge.js';
 
-// Exact 160-name public surface of the former monolithic api-client.ts
+// Exact 181-name public surface of the former monolithic api-client.ts
 // (128 original + resolveStore + getShiftOpenMap, both added for the
 // replacement-shift feature, + getAcademyProgress/completeAcademyStep/
 // getAcademyContextualStatus/dismissAcademyContextual, added for T2
 // Academy, + getAvatar, added for the avatar-IDOR hotfix — GET /avatars/:id
 // now requires auth, so a bare <img src> can no longer reach it, + 24
 // admin-prefixed entries from features/admin-center/api.ts (20.59.0 Admin
-// Control Center) + issueStepUpTicket), preserved verbatim by the split
-// (see the architecture trace/plan).
+// Control Center) + issueStepUpTicket, + 17 shift/schedule/plan admin
+// correction entries (Phase 4+ Admin Control Center Area A) + 4 feature-flags/
+// operations-center entries (Phase 4+ Admin Control Center Area B)),
+// preserved verbatim by the split (see the architecture trace/plan).
 const EXPECTED_KEYS = [
   'getOrgStores', 'getMetrics', 'getPromos', 'getPromoCard', 'createPromo',
   'markPromoUsed', 'keepPromo', 'getCashTable', 'saveCash', 'createMetric',
@@ -69,13 +71,21 @@ const EXPECTED_KEYS = [
   'adminSearchSales', 'adminGetSale', 'adminPreviewVoidSale', 'adminVoidSale',
   'adminRestoreSale', 'adminPreviewCorrectStore', 'adminCorrectSaleStore',
   'adminCorrectSaleMetric',
-  'issueStepUpTicket'
+  'issueStepUpTicket',
+  'adminSearchShifts', 'adminGetShift', 'adminPreviewVoidShift', 'adminVoidShift',
+  'adminRestoreShift', 'adminPreviewCorrectShift', 'adminCorrectShift',
+  'adminSearchSchedules', 'adminGetSchedule', 'adminPreviewVoidSchedule',
+  'adminVoidSchedule', 'adminPreviewCorrectSchedule', 'adminCorrectSchedule',
+  'adminGetEmployeePlan', 'adminCorrectEmployeePlanMetric', 'adminGetStorePlan',
+  'adminCorrectStorePlanMetric',
+  'adminGetFeatureFlags', 'adminUpsertFeatureFlag', 'adminDeleteFeatureFlag',
+  'adminGetOperationsOverview'
 ] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 160-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 181-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 160
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 181
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 

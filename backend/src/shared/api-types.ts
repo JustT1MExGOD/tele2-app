@@ -1631,7 +1631,103 @@ export interface AdminSaleCorrectStorePreviewResponse {
   [key: string]: unknown;
 }
 
+export interface AdminShiftRow {
+  id: number;
+  employee_id: number;
+  store_id: string;
+  work_date: string;
+  status: string;
+  employee_name: string;
+  store_name: string;
+  voided_at: string | null;
+  voided_by: number | null;
+  void_reason: string | null;
+  version: number;
+  [key: string]: unknown;
+}
+
+export interface AdminShiftsListResponse {
+  items: AdminShiftRow[];
+}
+
+export interface AdminShiftDetailResponse {
+  row: AdminShiftRow;
+}
+
+export interface AdminShiftActionResponse {
+  row: AdminShiftRow;
+}
+
+export interface AdminShiftVoidPreviewResponse {
+  [key: string]: unknown;
+}
+
+export interface AdminShiftCorrectPreviewResponse {
+  row: AdminShiftRow;
+  crossOrg: boolean;
+  newStore?: unknown;
+}
+
+export interface AdminScheduleRow {
+  id: number;
+  employee_id: number;
+  store_id: string;
+  work_date: string;
+  shift_text: string | null;
+  hours: number | null;
+  employee_name: string;
+  store_name: string;
+  version: number;
+  [key: string]: unknown;
+}
+
+export interface AdminSchedulesListResponse {
+  items: AdminScheduleRow[];
+}
+
+export interface AdminScheduleDetailResponse {
+  row: AdminScheduleRow;
+}
+
+export interface AdminScheduleActionResponse {
+  row: AdminScheduleRow;
+}
+
+export interface AdminScheduleVoidPreviewResponse {
+  [key: string]: unknown;
+}
+
+export interface AdminScheduleCorrectPreviewResponse {
+  row: AdminScheduleRow;
+  destinationExists: boolean;
+}
+
+export interface AdminPlanDetailResponse {
+  row: Record<string, unknown>;
+  metrics: Record<string, { value: number; label: string }>;
+}
+
 export interface StepUpTicketResponse {
   ok: true;
   step_up_token: string;
+}
+
+export interface FeatureFlagRow {
+  id: number;
+  key: string;
+  org_id: string | null;
+  enabled: boolean;
+  description: string | null;
+  updated_by: number | null;
+  updated_at: string;
+  [key: string]: unknown;
+}
+export interface AdminFeatureFlagsListResponse { items: FeatureFlagRow[]; }
+export interface AdminFeatureFlagUpsertResponse { row: FeatureFlagRow; }
+export interface AdminFeatureFlagDeleteResponse { ok: boolean; }
+
+export interface AdminOperationsOverviewResponse {
+  alerts: Record<string, unknown>[];
+  alerts_by_severity: Record<string, number>;
+  pending_access_requests: Record<string, unknown>[];
 }

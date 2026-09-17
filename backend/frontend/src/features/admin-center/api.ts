@@ -17,7 +17,22 @@ import type {
   AdminSaleVoidPreviewResponse,
   AdminSaleCorrectStorePreviewResponse,
   AdminSaleMetricCorrectRequest,
-  StepUpTicketResponse
+  AdminShiftsListResponse,
+  AdminShiftDetailResponse,
+  AdminShiftActionResponse,
+  AdminShiftVoidPreviewResponse,
+  AdminShiftCorrectPreviewResponse,
+  AdminSchedulesListResponse,
+  AdminScheduleDetailResponse,
+  AdminScheduleActionResponse,
+  AdminScheduleVoidPreviewResponse,
+  AdminScheduleCorrectPreviewResponse,
+  AdminPlanDetailResponse,
+  StepUpTicketResponse,
+  AdminFeatureFlagsListResponse,
+  AdminFeatureFlagUpsertResponse,
+  AdminFeatureFlagDeleteResponse,
+  AdminOperationsOverviewResponse
 } from '../../../../src/shared/api-types.js';
 import { request } from '../../shared/api/http-client.js';
 
@@ -143,6 +158,139 @@ export async function adminPreviewCorrectStore(headers: Record<string, string>, 
 
 export async function adminCorrectSaleStore(headers: Record<string, string>, id: string, version: number, newStoreId: string, reason: string, stepUpToken?: string): Promise<AdminSaleActionResponse> {
   return request(`/admin/sales/${encodeURIComponent(id)}/correct-store`, withStepUp(headers, stepUpToken), { method: 'POST', body: { version, new_store_id: newStoreId, reason } });
+}
+
+// ---------- Shift corrections ----------
+
+export interface AdminShiftsSearchParams {
+  employeeId?: number;
+  storeId?: string;
+  from?: string;
+  to?: string;
+  includeVoided?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function adminSearchShifts(headers: Record<string, string>, orgQuery: string, params: AdminShiftsSearchParams): Promise<AdminShiftsListResponse> {
+  const qs = new URLSearchParams();
+  if (params.employeeId) qs.set('employee_id', String(params.employeeId));
+  if (params.storeId) qs.set('store_id', params.storeId);
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.includeVoided) qs.set('include_voided', '1');
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.offset) qs.set('offset', String(params.offset));
+  const filterQuery = qs.toString();
+  const query = filterQuery ? `?${filterQuery}${orgQuery}` : orgQuery ? `?${orgQuery.slice(1)}` : '';
+  return request(`/admin/shifts${query}`, headers);
+}
+
+export async function adminGetShift(headers: Record<string, string>, id: number): Promise<AdminShiftDetailResponse> {
+  return request(`/admin/shifts/${id}`, headers);
+}
+
+export async function adminPreviewVoidShift(headers: Record<string, string>, id: number): Promise<AdminShiftVoidPreviewResponse> {
+  return request(`/admin/shifts/${id}/void/preview`, headers, { method: 'POST' });
+}
+
+export async function adminVoidShift(headers: Record<string, string>, id: number, version: number, reason: string): Promise<AdminShiftActionResponse> {
+  return request(`/admin/shifts/${id}/void`, headers, { method: 'POST', body: { version, reason } });
+}
+
+export async function adminRestoreShift(headers: Record<string, string>, id: number, version: number, reason: string): Promise<AdminShiftActionResponse> {
+  return request(`/admin/shifts/${id}/restore`, headers, { method: 'POST', body: { version, reason } });
+}
+
+export async function adminPreviewCorrectShift(headers: Record<string, string>, id: number, newStoreId?: string): Promise<AdminShiftCorrectPreviewResponse> {
+  return request(`/admin/shifts/${id}/correct/preview`, headers, { method: 'POST', body: { new_store_id: newStoreId } });
+}
+
+export async function adminCorrectShift(headers: Record<string, string>, id: number, version: number, opts: { newStoreId?: string; workDate?: string }, reason: string, stepUpToken?: string): Promise<AdminShiftActionResponse> {
+  return request(`/admin/shifts/${id}/correct`, withStepUp(headers, stepUpToken), { method: 'POST', body: { version, new_store_id: opts.newStoreId, work_date: opts.workDate, reason } });
+}
+
+// ---------- Schedule corrections ----------
+
+export interface AdminSchedulesSearchParams {
+  employeeId?: number;
+  storeId?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function adminSearchSchedules(headers: Record<string, string>, orgQuery: string, params: AdminSchedulesSearchParams): Promise<AdminSchedulesListResponse> {
+  const qs = new URLSearchParams();
+  if (params.employeeId) qs.set('employee_id', String(params.employeeId));
+  if (params.storeId) qs.set('store_id', params.storeId);
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.offset) qs.set('offset', String(params.offset));
+  const filterQuery = qs.toString();
+  const query = filterQuery ? `?${filterQuery}${orgQuery}` : orgQuery ? `?${orgQuery.slice(1)}` : '';
+  return request(`/admin/schedules${query}`, headers);
+}
+
+export async function adminGetSchedule(headers: Record<string, string>, id: number): Promise<AdminScheduleDetailResponse> {
+  return request(`/admin/schedules/${id}`, headers);
+}
+
+export async function adminPreviewVoidSchedule(headers: Record<string, string>, id: number): Promise<AdminScheduleVoidPreviewResponse> {
+  return request(`/admin/schedules/${id}/void/preview`, headers, { method: 'POST' });
+}
+
+export async function adminVoidSchedule(headers: Record<string, string>, id: number, version: number, reason: string): Promise<AdminScheduleActionResponse> {
+  return request(`/admin/schedules/${id}/void`, headers, { method: 'POST', body: { version, reason } });
+}
+
+export async function adminPreviewCorrectSchedule(headers: Record<string, string>, id: number, workDate?: string): Promise<AdminScheduleCorrectPreviewResponse> {
+  return request(`/admin/schedules/${id}/correct/preview`, headers, { method: 'POST', body: { work_date: workDate } });
+}
+
+export async function adminCorrectSchedule(headers: Record<string, string>, id: number, version: number, opts: { storeId?: string; workDate?: string; hours?: number }, reason: string): Promise<AdminScheduleActionResponse> {
+  return request(`/admin/schedules/${id}/correct`, headers, { method: 'POST', body: { version, store_id: opts.storeId, work_date: opts.workDate, hours: opts.hours, reason } });
+}
+
+// ---------- Plan corrections ----------
+
+export async function adminGetEmployeePlan(headers: Record<string, string>, id: number): Promise<AdminPlanDetailResponse> {
+  return request(`/admin/plans/employees/${id}`, headers);
+}
+
+export async function adminCorrectEmployeePlanMetric(headers: Record<string, string>, id: number, metric: string, value: number, version: number, reason: string): Promise<AdminPlanDetailResponse> {
+  return request(`/admin/plans/employees/${id}/correct-metric`, headers, { method: 'POST', body: { metric, value, version, reason } });
+}
+
+export async function adminGetStorePlan(headers: Record<string, string>, id: number): Promise<AdminPlanDetailResponse> {
+  return request(`/admin/plans/stores/${id}`, headers);
+}
+
+export async function adminCorrectStorePlanMetric(headers: Record<string, string>, id: number, metric: string, value: number, version: number, reason: string): Promise<AdminPlanDetailResponse> {
+  return request(`/admin/plans/stores/${id}/correct-metric`, headers, { method: 'POST', body: { metric, value, version, reason } });
+}
+
+// ---------- Feature flags ----------
+
+export async function adminGetFeatureFlags(headers: Record<string, string>): Promise<AdminFeatureFlagsListResponse> {
+  return request('/admin/feature-flags', headers);
+}
+
+export async function adminUpsertFeatureFlag(headers: Record<string, string>, key: string, orgId: string | null, enabled: boolean, description: string | null): Promise<AdminFeatureFlagUpsertResponse> {
+  return request(`/admin/feature-flags/${encodeURIComponent(key)}`, headers, { method: 'PUT', body: { org_id: orgId, enabled, description } });
+}
+
+export async function adminDeleteFeatureFlag(headers: Record<string, string>, key: string, orgId: string | null): Promise<AdminFeatureFlagDeleteResponse> {
+  const qs = orgId ? `?org_id=${encodeURIComponent(orgId)}` : '';
+  return request(`/admin/feature-flags/${encodeURIComponent(key)}${qs}`, headers, { method: 'DELETE' });
+}
+
+// ---------- Operations Center ----------
+
+export async function adminGetOperationsOverview(headers: Record<string, string>): Promise<AdminOperationsOverviewResponse> {
+  return request('/admin/operations-overview', headers);
 }
 
 // ---------- Step-up MFA ticket (ADR-009) ----------

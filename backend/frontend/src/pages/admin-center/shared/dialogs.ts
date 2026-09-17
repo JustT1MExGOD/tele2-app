@@ -129,6 +129,91 @@ export function promptMetricCorrection(opts: PromptMetricCorrectionOptions): Pro
   });
 }
 
+export interface PromptFieldCorrectionField {
+  id: string;
+  label: string;
+  type: 'select' | 'date' | 'number' | 'text';
+  value?: string | number;
+  options?: { value: string; label: string }[];
+}
+
+export interface PromptFieldCorrectionOptions {
+  title: string;
+  fields: PromptFieldCorrectionField[];
+  confirmLabel?: string;
+}
+
+/** Generalizes the store/date reassignment modal (originally duplicated
+ * inline in sales-correction.ts) into a reusable N-field-plus-reason
+ * prompt, reused by every "correct" action across shift/schedule/plan
+ * corrections. Returns the field values (keyed by field id) plus a
+ * mandatory trimmed reason, or null if cancelled / left empty. */
+export function promptFieldCorrection(opts: PromptFieldCorrectionOptions): Promise<{ values: Record<string, string>; reason: string } | null> {
+  return new Promise((resolve) => {
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    if (!modalTitle || !modalBody) {
+      resolve(null);
+      return;
+    }
+    modalTitle.textContent = opts.title;
+    const fieldsHtml = opts.fields
+      .map((f) => {
+        const inputHtml =
+          f.type === 'select'
+            ? `<select id="fieldCorrection_${esc(f.id)}" style="width:100%;box-sizing:border-box">${(f.options || [])
+                .map((o) => `<option value="${esc(o.value)}"${String(f.value) === o.value ? ' selected' : ''}>${esc(o.label)}</option>`)
+                .join('')}</select>`
+            : `<input type="${esc(f.type)}" id="fieldCorrection_${esc(f.id)}" value="${esc(String(f.value ?? ''))}" style="width:100%;box-sizing:border-box">`;
+        return `
+          <div style="padding:0 16px 8px">
+            <label style="display:block;font-size:13px;color:var(--text-secondary,#8e8e93);margin-bottom:4px">${esc(f.label)}</label>
+            ${inputHtml}
+          </div>`;
+      })
+      .join('');
+    modalBody.innerHTML = `
+      <div class="section" style="padding:0">
+        ${fieldsHtml}
+        <div style="padding:0 16px">
+          <textarea id="fieldCorrectionReason" rows="3" placeholder="Причина (обязательно)" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+        </div>
+        <div style="padding:12px 16px;display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn-ghost" id="fieldCorrectionCancel">Отмена</button>
+          <button type="button" class="btn-main" id="fieldCorrectionConfirm">${esc(opts.confirmLabel || 'Сохранить')}</button>
+        </div>
+      </div>
+    `;
+
+    let settled = false;
+    const finish = (value: { values: Record<string, string>; reason: string } | null) => {
+      if (settled) return;
+      settled = true;
+      closeModal();
+      resolve(value);
+    };
+
+    const reasonInput = document.getElementById('fieldCorrectionReason') as HTMLTextAreaElement | null;
+    document.getElementById('fieldCorrectionCancel')?.addEventListener('click', () => finish(null));
+    document.getElementById('fieldCorrectionConfirm')?.addEventListener('click', () => {
+      const reason = (reasonInput?.value || '').trim();
+      if (!reason) {
+        toast('Укажите причину', 'err');
+        return;
+      }
+      const values: Record<string, string> = {};
+      for (const f of opts.fields) {
+        const el = document.getElementById(`fieldCorrection_${f.id}`) as HTMLInputElement | HTMLSelectElement | null;
+        values[f.id] = el?.value ?? '';
+      }
+      finish({ values, reason });
+    });
+    document.getElementById('modalCloseBtn')?.addEventListener('click', () => finish(null), { once: true });
+
+    if (typeof openModal === 'function') openModal();
+  });
+}
+
 /** Prompts for a TOTP code and exchanges it for a step-up ticket via
  * POST /auth/mfa/step-up. Returns the ticket, or null if cancelled/failed. */
 export function requestStepUpTicket(): Promise<string | null> {

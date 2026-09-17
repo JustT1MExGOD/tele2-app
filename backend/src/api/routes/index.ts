@@ -49,6 +49,11 @@ import { registerAdminEmployeesRoutes } from './admin/employees.js';
 import { registerAdminStoresRoutes } from './admin/stores.js';
 import { registerAdminSearchRoutes } from './admin/search.js';
 import { registerAdminOverviewRoutes } from './admin/overview.js';
+import { registerAdminShiftsRoutes } from './admin/shifts.js';
+import { registerAdminSchedulesRoutes } from './admin/schedules.js';
+import { registerAdminPlansRoutes } from './admin/plans.js';
+import { registerAdminFeatureFlagsRoutes } from './admin/feature-flags.js';
+import { registerAdminOperationsRoutes } from './admin/operations.js';
 
 const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Plans', registerPlansRoutes],
@@ -94,7 +99,12 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Admin Control Center — Employees', registerAdminEmployeesRoutes],
   ['Admin Control Center — Stores', registerAdminStoresRoutes],
   ['Admin Control Center — Search', registerAdminSearchRoutes],
-  ['Admin Control Center — Overview', registerAdminOverviewRoutes]
+  ['Admin Control Center — Overview', registerAdminOverviewRoutes],
+  ['Admin Control Center — Shift corrections', registerAdminShiftsRoutes],
+  ['Admin Control Center — Schedule corrections', registerAdminSchedulesRoutes],
+  ['Admin Control Center — Plan corrections', registerAdminPlansRoutes],
+  ['Admin Control Center — Feature Flags', registerAdminFeatureFlagsRoutes],
+  ['Admin Control Center — Operations Center', registerAdminOperationsRoutes]
 ];
 
 /**

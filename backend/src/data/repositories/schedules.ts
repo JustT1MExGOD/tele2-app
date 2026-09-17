@@ -355,3 +355,97 @@ export async function countShiftsByEmployeeStoreInRange(
   );
   return res.rows;
 }
+
+// --- Admin Control Center, Phase 4+ — schedule row search/void(hard
+// delete)/correct. Unlike sales/shifts, schedules has no soft-delete
+// precedent and ~10 read call sites above that would all need a
+// voided_at IS NULL filter for no real benefit (a wrongly-scheduled day
+// is trivially re-enterable) — see core/admin/schedule-correction.ts's
+// own header comment. So "void" here is a genuine, version-gated,
+// audited hard delete; the full pre-delete row is snapshotted into
+// audit_log.before by the caller as the sole recovery path.
+
+export interface AdminScheduleSearchFilter {
+  orgId: string;
+  employeeId?: number;
+  storeId?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function adminSearchSchedules(f: AdminScheduleSearchFilter): Promise<any[]> {
+  const conditions = [`COALESCE(e.org_id,'default') = $1`];
+  const params: any[] = [f.orgId];
+  if (f.employeeId) { params.push(f.employeeId); conditions.push(`sch.employee_id = $${params.length}`); }
+  if (f.storeId) { params.push(f.storeId); conditions.push(`sch.store_id = $${params.length}`); }
+  if (f.from) { params.push(f.from); conditions.push(`sch.work_date >= $${params.length}`); }
+  if (f.to) { params.push(f.to); conditions.push(`sch.work_date <= $${params.length}`); }
+  const limit = Math.min(f.limit || 50, 200);
+  const offset = Math.max(f.offset || 0, 0);
+  params.push(limit, offset);
+  const res = await query(
+    `SELECT sch.*, e.full_name as employee_name, COALESCE(st.display_name, st.name) as store_name
+     FROM schedules sch
+     JOIN employees e ON e.id = sch.employee_id
+     LEFT JOIN stores st ON st.id = sch.store_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY sch.work_date DESC, sch.id DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+  return res.rows;
+}
+
+export async function findByIdForAdmin(scheduleId: number, lock = false, q: typeof query = query): Promise<any | null> {
+  const res = await q(
+    `SELECT sch.*, e.full_name as employee_name, e.org_id as employee_org_id,
+            COALESCE(st.display_name, st.name) as store_name
+     FROM schedules sch
+     JOIN employees e ON e.id = sch.employee_id
+     LEFT JOIN stores st ON st.id = sch.store_id
+     WHERE sch.id = $1 ${lock ? 'FOR UPDATE OF sch' : ''}`,
+    [scheduleId]
+  );
+  return res.rows[0] || null;
+}
+
+/** Destination-collision check for correcting a row's work_date — mirrors
+ * the ON CONFLICT (employee_id, work_date) constraint upsert() relies on;
+ * excludeId lets the row being corrected check against itself harmlessly. */
+export async function findScheduleForDateEmployee(employeeId: number, workDate: string, excludeId?: number): Promise<any | null> {
+  const res = await query(
+    `SELECT * FROM schedules WHERE employee_id = $1 AND work_date = $2 AND ($3::bigint IS NULL OR id != $3)`,
+    [employeeId, workDate, excludeId ?? null]
+  );
+  return res.rows[0] || null;
+}
+
+export async function deleteByIdVersioned(scheduleId: number, expectedVersion: number, q: typeof query = query): Promise<any | null> {
+  const res = await q(
+    `DELETE FROM schedules WHERE id = $1 AND version = $2 RETURNING *`,
+    [scheduleId, expectedVersion]
+  );
+  return res.rows[0] || null;
+}
+
+export async function correctScheduleRow(
+  scheduleId: number, expectedVersion: number,
+  fields: { storeId?: string; workDate?: string; hours?: number; shiftText?: string },
+  q: typeof query = query
+): Promise<any | null> {
+  const sets: string[] = [];
+  const params: any[] = [scheduleId, expectedVersion];
+  if (fields.storeId !== undefined) { params.push(fields.storeId); sets.push(`store_id = $${params.length}`); }
+  if (fields.workDate !== undefined) { params.push(fields.workDate); sets.push(`work_date = $${params.length}::date`); }
+  if (fields.hours !== undefined) { params.push(fields.hours); sets.push(`hours = $${params.length}`); }
+  if (fields.shiftText !== undefined) { params.push(fields.shiftText); sets.push(`shift_text = $${params.length}`); }
+  if (!sets.length) return findByIdForAdmin(scheduleId, false, q);
+  sets.push('version = version + 1');
+  const res = await q(
+    `UPDATE schedules SET ${sets.join(', ')} WHERE id = $1 AND version = $2 RETURNING *`,
+    params
+  );
+  return res.rows[0] || null;
+}

@@ -5,7 +5,7 @@
  */
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireActive, requireManager, resolveViewOrgId } from '../../../auth/guards.js';
+import { requireActive, requireAdmin, resolveViewOrgId } from '../../../auth/guards.js';
 import { getOrg, orgIdForEmployee, listStoresForOrg, upsertOrg, listOrgs } from '../../../core/shared/tenant.js';
 import { invalidateAll as invalidateAllScopes } from '../../../core/shared/scope-cache.js';
 import type { OrgStoresResponse, BrandingResponse, OrgsListResponse, UpsertOrgResponse } from '../../../shared/api-types.js';
@@ -55,10 +55,7 @@ export async function registerBrandingRoutes(app: FastifyInstance) {
 
   // Список сетей — для переключателя сети в UI у admin (см. GET/POST /employees ?org_id=).
   app.get('/orgs', async (request, reply): Promise<OrgsListResponse | FastifyReply | undefined> => {
-    if (!requireManager(request, reply)) return;
-    if (request.user?.role !== 'admin') {
-      return reply.code(403).send({ error: 'admin only' });
-    }
+    if (!requireAdmin(request, reply)) return;
     return listOrgs();
   });
 
@@ -66,10 +63,7 @@ export async function registerBrandingRoutes(app: FastifyInstance) {
     '/admin/org/:id',
     { schema: { body: UpsertOrgBody } },
     async (request, reply): Promise<UpsertOrgResponse | FastifyReply | undefined> => {
-    if (!requireManager(request, reply)) return;
-    if (request.user?.role !== 'admin') {
-      return reply.code(403).send({ error: 'admin only' });
-    }
+    if (!requireAdmin(request, reply)) return;
     const id = (request.params as any).id;
     const body = request.body as any;
     const org = await upsertOrg({ id, ...body });

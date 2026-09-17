@@ -7,7 +7,7 @@
 import { invalidateSalesColumns } from '../../data/repositories/sales.js';
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireManager } from '../../auth/guards.js';
+import { requireAdmin } from '../../auth/guards.js';
 import { invalidateMetricsCache, getMetricDefs } from '../../core/shared/metrics-catalog.js';
 import { serverError } from '../../shared/errors.js';
 import * as metricsRepo from '../../data/repositories/metrics.js';
@@ -18,18 +18,9 @@ import type { MetricsResponse, CreateMetricResponse, DeleteMetricResponse } from
 // created metric becomes a real column on sales/store_plans/
 // employee_month_plans/store_month_plans, shared by EVERY org on the
 // platform, and is visible platform-wide via GET /metrics. That blast
-// radius doesn't match requireManager()'s scope (a manager of ONE org),
-// so create/delete additionally require platform admin, same pattern as
-// api/routes/org/branding.ts's admin-only routes. Hotfix — this route
-// used to let any single org's manager mutate shared platform schema.
-function requirePlatformAdmin(request: Parameters<typeof requireManager>[0], reply: FastifyReply): boolean {
-  if (!requireManager(request, reply)) return false;
-  if (request.user?.role !== 'admin') {
-    reply.code(403).send({ error: 'admin only' });
-    return false;
-  }
-  return true;
-}
+// radius doesn't match a single org's manager, so create/delete require
+// admin, same as api/routes/org/branding.ts's admin-only routes.
+const requirePlatformAdmin = requireAdmin;
 
 // Real ceiling is Postgres's ~1600 columns/table, but staying far below
 // that (row overhead, ALTER TABLE lock duration, realistic UI usability)

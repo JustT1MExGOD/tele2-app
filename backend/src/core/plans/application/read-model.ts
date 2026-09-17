@@ -247,6 +247,15 @@ export async function getMonthSummaryTable(month: string, orgId?: string) {
   };
 }
 
+// Admin Control Center, Phase 4+ — thin pass-through so
+// core/admin/plan-correction.ts can respect this module's own bounded-
+// context boundary (see index.ts's header comment) instead of reaching
+// into data/repositories/plans.js directly. No business logic of its own.
+export const findEmployeeMonthPlanById = plansRepo.findEmployeeMonthPlanById;
+export const correctEmployeeMonthPlanMetric = plansRepo.correctEmployeeMonthPlanMetric;
+export const findStoreMonthPlanById = plansRepo.findStoreMonthPlanById;
+export const correctStoreMonthPlanMetric = plansRepo.correctStoreMonthPlanMetric;
+
 /** Та же сводная таблица, что getMonthSummaryTable(), но разбивка по точкам,
  * не по сотрудникам — getStoreMonthFacts()/getStoreMonthPlan() уже
  * существовали (карточка точки, редактирование плана точки), не хватало

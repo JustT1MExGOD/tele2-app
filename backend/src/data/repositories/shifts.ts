@@ -181,7 +181,7 @@ export async function findRecentClosedForEmployee(employeeId: number, from: stri
             ss.score, ss.ideal_shift, ss.mood
      FROM shift_sessions ss
      LEFT JOIN stores st ON st.id = ss.store_id
-     WHERE ss.employee_id = $1 AND ss.status = 'closed'
+     WHERE ss.employee_id = $1 AND ss.status = 'closed' AND ss.voided_at IS NULL
        AND ss.work_date::date >= $2::date AND ss.work_date::date <= $3::date
      ORDER BY ss.work_date DESC LIMIT 20`,
     [employeeId, from, to]
@@ -189,12 +189,15 @@ export async function findRecentClosedForEmployee(employeeId: number, from: stri
   return res.rows;
 }
 
-/** GET /employees/:id/profile — явка: сколько дней периода была открыта смена. */
+/** GET /employees/:id/profile — явка: сколько дней периода была открыта смена.
+ * voided_at IS NULL — аннулированная (Admin Control Center, Phase 4+) смена
+ * не должна считаться явкой, тот же принцип, что и у sales.voided_at. */
 export async function countAttendedDays(employeeId: number, from: string, to: string): Promise<number> {
   const res = await query(
     `SELECT COUNT(DISTINCT work_date)::int as cnt
      FROM shift_sessions
-     WHERE employee_id = $1 AND work_date::date >= $2::date AND work_date::date <= $3::date`,
+     WHERE employee_id = $1 AND work_date::date >= $2::date AND work_date::date <= $3::date
+       AND voided_at IS NULL`,
     [employeeId, from, to]
   );
   return Number(res.rows[0]?.cnt) || 0;
@@ -262,4 +265,106 @@ export async function latestCloseResult(id:number,date:string | null) {
 }
 export async function saveCloseResult(id:string,result:any) {
   await query('UPDATE shift_sessions SET close_result=$2 WHERE id=$1',[id,JSON.stringify(result)]);
+}
+
+// --- Admin Control Center, Phase 4+ — shift session search/void/restore/
+// correct. Mirrors sales.ts's admin section exactly: soft-void (never a
+// hard delete, unlike schedules — see core/admin/shift-correction.ts),
+// optimistic concurrency via `version`, org derived from shift_sessions.org_id
+// itself (already tracked per-row since 0031_shift_replacement.sql, unlike
+// sales where it's derived from the joined store).
+
+export interface AdminShiftSearchFilter {
+  orgId: string;
+  employeeId?: number;
+  storeId?: string;
+  from?: string;
+  to?: string;
+  includeVoided?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function adminSearchShifts(f: AdminShiftSearchFilter): Promise<any[]> {
+  const conditions = [`COALESCE(ss.org_id,'default') = $1`];
+  const params: any[] = [f.orgId];
+  if (f.employeeId) { params.push(f.employeeId); conditions.push(`ss.employee_id = $${params.length}`); }
+  if (f.storeId) { params.push(f.storeId); conditions.push(`ss.store_id = $${params.length}`); }
+  if (f.from) { params.push(f.from); conditions.push(`ss.work_date >= $${params.length}`); }
+  if (f.to) { params.push(f.to); conditions.push(`ss.work_date <= $${params.length}`); }
+  if (!f.includeVoided) conditions.push('ss.voided_at IS NULL');
+  const limit = Math.min(f.limit || 50, 200);
+  const offset = Math.max(f.offset || 0, 0);
+  params.push(limit, offset);
+  const res = await query(
+    `SELECT ss.*, e.full_name as employee_name, COALESCE(st.display_name, st.name) as store_name
+     FROM shift_sessions ss
+     JOIN employees e ON e.id = ss.employee_id
+     LEFT JOIN stores st ON st.id = ss.store_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY ss.work_date DESC, ss.id DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+  return res.rows;
+}
+
+export async function findByIdForAdmin(sessionId: number, lock = false, q: typeof query = query): Promise<any | null> {
+  const res = await q(
+    `SELECT ss.*, e.full_name as employee_name, COALESCE(st.display_name, st.name) as store_name
+     FROM shift_sessions ss
+     JOIN employees e ON e.id = ss.employee_id
+     LEFT JOIN stores st ON st.id = ss.store_id
+     WHERE ss.id = $1 ${lock ? 'FOR UPDATE OF ss' : ''}`,
+    [sessionId]
+  );
+  return res.rows[0] || null;
+}
+
+/** Soft-void primitive — stamps voided_at/voided_by/void_reason, bumps
+ * version. Caller (core/admin/shift-correction.ts) already checked the
+ * session is closed/auto_closed, never open. */
+export async function voidShiftRow(
+  sessionId: number, expectedVersion: number, voidedBy: number, reason: string, q: typeof query = query
+): Promise<any | null> {
+  const res = await q(
+    `UPDATE shift_sessions SET voided_at = now(), voided_by = $3, void_reason = $4, version = version + 1
+     WHERE id = $1 AND version = $2
+     RETURNING *`,
+    [sessionId, expectedVersion, voidedBy, reason]
+  );
+  return res.rows[0] || null;
+}
+
+export async function restoreShiftRow(sessionId: number, expectedVersion: number, q: typeof query = query): Promise<any | null> {
+  const res = await q(
+    `UPDATE shift_sessions SET voided_at = NULL, voided_by = NULL, void_reason = NULL, version = version + 1
+     WHERE id = $1 AND version = $2
+     RETURNING *`,
+    [sessionId, expectedVersion]
+  );
+  return res.rows[0] || null;
+}
+
+/** Correct primitive — store/work_date/open_lat/open_lng-free reassignment.
+ * When storeId is provided, org_id is recomputed from the destination
+ * store (never left stale) — the one explicit rule from the plan for
+ * correcting a REPLACEMENT session's store. */
+export async function correctShiftRow(
+  sessionId: number, expectedVersion: number,
+  fields: { storeId?: string; workDate?: string; newOrgId?: string | null },
+  q: typeof query = query
+): Promise<any | null> {
+  const sets: string[] = [];
+  const params: any[] = [sessionId, expectedVersion];
+  if (fields.storeId !== undefined) { params.push(fields.storeId); sets.push(`store_id = $${params.length}`); }
+  if (fields.workDate !== undefined) { params.push(fields.workDate); sets.push(`work_date = $${params.length}::date`); }
+  if (fields.newOrgId !== undefined) { params.push(fields.newOrgId); sets.push(`org_id = $${params.length}`); }
+  if (!sets.length) return findByIdForAdmin(sessionId, false, q);
+  sets.push('version = version + 1');
+  const res = await q(
+    `UPDATE shift_sessions SET ${sets.join(', ')} WHERE id = $1 AND version = $2 RETURNING *`,
+    params
+  );
+  return res.rows[0] || null;
 }

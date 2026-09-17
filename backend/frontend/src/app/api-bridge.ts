@@ -221,6 +221,27 @@ import {
   adminPreviewCorrectStore,
   adminCorrectSaleStore,
   adminCorrectSaleMetric,
+  adminSearchShifts,
+  adminGetShift,
+  adminPreviewVoidShift,
+  adminVoidShift,
+  adminRestoreShift,
+  adminPreviewCorrectShift,
+  adminCorrectShift,
+  adminSearchSchedules,
+  adminGetSchedule,
+  adminPreviewVoidSchedule,
+  adminVoidSchedule,
+  adminPreviewCorrectSchedule,
+  adminCorrectSchedule,
+  adminGetEmployeePlan,
+  adminCorrectEmployeePlanMetric,
+  adminGetStorePlan,
+  adminCorrectStorePlanMetric,
+  adminGetFeatureFlags,
+  adminUpsertFeatureFlag,
+  adminDeleteFeatureFlag,
+  adminGetOperationsOverview,
   issueStepUpTicket
 } from '../features/admin-center/api.js';
 
@@ -386,6 +407,27 @@ declare global {
       adminPreviewCorrectStore: typeof adminPreviewCorrectStore;
       adminCorrectSaleStore: typeof adminCorrectSaleStore;
       adminCorrectSaleMetric: typeof adminCorrectSaleMetric;
+      adminSearchShifts: typeof adminSearchShifts;
+      adminGetShift: typeof adminGetShift;
+      adminPreviewVoidShift: typeof adminPreviewVoidShift;
+      adminVoidShift: typeof adminVoidShift;
+      adminRestoreShift: typeof adminRestoreShift;
+      adminPreviewCorrectShift: typeof adminPreviewCorrectShift;
+      adminCorrectShift: typeof adminCorrectShift;
+      adminSearchSchedules: typeof adminSearchSchedules;
+      adminGetSchedule: typeof adminGetSchedule;
+      adminPreviewVoidSchedule: typeof adminPreviewVoidSchedule;
+      adminVoidSchedule: typeof adminVoidSchedule;
+      adminPreviewCorrectSchedule: typeof adminPreviewCorrectSchedule;
+      adminCorrectSchedule: typeof adminCorrectSchedule;
+      adminGetEmployeePlan: typeof adminGetEmployeePlan;
+      adminCorrectEmployeePlanMetric: typeof adminCorrectEmployeePlanMetric;
+      adminGetStorePlan: typeof adminGetStorePlan;
+      adminCorrectStorePlanMetric: typeof adminCorrectStorePlanMetric;
+      adminGetFeatureFlags: typeof adminGetFeatureFlags;
+      adminUpsertFeatureFlag: typeof adminUpsertFeatureFlag;
+      adminDeleteFeatureFlag: typeof adminDeleteFeatureFlag;
+      adminGetOperationsOverview: typeof adminGetOperationsOverview;
       issueStepUpTicket: typeof issueStepUpTicket;
     };
   }
@@ -551,5 +593,26 @@ window.apiClient = {
   adminPreviewCorrectStore,
   adminCorrectSaleStore,
   adminCorrectSaleMetric,
+  adminSearchShifts,
+  adminGetShift,
+  adminPreviewVoidShift,
+  adminVoidShift,
+  adminRestoreShift,
+  adminPreviewCorrectShift,
+  adminCorrectShift,
+  adminSearchSchedules,
+  adminGetSchedule,
+  adminPreviewVoidSchedule,
+  adminVoidSchedule,
+  adminPreviewCorrectSchedule,
+  adminCorrectSchedule,
+  adminGetEmployeePlan,
+  adminCorrectEmployeePlanMetric,
+  adminGetStorePlan,
+  adminCorrectStorePlanMetric,
+  adminGetFeatureFlags,
+  adminUpsertFeatureFlag,
+  adminDeleteFeatureFlag,
+  adminGetOperationsOverview,
   issueStepUpTicket
 };

@@ -98,6 +98,23 @@ export async function listPendingForOrg(orgId: string): Promise<Omit<AccessReque
   return res.rows;
 }
 
+/** Operations Center (Admin Control Center, Phase 4+, Area B4) — та же
+ * effective_org_id проекция, что listPendingForOrg, но БЕЗ org-фильтра:
+ * cross-org by design, в отличие от Command Center. */
+export async function listPendingAll(): Promise<Omit<AccessRequestRow, 'password_hash'>[]> {
+  const res = await query(
+    `SELECT ar.id, ar.telegram_id, ar.telegram_username, ar.full_name, ar.claimed_employee_id,
+            ar.message, ar.status, ar.org_id, ar.reviewed_by, ar.reviewed_at, ar.created_at,
+            ar.provider, ar.phone,
+            COALESCE(ar.org_id, e.org_id, 'default') as effective_org_id
+     FROM access_requests ar
+     LEFT JOIN employees e ON e.id = ar.claimed_employee_id
+     WHERE ar.status = 'pending'
+     ORDER BY ar.created_at ASC`
+  );
+  return res.rows;
+}
+
 /** Approve/reject — та же effective_org_id проекция, что list, для одной заявки по id. */
 export async function findByIdWithEffectiveOrg(id: number): Promise<AccessRequestWithEffectiveOrg | null> {
   const res = await query(

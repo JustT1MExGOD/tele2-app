@@ -124,6 +124,57 @@ export async function upsertStoreMonthPlanRow(storeId: string, monthStartDate: s
   return res.rows[0];
 }
 
+// --- Admin Control Center, Phase 4+ — single-metric plan corrections.
+// Plans have no void concept (zeroing every metric already models "no
+// plan") — only correct, mirroring correctSaleMetric's version-gated
+// UPDATE. `metric` must already be validated against metricKeys() by the
+// caller (core/admin/plan-correction.ts), same allowlist-before-
+// interpolation discipline as sales.setMetric.
+
+export async function findEmployeeMonthPlanById(planId: number, lock = false, q: typeof query = query): Promise<any | null> {
+  const res = await q(
+    `SELECT emp.*, e.full_name as employee_name, e.org_id as employee_org_id
+     FROM employee_month_plans emp
+     JOIN employees e ON e.id = emp.employee_id
+     WHERE emp.id = $1 ${lock ? 'FOR UPDATE OF emp' : ''}`,
+    [planId]
+  );
+  return res.rows[0] || null;
+}
+
+export async function correctEmployeeMonthPlanMetric(
+  planId: number, metric: string, value: number, expectedVersion: number, q: typeof query = query
+): Promise<any | null> {
+  const res = await q(
+    `UPDATE employee_month_plans SET ${metric} = $3, version = version + 1, updated_at = now()
+     WHERE id = $1 AND version = $2 RETURNING *`,
+    [planId, expectedVersion, value]
+  );
+  return res.rows[0] || null;
+}
+
+export async function findStoreMonthPlanById(planId: number, lock = false, q: typeof query = query): Promise<any | null> {
+  const res = await q(
+    `SELECT smp.*, COALESCE(st.display_name, st.name) as store_name, st.org_id as store_org_id
+     FROM store_month_plans smp
+     JOIN stores st ON st.id = smp.store_id
+     WHERE smp.id = $1 ${lock ? 'FOR UPDATE OF smp' : ''}`,
+    [planId]
+  );
+  return res.rows[0] || null;
+}
+
+export async function correctStoreMonthPlanMetric(
+  planId: number, metric: string, value: number, expectedVersion: number, q: typeof query = query
+): Promise<any | null> {
+  const res = await q(
+    `UPDATE store_month_plans SET ${metric} = $3, version = version + 1, updated_at = now()
+     WHERE id = $1 AND version = $2 RETURNING *`,
+    [planId, expectedVersion, value]
+  );
+  return res.rows[0] || null;
+}
+
 export async function materializeRow(storeId: string, date: string, p: Record<string, number>): Promise<void> {
   const keys=Object.keys(p).filter(k=>/^[a-z][a-z0-9_]{0,29}$/.test(k));
   await query(`INSERT INTO store_plans(store_id,plan_date,${keys.join(',')}) VALUES($1,$2,${keys.map((_,i)=>'$'+(i+3)).join(',')})
