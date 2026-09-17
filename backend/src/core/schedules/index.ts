@@ -24,3 +24,9 @@ export {
   type MetricBucketForTest
 } from './domain/history-scoring.js';
 export { scheduleReads, type ScheduleReads } from './ports/read.js';
+export {
+  findByIdForAdmin,
+  findScheduleForDateEmployee,
+  deleteByIdVersioned,
+  correctScheduleRow
+} from './application/admin-correction.js';

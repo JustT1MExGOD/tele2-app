@@ -14,7 +14,9 @@
  * no restore endpoint.
  */
 import { withTransaction } from '../../data/db/index.js';
-import * as schedulesRepo from '../../data/repositories/schedules.js';
+import {
+  findByIdForAdmin, findScheduleForDateEmployee, deleteByIdVersioned, correctScheduleRow
+} from '../schedules/index.js';
 import * as auditRepo from '../../data/repositories/audit.js';
 
 export class ScheduleVersionConflictError extends Error {
@@ -48,7 +50,7 @@ interface Actor {
 }
 
 export async function previewVoidSchedule(scheduleId: number) {
-  const row = await schedulesRepo.findByIdForAdmin(scheduleId);
+  const row = await findByIdForAdmin(scheduleId);
   if (!row) throw new ScheduleNotFoundError();
   return { row };
 }
@@ -57,11 +59,11 @@ export async function voidSchedule(opts: {
   scheduleId: number; version: number; reason: string; actor: Actor; requestId?: string | null;
 }) {
   return withTransaction(async (q) => {
-    const row = await schedulesRepo.findByIdForAdmin(opts.scheduleId, true, q);
+    const row = await findByIdForAdmin(opts.scheduleId, true, q);
     if (!row) throw new ScheduleNotFoundError();
     if (Number(row.version) !== opts.version) throw new ScheduleVersionConflictError();
 
-    const deleted = await schedulesRepo.deleteByIdVersioned(opts.scheduleId, opts.version, q);
+    const deleted = await deleteByIdVersioned(opts.scheduleId, opts.version, q);
     if (!deleted) throw new ScheduleVersionConflictError();
 
     await auditRepo.record({
@@ -82,10 +84,10 @@ export async function voidSchedule(opts: {
 }
 
 export async function previewCorrectSchedule(scheduleId: number, newWorkDate?: string) {
-  const row = await schedulesRepo.findByIdForAdmin(scheduleId);
+  const row = await findByIdForAdmin(scheduleId);
   if (!row) throw new ScheduleNotFoundError();
   if (!newWorkDate || newWorkDate === row.work_date) return { row, destinationExists: false };
-  const destination = await schedulesRepo.findScheduleForDateEmployee(row.employee_id, newWorkDate, scheduleId);
+  const destination = await findScheduleForDateEmployee(row.employee_id, newWorkDate, scheduleId);
   return { row, destinationExists: !!destination };
 }
 
@@ -94,16 +96,16 @@ export async function correctSchedule(opts: {
   reason: string; actor: Actor; requestId?: string | null;
 }) {
   return withTransaction(async (q) => {
-    const row = await schedulesRepo.findByIdForAdmin(opts.scheduleId, true, q);
+    const row = await findByIdForAdmin(opts.scheduleId, true, q);
     if (!row) throw new ScheduleNotFoundError();
     if (Number(row.version) !== opts.version) throw new ScheduleVersionConflictError();
 
     if (opts.workDate && opts.workDate !== row.work_date) {
-      const destination = await schedulesRepo.findScheduleForDateEmployee(row.employee_id, opts.workDate, opts.scheduleId);
+      const destination = await findScheduleForDateEmployee(row.employee_id, opts.workDate, opts.scheduleId);
       if (destination) throw new ScheduleDestinationExistsError();
     }
 
-    const updated = await schedulesRepo.correctScheduleRow(opts.scheduleId, opts.version, {
+    const updated = await correctScheduleRow(opts.scheduleId, opts.version, {
       storeId: opts.storeId, workDate: opts.workDate, hours: opts.hours
     }, q);
     if (!updated) throw new ScheduleVersionConflictError();
