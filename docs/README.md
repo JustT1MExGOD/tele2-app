@@ -55,6 +55,18 @@
 - [Аудит удобства настольного интерфейса](DESKTOP-UX-AUDIT.md).
 - [Границы доверия приложения Windows](DESKTOP-SECURITY.md).
 
+### Нативное приложение Windows (Kotlin)
+
+Отдельный клиент на Kotlin и Compose Multiplatform в каталоге `native/`; версия ведётся отдельно от веба и Electron-приложения.
+
+- [Нативное приложение: обзор и быстрый старт](../native/README.md).
+- [Возможности: экраны, код, отличия от веба](../native/docs/FEATURES.md).
+- [Архитектура нативного приложения](../native/docs/ARCHITECTURE.md).
+- [Разработка, сборка и выпуск](../native/docs/DEVELOPMENT.md).
+- [Обновления нативного приложения и сплэш](../native/docs/UPDATES.md).
+- [Установщик нативного приложения](../native/installer/README.md).
+- [История версий нативного приложения](../native/CHANGELOG.md).
+
 ## Приложение Android
 
 - [Выпуск приложения для Android](ANDROID-RELEASE.md).

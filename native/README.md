@@ -1,0 +1,83 @@
+# Нативное приложение T2 Sales для Windows
+
+[Каталог документации](../docs/README.md) · [Обзор проекта](../README.md)
+
+Полноценный клиент T2 Sales на Kotlin Multiplatform и Compose Multiplatform for Desktop. Это отдельная кодовая база: она не использует веб-страницы и не заменяет Electron-приложение из `desktop/`, а работает с тем же рабочим сервером и повторяет веб-версию экран за экраном. Документ — точка входа для тех, кто запускает, собирает или дорабатывает этот клиент.
+
+**Содержание**
+
+- [Что это](#что-это)
+- [Быстрый старт](#быстрый-старт)
+- [Структура каталога](#структура-каталога)
+- [Где приложение хранит данные](#где-приложение-хранит-данные)
+- [Документы](#документы)
+- [Ограничения](#ограничения)
+
+## Что это
+
+| Параметр | Значение |
+| --- | --- |
+| Версия | `1.1.0` — ведётся отдельно от веба и backend; единственный источник — `appVersion` в [desktopApp/build.gradle.kts](desktopApp/build.gradle.kts) |
+| Платформа | Windows 10/11, x64. Код общего слоя (`shared`) не привязан к Windows |
+| Стек | Kotlin 2.0.21, Compose Multiplatform 1.7.1, Ktor 2.3.13 (OkHttp), kotlinx.serialization 1.7.3 |
+| Сервер | `https://tele2-app-production.up.railway.app` (см. `ApiConfig` в `shared`) |
+| Оформление | Повторяет веб (`styles.css`): светлая и тёмная темы, переключатель в шапке |
+| Установка | Один `.exe` на пользователя, без прав администратора: [installer/README.md](installer/README.md) |
+| Обновление | Проверяется и ставится при запуске: [docs/UPDATES.md](docs/UPDATES.md) |
+
+Электрон-приложение продолжает работать без изменений. Нативный клиент устанавливается в свою папку под своим именем (`T2 Sales Native`) и не пересекается с ним.
+
+## Быстрый старт
+
+Нужен JDK 17. Рабочий каталог — `native/`, оболочка — Git Bash или PowerShell.
+
+```bash
+export JAVA_HOME="/c/Users/<пользователь>/tools/jdk-17.0.20.1+1"   # пример пути
+export PATH="$JAVA_HOME/bin:$PATH"
+
+./gradlew :desktopApp:run            # запустить из исходников (со сплэшем)
+./gradlew :desktopApp:compileKotlin  # быстрая проверка, что всё собирается
+./gradlew :shared:jvmTest :desktopApp:test   # тесты
+./gradlew :desktopApp:packageSetup   # собрать установщик
+```
+
+Установщик появляется в `desktopApp/build/installer/T2SalesNative-Setup-x64-<версия>.exe`. Подробности, переменные окружения и режимы отладки — в [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+## Структура каталога
+
+| Путь | Назначение |
+| --- | --- |
+| `shared/` | Модуль Kotlin Multiplatform (пока только цель `jvm()`): HTTP-клиент, cookie и CSRF, типы ответов, все API-классы, вход, токены темы, модель навигации |
+| `desktopApp/` | Приложение Compose Desktop: экраны, оболочка, сеть DIRECT/RELAY, обновления, сплэш, сборка установщика |
+| `installer/` | Установщик на WPF (C# 5, собирается штатным `csc.exe` из Windows): [installer/README.md](installer/README.md) |
+| `scripts/update-prepare.mjs` | Подготовка манифеста и папки публикации нового установщика |
+| `docs/` | Документация нативного приложения |
+| `CHANGELOG.md` | История версий нативного клиента |
+
+## Где приложение хранит данные
+
+| Что | Где |
+| --- | --- |
+| Сессия (cookie `t2_session` и `t2_csrf`) | `%USERPROFILE%\.t2sales\cookies.json` |
+| Выбранная тема, режим сети | Реестр Windows, узел Java Preferences `ru/t2sales/desktop` (`HKCU\Software\JavaSoft\Prefs`) |
+| Журнал обновлений | `%LOCALAPPDATA%\T2 Sales Native\logs\updater.log` |
+| Скачанные установщики | `%LOCALAPPDATA%\T2 Sales Native\updates\` |
+| Само приложение (после установки) | `%LOCALAPPDATA%\Programs\T2 Sales Native\` |
+
+## Документы
+
+| Документ | О чём |
+| --- | --- |
+| [docs/FEATURES.md](docs/FEATURES.md) | Что сделано: каждый экран, где лежит код, что добавлено сверх веба и что намеренно не переносилось |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Как устроено: модули, сеть, запуск, оформление, анимации |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Как запускать, тестировать, собирать и выпускать |
+| [docs/UPDATES.md](docs/UPDATES.md) | Обновления: сервер, манифест, проверки безопасности, сплэш |
+| [installer/README.md](installer/README.md) | Установщик: устройство, ключи, сборка |
+| [CHANGELOG.md](CHANGELOG.md) | Что менялось по версиям |
+
+## Ограничения
+
+- Только Windows x64; проверялось на Windows 11.
+- Установщик не подписан цифровой подписью. Политика проверки обновлений `warn` допускает отсутствие подписи, но блокирует повреждённую.
+- Автоматических тестов интерфейса нет: экраны проверяются вручную по снимкам окна (см. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#проверка-интерфейса)).
+- Реальное обновление «с сервера на новую версию» целиком (загрузка, установка, перезапуск) в живой среде не прогонялось: проверены части по отдельности и демо-режим. Подробнее — в [docs/UPDATES.md](docs/UPDATES.md).
