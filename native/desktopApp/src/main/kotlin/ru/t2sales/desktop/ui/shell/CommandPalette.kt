@@ -78,6 +78,7 @@ fun CommandPaletteHost(container: AppContainer, role: String, isManager: Boolean
             navigationTargets(role, isManager).forEach { (section, label, screen) -> add(Cmd(label, section, "Экран") { go(screen) }) }
             fun tool(label: String, hint: String, screen: Screen, kw: String = "") = add(Cmd(label, hint, "Экран", kw) { go(screen) })
             tool("BFQ", "Рейтинг качества за месяц", Screen.Bfq)
+            tool("Повтор месяца", "Гонка сотрудников по дням", Screen.Replay, "гонка replay анимация")
             tool("Heatmap часов", "Когда ставить сильного", Screen.Heatmap, "тепловая карта")
             tool("Прогноз и what-if", "7 дней · сценарии смен", Screen.Forecast)
             tool("Объявления", "Прочитал · обязательно", Screen.Announce)
@@ -95,10 +96,17 @@ fun CommandPaletteHost(container: AppContainer, role: String, isManager: Boolean
             add(Cmd("Промокоды РТК", "Общий пул", "Инструмент") { ToolDialogs.open("promos") })
             add(Cmd("Внести продажу", "Ctrl+N", "Действие", "добавить новая") { AddSaleState.open() })
             add(Cmd("Сменить тему", "Светлая / тёмная", "Действие", "оформление dark light") {
+                ThemePrefs.auto = false
                 T2Colors.dark = !T2Colors.dark
                 ThemePrefs.setDark(T2Colors.dark)
             })
+            add(Cmd("Тема как в Windows", "Следовать светлой или тёмной теме системы", "Действие", "оформление авто system") { ThemePrefs.auto = true })
             add(Cmd("Обновить данные", "Перезагрузить экран", "Действие", "refresh") { onRefresh() })
+            add(Cmd("Сохранить диагностику", "Файл с версиями и состоянием на рабочий стол", "Действие", "лог журнал debug logs") {
+                runCatching { ru.t2sales.desktop.support.Diagnostics.export(container) }
+                    .onSuccess { ru.t2sales.desktop.ui.components.T2Toast.show("Сохранено на рабочем столе: ${it.fileName}") }
+                    .onFailure { ru.t2sales.desktop.ui.components.T2Toast.show("Не удалось сохранить диагностику", true) }
+            })
             if (canManage) employees.forEach { e -> add(Cmd("Продажа: ${e.full_name}", "Внести продажу за сотрудника", "Сотрудник", "продажа") { AddSaleState.open(e.id) }) }
         }
     }

@@ -1,5 +1,7 @@
 package ru.t2sales.desktop.ui.sales
 
+import ru.t2sales.shared.api.ApiException
+import ru.t2sales.desktop.ui.components.SkeletonBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -79,6 +81,8 @@ fun AddSaleDialog(
     teamApi: TeamApi,
     scheduleApi: ScheduleApi,
     salesApi: SalesApi,
+    outbox: ru.t2sales.desktop.offline.SalesOutbox,
+    formCache: ru.t2sales.desktop.offline.SaleFormCache,
     myEmployeeId: Int?,
     myName: String?,
     canManage: Boolean,
@@ -88,6 +92,7 @@ fun AddSaleDialog(
     val scope = rememberCoroutineScope()
     var form by remember { mutableStateOf<SaleForm?>(null) }
     var failed by remember { mutableStateOf(false) }
+    var cachedAt by remember { mutableStateOf<java.time.Instant?>(null) }
     var employeeId by remember { mutableStateOf<Int?>(null) }
     var storeId by remember { mutableStateOf<String?>(null) }
     val selection = remember { mutableStateMapOf<String, String>() }
@@ -119,16 +124,33 @@ fun AddSaleDialog(
             else myEmployeeId ?: empList.firstOrNull()?.id
             employeeId = defaultEmp
             storeId = defaultEmp?.let { byEmp[it] } ?: stores.firstOrNull()?.id
+            myEmployeeId?.let { formCache.save(it, ru.t2sales.desktop.offline.CachedSaleForm(java.time.Instant.now(), empList, stores, byEmp, metrics)) }
             SaleForm(empList, stores, byEmp, metrics)
-        }.onSuccess { form = it }.onFailure { failed = true }
+        }.onSuccess { form = it }.onFailure {
+            // no answer from the server: open the form from the last data it gave this employee, so a sale can still be entered
+            val cached = myEmployeeId?.let { id -> formCache.load(id) }
+            if (cached == null) {
+                failed = true
+            } else {
+                val defaultEmp = if (canManage) presetEmployeeId ?: myEmployeeId ?: cached.employees.firstOrNull()?.id else myEmployeeId ?: cached.employees.firstOrNull()?.id
+                employeeId = defaultEmp
+                storeId = defaultEmp?.let { cached.storeByEmployee[it] } ?: cached.stores.firstOrNull()?.id
+                cachedAt = cached.savedAt
+                form = SaleForm(cached.employees, cached.stores, cached.storeByEmployee, cached.metrics.ifEmpty { FALLBACK_METRICS })
+            }
+        }
     }
 
     SheetDialog("Добавить продажу", onDismiss = { if (!busy) onDismiss() }) {
         val f = form
         when {
             failed -> Text("Ошибка загрузки", color = T2Colors.danger)
-            f == null -> CircularProgressIndicator()
+            f == null -> FormSkeleton()
             else -> {
+                cachedAt?.let { at ->
+                    val shown = java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm").format(at.atZone(java.time.ZoneId.of("Europe/Moscow")))
+                    Text("Нет связи: данные от $shown. Продажа сохранится и отправится сама, когда связь появится.", color = T2Colors.warning, fontSize = 12.sp, modifier = Modifier.padding(bottom = 12.dp))
+                }
                 FieldLabel("Сотрудник")
                 Dropdown(
                     value = f.employees.firstOrNull { it.id == employeeId }?.full_name ?: "",
@@ -266,9 +288,20 @@ fun AddSaleDialog(
                                 AddSaleState.refreshTick++
                                 onDismiss()
                             }
-                            .onFailure {
-                                T2Toast.show(it.message?.takeIf { m -> m != "fail" } ?: "Ошибка сохранения", true)
-                                busy = false
+                            .onFailure { e ->
+                                if (e is ApiException) {
+                                    // the server answered and said no: show why, the form stays open
+                                    T2Toast.show(e.message.takeIf { m -> m != "fail" } ?: "Ошибка сохранения", true)
+                                    busy = false
+                                } else {
+                                    // no answer at all: keep the sale (same client_id, so a resend can never double it) and send it later
+                                    runCatching { outbox.enqueue(body, summary) }
+                                        .onSuccess {
+                                            T2Toast.show("Нет связи: продажа сохранена и отправится сама (в очереди: ${outbox.pendingCount})")
+                                            onDismiss()
+                                        }
+                                        .onFailure { T2Toast.show("Ошибка сохранения", true); busy = false }
+                                }
                             }
                     }
                 }
@@ -280,4 +313,21 @@ fun AddSaleDialog(
 @Composable
 private fun Dropdown(value: String, options: List<String>, enabled: Boolean, onPick: (String) -> Unit) {
     ru.t2sales.desktop.ui.components.DropdownField(value, options, enabled, onPick)
+}
+
+/** Shape of the form while its data loads: two fields and the grid of type chips. */
+@Composable
+private fun FormSkeleton() {
+    androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp)) {
+        repeat(2) {
+            SkeletonBlock(Modifier.fillMaxWidth(0.3f).height(12.dp), 6.dp)
+            SkeletonBlock(Modifier.fillMaxWidth().height(52.dp), 14.dp)
+        }
+        SkeletonBlock(Modifier.fillMaxWidth(0.4f).height(12.dp), 6.dp)
+        repeat(3) {
+            androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                repeat(3) { SkeletonBlock(Modifier.weight(1f).height(46.dp), 14.dp) }
+            }
+        }
+    }
 }

@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.components
 
+import androidx.compose.foundation.layout.height
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
@@ -46,6 +47,7 @@ object Motion {
     const val ValueMs = 1000
     const val PaletteMs = 220
     const val MenuMs = 180
+    const val DialogMs = 260
 }
 
 /** A screen (or a page of it) arriving: fades in while sliding up a few pixels. Replays whenever [key] changes. */
@@ -108,3 +110,30 @@ fun SkeletonBlock(modifier: Modifier = Modifier, radius: Dp = 16.dp) {
 
 /** Spring used for press feedback: quick and slightly bouncy. */
 fun pressSpring() = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+
+/** A dialog "grows" into place: fades in while rising a few pixels from slightly smaller. Dialogs are separate windows, so this animates their content. */
+@Composable
+fun DialogEnter(content: @Composable () -> Unit) {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { a.animateTo(1f, tween(Motion.DialogMs, easing = Motion.Emphasized)) }
+    Box(Modifier.graphicsLayer {
+        alpha = a.value
+        translationY = (1f - a.value) * 16.dp.toPx()
+        val sc = 0.94f + 0.06f * a.value
+        scaleX = sc; scaleY = sc
+    }) { content() }
+}
+
+/** Standard "loading" placeholder for a list or card: a few shimmering bars of different width. Replaces spinners everywhere. */
+@Composable
+fun LoadingBlock(modifier: Modifier = Modifier, lines: Int = 3) {
+    androidx.compose.foundation.layout.Column(
+        modifier.fillMaxWidth(),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
+    ) {
+        val widths = listOf(1f, 0.82f, 0.64f, 0.9f, 0.7f)
+        repeat(lines) { i ->
+            SkeletonBlock(Modifier.fillMaxWidth(widths[i % widths.size]).height(if (i == 0) 44.dp else 20.dp), 10.dp)
+        }
+    }
+}

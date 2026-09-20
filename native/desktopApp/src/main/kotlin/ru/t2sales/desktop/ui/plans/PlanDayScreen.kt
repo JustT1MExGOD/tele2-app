@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.plans
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -104,7 +105,7 @@ fun PlanDayScreen(container: AppContainer) {
         val d = data
         when {
             failed -> Text("Ошибка загрузки", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            d == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            d == null -> LoadingBlock(Modifier.padding(16.dp))
             d.stores.isEmpty() -> Text("Нет точек", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 val cols = ((maxWidth + 12.dp) / (420.dp + 12.dp)).toInt().coerceAtLeast(1)

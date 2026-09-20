@@ -463,10 +463,10 @@ data class LinkPhoneRequest(val phone: String, val password: String)
 data class ParseSaleRequest(val text: String)
 
 @Serializable
-data class QuickSaleRequest(val text: String, val client_id: String)
+data class QuickSaleRequest(val text: String, val client_id: String, val employee_id: Int? = null)
 
 @Serializable
-data class ParsedSale(val metrics: Map<String, Double> = emptyMap(), val confidence: Double? = null)
+data class ParsedSale(val metrics: Map<String, Double> = emptyMap(), val confidence: Double? = null, val unmatched: List<String> = emptyList())
 
 @Serializable
 data class QuickSaleResponse(val parsed: ParsedSale? = null)

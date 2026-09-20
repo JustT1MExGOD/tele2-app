@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.commandcenter
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -87,7 +88,7 @@ fun CommandCenterScreen(container: AppContainer, me: MeResponse, onNavigate: (Sc
     val d = data
     when {
         failed -> Text("Command Center сейчас недоступен, зайди чуть позже", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-        d == null -> CircularProgressIndicator()
+        d == null -> LoadingBlock()
         else -> {
             val n = d.network
             val tone = when {

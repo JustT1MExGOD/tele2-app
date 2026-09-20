@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.admin
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -79,7 +80,7 @@ fun OrgsScreen(api: AdminApi) {
         val list = orgs
         when {
             failed -> Text("\uD83C\uDF49 Не получилось загрузить сети", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("\uD83C\uDF49 Сетей пока нет", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {
                 val sorted = list.sortedWith { a, b ->

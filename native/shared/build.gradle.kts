@@ -39,6 +39,9 @@ kotlin {
         val jvmMain by getting {
             dependencies {
                 implementation(libs.ktor.client.okhttp)
+                // Windows DPAPI: the sign-in cookies are stored encrypted for the current Windows user
+                implementation(libs.jna)
+                implementation(libs.jna.platform)
             }
         }
     }

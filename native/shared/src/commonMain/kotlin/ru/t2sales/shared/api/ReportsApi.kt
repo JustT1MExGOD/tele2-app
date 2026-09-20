@@ -191,9 +191,13 @@ class ScheduleApi(private val client: HttpClient) {
 
     /** manager-tier only (server-enforced). hours = 0 means a day off. */
     suspend fun saveShift(item: ScheduleBulkItem): SaveScheduleBulkResponse =
+        saveShifts(listOf(item))
+
+    /** Several shifts in ONE request: the server applies the whole batch in one transaction (a swap is never half done). */
+    suspend fun saveShifts(items: List<ScheduleBulkItem>): SaveScheduleBulkResponse =
         client.post(apiUrl("/schedules/bulk")) {
             contentType(ContentType.Application.Json)
-            setBody(SaveScheduleBulkRequest(listOf(item)))
+            setBody(SaveScheduleBulkRequest(items))
         }.body()
 }
 
@@ -396,10 +400,11 @@ class ProfileApi(private val client: HttpClient) {
             setBody(ParseSaleRequest(text))
         }.body()
 
-    suspend fun quickSale(text: String, clientId: String): QuickSaleResponse =
+    /** [employeeId] only for a manager writing a colleague's sale; the server picks the store from that person's shift. */
+    suspend fun quickSale(text: String, clientId: String, employeeId: Int? = null): QuickSaleResponse =
         client.post(apiUrl("/sales/quick")) {
             contentType(ContentType.Application.Json)
-            setBody(QuickSaleRequest(text, clientId))
+            setBody(QuickSaleRequest(text, clientId, employeeId))
         }.body()
 
     suspend fun uploadAvatar(jpeg: ByteArray) {

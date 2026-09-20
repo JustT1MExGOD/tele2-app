@@ -12,6 +12,12 @@ object AppNav {
     /** True while the signed-in shell is on screen; window-wide shortcuts (Ctrl+K / Ctrl+N) only fire then. */
     var signedIn = false
 
+    /** The signed-in employee (owner of the offline queue); null when signed out. */
+    var myEmployeeId: Int? = null
+
+    /** Manager or admin: may enter a colleague's sale (the quick-sale window then understands "фамилия 3 аксы"). */
+    var canManageSales: Boolean = false
+
     /** Current and previous screen — «Назад» on detail pages (goBack in the web). */
     var current: Screen = Screen.Home
     var previous: Screen = Screen.Home

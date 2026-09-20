@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.bfq
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -71,7 +72,7 @@ fun BfqScreen(container: AppContainer, me: MeResponse) {
         val list = items
         when {
             failed -> Text("Ошибка BFQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("Нет данных BFQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> list.forEachIndexed { i, e ->
                 Row(modifier = Modifier.fillMaxWidth().clickable { opened = e.employee_id }.padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -113,7 +114,7 @@ private fun BfqCard(container: AppContainer, id: Int, month: String, canManage: 
         val d = data
         when {
             failed -> Text("Ошибка", color = T2Colors.hint, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
-            d == null -> CircularProgressIndicator()
+            d == null -> LoadingBlock()
             else -> {
                 val f = d["fact"].o()
                 val fc = d["forecast"].o()

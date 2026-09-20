@@ -32,6 +32,8 @@ sealed class HomeUiState {
         val showAnalytics: Boolean,
         val health: SupervisorHealthResponse?,
         val networkTotals: NetworkTotals,
-        val topLeaders: List<DashboardLeaderRow>
+        val topLeaders: List<DashboardLeaderRow>,
+        /** Set when some of this data is the last saved copy because the server did not answer: the moment it was saved. */
+        val staleSince: java.time.Instant? = null
     ) : HomeUiState()
 }

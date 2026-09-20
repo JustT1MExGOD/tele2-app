@@ -1,5 +1,7 @@
 package ru.t2sales.desktop.ui.info
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
+import ru.t2sales.desktop.ui.components.reveal
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -80,12 +82,12 @@ fun AlertsScreen(container: AppContainer, onNavigate: (Screen) -> Unit) {
     val list = items
     when {
         failed -> Text("Не удалось загрузить алерты", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-        list == null -> CircularProgressIndicator()
+        list == null -> LoadingBlock()
         list.isEmpty() -> Text("Нет алертов", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
         else -> Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-            list.forEach { a ->
+            list.forEachIndexed { idx, a ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { opened = a.id; scope.launch { runCatching { api.markRead(a.id) } } }.padding(vertical = 13.dp),
+                    modifier = Modifier.reveal(idx, 30).fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { opened = a.id; scope.launch { runCatching { api.markRead(a.id) } } }.padding(vertical = 13.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val shape = RoundedCornerShape(12.dp)

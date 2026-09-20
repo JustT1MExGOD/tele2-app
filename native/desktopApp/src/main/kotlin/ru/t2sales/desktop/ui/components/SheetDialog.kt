@@ -33,7 +33,7 @@ import ru.t2sales.shared.theme.T2Colors
 fun SheetDialog(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         val shape = RoundedCornerShape(28.dp)
-        Column(
+        DialogEnter { Column(
             modifier = Modifier
                 .width(460.dp)
                 .heightIn(max = 760.dp)
@@ -63,6 +63,6 @@ fun SheetDialog(title: String, onDismiss: () -> Unit, content: @Composable Colum
                 )
             }
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) { content() }
-        }
+        } }
     }
 }

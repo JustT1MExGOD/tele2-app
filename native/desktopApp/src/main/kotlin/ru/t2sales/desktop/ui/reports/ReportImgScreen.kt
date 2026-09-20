@@ -1,5 +1,8 @@
 package ru.t2sales.desktop.ui.reports
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import ru.t2sales.desktop.ui.components.MChipButton
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -94,6 +97,10 @@ fun ReportImgScreen(container: AppContainer) {
                     Column(modifier = Modifier.padding(bottom = 12.dp)) {
                         if (label != null) Text(label, color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(start = 2.dp, bottom = 6.dp))
                         SvgFrame(svg)
+                        Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MChipButton("Копировать") { copyPng(svg) }
+                            MChipButton("Сохранить PNG") { savePng(svg, (stores.firstOrNull { it.id == storeId }?.name ?: "точка") + "-" + date.trim() + (label?.let { "-$it" } ?: "")) }
+                        }
                     }
                 }
             }
@@ -171,4 +178,52 @@ private fun SvgFrame(svg: String) {
             }
         }
     }
+}
+
+
+/** Draws the frame into a bitmap of its own size (the same drawing as on screen) and returns it as PNG bytes. */
+private fun renderPng(svg: String): ByteArray {
+    val (geometry, texts) = extractTexts(svg)
+    val dom = SVGDOM(Data.makeFromBytes(geometry.toByteArray(Charsets.UTF_8)))
+    val vb = VIEWBOX.find(svg)
+    val w = vb?.groupValues?.get(1)?.toFloatOrNull() ?: WIDTH.find(svg)?.groupValues?.get(1)?.toFloatOrNull() ?: 1080f
+    val h = vb?.groupValues?.get(2)?.toFloatOrNull() ?: HEIGHT.find(svg)?.groupValues?.get(1)?.toFloatOrNull() ?: 1080f
+    val surface = org.jetbrains.skia.Surface.makeRasterN32Premul(w.toInt(), h.toInt())
+    val canvas = surface.canvas
+    canvas.clear(0xFF0A0A0B.toInt())
+    dom.setContainerSize(w, h)
+    dom.render(canvas)
+    texts.forEach { t ->
+        val font = Font(typeface(t.bold), t.size)
+        val paint = Paint().apply { color = t.color }
+        val line = TextLine.make(t.text, font)
+        canvas.drawTextLine(line, if (t.anchorEnd) t.x - line.width else t.x, t.y, paint)
+    }
+    return surface.makeImageSnapshot().encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)?.bytes ?: error("не удалось получить PNG")
+}
+
+/** Puts the picture on the clipboard: paste it straight into Telegram or a document. */
+private fun copyPng(svg: String) {
+    runCatching {
+        val image = javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(renderPng(svg)))
+        val transferable = object : java.awt.datatransfer.Transferable {
+            override fun getTransferDataFlavors() = arrayOf(java.awt.datatransfer.DataFlavor.imageFlavor)
+            override fun isDataFlavorSupported(f: java.awt.datatransfer.DataFlavor) = f == java.awt.datatransfer.DataFlavor.imageFlavor
+            override fun getTransferData(f: java.awt.datatransfer.DataFlavor): Any = if (isDataFlavorSupported(f)) image else throw java.awt.datatransfer.UnsupportedFlavorException(f)
+        }
+        java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(transferable, null)
+    }.onSuccess { ru.t2sales.desktop.ui.components.T2Toast.show("Картинка скопирована: вставьте её в чат") }
+        .onFailure { ru.t2sales.desktop.ui.components.T2Toast.show("Не удалось скопировать картинку", true) }
+}
+
+/** Saves the picture as a PNG on the desktop. */
+private fun savePng(svg: String, name: String) {
+    runCatching {
+        val safe = name.replace(Regex("""[\\/:*?"<>|\s]+"""), "_")
+        val desktop = java.nio.file.Paths.get(System.getProperty("user.home"), "Desktop").takeIf { java.nio.file.Files.isDirectory(it) } ?: java.nio.file.Paths.get(System.getProperty("user.home"))
+        val file = desktop.resolve("T2-report-$safe.png")
+        java.nio.file.Files.write(file, renderPng(svg))
+        file
+    }.onSuccess { ru.t2sales.desktop.ui.components.T2Toast.show("Сохранено на рабочем столе: ${it.fileName}") }
+        .onFailure { ru.t2sales.desktop.ui.components.T2Toast.show("Не удалось сохранить картинку", true) }
 }

@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.team
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -151,7 +152,7 @@ fun TeamScreen(teamApi: TeamApi, scheduleApi: ScheduleApi, salesApi: SalesApi, a
         val list = employees
         when {
             failed -> Text("Не получилось загрузить команду, зайди чуть позже", color = T2Colors.danger)
-            list == null -> CircularProgressIndicator()
+            list == null -> LoadingBlock()
             list.isEmpty() -> Text("В команде пока никого нет", color = T2Colors.hint)
             else -> {
                 val totals = HashMap<Int, Totals>()

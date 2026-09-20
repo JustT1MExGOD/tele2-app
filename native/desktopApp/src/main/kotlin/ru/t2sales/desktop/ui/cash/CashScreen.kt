@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.cash
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -120,7 +121,7 @@ fun CashScreen(container: AppContainer) {
         val t = table
         when {
             failed -> Text("\uD83C\uDF49 Касса сейчас недоступна, зайди чуть позже", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            t == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            t == null -> LoadingBlock(Modifier.padding(16.dp))
             t.dates.isEmpty() -> Text("\uD83C\uDF49 Пока нет ни одной записи кассы \u2014 внеси первую строку выше", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {
                 val list = if (t.stores.isNotEmpty()) t.stores else stores

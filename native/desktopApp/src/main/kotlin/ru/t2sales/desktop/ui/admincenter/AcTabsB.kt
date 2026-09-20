@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.admincenter
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -100,7 +101,7 @@ internal fun FlagsTab(container: AppContainer) {
         val list = items
         when {
             failed -> EmptyText("Не удалось загрузить флаги")
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Флагов пока нет")
             else -> list.forEach { f ->
                 ListRow("${f.key} \u00B7 ${f.org_id ?: "все сети"} \u00B7 ${if (f.enabled) "включено" else "выключено"}", f.description) {
@@ -133,7 +134,7 @@ internal fun OrgSettingsTab(container: AppContainer) {
         val list = orgs
         when {
             failed -> EmptyText("Не удалось загрузить сети")
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Сетей нет")
             else -> list.forEach { o -> NavRow(o.brand_name ?: o.name, o.id + if (o.is_active == false) " \u00B7 неактивна" else "") { selected = o.id } }
         }
@@ -199,7 +200,7 @@ internal fun RulesTab(container: AppContainer) {
         val list = items
         when {
             failed -> EmptyText("Не удалось загрузить метрики")
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Метрик нет")
             else -> list.forEach { m ->
                 ListRow("${m.label ?: m.id} (${m.short_label ?: ""})", "${m.id} \u00B7 ${m.unit ?: ""}") {
@@ -231,7 +232,7 @@ internal fun OperationsTab(container: AppContainer) {
     PageSection("Открытые алерты по всем сетям") {
         when {
             failed -> EmptyText("Не удалось загрузить данные")
-            d == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val bySeverity = (d["alerts_by_severity"] as? JsonObject).orEmpty()
                 if (bySeverity.isNotEmpty()) {

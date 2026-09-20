@@ -91,7 +91,7 @@ fun AppShell(
         Box(modifier = Modifier.fillMaxSize().background(T2Colors.surface2)) {
             if (selected == Screen.Chat) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    AppHeader(selected, myDay, teamApi, myEmployeeId, container.network, onRefresh = { reload++ })
+                    AppHeader(selected, myDay, teamApi, myEmployeeId, container.network, container.outbox, onRefresh = { reload++ })
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -102,7 +102,7 @@ fun AppShell(
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    AppHeader(selected, myDay, teamApi, myEmployeeId, container.network, onRefresh = { reload++ })
+                    AppHeader(selected, myDay, teamApi, myEmployeeId, container.network, container.outbox, onRefresh = { reload++ })
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                         Column(
                             modifier = Modifier
@@ -128,6 +128,8 @@ fun AppShell(
                     teamApi = teamApi,
                     scheduleApi = container.scheduleApi,
                     salesApi = container.salesApi,
+                    outbox = container.outbox,
+                    formCache = container.saleFormCache,
                     myEmployeeId = myEmployeeId,
                     myName = me.full_name,
                     canManage = canManage,
@@ -140,15 +142,17 @@ fun AppShell(
 }
 
 @Composable
-private fun AppHeader(selected: Screen, myDay: MeDayResponse?, teamApi: TeamApi, myEmployeeId: Int?, network: ru.t2sales.desktop.network.NetworkManager, onRefresh: () -> Unit) {
+private fun AppHeader(selected: Screen, myDay: MeDayResponse?, teamApi: TeamApi, myEmployeeId: Int?, network: ru.t2sales.desktop.network.NetworkManager, outbox: ru.t2sales.desktop.offline.SalesOutbox, onRefresh: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().background(T2Colors.bg).padding(horizontal = T2Spacing.sp4, vertical = T2Spacing.sp3)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AvatarImage(teamApi, myEmployeeId, "T2", size = 44.dp)
             Spacer(Modifier.width(T2Spacing.sp3))
             Text(selected.label, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = T2Colors.text, modifier = Modifier.weight(1f))
+            OutboxPill(outbox)
             NetworkIndicator(network)
             Spacer(Modifier.width(T2Spacing.sp2))
             HeaderButton("\u25D0") {
+                ThemePrefs.auto = false // a hand-picked theme wins over "as in Windows"
                 T2Colors.dark = !T2Colors.dark
                 ThemePrefs.setDark(T2Colors.dark)
             }
@@ -213,4 +217,11 @@ object ThemePrefs {
     private val prefs = java.util.prefs.Preferences.userRoot().node("ru/t2sales/desktop")
     fun isDark() = prefs.getBoolean("dark", true)
     fun setDark(value: Boolean) = prefs.putBoolean("dark", value)
+
+    private var autoState by mutableStateOf(prefs.getBoolean("themeAuto", false))
+
+    /** The theme follows Windows (light or dark as the system is). Choosing a theme by hand switches this off. */
+    var auto: Boolean
+        get() = autoState
+        set(v) { autoState = v; prefs.putBoolean("themeAuto", v) }
 }

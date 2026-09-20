@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.admincenter
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -125,7 +126,7 @@ private fun OverviewTab(container: AppContainer) {
         val d = data
         when {
             failed -> Text("Не удалось загрузить обзор", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            d == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val st = d.shifts_today
                 fun num(e: kotlinx.serialization.json.JsonElement?) = (e as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 0
@@ -244,7 +245,7 @@ private fun EmployeeDetail(container: AppContainer, id: Int) {
     val d = detail
     when {
         failed -> PageSection(null) { EmptyText("Не удалось загрузить сотрудника") }
-        d == null -> CircularProgressIndicator()
+        d == null -> LoadingBlock()
         else -> {
             val emp = d.employee
             PageSection(null) {
@@ -374,7 +375,7 @@ private fun StoresTab(container: AppContainer) {
         val list = stores
         when {
             failed -> EmptyText("Не удалось загрузить точки")
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Нет точек")
             else -> list.forEach { s -> NavRow(s.display_name ?: s.name, s.code + if (s.is_active) "" else " \u00B7 деактивирована") { selected = s.id } }
         }
@@ -402,7 +403,7 @@ private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, o
     val s = store
     when {
         failed -> PageSection(null) { EmptyText("Не удалось загрузить точку") }
-        s == null -> CircularProgressIndicator()
+        s == null -> LoadingBlock()
         else -> PageSection(null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
@@ -477,7 +478,7 @@ private fun AuditTab(container: AppContainer) {
         val list = items
         when {
             failed -> EmptyText("Ошибка загрузки")
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Записей не найдено")
             else -> list.forEach { i ->
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)) {

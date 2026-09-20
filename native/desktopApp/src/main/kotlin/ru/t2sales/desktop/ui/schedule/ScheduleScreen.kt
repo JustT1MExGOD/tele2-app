@@ -1,5 +1,16 @@
 package ru.t2sales.desktop.ui.schedule
 
+import ru.t2sales.desktop.ui.components.T2Toast
+import kotlin.math.roundToInt
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Offset
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -100,17 +111,21 @@ private fun storeShort(row: ScheduleRow, limit: Int): String =
 
 /** Read-only port of pages/schedule: header, month switcher, team summary grid (manager tier) and personal calendar. */
 @Composable
-fun ScheduleScreen(scheduleApi: ScheduleApi, teamApi: TeamApi, myEmployeeId: Int?, role: String?, canEdit: Boolean) {
+fun ScheduleScreen(scheduleApi: ScheduleApi, teamApi: TeamApi, myEmployeeId: Int?, role: String?, canEdit: Boolean, cache: ru.t2sales.desktop.offline.ReadCache? = null) {
     val today = remember { LocalDate.now(MOSCOW) }
     var month by remember { mutableStateOf(YearMonth.from(today)) }
     var rows by remember { mutableStateOf<List<ScheduleRow>?>(null) }
     var failed by remember { mutableStateOf(false) }
+    var staleSince by remember { mutableStateOf<java.time.Instant?>(null) }
     var stores by remember { mutableStateOf<Map<String, StoreInfo>>(emptyMap()) }
     var employees by remember { mutableStateOf<List<EmployeeListItem>?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     var editing by remember { mutableStateOf<EditTarget?>(null) }
     var draft by remember { mutableStateOf<ScheduleDraft?>(null) }
     val scope = rememberCoroutineScope()
+    val drag = remember { ShiftDrag() }
+    var silentKey by remember { mutableStateOf(0) }
+    var origin by remember { mutableStateOf(Offset.Zero) }
 
     LaunchedEffect(Unit) {
         runCatching { scheduleApi.getOrgStores() }.onSuccess { r -> stores = r.stores.associateBy { it.id } }
@@ -119,18 +134,71 @@ fun ScheduleScreen(scheduleApi: ScheduleApi, teamApi: TeamApi, myEmployeeId: Int
     LaunchedEffect(month, reloadKey) {
         rows = null
         failed = false
+        staleSince = null
+        val key = "schedule." + month
         runCatching { scheduleApi.getScheduleMonth(month.toString()) }
-            .onSuccess { rows = it.items }
-            .onFailure { failed = true }
+            .onSuccess { rows = it.items; cache?.put(key, ru.t2sales.shared.api.ScheduleMonthResponse.serializer(), it) }
+            .onFailure { e ->
+                // no answer from the server: the last saved copy of this month, marked as such (editing needs the server, so it just fails)
+                val saved = if (e is ru.t2sales.shared.api.ApiException) null else cache?.get(key, ru.t2sales.shared.api.ScheduleMonthResponse.serializer())
+                if (saved != null) { rows = saved.value.items; staleSince = saved.savedAt } else failed = true
+            }
     }
 
+    // refresh the month without the skeleton flash (after a drag-and-drop the cells are already in place)
+    LaunchedEffect(silentKey) {
+        if (silentKey > 0) runCatching { scheduleApi.getScheduleMonth(month.toString()) }.onSuccess { rows = it.items }
+    }
+
+    fun nameOf(id: Int): String = employees.orEmpty().firstOrNull { it.id == id }?.full_name ?: rows.orEmpty().firstOrNull { it.employee_id == id }?.full_name.orEmpty()
+
+    fun undoMove(changes: List<ShiftChange>) {
+        scope.launch {
+            runCatching { scheduleApi.saveShifts(toBulk(changes, false)) }
+                .onSuccess {
+                    rows = applyLocally(rows.orEmpty(), changes, false)
+                    T2Toast.show(if (it.count == changes.size) "Перенос отменён" else "Отменено не полностью: проверьте график", it.count != changes.size)
+                    silentKey++
+                }
+                .onFailure { T2Toast.show(it.message ?: "Не удалось отменить", true); silentKey++ }
+        }
+    }
+
+    // dropped a shift on another day / employee: move it, or swap when the target is occupied
+    fun onDrop(from: CellKey, to: CellKey) {
+        val all = rows.orEmpty()
+        fun rowAt(k: CellKey) = all.firstOrNull { it.employee_id == k.employeeId && it.work_date.take(10) == k.date }
+        val changes = planMove(from, rowAt(from), to, rowAt(to), ::nameOf)
+        if (changes == null) { T2Toast.show("Эту смену перенести нельзя: дробные часы", true); return }
+        val swap = rowAt(to) != null
+        scope.launch {
+            runCatching { scheduleApi.saveShifts(toBulk(changes, true)) }
+                .onSuccess { r ->
+                    if (r.count == changes.size) {
+                        rows = applyLocally(rows.orEmpty(), changes, true)
+                        val what = if (swap) "Смены поменялись местами" else "Смена перенесена"
+                        T2Toast.showAction(what, "Отменить") { undoMove(changes) }
+                    } else {
+                        T2Toast.show("Часть смен не сохранилась: проверьте график", true)
+                    }
+                    silentKey++
+                }
+                .onFailure { T2Toast.show(it.message ?: "Нет прав", true); silentKey++ }
+        }
+    }
+
+    Box(Modifier.fillMaxWidth().onGloballyPositioned { origin = it.positionInRoot() }) {
+    Column(Modifier.fillMaxWidth()) {
     MonthSwitcher(month) { month = it }
+    staleSince?.let { at ->
+        Text("Нет связи с сервером: график от ${java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm").format(at.atZone(MOSCOW))}", color = T2Colors.warning, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 6.dp))
+    }
 
     val list = rows
     val managerTier = role == "manager" || role == "senior" || role == "admin"
     when {
         failed -> Text("Ошибка загрузки графика — не удалось получить смены", color = T2Colors.danger)
-        list == null || employees == null -> CircularProgressIndicator()
+        list == null || employees == null -> LoadingBlock()
         else -> {
             if (managerTier) {
                 Text(
@@ -189,7 +257,10 @@ fun ScheduleScreen(scheduleApi: ScheduleApi, teamApi: TeamApi, myEmployeeId: Int
                     MonthGrid(
                         month, days, today, stores,
                         draftByDate = draftByEmp[empId].orEmpty(),
-                        onDayClick = if (canEdit) { date, row -> editing = EditTarget(empId, name, date, row) } else null
+                        onDayClick = if (canEdit) { date, row -> editing = EditTarget(empId, name, date, row) } else null,
+                        dragEmployeeId = empId,
+                        drag = if (canEdit) drag else null,
+                        onDrop = ::onDrop
                     )
                 }
             }
@@ -213,6 +284,9 @@ fun ScheduleScreen(scheduleApi: ScheduleApi, teamApi: TeamApi, myEmployeeId: Int
                 }
             }
         )
+    }
+    }
+    DragGhost(drag, origin, stores)
     }
 }
 
@@ -409,7 +483,10 @@ private fun MonthGrid(
     today: LocalDate,
     stores: Map<String, StoreInfo>,
     draftByDate: Map<String, kotlinx.serialization.json.JsonObject> = emptyMap(),
-    onDayClick: ((LocalDate, ScheduleRow?) -> Unit)? = null
+    onDayClick: ((LocalDate, ScheduleRow?) -> Unit)? = null,
+    dragEmployeeId: Int? = null,
+    drag: ShiftDrag? = null,
+    onDrop: ((CellKey, CellKey) -> Unit)? = null
 ) {
     val first = month.atDay(1)
     val offset = first.dayOfWeek.value - 1
@@ -428,7 +505,8 @@ private fun MonthGrid(
                             val row = mine[date.toString()]
                             // the draft never replaces or shadows a saved shift - the saved row always wins
                             val draftItem = if (row == null) draftByDate[date.toString()] else null
-                            DayCell(date.dayOfMonth, row, date == today, stores, draftItem, onDayClick?.let { cb -> { cb(date, row) } })
+                            DayCell(date.dayOfMonth, row, date == today, stores, draftItem, onDayClick?.let { cb -> { cb(date, row) } },
+                                cellKey = dragEmployeeId?.let { CellKey(it, date.toString()) }, drag = drag, onDrop = onDrop)
                         }
                     }
                 }
@@ -445,8 +523,14 @@ private fun PadCell(day: Int) {
 }
 
 @Composable
-private fun DayCell(day: Int, row: ScheduleRow?, isToday: Boolean, stores: Map<String, StoreInfo>, draftItem: kotlinx.serialization.json.JsonObject?, onClick: (() -> Unit)?) {
+private fun DayCell(day: Int, row: ScheduleRow?, isToday: Boolean, stores: Map<String, StoreInfo>, draftItem: kotlinx.serialization.json.JsonObject?, onClick: (() -> Unit)?,
+    cellKey: CellKey? = null, drag: ShiftDrag? = null, onDrop: ((CellKey, CellKey) -> Unit)? = null
+) {
     val shape = RoundedCornerShape(10.dp)
+    val dragEnabled = drag != null && cellKey != null
+    if (dragEnabled) DisposableEffect(cellKey) { onDispose { drag!!.bounds.remove(cellKey!!) } }
+    val isSource = dragEnabled && drag!!.source == cellKey
+    val isTarget = dragEnabled && drag!!.target == cellKey
     val draftStore = draftItem?.get("store_id")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
     val col = row?.let { storeColor(it.store_id, stores) } ?: draftStore?.let { storeColor(it, stores) }
     val isDraft = row == null && draftStore != null
@@ -465,7 +549,21 @@ private fun DayCell(day: Int, row: ScheduleRow?, isToday: Boolean, stores: Map<S
                     )
                 } else Modifier.border(1.5.dp, if (isToday) T2Colors.primary else col ?: Color.Transparent, shape)
             )
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(if (isTarget) Modifier.background(T2Colors.primarySoft, shape).border(2.dp, T2Colors.primary, shape) else Modifier)
+            .graphicsLayer { alpha = if (isSource) 0.35f else 1f }
+            .then(if (dragEnabled) Modifier.onGloballyPositioned { drag!!.bounds[cellKey!!] = it.boundsInRoot() } else Modifier)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(
+                // only a day that has a shift can be picked up; every day (empty ones too) is a drop target
+                if (dragEnabled && row != null) Modifier.pointerInput(cellKey, row) {
+                    detectDragGestures(
+                        onDragStart = { off -> drag!!.begin(cellKey!!, row, (drag.bounds[cellKey]?.topLeft ?: Offset.Zero) + off) },
+                        onDrag = { change, amount -> change.consume(); drag!!.moveBy(amount) },
+                        onDragEnd = { drag!!.finish()?.let { (from, to) -> onDrop?.invoke(from, to) } },
+                        onDragCancel = { drag!!.cancel() }
+                    )
+                } else Modifier
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -498,7 +596,7 @@ private fun EditShiftDialog(
 
     Dialog(onDismissRequest = { if (!busy) onDismiss() }) {
         val shape = RoundedCornerShape(28.dp)
-        Column(
+        ru.t2sales.desktop.ui.components.DialogEnter { Column(
             modifier = Modifier
                 .width(460.dp)
                 .clip(shape)
@@ -554,6 +652,31 @@ private fun EditShiftDialog(
                     }
                 }
             }
-        }
+        } }
+    }
+}
+
+/** The little card that follows the pointer while a shift is being dragged. */
+@Composable
+private fun DragGhost(drag: ShiftDrag, origin: Offset, stores: Map<String, StoreInfo>) {
+    val row = drag.sourceRow ?: return
+    if (!drag.active) return
+    val shape = RoundedCornerShape(12.dp)
+    val col = storeColor(row.store_id, stores)
+    val p = drag.pointer - origin
+    // beside the pointer, not under it: the day it hovers stays visible and shows the drop highlight
+    val dx = with(androidx.compose.ui.platform.LocalDensity.current) { (-16).dp.roundToPx() }
+    val dy = with(androidx.compose.ui.platform.LocalDensity.current) { (-16).dp.roundToPx() }
+    Box(
+        Modifier
+            .offset { androidx.compose.ui.unit.IntOffset(p.x.roundToInt() - dx, p.y.roundToInt() - dy) }
+            .size(76.dp, 48.dp)
+            .shadow(10.dp, shape)
+            .clip(shape)
+            .background(col)
+            .graphicsLayer { alpha = 0.92f },
+        contentAlignment = Alignment.Center
+    ) {
+        Text("${storeShort(row, 6)}\n${row.wholeHours() ?: row.hours?.toInt() ?: 0} ч", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
     }
 }

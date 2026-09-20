@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.info
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,7 +64,7 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
     PageSection("Частые вопросы") {
         val list = faq
         when {
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             faqFailed -> Text("Не удалось загрузить FAQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             list.isEmpty() -> Text("FAQ пока пуст", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> list.forEach { f ->
@@ -109,7 +110,7 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
         PageSection("Тикеты (только admin)") {
             val list = all
             when {
-                list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                list == null -> LoadingBlock(Modifier.padding(16.dp))
                 list.isEmpty() -> Text("Нет тикетов", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
                 else -> list.forEach { t ->
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)) {

@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.admincenter
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -111,7 +112,7 @@ internal fun ShiftsTab(container: AppContainer) {
         }
         val list = results
         when {
-            searching -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            searching -> LoadingBlock(Modifier.padding(16.dp))
             searchFailed -> EmptyText("Ошибка поиска")
             list == null -> {}
             list.isEmpty() -> EmptyText("Ничего не найдено")
@@ -124,7 +125,7 @@ internal fun ShiftsTab(container: AppContainer) {
         val row = detail
         when {
             detailFailed -> PageSection(null) { EmptyText("Не удалось загрузить смену") }
-            row == null || row.id != selected -> CircularProgressIndicator()
+            row == null || row.id != selected -> LoadingBlock()
             else -> {
                 val canVoid = row.voided_at == null && (row.status == "closed" || row.status == "auto_closed")
                 PageSection("${row.employee_name} \u00B7 ${row.store_name} \u00B7 ${row.work_date}") {
@@ -224,7 +225,7 @@ internal fun SchedulesTab(container: AppContainer) {
         }
         val list = results
         when {
-            searching -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            searching -> LoadingBlock(Modifier.padding(16.dp))
             searchFailed -> EmptyText("Ошибка поиска")
             list == null -> {}
             list.isEmpty() -> EmptyText("Ничего не найдено")
@@ -237,7 +238,7 @@ internal fun SchedulesTab(container: AppContainer) {
         val row = detail
         when {
             detailFailed -> PageSection(null) { EmptyText("Не удалось загрузить строку графика") }
-            row == null || row.id != selected -> CircularProgressIndicator()
+            row == null || row.id != selected -> LoadingBlock()
             else -> PageSection("${row.employee_name} \u00B7 ${row.store_name} \u00B7 ${row.work_date}") {
                 DetailLine((row.shift_text ?: "") + (row.hours?.let { " \u00B7 ${if (it % 1.0 == 0.0) it.toLong() else it} ч" } ?: ""))
                 Row(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -331,7 +332,7 @@ private fun PlanBlock(container: AppContainer, title: String, kind: String, plac
         }
         val p = plan
         when {
-            loading -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            loading -> LoadingBlock(Modifier.padding(16.dp))
             failed -> EmptyText("Не удалось загрузить план")
             p != null && planId != null -> FlowRow(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),

@@ -1,5 +1,17 @@
 package ru.t2sales.desktop.ui.components
 
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -65,10 +77,17 @@ fun DropdownField(
     onPick: (DropdownItem) -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
+    var active by remember { mutableStateOf(0) }
     var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val chevron by animateFloatAsState(if (open) 180f else 0f, tween(200))
     Box(Modifier.fillMaxWidth().onSizeChanged { size = it }) {
-        FieldBox(onClick = { if (enabled) open = !open }) {
+        FieldBox(onClick = {
+            if (enabled) {
+                // opening: the keyboard cursor starts on the current value
+                if (!open) active = options.indexOfFirst { it.key == selected || (selected == null && it.label == value) }.coerceAtLeast(0)
+                open = !open
+            }
+        }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(value, fontSize = 16.sp, color = valueColor ?: if (enabled) T2Colors.text else T2Colors.hint, modifier = Modifier.weight(1f))
                 Icon(Icons.Outlined.KeyboardArrowDown, null, tint = T2Colors.hint, modifier = Modifier.graphicsLayer { rotationZ = chevron })
@@ -80,11 +99,19 @@ fun DropdownField(
                 alignment = Alignment.TopStart,
                 offset = IntOffset(0, size.height + gap),
                 width = with(LocalDensity.current) { size.width.toDp() },
-                onDismiss = { open = false }
+                onDismiss = { open = false },
+                onKey = { ev ->
+                    if (ev.type != KeyEventType.KeyDown || options.isEmpty()) false else when (ev.key) {
+                        Key.DirectionDown -> { active = (active + 1) % options.size; true }
+                        Key.DirectionUp -> { active = (active - 1 + options.size) % options.size; true }
+                        Key.Enter, Key.NumPadEnter -> { open = false; onPick(options[active.coerceIn(0, options.lastIndex)]); true }
+                        else -> false
+                    }
+                }
             ) {
                 if (options.isEmpty()) Text("Нет вариантов", color = T2Colors.hint, modifier = Modifier.padding(16.dp))
-                options.forEach { item ->
-                    MenuRow(item, item.key == selected || (selected == null && item.label == value)) { open = false; onPick(item) }
+                options.forEachIndexed { i, item ->
+                    MenuRow(item, item.key == selected || (selected == null && item.label == value), active = i == active, onHover = { active = i }) { open = false; onPick(item) }
                 }
             }
         }
@@ -110,15 +137,22 @@ private fun MenuPopup(
     width: androidx.compose.ui.unit.Dp?,
     minWidth: androidx.compose.ui.unit.Dp = 0.dp,
     onDismiss: () -> Unit,
+    onKey: ((KeyEvent) -> Boolean)? = null,
     content: @Composable () -> Unit
 ) {
     val shape = RoundedCornerShape(16.dp)
+    val focus = remember { FocusRequester() }
     val enter = remember { Animatable(0f) }
     LaunchedEffect(Unit) { enter.animateTo(1f, tween(Motion.MenuMs, easing = Motion.Emphasized)) }
     Popup(alignment = alignment, offset = offset, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
+        // inside the popup: only here is the requester attached to a node
+        LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
         Column(
             Modifier
                 .then(if (width != null) Modifier.width(width) else Modifier.widthIn(min = minWidth))
+                .focusRequester(focus)
+                .onPreviewKeyEvent { onKey?.invoke(it) ?: false }
+                .focusable()
                 .graphicsLayer {
                     alpha = enter.value
                     translationY = (1f - enter.value) * -8.dp.toPx()
@@ -136,20 +170,24 @@ private fun MenuPopup(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MenuRow(item: DropdownItem, isSelected: Boolean, onClick: () -> Unit) {
+private fun MenuRow(item: DropdownItem, isSelected: Boolean, active: Boolean, onHover: () -> Unit, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
+    LaunchedEffect(hovered) { if (hovered) onHover() }
+    val visible = remember { BringIntoViewRequester() }
+    LaunchedEffect(active) { if (active) visible.bringIntoView() }
     val bg by animateColorAsState(
         when {
             isSelected -> T2Colors.primarySoft
-            hovered -> T2Colors.surface2
+            active -> T2Colors.surface2
             else -> Color.Transparent
         },
         tween(120)
     )
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(bg)
+        Modifier.fillMaxWidth().bringIntoViewRequester(visible).clip(RoundedCornerShape(10.dp)).background(bg)
             .hoverable(source)
             .clickable(interactionSource = source, indication = null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 11.dp),

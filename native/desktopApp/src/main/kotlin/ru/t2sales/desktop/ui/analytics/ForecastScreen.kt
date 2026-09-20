@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.analytics
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -121,7 +122,7 @@ fun ForecastScreen(container: AppContainer, me: MeResponse) {
         val d = forecast
         when {
             fcFailed -> Text("\uD83C\uDF49 Прогноз сейчас недоступен, зайди чуть позже", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            d == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val hist = d["history_days"].dbl().toInt()
                 val items = d["items"].arr().map { it.obj() }

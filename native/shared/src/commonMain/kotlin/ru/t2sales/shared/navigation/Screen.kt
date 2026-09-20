@@ -37,4 +37,5 @@ sealed class Screen(val label: String) {
     data object SvStores : Screen("Точки")
     data object SvPeople : Screen("Люди")
     data object SvTrend : Screen("Тренд")
+    data object Replay : Screen("Повтор месяца")
 }

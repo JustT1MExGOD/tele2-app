@@ -1,5 +1,7 @@
 package ru.t2sales.desktop.ui.tasks
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
+import ru.t2sales.desktop.ui.components.reveal
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -107,12 +109,12 @@ fun TasksScreen(tasksApi: TasksApi, myEmployeeId: Int?, role: String?, isManager
     val list = tasks
     when {
         failed -> Text("Не удалось загрузить задачи", color = T2Colors.hint, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-        list == null -> CircularProgressIndicator()
+        list == null -> LoadingBlock()
         else -> {
             val items = list.filter(filter::matches)
             if (items.isEmpty()) Text("Нет задач", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-                items.forEach { t -> TaskRow(t) { openId = t.id } }
+                items.forEachIndexed { idx, t -> Box(Modifier.reveal(idx, 30)) { TaskRow(t) { openId = t.id } } }
             }
         }
     }
@@ -195,7 +197,7 @@ private fun TaskDetail(tasksApi: TasksApi, id: Int, myEmployeeId: Int?, canManag
         val d = detail
         when {
             failed -> Text("Не удалось загрузить задачу", color = T2Colors.hint, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
-            d == null -> CircularProgressIndicator()
+            d == null -> LoadingBlock()
             else -> {
                 val t = d.task
                 Text(t.title, fontWeight = FontWeight.Bold, fontSize = 15.sp)

@@ -1,5 +1,23 @@
 package ru.t2sales.desktop
 
+import ru.t2sales.desktop.system.SystemTheme
+import ru.t2sales.desktop.quick.QuickSaleHost
+import ru.t2sales.desktop.quick.QuickSale
+import ru.t2sales.desktop.ui.shell.AppNav
+import ru.t2sales.desktop.support.Diagnostics
+import ru.t2sales.desktop.system.WindowPrefs
+import ru.t2sales.desktop.system.TrayPrefs
+import ru.t2sales.desktop.system.SingleInstance
+import ru.t2sales.desktop.system.NotificationWatcher
+import ru.t2sales.desktop.system.GlobalHotkey
+import ru.t2sales.desktop.system.Autostart
+import ru.t2sales.desktop.system.AppWindow
+import ru.t2sales.desktop.system.AppNotifier
+import kotlinx.coroutines.flow.debounce
+import androidx.compose.ui.window.Notification
+import androidx.compose.ui.window.rememberTrayState
+import androidx.compose.ui.window.Tray
+import androidx.compose.runtime.snapshotFlow
 import ru.t2sales.desktop.ui.boot.SplashScreen
 import ru.t2sales.desktop.ui.boot.BootSequence
 import androidx.compose.ui.window.rememberWindowState
@@ -60,45 +78,141 @@ import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Theme
 import ru.t2sales.desktop.ui.shell.ThemePrefs
 
-fun main() = application {
-    val container = remember { AppContainer() }
-    remember { T2Colors.dark = ThemePrefs.isDark() }
+@OptIn(kotlinx.coroutines.FlowPreview::class)
+fun main(args: Array<String>) {
+    // "--tray" is what Windows autostart passes: start hidden, live in the tray until the user opens the window
+    val startHidden = "--tray" in args
+    // One copy of the installed app: a second start just brings the first one forward. A development run is never restricted.
+    if (ru.t2sales.desktop.update.UpdateConfig.isPackaged && !SingleInstance.acquire(onShow = { AppWindow.show() })) return
+    if (startHidden) AppWindow.visible = false
 
-    val icon = remember { androidx.compose.ui.graphics.painter.BitmapPainter(androidx.compose.ui.res.useResource("icon.png", ::loadImageBitmapFrom)) }
+    application {
+        val container = remember { AppContainer() }
+        remember { T2Colors.dark = ThemePrefs.isDark() }
 
-    // Launch like Discord: a small splash checks the connection, installs a pending update, signs in - and only then the client opens.
-    val boot = remember { BootSequence(container) }
-    var booted by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { boot.run(); booted = true }
+        val icon = remember { androidx.compose.ui.graphics.painter.BitmapPainter(androidx.compose.ui.res.useResource("icon.png", ::loadImageBitmapFrom)) }
 
-    if (!booted) {
-        Window(
-            onCloseRequest = ::exitApplication, title = "T2 Sales", icon = icon,
-            undecorated = true, transparent = true, resizable = false, alwaysOnTop = true,
-            state = rememberWindowState(size = DpSize(480.dp, 520.dp), position = WindowPosition.Aligned(Alignment.Center))
-        ) {
-            WindowDraggableArea { SplashScreen(boot.state) }
+        // Launch like Discord: a small splash checks the connection, installs a pending update, signs in - and only then the client opens.
+        val boot = remember { BootSequence(container) }
+        var booted by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { boot.run(); booted = true }
+
+        // follow Windows' light/dark setting while "theme as in Windows" is on (checked every 20 s: the setting rarely changes)
+        LaunchedEffect(ThemePrefs.auto) {
+            while (ThemePrefs.auto) {
+                SystemTheme.isDark()?.let { dark -> if (dark != T2Colors.dark) { T2Colors.dark = dark; ThemePrefs.setDark(dark) } }
+                kotlinx.coroutines.delay(20_000)
+            }
         }
-        return@application
-    }
+        // unsent sales, visible without opening the window: in the tray tooltip and in the window title
+        val queued = container.outbox.pendingCount + container.outbox.reviewCount
 
-    Window(
-        onCloseRequest = ::exitApplication, title = "T2 Sales", icon = icon,
-        onPreviewKeyEvent = { ev ->
-            // window-wide shortcuts: Ctrl+K palette, Ctrl+N new sale. Signed-out they are harmless: the shell closes the palette on entry.
-            if (ev.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && ev.isCtrlPressed && ru.t2sales.desktop.ui.shell.AppNav.signedIn) {
-                when (ev.key) {
-                    androidx.compose.ui.input.key.Key.K -> { ru.t2sales.desktop.ui.shell.CommandPalette.toggle(); true }
-                    androidx.compose.ui.input.key.Key.N -> { ru.t2sales.desktop.ui.sales.AddSaleState.open(); true }
-                    else -> false
+        // ---- tray: the app lives here when its window is closed; system notifications come from it
+        val trayState = rememberTrayState()
+        var autostart by remember { mutableStateOf(Autostart.enabled()) }
+        var hideOnClose by remember { mutableStateOf(TrayPrefs.hideOnClose) }
+        LaunchedEffect(Unit) {
+            AppNotifier.send = { title, text -> trayState.sendNotification(Notification(title, text, Notification.Type.Info)) }
+        }
+        Tray(
+            icon = icon,
+            state = trayState,
+            tooltip = if (queued > 0) "T2 Sales · продаж в очереди: $queued" else "T2 Sales",
+            onAction = { AppWindow.show() },
+            menu = {
+                Item("Открыть T2 Sales", onClick = { AppWindow.show() })
+                Item("Быстрая продажа  (${GlobalHotkey.LABEL})", onClick = { QuickSale.open() })
+                Separator()
+                if (Autostart.available) {
+                    CheckboxItem("Запускать вместе с Windows", checked = autostart, onCheckedChange = { on -> if (Autostart.set(on)) autostart = on })
                 }
-            } else false
+                CheckboxItem("Тема как в Windows", checked = ThemePrefs.auto, onCheckedChange = { on -> ThemePrefs.auto = on })
+                CheckboxItem("Закрытие окна сворачивает в трей", checked = hideOnClose, onCheckedChange = { on -> hideOnClose = on; TrayPrefs.hideOnClose = on })
+                Item("Сохранить диагностику на рабочий стол", onClick = {
+                    runCatching { Diagnostics.export(container) }
+                        .onSuccess { trayState.sendNotification(Notification("T2 Sales", "Диагностика сохранена: ${it.fileName}", Notification.Type.Info)) }
+                        .onFailure { trayState.sendNotification(Notification("T2 Sales", "Не удалось сохранить диагностику", Notification.Type.Error)) }
+                })
+                Separator()
+                Item("Выйти", onClick = ::exitApplication)
+            }
+        )
+
+        QuickSaleHost(container, icon)
+
+        // background helpers start once the app is up
+        LaunchedEffect(booted) {
+            if (!booted) return@LaunchedEffect
+            // Ctrl+Alt+P: the small quick-sale window over whatever is on screen (the sign-in screen when signed out)
+            GlobalHotkey.register { QuickSale.open() }
+            NotificationWatcher(container).start()
         }
-    ) {
-        // the splash (always on top) has just closed: bring the client to the front instead of letting it open behind other windows
-        LaunchedEffect(Unit) { window.toFront(); window.requestFocus() }
-        T2Theme {
-            MainEntrance { AppRoot(container, boot.me) }
+
+        if (!booted) {
+            if (!startHidden) {
+                Window(
+                    onCloseRequest = ::exitApplication, title = "T2 Sales", icon = icon,
+                    undecorated = true, transparent = true, resizable = false, alwaysOnTop = true,
+                    state = rememberWindowState(size = DpSize(480.dp, 520.dp), position = WindowPosition.Aligned(Alignment.Center))
+                ) {
+                    WindowDraggableArea { SplashScreen(boot.state) }
+                }
+            }
+            return@application
+        }
+
+        val saved = remember { WindowPrefs.load() }
+        val windowState = rememberWindowState(
+            size = saved?.let { DpSize(it.width.dp, it.height.dp) } ?: DpSize(1100.dp, 760.dp),
+            position = if (saved != null && saved.x != Int.MIN_VALUE) WindowPosition(saved.x.dp, saved.y.dp) else WindowPosition.PlatformDefault,
+            placement = if (saved?.maximized == true) androidx.compose.ui.window.WindowPlacement.Maximized else androidx.compose.ui.window.WindowPlacement.Floating
+        )
+        LaunchedEffect(windowState) {
+            // remember the size and place a moment after the last change (not on every pixel of a drag)
+            snapshotFlow { listOf(windowState.size.width.value.toInt(), windowState.size.height.value.toInt(), windowState.position.x.value.toInt(), windowState.position.y.value.toInt(), if (windowState.placement == androidx.compose.ui.window.WindowPlacement.Maximized) 1 else 0) }
+                .debounce(700)
+                .collect { v ->
+                    val maximized = v[4] == 1
+                    // a maximised window keeps the size it had before, so only the flag is stored then
+                    if (maximized) WindowPrefs.load()?.let { WindowPrefs.save(it.width, it.height, it.x, it.y, true) }
+                    else if (windowState.position.isSpecified) WindowPrefs.save(v[0], v[1], v[2], v[3], false)
+                }
+        }
+
+        Window(
+            visible = AppWindow.visible,
+            state = windowState,
+            onCloseRequest = {
+                if (TrayPrefs.hideOnClose) {
+                    AppWindow.visible = false
+                    if (!TrayPrefs.noticeShown) {
+                        TrayPrefs.noticeShown = true
+                        AppNotifier.send("T2 Sales продолжает работать", "Приложение осталось в трее и сообщит о новых алертах и объявлениях. Выход: правая кнопка по значку.")
+                    }
+                } else {
+                    exitApplication()
+                }
+            },
+            title = if (queued > 0) "($queued) T2 Sales" else "T2 Sales", icon = icon,
+            onPreviewKeyEvent = { ev ->
+                // window-wide shortcuts: Ctrl+K palette, Ctrl+N new sale. Signed-out they are harmless: the shell closes the palette on entry.
+                if (ev.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && ev.isCtrlPressed && ru.t2sales.desktop.ui.shell.AppNav.signedIn) {
+                    when (ev.key) {
+                        androidx.compose.ui.input.key.Key.K -> { ru.t2sales.desktop.ui.shell.CommandPalette.toggle(); true }
+                        androidx.compose.ui.input.key.Key.N -> { ru.t2sales.desktop.ui.sales.AddSaleState.open(); true }
+                        else -> false
+                    }
+                } else false
+            }
+        ) {
+            LaunchedEffect(Unit) { AppWindow.awt = window }
+            // the splash (always on top), the tray, a hotkey or a second start asked for the client: bring it to the front
+            LaunchedEffect(AppWindow.frontTick) {
+                if (AppWindow.visible) { window.isMinimized = false; window.toFront(); window.requestFocus() }
+            }
+            T2Theme {
+                MainEntrance { AppRoot(container, boot.me) }
+            }
         }
     }
 }
@@ -117,7 +231,22 @@ private fun AppRoot(container: AppContainer, initialMe: MeResponse?) {
 
     // The connection, update check and session lookup already happened on the splash (BootSequence); from here on only the periodic
     // update timers run (first one ~15 s after launch, then every 4 h; a no-op when no update server is configured).
-    LaunchedEffect(Unit) { container.updates.start() }
+    LaunchedEffect(Unit) {
+        container.updates.start()
+        container.outbox.onSent = { n ->
+            ru.t2sales.desktop.ui.components.T2Toast.show("Из очереди отправлено: $n")
+            AppNotifier.whenAway("T2 Sales", "Из очереди отправлено продаж: $n")
+            ru.t2sales.desktop.ui.sales.AddSaleState.refreshTick++
+        }
+        container.outbox.start()
+        // development only: `T2_SHIFT_RESULT_DEMO=1` shows the closed-shift card with sample numbers (nothing is sent to the server)
+        if (!ru.t2sales.desktop.update.UpdateConfig.isPackaged && System.getenv("T2_SHIFT_RESULT_DEMO") == "1") {
+            ru.t2sales.desktop.ui.shift.ShiftUi.result = kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"score":92,"ideal_shift":"true","fact":{"sim":7,"mnp":2,"pa":1,"combo":1},"day_plan":{"sim":7,"mnp":2,"pa":1,"combo":1},"ideal_missing":[],"ai_summary":"Отличная смена: план по всем четырём метрикам закрыт, лучший час пришёлся на вечер.","gamification":{"title":"Мастер","level":4,"xp":1180,"next_level_xp":1500,"xp_gained":120,"leveled_up":"true","streak_days":6},"rewarded":"true"}"""
+            ) as kotlinx.serialization.json.JsonObject
+        }
+        if (!ru.t2sales.desktop.update.UpdateConfig.isPackaged && System.getenv("T2_OUTBOX_DEMO") == "1") container.outbox.seedDemoForReview()
+    }
 
     if (me == null) {
         LoginScreen(
@@ -127,7 +256,9 @@ private fun AppRoot(container: AppContainer, initialMe: MeResponse?) {
     } else {
         var selected by remember { mutableStateOf<Screen>(Screen.Home) }
         ru.t2sales.desktop.ui.shell.AppNav.signedIn = true
-        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { ru.t2sales.desktop.ui.shell.AppNav.signedIn = false } }
+        ru.t2sales.desktop.ui.shell.AppNav.myEmployeeId = me!!.employee_id
+        ru.t2sales.desktop.ui.shell.AppNav.canManageSales = me!!.role == "manager" || me!!.role == "admin" || me!!.is_manager == true
+        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { ru.t2sales.desktop.ui.shell.AppNav.signedIn = false; ru.t2sales.desktop.ui.shell.AppNav.myEmployeeId = null } }
         ru.t2sales.desktop.ui.shell.AppNav.go = { selected = it }
         ru.t2sales.desktop.ui.shell.AppNav.current = selected
         AppShell(
@@ -143,6 +274,7 @@ private fun AppRoot(container: AppContainer, initialMe: MeResponse?) {
                 Screen.PlanDay -> ru.t2sales.desktop.ui.plans.PlanDayScreen(container)
                 Screen.Live -> LiveScreen(container)
                 Screen.Heatmap -> HeatmapScreen(container)
+                Screen.Replay -> ru.t2sales.desktop.ui.replay.ReplayScreen(container)
                 Screen.Forecast -> ForecastScreen(container, me = me!!)
                 Screen.Alerts -> AlertsScreen(container, onNavigate = { selected = it })
                 Screen.Announce -> AnnounceScreen(container, me = me!!)
@@ -177,7 +309,7 @@ private fun AppRoot(container: AppContainer, initialMe: MeResponse?) {
                     onNavigate = { selected = it }
                 )
                 Screen.Tasks -> TasksScreen(tasksApi = container.tasksApi, myEmployeeId = me?.employee_id, role = me?.role, isManagerFlag = me?.is_manager == true)
-                Screen.Schedule -> ScheduleScreen(scheduleApi = container.scheduleApi, teamApi = container.teamApi, myEmployeeId = me?.employee_id, role = me?.role, canEdit = me?.role == "manager" || me?.role == "admin" || me?.is_manager == true)
+                Screen.Schedule -> ScheduleScreen(cache = container.readCache, scheduleApi = container.scheduleApi, teamApi = container.teamApi, myEmployeeId = me?.employee_id, role = me?.role, canEdit = me?.role == "manager" || me?.role == "admin" || me?.is_manager == true)
                 Screen.Reports -> ReportsScreen(
                     reportsApi = container.reportsApi,
                     teamApi = container.teamApi,

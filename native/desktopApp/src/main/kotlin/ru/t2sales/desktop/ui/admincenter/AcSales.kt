@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.admincenter
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -100,7 +101,7 @@ internal fun SalesTab(container: AppContainer) {
         }
         val list = results
         when {
-            searching -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            searching -> LoadingBlock(Modifier.padding(16.dp))
             searchFailed -> EmptyText("Ошибка поиска")
             list == null -> {}
             list.isEmpty() -> EmptyText("Ничего не найдено")
@@ -113,7 +114,7 @@ internal fun SalesTab(container: AppContainer) {
         val d = detail
         when {
             detailFailed -> PageSection(null) { EmptyText("Не удалось загрузить строку") }
-            d == null || d.row.id != selectedId -> CircularProgressIndicator()
+            d == null || d.row.id != selectedId -> LoadingBlock()
             else -> {
                 val row = d.row
                 val canEdit = row.voided_at == null

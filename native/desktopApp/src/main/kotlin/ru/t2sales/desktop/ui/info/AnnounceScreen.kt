@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.info
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,7 +60,7 @@ fun AnnounceScreen(container: AppContainer, me: MeResponse) {
         val list = items
         when {
             failed -> Text("\uD83C\uDF49 Не удалось загрузить объявления", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("\uD83C\uDF49 Нет объявлений", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> list.forEach { a ->
                 val shape = RoundedCornerShape(16.dp)
@@ -107,7 +108,7 @@ fun AnnounceScreen(container: AppContainer, me: MeResponse) {
             val r = reads
             when {
                 readsFailed -> Text("Не удалось загрузить", color = T2Colors.hint, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
-                r == null -> CircularProgressIndicator()
+                r == null -> LoadingBlock()
                 else -> {
                     Text("ПРОЧИТАЛИ (${r.read.size}/${r.read.size + r.unread.size})", color = T2Colors.hint, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.7.sp, modifier = Modifier.padding(bottom = 8.dp))
                     if (r.read.isEmpty()) Text("Пока никто", color = T2Colors.hint, fontSize = 13.sp)

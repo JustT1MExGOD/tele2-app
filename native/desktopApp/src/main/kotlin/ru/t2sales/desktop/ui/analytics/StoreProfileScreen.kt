@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.analytics
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,7 +82,7 @@ fun StoreProfileScreen(container: AppContainer, me: MeResponse, onNavigate: (Scr
     when {
         storeId == null -> Text("Точка не выбрана", color = T2Colors.hint, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
         failed -> Text("Не удалось загрузить профиль точки", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-        d == null -> CircularProgressIndicator()
+        d == null -> LoadingBlock()
         else -> {
             val store = d["store"].obj()
             val health = d["health"].obj()

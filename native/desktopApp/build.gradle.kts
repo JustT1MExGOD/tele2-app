@@ -11,7 +11,7 @@ plugins {
 
 // The native (PC) app is versioned on its own, independently of the web/backend version.
 // Single source: this value feeds the installer (packageVersion) and the runtime (app-version.properties -> AppVersion).
-val appVersion = "1.1.0"
+val appVersion = "1.2.0"
 
 kotlin {
     compilerOptions {
@@ -25,6 +25,8 @@ dependencies {
     implementation(compose.materialIconsExtended)
     implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.ktor.client.okhttp)
+    implementation(libs.jna)
+    implementation(libs.jna.platform)
 
     testImplementation(kotlin("test"))
 }

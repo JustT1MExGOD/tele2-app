@@ -61,4 +61,14 @@ class AppContainer {
     val plansApi = PlansApi(httpClient)
     val adminCenterApi = AdminCenterApi(httpClient)
     val authRepository = AuthRepository(authApi)
+
+    /** Sales entered without a connection wait here (on disk) and are sent when the server answers again. */
+    val outbox = ru.t2sales.desktop.offline.SalesOutbox(
+        file = java.nio.file.Paths.get(ru.t2sales.shared.auth.platformConfigDir(), "pending-sales.json"),
+        owner = { ru.t2sales.desktop.ui.shell.AppNav.myEmployeeId },
+        send = { salesApi.createSale(it) }
+    )
+    /** Last good answers of the dashboard and the schedule: quick first paint, and something to show without a connection. */
+    val readCache = ru.t2sales.desktop.offline.ReadCache(java.nio.file.Paths.get(ru.t2sales.shared.auth.platformConfigDir(), "cache"), owner = { ru.t2sales.desktop.ui.shell.AppNav.myEmployeeId })
+    val saleFormCache = ru.t2sales.desktop.offline.SaleFormCache(java.nio.file.Paths.get(ru.t2sales.shared.auth.platformConfigDir(), "sale-form-cache.json"))
 }

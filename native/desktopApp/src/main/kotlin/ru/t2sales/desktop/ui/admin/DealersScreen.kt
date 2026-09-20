@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.admin
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -81,7 +82,7 @@ fun DealersScreen(api: AdminApi) {
     PageSection("Дилеры/Секторы") {
         when {
             failed -> Text("Не удалось загрузить дилеров/секторы", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            t == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            t == null -> LoadingBlock(Modifier.padding(16.dp))
             t.dealers.isEmpty() && t.unassigned_sectors.isEmpty() -> Text("Дилеров пока нет — заведите через форму сети", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 t.dealers.forEach { d ->

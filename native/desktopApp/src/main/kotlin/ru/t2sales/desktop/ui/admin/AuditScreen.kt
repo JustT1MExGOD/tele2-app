@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.admin
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -127,7 +128,7 @@ fun AuditScreen(api: AdminApi) {
         }
         when {
             failed -> Text("\uD83C\uDF49 Не получилось загрузить историю", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            !loaded -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            !loaded -> LoadingBlock(Modifier.padding(16.dp))
             items.isEmpty() -> Text("\uD83C\uDF49 Действий пока нет", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {
                 val sorted = items.sortedWith { a, b ->

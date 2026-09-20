@@ -115,7 +115,7 @@ private fun greetingByHour(): String {
 @Composable
 fun HomeScreen(container: AppContainer, me: MeResponse, onNavigate: (Screen) -> Unit) {
     val role = me.role
-    val viewModel = remember { HomeViewModel(container.homeApi, container.reportsApi) }
+    val viewModel = remember { HomeViewModel(container.homeApi, container.reportsApi, container.readCache) }
     var uiState by remember { mutableStateOf<HomeUiState>(HomeUiState.Loading) }
     var shiftOpen by remember { mutableStateOf<Boolean?>(null) }
     var replacementOpen by remember { mutableStateOf(false) }
@@ -125,6 +125,8 @@ fun HomeScreen(container: AppContainer, me: MeResponse, onNavigate: (Screen) -> 
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(role, refresh) {
+        // the last saved copy first (instant), then the fresh data replaces it
+        if (uiState is HomeUiState.Loading) viewModel.cachedContent(role)?.let { uiState = it }
         uiState = viewModel.load(role)
     }
     LaunchedEffect(Unit) {
@@ -154,6 +156,10 @@ fun HomeScreen(container: AppContainer, me: MeResponse, onNavigate: (Screen) -> 
         HomeUiState.Loading -> HomeSkeleton()
         is HomeUiState.Content -> {
             val t = state.networkTotals
+            state.staleSince?.let { at ->
+                val shown = java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm").format(at.atZone(MOSCOW))
+                Text("Нет связи с сервером: показаны данные от $shown", color = T2Colors.warning, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 10.dp))
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(T2Spacing.sp3), verticalArrangement = Arrangement.spacedBy(T2Spacing.sp3), maxItemsInEachRow = 6) {
                 listOf("SIM" to t.sim, "MNP" to t.mnp, "ПА" to t.pa, "Комбо" to t.combo, "Телефоны" to t.phones, "Аксы" to t.accessories).forEachIndexed { i, (l, v) ->
                     StatChip(l, v.roundToInt(), Modifier.weight(1f).reveal(1 + i, 45))
@@ -165,6 +171,8 @@ fun HomeScreen(container: AppContainer, me: MeResponse, onNavigate: (Screen) -> 
                 val twoCols = maxWidth >= 680.dp
                 val left: @Composable () -> Unit = {
                     Box(Modifier.reveal(3)) { MyDaySection(state.myDay, shiftOpen, replacementOpen, container, onNavigate, onTaskDone = { refresh++ }) }
+                    Spacer(Modifier.height(T2Spacing.sp4))
+                    Box(Modifier.reveal(4)) { PaceSection(state.myDay, container) }
                     Spacer(Modifier.height(T2Spacing.sp4))
                     Box(Modifier.reveal(5)) { TopLeadersSection(state.topLeaders) { onNavigate(Screen.Team) } }
                 }
@@ -193,7 +201,7 @@ fun HomeScreen(container: AppContainer, me: MeResponse, onNavigate: (Screen) -> 
         }
     }
 
-    if (about) AboutDialog(container.updates) { about = false }
+    if (about) AboutDialog(container) { about = false }
 }
 
 /** Placeholder while the dashboard loads: the same layout, shimmering, instead of a spinner. */
@@ -288,7 +296,7 @@ private fun StatChip(label: String, value: Int, modifier: Modifier) {
 
 /** The web's .section: surface card, radius 20, border, uppercase title. */
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+internal fun Section(title: String, content: @Composable () -> Unit) {
     val shape = RoundedCornerShape(T2Radius.default)
     Column(
         modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(vertical = 6.dp)
@@ -617,6 +625,7 @@ private fun ToolsSection(onNavigate: (Screen) -> Unit, onAbout: () -> Unit) {
         ListRow(Icons.Outlined.School, null, "Калькулятор школа", "Телефон − 70% + 30% + 3600 + 3490") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("school") }
         ListRow(Icons.Outlined.LocalOffer, null, "Промокоды РТК", "Общий пул · скрытый список") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("promos") }
         ListRow(Icons.Outlined.GridView, null, "Heatmap часов", "Когда ставить сильного") { onNavigate(Screen.Heatmap) }
+        ListRow(Icons.Outlined.TrendingUp, null, "Повтор месяца", "Гонка сотрудников по дням") { onNavigate(Screen.Replay) }
         ListRow(Icons.Outlined.Timeline, null, "Прогноз и what-if", "7 дней · сценарии смен") { onNavigate(Screen.Forecast) }
         ListRow(Icons.Outlined.Campaign, null, "Объявления", "Прочитал · обязательно") { onNavigate(Screen.Announce) }
         ListRow(Icons.Outlined.Image, null, "Отчёт-картинка", "SVG итог дня") { onNavigate(Screen.ReportImg) }
@@ -630,7 +639,8 @@ private fun ToolsSection(onNavigate: (Screen) -> Unit, onAbout: () -> Unit) {
 }
 
 @Composable
-private fun AboutDialog(updates: ru.t2sales.desktop.update.UpdateManager, onDismiss: () -> Unit) {
+private fun AboutDialog(container: AppContainer, onDismiss: () -> Unit) {
+    val updates = container.updates
     val scope = rememberCoroutineScope()
     SheetDialog("О приложении", onDismiss) {
         Text("T2 Sales", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
@@ -658,5 +668,11 @@ private fun AboutDialog(updates: ru.t2sales.desktop.update.UpdateManager, onDism
             Spacer(Modifier.height(8.dp))
         }
         MainButton("Закрыть", enabled = true, onClick = onDismiss)
+        Spacer(Modifier.height(8.dp))
+        MainButton("Сохранить диагностику на рабочий стол", enabled = true) {
+            runCatching { ru.t2sales.desktop.support.Diagnostics.export(container) }
+                .onSuccess { ru.t2sales.desktop.ui.components.T2Toast.show("Сохранено на рабочем столе: ${it.fileName}") }
+                .onFailure { ru.t2sales.desktop.ui.components.T2Toast.show("Не удалось сохранить диагностику", true) }
+        }
     }
 }

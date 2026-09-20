@@ -70,7 +70,7 @@ object ShiftUi {
 fun ShiftDialogHost(container: AppContainer) {
     val scope = rememberCoroutineScope()
     ShiftUi.brief?.let { Brief(it) { ShiftUi.brief = null } }
-    ShiftUi.result?.let { Result(it) { ShiftUi.result = null } }
+    ShiftUi.result?.let { ShiftResultCard(it, container) { ShiftUi.result = null } }
     if (ShiftUi.closing) CloseDialog(container, scope)
     if (ShiftUi.changeStore) ChangeStoreDialog(container, scope)
 }
@@ -128,38 +128,6 @@ private fun CloseDialog(container: AppContainer, scope: CoroutineScope) {
                     .onFailure { T2Toast.show(it.message ?: "Не удалось закрыть смену", true); busy = false }
             }
         }
-    }
-}
-
-@Composable
-private fun Result(data: JsonObject, onDismiss: () -> Unit) {
-    val fact = data["fact"].o(); val plan = data["day_plan"].o(); val gam = data["gamification"].o()
-    val missing = data["ideal_missing"].a().map { it.s() }
-    val ideal = (data["ideal_shift"] as? JsonPrimitive)?.content == "true"
-    SheetDialog(if (ideal) "\uD83C\uDFC6 Идеальная смена" else "Смена закрыта", onDismiss) {
-        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-            Text(n(data["score"].d()), fontSize = 36.sp, fontWeight = FontWeight.ExtraBold)
-            Text("итоговый score", color = T2Colors.hint, fontSize = 12.sp)
-        }
-        listOf("sim" to "SIM", "mnp" to "MNP", "pa" to "ПА", "combo" to "Комбо").forEach { (id, l) -> ProgressRow(l, fact[id].d(), plan[id].d()) }
-        if (!ideal && missing.isNotEmpty()) Text("До идеальной смены: ${missing.joinToString(", ")}", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
-        data["ai_summary"].s().takeIf { it.isNotEmpty() }?.let { ai -> Spacer(Modifier.height(14.dp)); Block("") { Text(ai, fontSize = 13.sp, lineHeight = 19.sp) } }
-        Spacer(Modifier.height(14.dp))
-        Block("") {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("${gam["title"].s()} \u00B7 ур. ${gam["level"].d().toInt().coerceAtLeast(1)}", fontWeight = FontWeight.Bold)
-                    Text("${n(gam["xp"].d())} XP" + (gam["next_level_xp"] as? JsonPrimitive)?.let { " / ${n(it.d())}" }.orEmpty() + if ((gam["leveled_up"] as? JsonPrimitive)?.content == "true") " \u00B7 \uD83C\uDF89 новый уровень!" else "", color = T2Colors.hint, fontSize = 12.sp)
-                }
-                Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                    Text("+${n(gam["xp_gained"].d())} XP", color = T2Colors.success, fontWeight = FontWeight.Bold)
-                    if (gam["streak_days"].d() > 0) Text("\uD83D\uDD25 ${gam["streak_days"].d().toInt()} дн.", color = T2Colors.hint, fontSize = 12.sp)
-                }
-            }
-            if ((data["rewarded"] as? JsonPrimitive)?.content == "false") Text("Смена на эту дату уже была закрыта и награждена сегодня \u2014 XP не начисляется повторно.", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-        }
-        Spacer(Modifier.height(4.dp))
-        MainButton("Понятно", enabled = true, onClick = onDismiss)
     }
 }
 

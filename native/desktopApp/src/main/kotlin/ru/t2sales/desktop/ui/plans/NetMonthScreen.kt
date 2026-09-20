@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.plans
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -63,7 +64,7 @@ fun NetMonthScreen(container: AppContainer) {
         val d = emp
         when {
             failed -> Text("Не удалось загрузить", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            d == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val totals = d.totals
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {

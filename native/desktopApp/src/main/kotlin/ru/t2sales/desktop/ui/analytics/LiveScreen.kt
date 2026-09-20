@@ -1,5 +1,7 @@
 package ru.t2sales.desktop.ui.analytics
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
+import ru.t2sales.desktop.ui.components.reveal
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,7 +64,7 @@ fun LiveScreen(container: AppContainer) {
         val d = data
         when {
             failed -> Text("\uD83C\uDF49 Живая карта сети сейчас недоступна, зайди чуть позже", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            d == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val today = LocalDate.now(ZoneId.of("Europe/Moscow")).toString()
                 Text("Дата: ${d["date"].str().ifEmpty { today }} \u00B7 обновление при открытии экрана", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -71,9 +73,9 @@ fun LiveScreen(container: AppContainer) {
                 else BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
                     val cols = ((maxWidth + 10.dp) / (320.dp + 10.dp)).toInt().coerceAtLeast(1)
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        stores.chunked(cols).forEach { row ->
+                        stores.chunked(cols).forEachIndexed { ri, row ->
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                                row.forEach { el -> Box(Modifier.weight(1f)) { StoreLive(el.obj()) } }
+                                row.forEachIndexed { ci, el -> Box(Modifier.weight(1f).reveal(ri * cols + ci, 45)) { StoreLive(el.obj()) } }
                                 repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                             }
                         }

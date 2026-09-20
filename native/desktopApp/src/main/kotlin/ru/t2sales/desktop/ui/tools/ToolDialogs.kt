@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.tools
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -157,7 +158,7 @@ private fun PromosDialog(container: AppContainer, onDismiss: () -> Unit) {
                 val list = items
                 when {
                     failed -> Text("\uD83C\uDF49 Промокоды сейчас недоступны, зайди чуть позже", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
-                    list == null -> CircularProgressIndicator()
+                    list == null -> LoadingBlock()
                     list.isEmpty() -> Text("Пока пусто \u2014 добавь первый код", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
                     else -> list.forEach { it ->
                         val shape = RoundedCornerShape(14.dp)
@@ -192,7 +193,7 @@ private fun PromosDialog(container: AppContainer, onDismiss: () -> Unit) {
             }
             is PromoView.Card -> {
                 val c = card
-                if (c == null) CircularProgressIndicator()
+                if (c == null) LoadingBlock()
                 else {
                     Text("Полный код (можно выделить):", color = T2Colors.hint, fontSize = 13.sp)
                     val shape = RoundedCornerShape(14.dp)

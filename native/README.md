@@ -17,7 +17,7 @@
 
 | Параметр | Значение |
 | --- | --- |
-| Версия | `1.1.0` — ведётся отдельно от веба и backend; единственный источник — `appVersion` в [desktopApp/build.gradle.kts](desktopApp/build.gradle.kts) |
+| Версия | `1.2.0` — ведётся отдельно от веба и backend; единственный источник — `appVersion` в [desktopApp/build.gradle.kts](desktopApp/build.gradle.kts) |
 | Платформа | Windows 10/11, x64. Код общего слоя (`shared`) не привязан к Windows |
 | Стек | Kotlin 2.0.21, Compose Multiplatform 1.7.1, Ktor 2.3.13 (OkHttp), kotlinx.serialization 1.7.3 |
 | Сервер | `https://tele2-app-production.up.railway.app` (см. `ApiConfig` в `shared`) |
@@ -58,8 +58,14 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | Что | Где |
 | --- | --- |
-| Сессия (cookie `t2_session` и `t2_csrf`) | `%USERPROFILE%\.t2sales\cookies.json` |
+| Сессия (cookie `t2_session` и `t2_csrf`), зашифрована DPAPI | `%USERPROFILE%\.t2sales\cookies.json` |
 | Выбранная тема, режим сети | Реестр Windows, узел Java Preferences `ru/t2sales/desktop` (`HKCU\Software\JavaSoft\Prefs`) |
+| Сессия защищена DPAPI: файл зашифрован для вашей учётной записи Windows | `cookies.json` (см. выше) |
+| Последние ответы главной и графика (кэш чтения) | `%USERPROFILE%\.t2sales\cache\<id сотрудника>\` |
+| Размер и положение окна, «закрытие сворачивает в трей», уже показанные уведомления | Реестр Windows, Java Preferences `ru/t2sales/desktop` (и `ru/t2sales/desktop/notify`) |
+| Автозапуск с Windows (если включён) | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, значение «T2 Sales Native» |
+| Очередь неотправленных продаж | `%USERPROFILE%\.t2sales\pending-sales.json` |
+| Последние данные формы «Добавить продажу» (для работы без сети) | `%USERPROFILE%\.t2sales\sale-form-cache.json` |
 | Журнал обновлений | `%LOCALAPPDATA%\T2 Sales Native\logs\updater.log` |
 | Скачанные установщики | `%LOCALAPPDATA%\T2 Sales Native\updates\` |
 | Само приложение (после установки) | `%LOCALAPPDATA%\Programs\T2 Sales Native\` |

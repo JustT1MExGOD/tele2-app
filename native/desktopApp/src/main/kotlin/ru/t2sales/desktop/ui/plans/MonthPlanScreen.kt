@@ -1,5 +1,6 @@
 package ru.t2sales.desktop.ui.plans
 
+import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -100,7 +101,7 @@ fun MonthPlanScreen(container: AppContainer, me: MeResponse) {
         val d = data
         when {
             failed -> Text("Планы месяца недоступны", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            d == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 Text("Сотрудников: ${d.rows.size} \u00B7 ост. дней: ${d.remaining_days ?: "\u2014"}", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 if (d.rows.isEmpty()) {
@@ -173,7 +174,7 @@ fun MonthPlanScreen(container: AppContainer, me: MeResponse) {
     PageSection("Дневные планы точек сегодня") {
         val list = stores
         when {
-            list == null -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("Нет данных", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> list.forEach { st ->
                 val color = st.color?.let { runCatching { Color(("FF" + it.removePrefix("#")).toLong(16)) }.getOrNull() } ?: Color(0xFF2AABEE)
@@ -273,7 +274,7 @@ private fun PlanEditDialog(
         loaded = true
     }
     SheetDialog(title, onDismiss) {
-        if (!loaded) { CircularProgressIndicator(); return@SheetDialog }
+        if (!loaded) { LoadingBlock(); return@SheetDialog }
         Text(note, color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 12.dp))
         metrics.forEach { m ->
             Field(m.label + (m.unit?.let { " ($it)" } ?: ""), values[m.id] ?: "", { v -> values[m.id] = v.filter { it.isDigit() || it == '.' } }, fill = T2Colors.surface2)
