@@ -235,6 +235,13 @@
       /* п.16: гасит нативный pull-to-refresh Android Chrome — иначе
          конфликтует с собственным PTR-жестом (07-add-sale.js) */
       overscroll-behavior-y: contain;
+      /* Отключает жест pin-to-zoom и двойной тап-зум (Android Chrome/
+         Telegram WebView игнорируют user-scalable=no из <meta viewport>
+         без этого — только touch-action реально блокирует жест). iOS
+         Safari по-прежнему разрешает pinch-zoom вне зависимости от обоих
+         механизмов (Apple жёстко резервирует его для доступности) — это
+         системное ограничение платформы, обойти нельзя. */
+      touch-action: pan-x pan-y;
     }
 
     body {
