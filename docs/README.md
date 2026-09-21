@@ -62,6 +62,7 @@
 - [Нативное приложение: обзор и быстрый старт](../native/README.md).
 - [Возможности: экраны, код, отличия от веба](../native/docs/FEATURES.md).
 - [Архитектура нативного приложения](../native/docs/ARCHITECTURE.md).
+- [Нативное приложение для Android: устройство, экраны, сборка](../native/docs/ANDROID.md).
 - [Разработка, сборка и выпуск](../native/docs/DEVELOPMENT.md).
 - [Обновления нативного приложения и сплэш](../native/docs/UPDATES.md).
 - [Установщик нативного приложения](../native/installer/README.md).

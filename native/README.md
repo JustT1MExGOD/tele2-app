@@ -18,7 +18,7 @@
 | Параметр | Значение |
 | --- | --- |
 | Версия | `1.2.0` — ведётся отдельно от веба и backend; единственный источник — `appVersion` в [desktopApp/build.gradle.kts](desktopApp/build.gradle.kts) |
-| Платформа | Windows 10/11, x64. Код общего слоя (`shared`) не привязан к Windows |
+| Платформа | Windows 10/11, x64 (клиент для ПК); Android 7+ (отдельный модуль `androidApp`). Общий слой `shared` не привязан к Windows |
 | Стек | Kotlin 2.0.21, Compose Multiplatform 1.7.1, Ktor 2.3.13 (OkHttp), kotlinx.serialization 1.7.3 |
 | Сервер | `https://tele2-app-production.up.railway.app` (см. `ApiConfig` в `shared`) |
 | Оформление | Повторяет веб (`styles.css`): светлая и тёмная темы, переключатель в шапке |
@@ -49,6 +49,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 | --- | --- |
 | `shared/` | Модуль Kotlin Multiplatform (пока только цель `jvm()`): HTTP-клиент, cookie и CSRF, типы ответов, все API-классы, вход, токены темы, модель навигации |
 | `desktopApp/` | Приложение Compose Desktop: экраны, оболочка, сеть DIRECT/RELAY, обновления, сплэш, сборка установщика |
+| `androidApp/` | Нативное приложение для Android (Compose): свой мобильный интерфейс с нижней навигацией на общем `shared`: [docs/ANDROID.md](docs/ANDROID.md) |
 | `installer/` | Установщик на WPF (C# 5, собирается штатным `csc.exe` из Windows): [installer/README.md](installer/README.md) |
 | `scripts/update-prepare.mjs` | Подготовка манифеста и папки публикации нового установщика |
 | `docs/` | Документация нативного приложения |
@@ -77,6 +78,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 | [docs/FEATURES.md](docs/FEATURES.md) | Что сделано: каждый экран, где лежит код, что добавлено сверх веба и что намеренно не переносилось |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Как устроено: модули, сеть, запуск, оформление, анимации |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Как запускать, тестировать, собирать и выпускать |
+| [docs/ANDROID.md](docs/ANDROID.md) | Нативное приложение для Android: устройство, экраны, сборка, что проверено |
 | [docs/UPDATES.md](docs/UPDATES.md) | Обновления: сервер, манифест, проверки безопасности, сплэш |
 | [installer/README.md](installer/README.md) | Установщик: устройство, ключи, сборка |
 | [CHANGELOG.md](CHANGELOG.md) | Что менялось по версиям |

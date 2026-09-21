@@ -8,3 +8,6 @@ package ru.t2sales.shared.auth
  * without touching any shared networking logic.
  */
 expect fun platformConfigDir(): String
+
+/** Encryption of the stored session where the platform has a key store (Windows DPAPI, Android Keystore); null = none. */
+expect fun platformSecretProtector(): SecretProtector?

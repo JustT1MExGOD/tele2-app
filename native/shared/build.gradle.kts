@@ -6,17 +6,32 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.androidLibrary)
 }
 
 kotlin {
-    // Only the jvm() target is wired up for Milestone 1 (Desktop-first).
-    // androidTarget() is intentionally not added yet — adding it later is a
-    // one-line change here, not a restructuring, since all shared code
-    // already lives under commonMain.
+    // Targets: jvm (the Windows client) and android. jvmShared holds what both JVM targets can use (java.io file storage).
     jvm {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
+
+    androidTarget {
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
+
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("jvmShared") {
+                withJvm()
+                withAndroidTarget()
+            }
         }
     }
 
@@ -36,6 +51,11 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        val androidMain by getting {
+            dependencies {
+                implementation(libs.ktor.client.okhttp)
+            }
+        }
         val jvmMain by getting {
             dependencies {
                 implementation(libs.ktor.client.okhttp)
@@ -44,5 +64,15 @@ kotlin {
                 implementation(libs.jna.platform)
             }
         }
+    }
+}
+
+android {
+    namespace = "ru.t2sales.shared"
+    compileSdk = 35
+    defaultConfig { minSdk = 24 }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
