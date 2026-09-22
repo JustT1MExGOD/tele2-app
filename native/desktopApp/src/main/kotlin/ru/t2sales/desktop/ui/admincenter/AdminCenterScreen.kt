@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -40,8 +41,10 @@ import kotlinx.coroutines.launch
 import ru.t2sales.desktop.di.AppContainer
 import ru.t2sales.desktop.ui.components.Field
 import ru.t2sales.desktop.ui.components.MChipButton
+import ru.t2sales.desktop.ui.components.MainButton
 import ru.t2sales.desktop.ui.components.PageSection
 import ru.t2sales.desktop.ui.components.SelectField
+import ru.t2sales.desktop.ui.components.SheetDialog
 import ru.t2sales.desktop.ui.components.T2Toast
 import ru.t2sales.shared.api.ApiException
 import ru.t2sales.shared.api.AuditItem
@@ -233,6 +236,7 @@ private fun EmployeeDetail(container: AppContainer, id: Int) {
     var roleChoice by remember(id) { mutableStateOf<String?>(null) }
     var danger by remember { mutableStateOf<Boolean>(false) }
     var pendingTicket by remember { mutableStateOf<((String) -> Unit)?>(null) }
+    var resetLink by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(id, reload) {
         failed = false
@@ -335,7 +339,9 @@ private fun EmployeeDetail(container: AppContainer, id: Int) {
                     }
                     MChipButton("Сброс пароля") {
                         scope.launch {
-                            runCatching { api.passwordReset(id) }.onSuccess { T2Toast.show("Ссылка на сброс пароля создана") }.onFailure { toastErr("Ошибка") }
+                            runCatching { api.passwordReset(id) }
+                                .onSuccess { r -> resetLink = ru.t2sales.shared.api.ApiConfig.PROD_API_BASE + "/?reset=" + r.token }
+                                .onFailure { toastErr("Ошибка") }
                         }
                     }
                 }
@@ -358,6 +364,29 @@ private fun EmployeeDetail(container: AppContainer, id: Int) {
     }
     val t = pendingTicket
     if (t != null) StepUpDialog(api, onDismiss = { pendingTicket = null }, onTicket = { ticket -> pendingTicket = null; t(ticket) })
+    val link = resetLink
+    if (link != null) ResetLinkDialog(link) { resetLink = null }
+}
+
+/** Shows the one-time reset link the server just created: it is otherwise thrown away, so an admin never had a way to hand it to the employee. */
+@Composable
+private fun ResetLinkDialog(link: String, onDismiss: () -> Unit) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    SheetDialog("Ссылка на сброс пароля", onDismiss) {
+        Text(
+            "Одноразовая, действует до первого перехода. Передайте её сотруднику лично (не в общий чат) — по ней сразу открывается его сессия.",
+            color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 12.dp)
+        )
+        SelectionContainer {
+            Text(link, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(T2Colors.surface2).padding(12.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        MainButton("Скопировать и закрыть", enabled = true) {
+            clipboard.setText(androidx.compose.ui.text.AnnotatedString(link))
+            T2Toast.show("Скопировано")
+            onDismiss()
+        }
+    }
 }
 
 // ---------------- Stores

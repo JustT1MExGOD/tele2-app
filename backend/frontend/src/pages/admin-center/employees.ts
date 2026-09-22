@@ -4,7 +4,7 @@
  * GET /admin/employees/:id — see src/api/routes/admin/search.ts) +
  * detail panel with safe actions.
  */
-import { confirmDangerousAction, requestStepUpTicket } from './shared/dialogs.js';
+import { confirmDangerousAction, requestStepUpTicket, showOneTimeLink } from './shared/dialogs.js';
 import { describeUserAgent } from '../../shared/device-label.js';
 
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -233,9 +233,13 @@ async function onMfaReset(employeeId: number): Promise<void> {
 async function onPasswordReset(employeeId: number): Promise<void> {
   try {
     const res = await window.apiClient.adminInitiatePasswordReset(authHeaders(true), employeeId);
-    toast('Ссылка на сброс пароля создана', 'ok');
-    console.info('password reset token issued', res.token);
+    const link = `${window.location.origin}/?reset=${res.token}`;
+    showOneTimeLink(
+      'Ссылка на сброс пароля',
+      'Одноразовая, действует до первого перехода. Передайте её сотруднику лично (не в общий чат) — по ней сразу открывается его сессия.',
+      link
+    );
   } catch (e) {
-    toast('Ошибка', 'err');
+    toast((e as { message?: string })?.message || 'Ошибка', 'err');
   }
 }

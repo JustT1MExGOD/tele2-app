@@ -18,15 +18,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Divider
-import androidx.compose.material.Icon
 import androidx.compose.material.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.LaunchedEffect
@@ -40,7 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,14 +42,14 @@ import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Radius
 import ru.t2sales.shared.theme.T2Spacing
 
-/** The six tabs of the web app's mobile #bottomNavMain, in the same order and with the same captions. */
-private enum class Tab(val label: String, val icon: ImageVector) {
-    Home("Главная", Icons.Outlined.Home),
-    Plan("План", Icons.Outlined.BarChart),
-    Schedule("График", Icons.Outlined.CalendarMonth),
-    Profile("Профиль", Icons.Outlined.Person),
-    Team("Команда", Icons.Outlined.Group),
-    Chat("Чат", Icons.Outlined.ChatBubbleOutline)
+/** The six tabs of the web app's mobile #bottomNavMain, in the same order and with the same captions and icons. */
+private enum class Tab(val label: String, val icon: Path) {
+    Home("Главная", NavIcons.home),
+    Plan("План", NavIcons.plan),
+    Schedule("График", NavIcons.schedule),
+    Profile("Профиль", NavIcons.profile),
+    Team("Команда", NavIcons.team),
+    Chat("Чат", NavIcons.chat)
 }
 
 @Composable
@@ -117,7 +109,7 @@ private fun BottomNav(current: Tab, onSelect: (Tab) -> Unit) {
                     Modifier.weight(1f).clip(RoundedCornerShape(T2Radius.sm)).bouncyClickable(to = 0.9f) { onSelect(t) }.padding(vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(t.icon, contentDescription = t.label, tint = tint, modifier = Modifier.size(22.dp).graphicsLayer { scaleX = lift; scaleY = lift })
+                    NavIcon(t.icon, contentDescription = t.label, tint = tint, size = 22.dp, modifier = Modifier.graphicsLayer { scaleX = lift; scaleY = lift })
                     Text(t.label, color = tint, fontSize = 10.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                 }
             }

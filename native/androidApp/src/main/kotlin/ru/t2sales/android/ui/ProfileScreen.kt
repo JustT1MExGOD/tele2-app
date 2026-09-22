@@ -1,6 +1,8 @@
 package ru.t2sales.android.ui
 
 import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -149,7 +151,17 @@ fun ProfileScreen(container: AppContainer, me: MeResponse, onOpenSchedule: () ->
                 .border(1.dp, Color(0x0FFFFFFF), heroShape).padding(start = T2Spacing.sp4, end = T2Spacing.sp4, top = T2Spacing.sp5, bottom = T2Spacing.sp4)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AvatarImage(container, empId, (me.full_name ?: "T").take(1).uppercase(), 64.dp)
+                Box {
+                    AvatarImage(container, empId, (me.full_name ?: "T").take(1).uppercase(), 64.dp)
+                    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                        if (uri != null) pickAvatar(container, empId, scope, uri)
+                    }
+                    Box(
+                        Modifier.align(Alignment.BottomEnd).size(22.dp).clip(CircleShape).background(T2Colors.primary)
+                            .clickable { picker.launch("image/*") },
+                        contentAlignment = Alignment.Center
+                    ) { Text("✎", color = Color.White, fontSize = 11.sp) }
+                }
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text(me.full_name ?: "Сотрудник", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
@@ -300,8 +312,8 @@ fun ProfileScreen(container: AppContainer, me: MeResponse, onOpenSchedule: () ->
         // --- actions (lkActions): only the ones whose screens exist on the phone so far
         SectionLabel("Действия")
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionTile("+", "Продажа", "Внести метрики", Modifier.weight(1f)) { AppState.openAddSale() }
-            ActionTile("▦", "График", "Месяц целиком", Modifier.weight(1f), onOpenSchedule)
+            ActionTile(NavIcons.plus, "Продажа", "Внести метрики", Modifier.weight(1f)) { AppState.openAddSale() }
+            ActionTile(NavIcons.schedule, "График", "Месяц целиком", Modifier.weight(1f), onOpenSchedule)
             ActionTile("⏱", "Смена", "Открыть / закрыть", Modifier.weight(1f)) { if (sess != null) ShiftUi.closing = true else ShiftUi.open(container, scope) }
         }
         Spacer(Modifier.height(T2Spacing.sp2))
@@ -309,8 +321,8 @@ fun ProfileScreen(container: AppContainer, me: MeResponse, onOpenSchedule: () ->
         // --- account (lkPhoneAuth): the phone is already the login here, so only sign-out
         Card {
             CardTitle("Аккаунт")
-            me.phone?.let { ListRow("№", "Вход по телефону", it, chevron = false) }
-            ListRow("→", "Выйти", null, chevron = false) {
+            me.phone?.let { ListRow(NavIcons.smartphone, "Вход по телефону", it, chevron = false) }
+            ListRow(NavIcons.logOut, "Выйти", null, chevron = false) {
                 scope.launch {
                     runCatching { api.logout() }
                     onLogout()
@@ -386,12 +398,24 @@ private fun DarkPill(text: String) {
 
 @Composable
 private fun ActionTile(glyph: String, title: String, sub: String, modifier: Modifier, onClick: () -> Unit) {
+    ActionTile(modifier, onClick, title, sub) { Text(glyph, fontSize = 20.sp, color = T2Colors.primary, fontWeight = FontWeight.Bold) }
+}
+
+/** "Продажа" and "График" have real web icons ("+" and the calendar the bottom-nav "График" tab already uses); "Смена" doesn't (the
+ * desktop client's own reference for this row has no icon either), so it keeps its plain glyph via the overload above. */
+@Composable
+private fun ActionTile(icon: androidx.compose.ui.graphics.Path, title: String, sub: String, modifier: Modifier, onClick: () -> Unit) {
+    ActionTile(modifier, onClick, title, sub) { NavIcon(icon, contentDescription = title, tint = T2Colors.primary, size = 20.dp) }
+}
+
+@Composable
+private fun ActionTile(modifier: Modifier, onClick: () -> Unit, title: String, sub: String, icon: @Composable () -> Unit) {
     val shape = RoundedCornerShape(T2Radius.md)
     Column(
         modifier.clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(glyph, fontSize = 20.sp, color = T2Colors.primary, fontWeight = FontWeight.Bold)
+        icon()
         Text(title, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 4.dp), maxLines = 1)
         Text(sub, color = T2Colors.hint, fontSize = 10.sp, maxLines = 1)
     }
@@ -419,10 +443,32 @@ private fun Ring(pct: Int) {
     }
 }
 
+/** Reads the picked photo, downsizes it to the PC client's own limit (256px on the long side) and re-encodes as JPEG before
+ * uploading — the source file from a phone's camera can be several megabytes, nobody needs that for a 64dp avatar circle. */
+private fun pickAvatar(container: AppContainer, employeeId: Int?, scope: kotlinx.coroutines.CoroutineScope, uri: android.net.Uri) {
+    scope.launch {
+        runCatching {
+            val ctx = ru.t2sales.shared.auth.AndroidPlatform.appContext
+            val src = ctx.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: error("image")
+            val scale = minOf(1f, 256f / maxOf(src.width, src.height))
+            val w = (src.width * scale).roundToInt().coerceAtLeast(1)
+            val h = (src.height * scale).roundToInt().coerceAtLeast(1)
+            val scaled = android.graphics.Bitmap.createScaledBitmap(src, w, h, true)
+            val out = java.io.ByteArrayOutputStream()
+            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+            container.profileApi.uploadAvatar(out.toByteArray())
+        }.onSuccess {
+            employeeId?.let { container.teamApi.forgetAvatar(it) }
+            AvatarVersion.v++
+            Toaster.show("Аватар обновлён")
+        }.onFailure { Toaster.show("Не удалось загрузить фото", true) }
+    }
+}
+
 /** The employee's photo when there is one, otherwise the first letter. */
 @Composable
 fun AvatarImage(container: AppContainer, employeeId: Int?, fallback: String, size: Dp) {
-    val bitmap by produceState<ImageBitmap?>(null, employeeId) {
+    val bitmap by produceState<ImageBitmap?>(null, employeeId, AvatarVersion.v) {
         value = employeeId?.let { id ->
             container.teamApi.getAvatar(id)?.let { bytes -> runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull() }
         }

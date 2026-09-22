@@ -3,6 +3,7 @@ package ru.t2sales.android.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.launch
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.heightIn
@@ -88,6 +90,27 @@ fun ListRow(iconText: String, title: String, sub: String?, value: String? = null
     }
 }
 
+/** The same row, with the web's own vector icon (from [NavIcons]) instead of a text glyph tile — used wherever the web has a real `<svg>` for this row. */
+@Composable
+fun ListRow(icon: androidx.compose.ui.graphics.Path, title: String, sub: String?, value: String? = null, chevron: Boolean = true, onClick: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().let { if (onClick != null) it.bouncyClickable(to = 0.985f, onClick = onClick) else it }.padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val shape = RoundedCornerShape(T2Radius.sm)
+        Box(Modifier.size(42.dp).clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape), contentAlignment = Alignment.Center) {
+            NavIcon(icon, contentDescription = title, tint = T2Colors.textSecondary, size = 20.dp)
+        }
+        Spacer(Modifier.width(T2Spacing.sp3))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            if (sub != null) Text(sub, color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        if (value != null) Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
+        if (chevron) Text("›", color = T2Colors.hint, fontSize = 18.sp, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
 /** One open sheet: its content is drawn by [SheetLayer] at the root of the app, so it covers the bottom navigation and the "+" button. */
 class SheetEntry {
     var content by androidx.compose.runtime.mutableStateOf<@Composable () -> Unit>({})
@@ -131,20 +154,44 @@ private fun SheetSurface(title: String, busy: Boolean, onDismiss: () -> Unit, fo
         }
     }
     androidx.activity.compose.BackHandler(enabled = !busy) { close() }
+
+    // drag-to-dismiss: dragging the handle/title down (the web app's own gesture on its sheet-modal) follows the finger,
+    // then either springs back or finishes the dismiss, matching the tap-outside-to-close that already existed
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var dragPx by remember { mutableStateOf(0f) }
+    val dismissThresholdPx = with(density) { 120.dp.toPx() }
+    val draggableState = androidx.compose.foundation.gestures.rememberDraggableState { delta -> if (!busy) dragPx = (dragPx + delta).coerceAtLeast(0f) }
+
     Box(
-        Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0x99000000).copy(alpha = 0.6f * progress.value))
+        Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0x99000000).copy(alpha = 0.6f * progress.value * (1f - (dragPx / (dismissThresholdPx * 3f)).coerceIn(0f, 1f))))
             .clickable(enabled = !busy, indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { close() },
         contentAlignment = Alignment.BottomCenter
     ) {
         val shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         Column(
             Modifier.fillMaxWidth().statusBarsPadding().padding(top = 24.dp).heightIn(max = 720.dp)
-                .graphicsLayer { translationY = (1f - progress.value) * size.height * 0.35f; alpha = progress.value.coerceIn(0f, 1f) }
+                .graphicsLayer { translationY = (1f - progress.value) * size.height * 0.35f + dragPx; alpha = progress.value.coerceIn(0f, 1f) }
                 .clip(shape).background(T2Colors.surface)
                 .clickable(enabled = false) {}.navigationBarsPadding().imePadding().padding(horizontal = 16.dp)
         ) {
-            Box(Modifier.padding(vertical = 10.dp).width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(T2Colors.surface3).align(Alignment.CenterHorizontally))
-            Text(title, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 12.dp))
+            Column(
+                Modifier.fillMaxWidth().draggable(
+                    state = draggableState,
+                    orientation = androidx.compose.foundation.gestures.Orientation.Vertical,
+                    enabled = !busy,
+                    onDragStopped = { velocity ->
+                        if (dragPx > dismissThresholdPx || velocity > 1000f) {
+                            androidx.compose.animation.core.animate(dragPx, with(density) { 1000.dp.toPx() }, animationSpec = androidx.compose.animation.core.tween(180)) { v, _ -> dragPx = v }
+                            onDismiss()
+                        } else {
+                            androidx.compose.animation.core.animate(dragPx, 0f, animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy)) { v, _ -> dragPx = v }
+                        }
+                    }
+                )
+            ) {
+                Box(Modifier.padding(vertical = 10.dp).width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(T2Colors.surface3).align(Alignment.CenterHorizontally))
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 12.dp))
+            }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) { content() }
             if (footer != null) {
                 Spacer(Modifier.height(12.dp))

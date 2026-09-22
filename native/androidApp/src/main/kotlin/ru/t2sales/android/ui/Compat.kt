@@ -1,5 +1,6 @@
 package ru.t2sales.android.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -109,6 +110,7 @@ class DropdownItem(val label: String, val key: Any = label, val color: Color? = 
 @Composable
 fun DropdownField(value: String, options: List<DropdownItem>, selected: Any? = null, enabled: Boolean = true, valueColor: Color? = null, onPick: (DropdownItem) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    BackHandler(enabled = open) { open = false }
     Box(Modifier.fillMaxWidth()) {
         FieldBox(onClick = { if (enabled) open = true }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -169,10 +171,15 @@ fun SheetDialog(title: String, onDismiss: () -> Unit, content: @Composable Colum
     BottomSheet(title, onDismiss = onDismiss) { Column { content() } }
 }
 
+/** Bumped after a successful avatar upload so every avatar on screen (team list, profile hero) refetches instead of showing the old photo. */
+object AvatarVersion {
+    var v by androidx.compose.runtime.mutableStateOf(0)
+}
+
 /** The employee's photo (or the first letter); the PC client's signature, for the ported screens. */
 @Composable
 fun AvatarImage(teamApi: TeamApi, employeeId: Int?, fallback: String, size: androidx.compose.ui.unit.Dp = 36.dp, active: Boolean = false) {
-    val bitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, employeeId) {
+    val bitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, employeeId, AvatarVersion.v) {
         value = employeeId?.let { id ->
             teamApi.getAvatar(id)?.let { bytes -> runCatching { android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull() }
         }

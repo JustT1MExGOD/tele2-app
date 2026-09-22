@@ -1,5 +1,6 @@
 package ru.t2sales.android.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -254,6 +255,7 @@ private fun Label(text: String) {
 @Composable
 fun PickerField(value: String, options: List<String>, enabled: Boolean, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    BackHandler(enabled = open) { open = false }
     val shape = RoundedCornerShape(12.dp)
     Box {
         Row(

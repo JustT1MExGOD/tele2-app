@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.NumberFormat
@@ -104,6 +105,26 @@ fun HomeScreen(container: AppContainer, me: MeResponse) {
     var data by remember { mutableStateOf<HomeData?>(null) }
     var refresh by remember { mutableStateOf(0) }
     var about by remember { mutableStateOf(false) }
+    var daysOffText by remember { mutableStateOf("Внеси продажу — начни стрик") }
+
+    // the greeting's "N дн. до выходного" badge: first day, starting today, that isn't a scheduled work day (hours > 0)
+    LaunchedEffect(Unit) {
+        val today = LocalDate.now(MOSCOW)
+        val sch = runCatching { container.scheduleApi.getScheduleMonth(today.toString().take(7)) }.getOrNull()
+        val empId = me.employee_id
+        if (sch != null && empId != null) {
+            val work = sch.items.filter { it.employee_id == empId && (it.hours ?: 0.0) > 0 }.map { it.work_date.take(10) }.toSet()
+            var until: Int? = null
+            for (i in 0..31) {
+                if (today.plusDays(i.toLong()).toString() !in work) { until = i; break }
+            }
+            daysOffText = when (until) {
+                0 -> "Сегодня выходной"
+                null -> "Внеси продажу — начни стрик"
+                else -> "$until дн. до выходного"
+            }
+        }
+    }
 
     LaunchedEffect(refresh, AppState.refreshTick) {
         val cache = container.readCache
@@ -143,7 +164,7 @@ fun HomeScreen(container: AppContainer, me: MeResponse) {
     Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
         AppHeader(me, data?.myDay, container) { refresh++ }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.reveal(0)) { Greeting(me.full_name?.split(" ")?.getOrNull(1) ?: me.full_name.orEmpty(), me.role, data?.shiftOpen) }
+            Box(Modifier.reveal(0)) { Greeting(me.full_name?.split(" ")?.getOrNull(1) ?: me.full_name.orEmpty(), me.role, data?.shiftOpen, daysOffText) }
             val d = data
             if (d == null) {
                 Section("Мой день") { LoadingBlock(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), lines = 4) }
@@ -173,12 +194,17 @@ private fun AppHeader(me: MeResponse, myDay: MeDayResponse?, container: AppConta
             Spacer(Modifier.weight(1f))
             HeaderButton("◐") { T2Colors.dark = !T2Colors.dark }
             Spacer(Modifier.width(8.dp))
-            HeaderButton("↻", onRefresh)
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(T2Radius.sm)).background(T2Colors.surface).border(1.dp, T2Colors.border, RoundedCornerShape(T2Radius.sm)).clickable(onClick = onRefresh), contentAlignment = Alignment.Center) {
+                NavIcon(NavIcons.refresh, contentDescription = "Обновить", tint = T2Colors.textSecondary, size = 18.dp)
+            }
         }
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Сегодня", today())
-            myDay?.shift?.let { s -> Pill("Точка", s.store_code ?: s.store_name ?: "—") }
+        // the web's two header pills are equal-width flex items (styles.css's ".header-pills .store-pill { flex: 1 1 0 }"):
+        // side by side splitting the full row, not left-aligned at their own content width — with only one shown (a day off,
+        // no shift yet), that one pill alone stretches across the whole row instead of sitting small on the left.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill("Сегодня", today(), modifier = Modifier.weight(1f))
+            myDay?.shift?.let { s -> Pill("Точка", s.store_code ?: s.store_name ?: "—", s.store_address, modifier = Modifier.weight(1f)) }
         }
     }
 }
@@ -199,17 +225,18 @@ private fun HeaderButton(glyph: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Pill(label: String, value: String) {
+private fun Pill(label: String, value: String, addr: String? = null, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(T2Radius.sm)
-    Column(Modifier.clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(horizontal = 12.dp, vertical = 7.dp)) {
+    Column(modifier.clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(horizontal = 12.dp, vertical = 7.dp)) {
         Text(label.uppercase(), color = T2Colors.hint, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-        Text(value, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!addr.isNullOrBlank()) Text(addr, color = T2Colors.hint, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 1.dp))
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Greeting(firstName: String, role: String?, shiftOpen: Boolean?) {
+private fun Greeting(firstName: String, role: String?, shiftOpen: Boolean?, daysOff: String) {
     val shape = RoundedCornerShape(T2Radius.default)
     Box(
         Modifier.fillMaxWidth().clip(shape)
@@ -221,6 +248,7 @@ private fun Greeting(firstName: String, role: String?, shiftOpen: Boolean?) {
             Text(greetingByHour(), color = Color(0xBFFFFFFF), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Text(firstName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                GreetBadge(daysOff)
                 if (role != null) GreetBadge(ROLE_LABELS[role] ?: role)
             }
         }
@@ -381,31 +409,31 @@ private fun MChip(label: String, modifier: Modifier, onClick: () -> Unit) {
 @Composable
 private fun QuickActionsSection() {
     Section("Быстрые действия") {
-        ListRow("₽", "Касса", "Факт / 1С / плюс-минус по точкам") { Nav.open(Page.Cash) }
-        ListRow("▦", "Планы и факт за месяц", "видно всей команде") { Nav.open(Page.MonthPlan) }
-        ListRow("↗", "Динамика выполнения", "все метрики · сотрудники и точки") { Nav.open(Page.NetMonth) }
-        ListRow("?", "Поддержка", null) { Nav.open(Page.Support) }
+        ListRow(NavIcons.cash, "Касса", "Факт / 1С / плюс-минус по точкам") { Nav.open(Page.Cash) }
+        ListRow(NavIcons.monthPlan, "Планы и факт за месяц", "видно всей команде") { Nav.open(Page.MonthPlan) }
+        ListRow(NavIcons.trend, "Динамика выполнения", "все метрики · сотрудники и точки") { Nav.open(Page.NetMonth) }
+        ListRow(NavIcons.support, "Поддержка", null) { Nav.open(Page.Support) }
     }
 }
 
 @Composable
 private fun ToolsSection(onAbout: () -> Unit) {
     Section("Инструменты") {
-        ListRow("★", "BFQ", "Рейтинг качества за месяц") { Nav.open(Page.Bfq) }
-        ListRow("÷", "Расчёт комбо", "Телефон − скидка + 28% + 1950") { ToolUi.open("combo") }
-        ListRow("÷", "Калькулятор школа", "Телефон − 70% + 30% + 3600 + 3490") { ToolUi.open("school") }
-        ListRow("%", "Промокоды РТК", "Общий пул · скрытый список") { ToolUi.open("promos") }
-        ListRow("▦", "Heatmap часов", "Когда ставить сильного") { Nav.open(Page.Heatmap) }
-        ListRow("↻", "Повтор месяца", "Гонка сотрудников по дням") { Nav.open(Page.Replay) }
-        ListRow("↗", "Прогноз и what-if", "7 дней · сценарии смен") { Nav.open(Page.Forecast) }
-        ListRow("!", "Объявления", "Прочитал · обязательно") { Nav.open(Page.Announce) }
-        ListRow("▣", "Отчёт-картинка", "SVG итог дня") { Nav.open(Page.ReportImg) }
-        ListRow("≡", "Отчёты", "Сводка по сети · экспорт") { Nav.open(Page.Reports) }
-        ListRow("●", "Сеть live", "Кто на смене · % плана · касса") { Nav.open(Page.Live) }
-        ListRow("◎", "Command Center", "Что происходит · где проблема · что делать") { Nav.open(Page.CommandCenter) }
-        ListRow("☑", "Задачи", "Кто что делает по сети") { Nav.open(Page.Tasks) }
-        ListRow("!", "Алерты", "Полный жизненный цикл, не только открытые") { Nav.open(Page.Alerts) }
-        ListRow("i", "О приложении", "T2 Sales v${ru.t2sales.android.BuildConfig.VERSION_NAME}", chevron = true, onClick = onAbout)
+        ListRow(NavIcons.bfq, "BFQ", "Рейтинг качества за месяц") { Nav.open(Page.Bfq) }
+        ListRow(NavIcons.comboCalc, "Расчёт комбо", "Телефон − скидка + 28% + 1950") { ToolUi.open("combo") }
+        ListRow(NavIcons.schoolCalc, "Калькулятор школа", "Телефон − 70% + 30% + 3600 + 3490") { ToolUi.open("school") }
+        ListRow(NavIcons.promos, "Промокоды РТК", "Общий пул · скрытый список") { ToolUi.open("promos") }
+        ListRow(NavIcons.heatmap, "Heatmap часов", "Когда ставить сильного") { Nav.open(Page.Heatmap) }
+        ListRow(NavIcons.repeat, "Повтор месяца", "Гонка сотрудников по дням") { Nav.open(Page.Replay) }
+        ListRow(NavIcons.trend, "Прогноз и what-if", "7 дней · сценарии смен") { Nav.open(Page.Forecast) }
+        ListRow(NavIcons.announce, "Объявления", "Прочитал · обязательно") { Nav.open(Page.Announce) }
+        ListRow(NavIcons.reportImg, "Отчёт-картинка", "SVG итог дня") { Nav.open(Page.ReportImg) }
+        ListRow(NavIcons.clipboardList, "Отчёты", "Сводка по сети · экспорт") { Nav.open(Page.Reports) }
+        ListRow(NavIcons.live, "Сеть live", "Кто на смене · % плана · касса") { Nav.open(Page.Live) }
+        ListRow(NavIcons.commandCenter, "Command Center", "Что происходит · где проблема · что делать") { Nav.open(Page.CommandCenter) }
+        ListRow(NavIcons.clipboardList, "Задачи", "Кто что делает по сети") { Nav.open(Page.Tasks) }
+        ListRow(NavIcons.alerts, "Алерты", "Полный жизненный цикл, не только открытые") { Nav.open(Page.Alerts) }
+        ListRow(NavIcons.info, "О приложении", "T2 Sales v${ru.t2sales.android.BuildConfig.VERSION_NAME}", chevron = true, onClick = onAbout)
     }
 }
 

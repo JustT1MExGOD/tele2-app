@@ -12,18 +12,10 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Divider
-import androidx.compose.material.Icon
 import androidx.compose.material.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Store
-import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,13 +33,14 @@ import ru.t2sales.shared.api.MeResponse
 import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Radius
 
-/** The supervisor's own bottom navigation of the web (#bottomNavSupervisor): the four sector views, plus the profile for signing out. */
-private enum class SvNav(val label: String, val icon: ImageVector) {
-    Overview("Обзор", Icons.Outlined.Dashboard),
-    Stores("Точки", Icons.Outlined.Store),
-    People("Люди", Icons.Outlined.Group),
-    Trend("Тренд", Icons.Outlined.TrendingUp),
-    Profile("Профиль", Icons.Outlined.Person)
+/** The supervisor's own bottom navigation of the web (#bottomNavSupervisor): the four sector views, plus a profile tab (the
+ * web's version has no fifth tab and no other way for a supervisor to sign out on a phone, so this app adds one). */
+private enum class SvNav(val label: String, val icon: Path) {
+    Overview("Обзор", NavIcons.svOverview),
+    Stores("Точки", NavIcons.svStores),
+    People("Люди", NavIcons.svPeople),
+    Trend("Тренд", NavIcons.svTrend),
+    Profile("Профиль", NavIcons.profile)
 }
 
 @Composable
@@ -74,7 +67,7 @@ fun SupervisorShell(container: AppContainer, me: MeResponse, onLogout: () -> Uni
                         SvNav.entries.forEach { t ->
                             val tint = if (t == current) T2Colors.primary else T2Colors.hint
                             Column(Modifier.weight(1f).clip(RoundedCornerShape(T2Radius.sm)).clickable { tab = t.name }.padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(t.icon, contentDescription = t.label, tint = tint, modifier = Modifier.size(22.dp))
+                                NavIcon(t.icon, contentDescription = t.label, tint = tint, size = 22.dp)
                                 Text(t.label, color = tint, fontSize = 10.sp, fontWeight = if (t == current) FontWeight.Bold else FontWeight.Medium, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                             }
                         }

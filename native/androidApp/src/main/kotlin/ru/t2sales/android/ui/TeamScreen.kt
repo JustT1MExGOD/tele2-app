@@ -113,9 +113,9 @@ fun TeamScreen(container: AppContainer, me: MeResponse) {
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
-        // an administrator looks at one network at a time (the web's org switcher)
+        // an administrator looks at one network at a time (the web's org switcher: Дилер → Сектор → Сеть)
         if (isAdmin && orgs.size > 1) {
-            SelectField("Сеть", orgs.firstOrNull { it.id == (viewOrgId ?: me.org_id) }?.name ?: "", orgs.map { it.name }) { picked -> orgs.firstOrNull { it.name == picked }?.let { viewOrgId = it.id } }
+            OrgSwitcher(orgs, viewOrgId ?: me.org_id) { viewOrgId = it }
             Spacer(Modifier.height(12.dp))
         }
         Section("Сотрудники") {
@@ -180,22 +180,22 @@ fun TeamScreen(container: AppContainer, me: MeResponse) {
                             .onFailure { Toaster.show("Ошибка экспорта", true) }
                     }
                 }
-                ListRow("₽", "История продаж", null) { HistoryFilter.employeeId = null; Nav.open(Page.History) }
-                ListRow("★", "BFQ", null) { Nav.open(Page.Bfq) }
-                ListRow("↓", "Экспорт продаж CSV", null) { export("sales") }
-                ListRow("↓", "Экспорт BFQ CSV", null) { export("bfq") }
-                ListRow("↓", "Экспорт графика CSV", null) { export("schedules") }
-                ListRow("+", "Добавить сотрудника", null) { addEmployee = true }
-                ListRow("+", "Добавить точку", null) { addStore = true }
+                ListRow(NavIcons.history, "История продаж", null) { HistoryFilter.employeeId = null; Nav.open(Page.History) }
+                ListRow(NavIcons.bfq, "BFQ", null) { Nav.open(Page.Bfq) }
+                ListRow(NavIcons.download, "Экспорт продаж CSV", null) { export("sales") }
+                ListRow(NavIcons.download, "Экспорт BFQ CSV", null) { export("bfq") }
+                ListRow(NavIcons.download, "Экспорт графика CSV", null) { export("schedules") }
+                ListRow(NavIcons.plus, "Добавить сотрудника", null) { addEmployee = true }
+                ListRow(NavIcons.svStores, "Добавить точку", null) { addStore = true }
                 if (isAdmin) {
-                    ListRow("●", "Сети", null) { Nav.open(Page.Orgs) }
-                    ListRow("≡", "История действий", null) { Nav.open(Page.Audit) }
-                    ListRow("▦", "Дилеры/Секторы", null) { Nav.open(Page.Dealers) }
+                    ListRow(NavIcons.globe, "Сети", null) { Nav.open(Page.Orgs) }
+                    ListRow(NavIcons.auditClock, "История действий", null) { Nav.open(Page.Audit) }
+                    ListRow(NavIcons.dealers, "Дилеры/Секторы", null) { Nav.open(Page.Dealers) }
                 }
-                ListRow("+", "Новая метрика плана", "SIM, MNP… + свои пункты") { metricsDialog = true }
-                if (isAdmin) ListRow("?", "Тикеты поддержки", null) { Nav.open(Page.Support) }
-                if (myRole == "supervisor" || isAdmin) ListRow("◎", "Кабинет супервайзера", null) { Nav.open(Page.SvOverview) }
-                if (isAdmin) ListRow("⚙", "Admin Center", "Организации, точки, сотрудники, коррекции") { Nav.open(Page.AdminCenter) }
+                ListRow(NavIcons.newMetric, "Новая метрика плана", "SIM, MNP… + свои пункты") { metricsDialog = true }
+                if (isAdmin) ListRow("🆘", "Тикеты поддержки", null) { Nav.open(Page.Support) }
+                if (myRole == "supervisor" || isAdmin) ListRow(NavIcons.svOverview, "Кабинет супервайзера", null) { Nav.open(Page.SvOverview) }
+                if (isAdmin) ListRow(NavIcons.settings, "Admin Center", "Организации, точки, сотрудники, коррекции") { Nav.open(Page.AdminCenter) }
             }
         }
         Spacer(Modifier.height(96.dp))
@@ -297,4 +297,33 @@ private fun EmployeeCard(emp: EmployeeListItem, sale: JsonObject?, shift: Schedu
 @Composable
 private fun Label(text: String) {
     Text(text.uppercase(), color = T2Colors.hint, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
+}
+
+/**
+ * The admin's own way to move between networks (index.html's team-page org switcher, ported from the PC client's TeamScreen.kt):
+ * three linked pickers — Дилер narrows to Сектор narrows to Сеть — not one flat list of every network's name across every dealer.
+ */
+@Composable
+private fun OrgSwitcher(orgs: List<ru.t2sales.shared.api.OrgAdminItem>, currentId: String?, onPick: (String) -> Unit) {
+    fun dealerOf(o: ru.t2sales.shared.api.OrgAdminItem) = o.dealer_name ?: "Без дилера"
+    fun sectorOf(o: ru.t2sales.shared.api.OrgAdminItem) = o.sector_id ?: "default"
+    val current = orgs.firstOrNull { it.id == currentId } ?: orgs.first()
+    val dealers = orgs.map(::dealerOf).distinct().sorted()
+    val sectors = orgs.filter { dealerOf(it) == dealerOf(current) }.map(::sectorOf).distinct().sorted()
+    val inSector = orgs.filter { dealerOf(it) == dealerOf(current) && sectorOf(it) == sectorOf(current) }
+
+    Column(Modifier.fillMaxWidth()) {
+        SelectField("Дилер", dealerOf(current), dealers) { d ->
+            val firstSector = orgs.filter { dealerOf(it) == d }.map(::sectorOf).distinct().sorted().first()
+            orgs.firstOrNull { dealerOf(it) == d && sectorOf(it) == firstSector }?.let { onPick(it.id) }
+        }
+        Spacer(Modifier.height(8.dp))
+        SelectField("Сектор", sectorOf(current), sectors) { s ->
+            orgs.firstOrNull { dealerOf(it) == dealerOf(current) && sectorOf(it) == s }?.let { onPick(it.id) }
+        }
+        Spacer(Modifier.height(8.dp))
+        SelectField("Сеть", current.name, inSector.map { it.name }) { n ->
+            inSector.firstOrNull { it.name == n }?.let { onPick(it.id) }
+        }
+    }
 }

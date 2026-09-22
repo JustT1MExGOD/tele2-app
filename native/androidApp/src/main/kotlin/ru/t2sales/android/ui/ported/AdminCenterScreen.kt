@@ -228,6 +228,7 @@ private fun EmployeeDetail(container: AppContainer, id: Int) {
     var reload by remember(id) { mutableStateOf(0) }
     var roleChoice by remember(id) { mutableStateOf<String?>(null) }
     var danger by remember { mutableStateOf<Boolean>(false) }
+    var resetLink by remember { mutableStateOf<String?>(null) }
     var pendingTicket by remember { mutableStateOf<((String) -> Unit)?>(null) }
 
     LaunchedEffect(id, reload) {
@@ -331,7 +332,9 @@ private fun EmployeeDetail(container: AppContainer, id: Int) {
                     }
                     MChipButton("Сброс пароля") {
                         scope.launch {
-                            runCatching { api.passwordReset(id) }.onSuccess { T2Toast.show("Ссылка на сброс пароля создана") }.onFailure { toastErr("Ошибка") }
+                            runCatching { api.passwordReset(id) }
+                                .onSuccess { r -> resetLink = ru.t2sales.shared.api.ApiConfig.PROD_API_BASE + "/?reset=" + r.token }
+                                .onFailure { toastErr("Ошибка") }
                         }
                     }
                 }
@@ -354,6 +357,27 @@ private fun EmployeeDetail(container: AppContainer, id: Int) {
     }
     val t = pendingTicket
     if (t != null) StepUpDialog(api, onDismiss = { pendingTicket = null }, onTicket = { ticket -> pendingTicket = null; t(ticket) })
+    val link = resetLink
+    if (link != null) ResetLinkSheet(link) { resetLink = null }
+}
+
+/** Shows the one-time reset link the server just created: it is otherwise thrown away, so an admin never had a way to hand it to the employee. */
+@Composable
+private fun ResetLinkSheet(link: String, onDismiss: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    BottomSheet("Ссылка на сброс пароля", onDismiss = onDismiss, footer = {
+        MainButton("Скопировать и закрыть") {
+            val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Ссылка на сброс пароля T2 Sales", link))
+            T2Toast.show("Скопировано")
+            onDismiss()
+        }
+    }) {
+        Text("Одноразовая, действует до первого перехода. Передайте её сотруднику лично (не в общий чат) — по ней сразу открывается его сессия.", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 12.dp))
+        androidx.compose.foundation.text.selection.SelectionContainer {
+            Text(link, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(T2Colors.surface2).padding(12.dp))
+        }
+    }
 }
 
 // ---------------- Stores

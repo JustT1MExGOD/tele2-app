@@ -69,6 +69,7 @@ dependencies {
     implementation(compose.material)
     implementation(compose.materialIconsExtended)
     implementation(libs.androidx.activity.compose)
+    implementation("androidx.core:core-ktx:1.13.1") // PathParser: builds the bottom nav icons straight from the web's own SVG path data
     implementation(libs.ktor.client.okhttp)
     implementation("com.caverock:androidsvg-aar:1.4") // the report pictures are SVG
 }

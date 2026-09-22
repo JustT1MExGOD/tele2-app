@@ -267,3 +267,40 @@ export function requestStepUpTicket(): Promise<string | null> {
     input?.focus();
   });
 }
+
+/**
+ * Shows a one-time link (currently: an admin-initiated password reset) that the caller must hand to the employee — the server
+ * returns it once and never again, so silently discarding it (as this screen used to) leaves the admin with no way to deliver it.
+ */
+export function showOneTimeLink(title: string, description: string, link: string): void {
+  const modalTitle = document.getElementById('modalTitle');
+  const modalBody = document.getElementById('modalBody');
+  if (!modalTitle || !modalBody) return;
+  modalTitle.textContent = title;
+  modalBody.innerHTML = `
+    <div class="section" style="padding:0">
+      <p style="padding:0 16px;color:var(--text-secondary,#8e8e93)">${esc(description)}</p>
+      <div style="padding:0 16px">
+        <input type="text" id="oneTimeLinkValue" readonly value="${esc(link)}" style="width:100%;box-sizing:border-box;font-family:monospace">
+      </div>
+      <div style="padding:12px 16px;display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn-ghost" id="oneTimeLinkClose">Закрыть</button>
+        <button type="button" class="btn-main" id="oneTimeLinkCopy">Скопировать</button>
+      </div>
+    </div>
+  `;
+  const input = document.getElementById('oneTimeLinkValue') as HTMLInputElement | null;
+  document.getElementById('oneTimeLinkClose')?.addEventListener('click', () => closeModal());
+  document.getElementById('oneTimeLinkCopy')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast('Скопировано');
+    } catch {
+      input?.select();
+      toast('Выделено — скопируйте вручную (Ctrl+C)', 'err');
+    }
+  });
+  document.getElementById('modalCloseBtn')?.addEventListener('click', () => closeModal(), { once: true });
+  if (typeof openModal === 'function') openModal();
+  input?.select();
+}
