@@ -147,7 +147,10 @@ Google Sheets + переписка в Telegram живут на одной точ
 
 | Слой | Технология | Зачем |
 |------|------------|-------|
-| Клиент | Telegram WebApp, `index.html` | UI, offline-queue, tutorial |
+| Клиент (веб/Telegram) | Telegram WebApp, `index.html` | UI, offline-queue, tutorial; тот же код открывается и как обычный мобильный веб |
+| Клиент (Windows, Electron) | `desktop/` — Electron-обёртка того же веб-фронтенда | Продакшн-десктоп-клиент |
+| Клиент (Android, Capacitor) | `android/` — Capacitor-обёртка того же веб-фронтенда | Продакшн-приложение, опубликовано в RuStore |
+| Нативные клиенты (Windows и Android) | `native/` — Kotlin Multiplatform + Compose, отдельная кодовая база | Разрабатываются параллельно вебу/Electron/Capacitor, не заменяют их; см. [native/README.md](native/README.md) |
 | API | Node.js 22, Fastify 5, TypeScript | REST + static |
 | БД | PostgreSQL (Railway) | источник истины |
 | Бот | Grammy | отчёты, напоминания, notify |
