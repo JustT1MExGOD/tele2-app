@@ -400,6 +400,16 @@ export function onChatComposerCompositionEnd(): void {
   isComposing = false;
 }
 
+/** Пока открыта клавиатура, нижняя навигация (.bottom-nav) прячется (styles.css,
+ * body.chat-keyboard-open) — как в большинстве чат-приложений, освобождает
+ * лишнюю полосу экрана вместо того, чтобы всегда висеть над клавиатурой. */
+export function onChatComposerFocus(): void {
+  document.body.classList.add('chat-keyboard-open');
+}
+export function onChatComposerBlur(): void {
+  document.body.classList.remove('chat-keyboard-open');
+}
+
 /** Enter = отправка, Shift+Enter = перенос строки, но не во время IME
  * (композиция иероглифов/эмодзи и т.п. — §20 брифа) — composing-событие
  * фиксируем отдельно (isComposing), т.к. event.isComposing в некоторых
@@ -593,6 +603,8 @@ declare global {
     onChatComposerKeydown: typeof onChatComposerKeydown;
     onChatComposerCompositionStart: typeof onChatComposerCompositionStart;
     onChatComposerCompositionEnd: typeof onChatComposerCompositionEnd;
+    onChatComposerFocus: typeof onChatComposerFocus;
+    onChatComposerBlur: typeof onChatComposerBlur;
     jumpToChatBottom: typeof jumpToChatBottom;
   }
 }
@@ -608,4 +620,6 @@ window.onChatComposerInput = onChatComposerInput;
 window.onChatComposerKeydown = onChatComposerKeydown;
 window.onChatComposerCompositionStart = onChatComposerCompositionStart;
 window.onChatComposerCompositionEnd = onChatComposerCompositionEnd;
+window.onChatComposerFocus = onChatComposerFocus;
+window.onChatComposerBlur = onChatComposerBlur;
 window.jumpToChatBottom = jumpToChatBottom;

@@ -252,6 +252,14 @@
          Второе объявление того же свойства просто переопределяет первое
          там, где dvh поддерживается, игнорируется без ошибки там, где нет. */
       min-height: 100dvh;
+      /* --tg-viewport-height (app/core.ts) — то же самое, что и у
+         .chat-page.active выше: внутри Telegram 100dvh не уменьшается при
+         появлении клавиатуры, из-за чего body оставался выше реально
+         видимой области — документ становился скроллящимся целиком, и
+         свайп по ленте чата утаскивал весь body (шапку и композер вместе
+         с ним), а не только внутренний .chat-scroll-box. Без Telegram
+         переменная не задана, calc() падает обратно на 100dvh. */
+      min-height: calc(var(--tg-viewport-height, 100dvh));
     }
 
     /* Selection */
@@ -2848,6 +2856,20 @@
   height: calc(var(--tg-viewport-height, 100dvh) - var(--app-header-height, 0px) - var(--bottom-nav-safe-offset));
   min-height: 0;
   padding: 0;
+}
+/* Клавиатура открыта в композере (chat/index.ts, onChatComposerFocus/Blur) —
+   .bottom-nav прячется (как в большинстве чат-приложений: лишняя полоса
+   вкладок над клавиатурой ни к чему), а .chat-page.active больше не вычитает
+   под неё место — тот же приём, что и для брейкпоинта ≥860px чуть ниже, где
+   .bottom-nav тоже скрыт и высота считается без этого слагаемого. */
+body.chat-keyboard-open {
+  padding-bottom: 0; /* bottom-nav скрыт, зазор под него не нужен — тот же приём, что на ≥860px (строка 2306) */
+}
+body.chat-keyboard-open .bottom-nav {
+  display: none;
+}
+body.chat-keyboard-open .chat-page.active {
+  height: calc(var(--tg-viewport-height, 100dvh) - var(--app-header-height, 0px));
 }
 /* .bottom-nav скрыт на ≥860px (display:none !important, base desktop-shell
    media block выше) — здесь нечего вычитать, та же логика, что уже
