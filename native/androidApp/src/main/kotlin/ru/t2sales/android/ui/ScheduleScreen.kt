@@ -77,8 +77,8 @@ private fun storeShort(row: ScheduleRow, limit: Int): String =
 private class EditTarget(val employeeId: Int, val name: String, val date: LocalDate, val row: ScheduleRow?)
 
 /**
- * Mobile port of pages/schedule: month switcher, team summary (manager tier), one month calendar per person, tap a day to edit it (managers).
- * Not ported yet: the automatic draft section and moving a shift by dragging it.
+ * Mobile port of pages/schedule: month switcher, team summary (manager tier), automatic draft section (managers), one month
+ * calendar per person, tap a day to edit it (managers). Not ported yet: moving a shift by dragging it (desktop-mouse only).
  */
 @Composable
 fun ScheduleScreen(container: AppContainer, me: MeResponse) {
@@ -94,6 +94,7 @@ fun ScheduleScreen(container: AppContainer, me: MeResponse) {
     var employees by remember { mutableStateOf<List<EmployeeListItem>?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     var editing by remember { mutableStateOf<EditTarget?>(null) }
+    var draft by remember { mutableStateOf<ScheduleDraft?>(null) }
 
     LaunchedEffect(Unit) {
         runCatching { scheduleApi.getOrgStores() }.onSuccess { r -> stores = r.stores.associateBy { it.id } }
@@ -116,6 +117,10 @@ fun ScheduleScreen(container: AppContainer, me: MeResponse) {
                 if (managerTier) {
                     Text("Сводный график команды", fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
                     SummaryGrid(list, emps, month, stores, today)
+                    Spacer(Modifier.height(T2Spacing.sp3))
+                }
+                if (canEdit) {
+                    DraftSection(scheduleApi, stores, emps, draft, { draft = it }, { reloadKey++ })
                     Spacer(Modifier.height(T2Spacing.sp3))
                 }
                 if (canEdit) Text("Нажми на день, чтобы поставить / убрать смену", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))

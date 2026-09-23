@@ -54,11 +54,15 @@ import ru.t2sales.android.AppContainer
 import ru.t2sales.shared.api.DashboardLeaderRow
 import ru.t2sales.shared.api.MeDayResponse
 import ru.t2sales.shared.api.MeResponse
+import ru.t2sales.shared.api.SupervisorHealthResponse
 import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Radius
 import ru.t2sales.shared.theme.T2Spacing
 
 private val MOSCOW = ZoneId.of("Europe/Moscow")
+
+// Same gate as web's canSeeAnalytics() (app/core.ts) and desktop's ANALYTICS_ROLES (HomeViewModel.kt).
+private val ANALYTICS_ROLES = setOf("manager", "admin", "supervisor")
 
 private val METRIC_SHORT_LABEL = mapOf(
     "sim" to "SIM", "mnp" to "MNP", "pa" to "ПА", "combo" to "Комбо", "phones" to "Тел", "accessories" to "Аксы",
@@ -87,7 +91,8 @@ private class HomeData(
     val myDay: MeDayResponse?,
     val totals: Totals,
     val leaders: List<DashboardLeaderRow>,
-    val shiftOpen: Boolean?
+    val shiftOpen: Boolean?,
+    val health: SupervisorHealthResponse?
 )
 
 private fun sumTotals(stats: JsonArray): Totals {
@@ -133,29 +138,35 @@ fun HomeScreen(container: AppContainer, me: MeResponse) {
             val cMyDay = cache.get("home.myday", MeDayResponse.serializer())?.value
             val cStats = cache.get("home.stats", JsonArray.serializer())?.value
             val cDash = cache.get("home.dashboard", DashboardResponse.serializer())?.value
+            val cHealth = if (me.role in ANALYTICS_ROLES) cache.get("home.health", SupervisorHealthResponse.serializer())?.value else null
             if (cMyDay != null || cStats != null || cDash != null) {
-                data = HomeData(cMyDay, cStats?.let(::sumTotals) ?: Totals(0.0, 0.0, 0.0, 0.0, 0.0, 0.0), cDash?.top.orEmpty().ifEmpty { cDash?.top7.orEmpty() }, null)
+                data = HomeData(cMyDay, cStats?.let(::sumTotals) ?: Totals(0.0, 0.0, 0.0, 0.0, 0.0, 0.0), cDash?.top.orEmpty().ifEmpty { cDash?.top7.orEmpty() }, null, cHealth)
             }
         }
-        // the four requests go out together: the wait is the slowest one, not the sum
+        // the requests go out together: the wait is the slowest one, not the sum
         coroutineScope {
             val aMyDay = async { runCatching { container.homeApi.getMyDay() }.getOrNull() }
             val aStats = async { runCatching { container.reportsApi.getStatsDaily(LocalDate.now(MOSCOW).toString()) }.getOrNull() }
             val aDash = async { runCatching { container.reportsApi.getDashboard() }.getOrNull() }
             val aShift = async { runCatching { container.profileApi.getShiftCurrent() }.getOrNull() }
+            // same role gate as web's canSeeAnalytics()/desktop's ANALYTICS_ROLES — a trainee/employee never issues this call
+            val aHealth = if (me.role in ANALYTICS_ROLES) async { runCatching { container.homeApi.getSupervisorHealth() }.getOrNull() } else null
             val myDay = aMyDay.await()
             val stats = aStats.await()
             val dashboard = aDash.await()
             val shift = aShift.await()
+            val health = aHealth?.await()
             myDay?.let { cache.put("home.myday", MeDayResponse.serializer(), it) }
             stats?.let { cache.put("home.stats", JsonArray.serializer(), it) }
             dashboard?.let { cache.put("home.dashboard", DashboardResponse.serializer(), it) }
+            health?.let { cache.put("home.health", SupervisorHealthResponse.serializer(), it) }
             val before = data
             data = HomeData(
                 myDay = myDay ?: before?.myDay,
                 totals = stats?.let(::sumTotals) ?: before?.totals ?: Totals(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
                 leaders = if (dashboard != null) dashboard.top.orEmpty().ifEmpty { dashboard.top7.orEmpty() } else before?.leaders.orEmpty(),
-                shiftOpen = shift?.let { it.session != null }
+                shiftOpen = shift?.let { it.session != null },
+                health = health ?: before?.health
             )
         }
     }
@@ -171,6 +182,9 @@ fun HomeScreen(container: AppContainer, me: MeResponse) {
             } else {
                 Box(Modifier.reveal(1)) { MyDay(d.myDay, d.shiftOpen) }
                 Box(Modifier.reveal(2)) { NetworkPulse(d.totals) }
+                if (me.role in ANALYTICS_ROLES) {
+                    Box(Modifier.reveal(3)) { CommandCenterSection(d.health) { Nav.open(Page.CommandCenter) } }
+                }
                 Box(Modifier.reveal(3)) { CalcSection() }
                 Box(Modifier.reveal(4)) { QuickActionsSection() }
                 Box(Modifier.reveal(5)) { TopLeaders(d.leaders) }
@@ -369,6 +383,77 @@ private fun StatChip(label: String, value: Int, modifier: Modifier) {
     ) {
         Text(text, fontSize = 20.sp, fontWeight = FontWeight.Black)
         Text(label.uppercase(), color = T2Colors.hint, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp, modifier = Modifier.padding(top = 3.dp))
+    }
+}
+
+/** Ported from desktop's HomeScreen.kt CommandCenterSection — web's #commandCenterSection / #homeDesktopInsights, manager+ only. */
+@Composable
+private fun CommandCenterSection(health: SupervisorHealthResponse?, onOpen: () -> Unit) {
+    Section("Сеть за минуту") {
+        if (health == null) {
+            Text("Недоступно", color = T2Colors.hint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            return@Section
+        }
+        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
+            val tone = when {
+                health.health >= 75 -> Color(0xFF30D158)
+                health.health >= 45 -> Color(0xFFFF9F0A)
+                else -> Color(0xFFFF453A)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(
+                    modifier = Modifier.size(52.dp).clip(CircleShape).background(tone.copy(alpha = 0.13f)).border(1.dp, tone.copy(alpha = 0.27f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) { Text(health.health.roundToInt().toString(), color = tone, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp) }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("${health.overall_pct.roundToInt()}% план дня", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    val pace = health.pace_delta.roundToInt()
+                    Text((if (pace >= 0) "+$pace" else "$pace") + "% к темпу дня", color = if (pace >= 0) T2Colors.success else T2Colors.danger, fontSize = 13.sp)
+                }
+                Text("›", color = T2Colors.hint, fontSize = 20.sp, modifier = Modifier.clickable(onClick = onOpen))
+            }
+            if (health.drops.isEmpty()) {
+                Text("Критических просадок нет — сеть в ритме", color = T2Colors.hint, modifier = Modifier.padding(top = 10.dp))
+            } else {
+                health.drops.take(3).forEach { d ->
+                    val warn = d.severity != "critical"
+                    val c = if (warn) Color(0xFFFF9F0A) else Color(0xFFFF453A)
+                    val shape = RoundedCornerShape(16.dp)
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .fillMaxWidth()
+                            .clip(shape)
+                            .background(Brush.linearGradient(listOf(c.copy(alpha = 0.12f), c.copy(alpha = 0.04f))))
+                            .border(1.dp, c.copy(alpha = if (warn) 0.30f else 0.25f), shape)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(if (warn) "⚠️" else "🔴", fontSize = 18.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(d.store_name ?: "Точка", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(d.message ?: "", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                            if (!d.ai_comment.isNullOrBlank()) {
+                                Text("✨ ${d.ai_comment}", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                            }
+                            if (d.store_id != null) {
+                                val chip = RoundedCornerShape(12.dp)
+                                Text(
+                                    "Предложить перенос",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier
+                                        .padding(top = 6.dp)
+                                        .clip(chip).background(T2Colors.surface2).border(1.dp, T2Colors.border, chip)
+                                        .clickable { AppNav.proposeMove(d.store_id ?: "") }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
