@@ -13,10 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.Icon
 import androidx.compose.material.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,7 +62,7 @@ fun OrgsScreen(api: AdminApi) {
         ) {
             val shape = RoundedCornerShape(T2Radius.sm)
             Box(Modifier.size(42.dp).clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.Add, contentDescription = null, tint = T2Colors.textSecondary, modifier = Modifier.size(20.dp))
+                NavIcon(NavIcons.plus, contentDescription = null, tint = T2Colors.textSecondary, size = 20.dp)
             }
             Spacer(Modifier.width(12.dp))
             Text("Добавить сеть", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

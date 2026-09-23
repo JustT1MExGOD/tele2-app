@@ -16,11 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Icon
 import androidx.compose.material.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -92,15 +87,15 @@ fun ReportsScreen(reportsApi: ReportsApi, teamApi: TeamApi, isAdmin: Boolean, ca
     Spacer(Modifier.height(12.dp))
 
     Section("Отчёт по точке") {
-        NavRow(Icons.Outlined.Image, "Отчёт-картинка", "SVG итог дня по выбранной точке") { onOpenReportImg() }
+        NavRow(NavIcons.reportImg, "Отчёт-картинка", "SVG итог дня по выбранной точке") { onOpenReportImg() }
     }
     Spacer(Modifier.height(12.dp))
 
     if (canManage) {
         Section("Экспорт CSV") {
-            NavRow(Icons.Outlined.Download, "Продажи", null) { export(scope, teamApi, "sales") }
-            NavRow(Icons.Outlined.Download, "BFQ", null) { export(scope, teamApi, "bfq") }
-            NavRow(Icons.Outlined.Download, "График", null) { export(scope, teamApi, "schedules") }
+            NavRow(NavIcons.download, "Продажи", null) { export(scope, teamApi, "sales") }
+            NavRow(NavIcons.download, "BFQ", null) { export(scope, teamApi, "bfq") }
+            NavRow(NavIcons.download, "График", null) { export(scope, teamApi, "schedules") }
         }
         Spacer(Modifier.height(12.dp))
     }
@@ -155,7 +150,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun NavRow(icon: ImageVector, title: String, sub: String?, onClick: () -> Unit) {
+private fun NavRow(icon: androidx.compose.ui.graphics.Path, title: String, sub: String?, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -164,7 +159,7 @@ private fun NavRow(icon: ImageVector, title: String, sub: String?, onClick: () -
         Box(
             modifier = Modifier.size(42.dp).clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape),
             contentAlignment = Alignment.Center
-        ) { Icon(icon, contentDescription = null, tint = T2Colors.textSecondary, modifier = Modifier.size(20.dp)) }
+        ) { NavIcon(icon, contentDescription = null, tint = T2Colors.textSecondary, size = 20.dp) }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)

@@ -173,6 +173,14 @@ object NavIcons {
      * differently per device/font); both now use this info-circle instead. */
     val info = icon { circle(12f, 12f, 10f); d("M12 16v-4"); d("M12 8h.01") }
     val checkmark = icon { d("M20 6 9 17l-5-5") }
+    /** Task status "cancelled" (pages/tasks/index.ts's CANCELLED_ICON) — circle + diagonal slash. */
+    val cancelled = icon { circle(12f, 12f, 10f); d("M4.929 4.929 19.071 19.071") }
+    /** Task status "open"/default (pages/tasks/index.ts's OPEN_ICON) — a clipboard, distinct from "clipboardList" (План). */
+    val clipboard = icon {
+        rect(8f, 2f, 8f, 4f, 1f)
+        d("M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2")
+        d("M12 11h4"); d("M12 16h4"); d("M8 11h.01"); d("M8 16h.01")
+    }
     /** The header's "Обновить" button (the theme toggle next to it is a plain "◐" glyph in the web app too, nothing to fix there). */
     val refresh = icon {
         d("M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"); d("M21 3v5h-5")

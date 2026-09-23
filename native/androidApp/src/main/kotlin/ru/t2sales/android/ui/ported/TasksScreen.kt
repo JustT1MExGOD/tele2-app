@@ -19,12 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.Icon
 import androidx.compose.material.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -127,8 +122,8 @@ private fun TaskRow(t: TaskListItem, onClick: () -> Unit) {
             modifier = Modifier.size(42.dp).clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape),
             contentAlignment = Alignment.Center
         ) {
-            val icon = when (t.status) { "done" -> Icons.Outlined.Check; "cancelled" -> Icons.Outlined.Block; else -> Icons.Outlined.Assignment }
-            Icon(icon, contentDescription = null, tint = T2Colors.textSecondary, modifier = Modifier.size(20.dp))
+            val icon = when (t.status) { "done" -> NavIcons.checkmark; "cancelled" -> NavIcons.cancelled; else -> NavIcons.clipboard }
+            NavIcon(icon, contentDescription = null, tint = T2Colors.textSecondary, size = 20.dp)
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
