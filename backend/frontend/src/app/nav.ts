@@ -204,7 +204,19 @@ export function switchPage(name: string): void {
   // чата, где он перекрывает композер внизу экрана; нативные клиенты
   // (desktop/android AppShell) тоже явно прячут FAB именно на чате).
   const fab = document.querySelector('.fab') as HTMLElement | null;
-  if (fab) fab.style.display = name.indexOf('sv-') === 0 || name === 'chat' ? 'none' : 'flex';
+  if (fab) {
+    const shouldShow = !(name.indexOf('sv-') === 0 || name === 'chat');
+    const wasHidden = fab.style.display === 'none';
+    fab.style.display = shouldShow ? 'flex' : 'none';
+    // Пружинный "поп" (styles.css, .fab-pop) только когда FAB реально
+    // появляется из скрытого состояния — не на каждый переход между обычными
+    // вкладками, где он и так уже был виден.
+    if (shouldShow && wasHidden) {
+      fab.classList.remove('fab-pop');
+      void fab.offsetWidth; // форсируем reflow — иначе повторный add() класса без реального removal не переигрывает анимацию
+      fab.classList.add('fab-pop');
+    }
+  }
 
   try {
     loadPage(name);

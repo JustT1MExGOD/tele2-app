@@ -773,6 +773,15 @@
       transform: scale(0.92);
       box-shadow: 0 4px 14px rgba(42,171,238,0.35);
     }
+    /* nav.ts — только когда FAB реально появляется из скрытого состояния
+       (ушли со страницы супервайзера/чата на обычную), не на каждый switchPage
+       между обычными вкладками, где он и так уже виден. */
+    @keyframes fabPop {
+      0% { transform: scale(0.4); opacity: 0; }
+      65% { transform: scale(1.08); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .fab.fab-pop { animation: fabPop 0.34s var(--ease-out, ease); }
 
     /* Bottom nav */
     .bottom-nav {
@@ -810,6 +819,18 @@
     .nav-item.active {
       color: var(--primary);
     }
+    /* Лёгкий "прыжок" иконки активной вкладки — switchPage() (nav.ts) toggle'ит
+       .active по всем .nav-item на каждый переход, так что анимация сама
+       переигрывается на новой активной вкладке без отдельного JS-триггера;
+       на повторный тап по уже активной вкладке toggle(true) не меняет класс,
+       так что она не переигрывается — то же поведение, что у нативных клиентов. */
+    @keyframes navIconHop {
+      0% { transform: scale(1); }
+      35% { transform: scale(1.22); }
+      60% { transform: scale(0.94); }
+      100% { transform: scale(1); }
+    }
+    .nav-item.active .ico { animation: navIconHop 0.38s var(--ease-out, ease); }
 
     /* п.17: весь эмодзи-набор приложения заменён на line-иконки (Lucide,
        ISC-лицензия). Инлайн SVG, stroke="currentColor" — берёт цвет из
@@ -1688,6 +1709,18 @@
     .combo-result .big { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; color: var(--primary); }
     .combo-result .hint { font-size: 12px; color: var(--hint); margin-top: 6px; line-height: 1.4; }
     .page > .section { animation: fadeUp 0.28s ease both; }
+    /* Каскадный reveal — те же 45мс между секциями, что нативные клиенты
+       используют между своими Modifier.reveal(index) элементами (HomeScreen.kt
+       и т.п.), только выражено через animation-delay вместо покадрового стейта.
+       :nth-child, а не :nth-of-type — секции всегда прямые .section-дети
+       .page (никаких других тегов между ними на верхнем уровне страницы). */
+    .page > .section:nth-child(2) { animation-delay: 0.045s; }
+    .page > .section:nth-child(3) { animation-delay: 0.09s; }
+    .page > .section:nth-child(4) { animation-delay: 0.135s; }
+    .page > .section:nth-child(5) { animation-delay: 0.18s; }
+    .page > .section:nth-child(6) { animation-delay: 0.225s; }
+    .page > .section:nth-child(7) { animation-delay: 0.27s; }
+    .page > .section:nth-child(8) { animation-delay: 0.315s; }
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
