@@ -2841,6 +2841,11 @@
      уже применён к body.padding-bottom для этого брейкпоинта. */
   height: calc(100vh - var(--app-header-height, 0px) - var(--bottom-nav-safe-offset));
   height: calc(100dvh - var(--app-header-height, 0px) - var(--bottom-nav-safe-offset));
+  /* --tg-viewport-height (core.ts, tg.viewportHeight на 'viewportChanged') —
+     реально видимая высота внутри Telegram, когда WebView не honour'ит
+     100dvh при появлении клавиатуры (композер иначе оказывался под ней).
+     Вне Telegram переменная не задана — calc() падает обратно на 100dvh. */
+  height: calc(var(--tg-viewport-height, 100dvh) - var(--app-header-height, 0px) - var(--bottom-nav-safe-offset));
   min-height: 0;
   padding: 0;
 }

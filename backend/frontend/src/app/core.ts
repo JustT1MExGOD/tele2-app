@@ -195,6 +195,24 @@ async function initTelegramWebApp(): Promise<void> {
     tg.onEvent('safeAreaChanged', applyTgSafeArea);
     tg.onEvent('contentSafeAreaChanged', applyTgSafeArea);
   } catch (_) {}
+
+  // Чат-композер "уезжал" при открытии клавиатуры внутри Telegram: .chat-page
+  // считает свою высоту через 100vh/100dvh (styles.css), а WebView некоторых
+  // клиентов Telegram не honour'ит эти юниты при появлении клавиатуры — сам
+  // документ остаётся прежней высоты, просто часть его перекрывается
+  // клавиатурой поверх. tg.viewportHeight — это и есть реально видимая (не
+  // перекрытая клавиатурой) высота, обновляется по 'viewportChanged'; тот же
+  // приём, что applyTgSafeArea() выше для отступов.
+  const applyTgViewportHeight = () => {
+    const h = tg.viewportHeight;
+    if (typeof h === 'number' && h > 0) {
+      document.body.style.setProperty('--tg-viewport-height', h + 'px');
+    }
+  };
+  try {
+    applyTgViewportHeight();
+    tg.onEvent('viewportChanged', applyTgViewportHeight);
+  } catch (_) {}
 }
 // access-supervisor/index.ts's initial bootApp() call awaits this before
 // deciding Telegram-vs-not, so a real Telegram user is never mistaken

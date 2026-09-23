@@ -200,9 +200,11 @@ export function switchPage(name: string): void {
   }
 
   // FAB всегда доступен для быстрой продажи (кроме access-gate и кабинета
-  // супервайзера — там нет личных продаж, чисто аналитика)
+  // супервайзера — там нет личных продаж, чисто аналитика — и кроме
+  // чата, где он перекрывает композер внизу экрана; нативные клиенты
+  // (desktop/android AppShell) тоже явно прячут FAB именно на чате).
   const fab = document.querySelector('.fab') as HTMLElement | null;
-  if (fab) fab.style.display = name.indexOf('sv-') === 0 ? 'none' : 'flex';
+  if (fab) fab.style.display = name.indexOf('sv-') === 0 || name === 'chat' ? 'none' : 'flex';
 
   try {
     loadPage(name);
