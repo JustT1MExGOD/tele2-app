@@ -39,7 +39,7 @@
 | ✅ | active | `requireActive` | одобренный (`access_status='active'`) сотрудник любой роли |
 | 👔 | manager+ | `requireManager` | `manager` / `admin` / `senior` |
 | 🛡 | supervisor+ | `requireManagerOrSupervisor` / `requireSupervisor` | `supervisor` и выше |
-| 🔑 | admin | ручная проверка `role === 'admin'` | только `admin` |
+| 🔑 | admin | `requireAdmin` (`/admin/*`) или ручная проверка `role === 'admin'` (старые роуты вроде `PUT /admin/org/:id`) | только `admin` |
 | 🔀 | смешанный | — | разные подроуты файла на разных уровнях, см. код |
 
 ## Эндпоинты
@@ -66,6 +66,9 @@
 | Export | 👔 | CSV: `/export/sales.csv`, `/export/bfq.csv`, `/export/schedules.csv` | `ops/export.ts` |
 | Audit | 🔑 | `GET /audit` | `audit.ts` |
 | Metrics | 👔 | `/metrics` (каталог кастомных метрик) | `metrics.ts` |
+| Admin Center — коррекции продаж/смен/графика/планов | 🔑 | `GET /admin/{sales,shifts,schedules}`+`/:id` (поиск и детали), `POST /admin/sales/:id/{void,restore,correct-metric,correct-store}` (+`/preview` для void/correct-store — предпросмотр без записи), те же `void`/`restore`/`correct` для `/admin/shifts/:id`, `void`/`correct` для `/admin/schedules/:id`, `POST /admin/plans/{employees,stores}/:id/correct-metric`. Причина обязательна, кросс-сетевые правки требуют step-up (`X-Step-Up-Token`) | `admin/sales.ts`, `admin/shifts.ts`, `admin/schedules.ts`, `admin/plans.ts` |
+| Admin Center — сотрудники, точки, поиск, обзор | 🔑 | `GET/PATCH /admin/employees/:id` (+`role`/`deactivate`/`reactivate`/`sessions`/`mfa/reset`/`password-reset`), `GET/PATCH /admin/stores/:id` (+`deactivate`/`reactivate`), `GET /admin/search`, `GET /admin/overview` | `admin/employees.ts`, `admin/stores.ts`, `admin/search.ts`, `admin/overview.ts` |
+| Admin Center — флаги функциональности и операционный центр | 🔑 | `GET/PUT/DELETE /admin/feature-flags/:key` (глобально или по сети), `GET /admin/operations-overview` (алерты и заявки на доступ по всем сетям сразу, не только своей) | `admin/feature-flags.ts`, `admin/operations.ts` |
 
 Каждый роут, отдающий чужие/сетевые данные, дополнительно гейтится
 org-scope проверкой (`assertStoreInOrg`/`assertEmployeeInOrg`) поверх

@@ -84,6 +84,8 @@ tele2-app/
 ├── docs/                      (этот файл + API.md/DEVELOPMENT.md/SECURITY.md/CHAT.md/FEATURES.md/ADR/archive/…)
 ├── sql/                       (исторические ручные SQL-снимки, не источник схемы — см. sql/README.md)
 ├── desktop/                   (20.55.0+ — Electron Windows-клиент, отдельный package.json/версия, см. docs/DESKTOP.md)
+├── android/                   (Capacitor-обёртка веб-фронтенда, опубликована в RuStore, см. docs/ANDROID-RELEASE.md)
+├── native/                    (Kotlin Multiplatform + Compose — отдельные клиенты для Windows и Android, своя версия/CHANGELOG, см. native/README.md)
 ├── relay/                     (20.55.0+ — T2 Edge Relay, отдельный package.json/версия/деплой, см. docs/DESKTOP-NETWORK.md)
 └── backend/                  ← Root Directory на Railway
     ├── package.json
@@ -119,6 +121,8 @@ tele2-app/
     │   │   ├── org/           (employees.ts · stores.ts · access.ts — заявки/секторы · branding.ts — сети/пикер точек)
     │   │   ├── analytics/     (stats · forecast · insights · live · what-if · heatmap · command-center · supervisor)
     │   │   ├── ops/            (tasks · support · comms · reports · export · alerts)
+    │   │   ├── admin/          (Admin Center — sales · shifts · schedules · plans (коррекции: причина + предпросмотр + аудит) ·
+    │   │   │                    employees · stores · search · overview · feature-flags · operations, все requireAdmin, см. docs/API.md)
     │   │   ├── profiles/       (store.ts · employee.ts — Store/Employee Intelligence, Health Score)
     │   │   └── chat/           (20.57.0 — messages.ts · attachments.ts · ws.ts, см. docs/CHAT.md)
     │   │
@@ -129,6 +133,8 @@ tele2-app/
     │   │   ├── reports/       (image.ts — SVG/PNG-рендер; svg-pool.ts — worker-пул)
     │   │   ├── chat/          (20.57.0 — service.ts · realtime-registry.ts · attachment-validation.ts ·
     │   │   │                    storage.ts/StorageAdapter, сейчас PostgresBlobStorageAdapter — см. docs/CHAT.md)
+    │   │   ├── admin/         (sales-correction.ts · shift-correction.ts · schedule-correction.ts · plan-correction.ts —
+    │   │   │                    каждая: withTransaction, версия-гейт WHERE id=$1 AND version=$2, recordAudit в той же транзакции)
     │   │   └── shared/        (tenant.ts — брендинг/сети; scope-cache.ts — Supervisor Scope Cache; metrics-catalog.ts)
     │   │
     │   ├── data/                         (Full Data Access Layer, 19.22.0→20.8.0 — единственное место с прямым SQL)
