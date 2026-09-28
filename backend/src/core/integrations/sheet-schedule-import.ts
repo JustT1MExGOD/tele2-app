@@ -18,7 +18,8 @@
  * сотрудника.
  */
 import * as employeesRepo from '../../data/repositories/employees.js';
-import * as schedulesRepo from '../../data/repositories/schedules.js';
+// schedules — bounded context owned by core/schedules/, never data/repositories/schedules.js directly (check:architecture).
+import { upsertFromSheet, deleteOneFromSheet } from '../schedules/index.js';
 import * as mappingsRepo from '../../data/repositories/sheet-schedule-import.js';
 import { findBestMatch, normalizeName } from './sheet-name-match.js';
 import { parseShiftCell } from './sheet-shift-parse.js';
@@ -50,7 +51,7 @@ export async function importSheetScheduleEvent(ev: SheetScheduleEvent): Promise<
 
 /** Возвращает employee_id, либо 'pending' если нужно подтверждение в Admin Center. */
 async function resolveEmployeeId(ev: SheetScheduleEvent): Promise<number | 'pending'> {
-  const confirmed = await mappingsRepo.findConfirmedMapping(ev.orgId, ev.employeeNameRaw);
+  const confirmed = await findConfirmedMapping(ev.orgId, ev.employeeNameRaw);
   if (confirmed) return confirmed.employee_id;
 
   const candidates = await employeesRepo.listActiveNamesForOrg(ev.orgId);
@@ -86,7 +87,7 @@ export async function applyToSchedule(employeeId: number, ev: Pick<SheetSchedule
 
   if (parsed.kind === 'off') {
     // Выходной не привязан к точке — store_id тут не нужен и не используется.
-    const deleted = await schedulesRepo.deleteOneFromSheet(employeeId, ev.workDate);
+    const deleted = await deleteOneFromSheet(employeeId, ev.workDate);
     return deleted ? { status: 'applied' } : { status: 'skipped_manual' };
   }
 
@@ -95,8 +96,15 @@ export async function applyToSchedule(employeeId: number, ev: Pick<SheetSchedule
   // с пустым store_id нельзя.
   if (!ev.storeId) return { status: 'skipped_no_store' };
 
-  const row = await schedulesRepo.upsertFromSheet(employeeId, ev.storeId, ev.workDate, parsed.shiftText, parsed.hours);
+  const row = await upsertFromSheet(employeeId, ev.storeId, ev.workDate, parsed.shiftText, parsed.hours);
   return row ? { status: 'applied' } : { status: 'skipped_manual' };
+}
+
+/** Один нормализованный вариант написания имени может быть вписан в таблицу с разным по регистру/пробелам текстом — сравнение через normalizeName() делается здесь (core), не в репозитории (infrastructure не должна зависеть от core). */
+async function findConfirmedMapping(orgId: string, sheetNameRaw: string) {
+  const rows = await mappingsRepo.listMappingsForOrg(orgId);
+  const target = normalizeName(sheetNameRaw);
+  return rows.find((r) => normalizeName(r.sheet_name_raw) === target) || null;
 }
 
 export { normalizeName };

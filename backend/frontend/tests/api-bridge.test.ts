@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import '../src/app/api-bridge.js';
 
-// Exact 181-name public surface of the former monolithic api-client.ts
+// Exact 184-name public surface of the former monolithic api-client.ts
 // (128 original + resolveStore + getShiftOpenMap, both added for the
 // replacement-shift feature, + getAcademyProgress/completeAcademyStep/
 // getAcademyContextualStatus/dismissAcademyContextual, added for T2
@@ -21,7 +21,8 @@ import '../src/app/api-bridge.js';
 // admin-prefixed entries from features/admin-center/api.ts (20.59.0 Admin
 // Control Center) + issueStepUpTicket, + 17 shift/schedule/plan admin
 // correction entries (Phase 4+ Admin Control Center Area A) + 4 feature-flags/
-// operations-center entries (Phase 4+ Admin Control Center Area B)),
+// operations-center entries (Phase 4+ Admin Control Center Area B) + 3
+// sheet-import-review entries (20.61.0, Google Sheets schedule import)),
 // preserved verbatim by the split (see the architecture trace/plan).
 const EXPECTED_KEYS = [
   'getOrgStores', 'getMetrics', 'getPromos', 'getPromoCard', 'createPromo',
@@ -79,13 +80,14 @@ const EXPECTED_KEYS = [
   'adminGetEmployeePlan', 'adminCorrectEmployeePlanMetric', 'adminGetStorePlan',
   'adminCorrectStorePlanMetric',
   'adminGetFeatureFlags', 'adminUpsertFeatureFlag', 'adminDeleteFeatureFlag',
-  'adminGetOperationsOverview'
+  'adminGetOperationsOverview',
+  'adminGetSheetImportPending', 'adminConfirmSheetImportPending', 'adminRejectSheetImportPending'
 ] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 181-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 184-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 181
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 184
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 

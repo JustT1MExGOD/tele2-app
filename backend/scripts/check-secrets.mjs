@@ -59,7 +59,11 @@ const ALLOWLIST_SUBSTRINGS = [
   'desktop/tests/fixtures/test-key.pem',
   'desktop/tests/fixtures/untrusted-key.pem',
   'relay/tests/fixtures/test-key.pem',
-  'relay/tests/fixtures/untrusted-key.pem'
+  'relay/tests/fixtures/untrusted-key.pem',
+  // Deliberately fake shared secret for the Google Sheets webhook isolation
+  // test — never a real SHEETS_WEBHOOK_SECRET value, only compared against
+  // itself within this one test file.
+  'tests/isolation/sheet-import-webhook.test.ts'
 ];
 
 let files;

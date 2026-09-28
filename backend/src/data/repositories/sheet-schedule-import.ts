@@ -4,7 +4,6 @@
  * core/integrations/sheet-schedule-import.ts для бизнес-логики импорта.
  */
 import { query } from '../db/index.js';
-import { normalizeName } from '../../core/integrations/sheet-name-match.js';
 
 export interface SheetMappingRow {
   id: number;
@@ -27,18 +26,18 @@ export interface SheetPendingRow {
 }
 
 /**
- * Один нормализованный вариант написания имени может быть вписан в таблицу
- * с разным по регистру/пробелам текстом — ищем по normalizeName() в JS
- * (сотрудников в сети немного, полная выборка по org_id и сравнение здесь
- * дешевле, чем городить функциональный индекс ради одной таблицы).
+ * Чистые данные, без нормализации имени — сравнение normalizeName()
+ * (core/integrations/sheet-name-match.ts) делает вызывающий код в core,
+ * не репозиторий (infrastructure не должна зависеть от core, см.
+ * docs/ARCHITECTURE.md). Сотрудников в сети немного, полная выборка по
+ * org_id дешевле, чем городить функциональный индекс ради одной таблицы.
  */
-export async function findConfirmedMapping(orgId: string | null, sheetNameRaw: string): Promise<SheetMappingRow | null> {
+export async function listMappingsForOrg(orgId: string | null): Promise<SheetMappingRow[]> {
   const res = await query(
     `SELECT id, org_id, sheet_name_raw, employee_id FROM sheet_schedule_mappings WHERE COALESCE(org_id,'') = COALESCE($1,'')`,
     [orgId]
   );
-  const target = normalizeName(sheetNameRaw);
-  return res.rows.find((r: SheetMappingRow) => normalizeName(r.sheet_name_raw) === target) || null;
+  return res.rows;
 }
 
 export async function createConfirmedMapping(

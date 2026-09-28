@@ -30,3 +30,4 @@ export {
   deleteByIdVersioned,
   correctScheduleRow
 } from './application/admin-correction.js';
+export { upsertFromSheet, deleteOneFromSheet } from './application/sheet-import.js';
