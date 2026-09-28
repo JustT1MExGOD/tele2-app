@@ -47,7 +47,7 @@
     "dotenv": "^16.4.5",
     "fastify": "^5.1.0",
     "googleapis": "^182.0.0",
-    "grammy": "^1.30.0",
+    "grammy": "^1.46.0",
     "gsap": "^3.15.0",
     "javascript-lp-solver": "^1.0.3",
     "maxmind": "^5.0.7",
