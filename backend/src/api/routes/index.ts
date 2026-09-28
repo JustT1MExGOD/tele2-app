@@ -54,6 +54,8 @@ import { registerAdminSchedulesRoutes } from './admin/schedules.js';
 import { registerAdminPlansRoutes } from './admin/plans.js';
 import { registerAdminFeatureFlagsRoutes } from './admin/feature-flags.js';
 import { registerAdminOperationsRoutes } from './admin/operations.js';
+import { registerAdminSheetImportRoutes } from './admin/sheet-import.js';
+import { registerSheetsWebhookRoutes } from './integrations/sheets-webhook.js';
 
 const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Plans', registerPlansRoutes],
@@ -104,7 +106,9 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Admin Control Center — Schedule corrections', registerAdminSchedulesRoutes],
   ['Admin Control Center — Plan corrections', registerAdminPlansRoutes],
   ['Admin Control Center — Feature Flags', registerAdminFeatureFlagsRoutes],
-  ['Admin Control Center — Operations Center', registerAdminOperationsRoutes]
+  ['Admin Control Center — Operations Center', registerAdminOperationsRoutes],
+  ['Admin Control Center — Sheet import review', registerAdminSheetImportRoutes],
+  ['Integrations — Google Sheets schedule webhook', registerSheetsWebhookRoutes]
 ];
 
 /**

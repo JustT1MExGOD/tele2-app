@@ -71,7 +71,8 @@ const PUBLIC_ROUTES = new Set([
   'GET /access/orgs', // публичный список сетей для формы регистрации — известный trade-off, rate-limited
   'GET /access/employees-directory', // публичный каталог для "я из списка" при регистрации — известный trade-off, rate-limited
   'POST /access/request', // сама заявка на доступ — inline telegram_id-check, до access_status активности
-  'GET /branding' // публичное оформление (лого/цвета) для экрана логина
+  'GET /branding', // публичное оформление (лого/цвета) для экрана логина
+  'POST /integrations/sheets/schedule-webhook' // Google Apps Script не умеет ходить с сессионной кукой/CSRF — авторизация статическим общим секретом (X-Sheets-Webhook-Secret, timingSafeEqual), см. сам роут
 ]);
 
 function walk(dir) {

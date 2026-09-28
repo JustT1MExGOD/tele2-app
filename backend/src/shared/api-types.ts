@@ -1731,3 +1731,21 @@ export interface AdminOperationsOverviewResponse {
   alerts_by_severity: Record<string, number>;
   pending_access_requests: Record<string, unknown>[];
 }
+
+export interface SheetImportPendingRow {
+  id: number;
+  org_id: string | null;
+  store_id: string | null;
+  store_name: string | null;
+  sheet_name_raw: string;
+  work_date: string;
+  shift_raw: string | null;
+  candidate_employee_id: number | null;
+  candidate_full_name: string | null;
+  candidate_score: number | null;
+  status: 'pending' | 'confirmed' | 'rejected';
+  created_at: string;
+  [key: string]: unknown;
+}
+export interface AdminSheetImportPendingListResponse { items: SheetImportPendingRow[]; }
+export interface AdminSheetImportResolveResponse { ok: boolean; outcome?: Record<string, unknown>; }

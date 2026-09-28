@@ -43,6 +43,7 @@
 - [HTTP API](API.md).
 - [Внутренний чат сотрудников](CHAT.md).
 - [Прогноз продаж: методология и точность](FORECASTING.md).
+- [Импорт графика из Google Таблиц](SHEET-SCHEDULE-IMPORT.md).
 - [Картинка-отчёт](REPORT_IMAGE.md).
 - [Типовые сбои](TROUBLESHOOTING.md).
 - [Правила оформления документации](DOCUMENTATION-STYLE.md).

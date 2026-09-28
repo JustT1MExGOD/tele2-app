@@ -32,7 +32,9 @@ import type {
   AdminFeatureFlagsListResponse,
   AdminFeatureFlagUpsertResponse,
   AdminFeatureFlagDeleteResponse,
-  AdminOperationsOverviewResponse
+  AdminOperationsOverviewResponse,
+  AdminSheetImportPendingListResponse,
+  AdminSheetImportResolveResponse
 } from '../../../../src/shared/api-types.js';
 import { request } from '../../shared/api/http-client.js';
 
@@ -285,6 +287,20 @@ export async function adminUpsertFeatureFlag(headers: Record<string, string>, ke
 export async function adminDeleteFeatureFlag(headers: Record<string, string>, key: string, orgId: string | null): Promise<AdminFeatureFlagDeleteResponse> {
   const qs = orgId ? `?org_id=${encodeURIComponent(orgId)}` : '';
   return request(`/admin/feature-flags/${encodeURIComponent(key)}${qs}`, headers, { method: 'DELETE' });
+}
+
+// ---------- Sheet schedule import review ----------
+
+export async function adminGetSheetImportPending(headers: Record<string, string>): Promise<AdminSheetImportPendingListResponse> {
+  return request('/admin/sheet-import/pending', headers);
+}
+
+export async function adminConfirmSheetImportPending(headers: Record<string, string>, id: number, employeeId: number): Promise<AdminSheetImportResolveResponse> {
+  return request(`/admin/sheet-import/pending/${id}/confirm`, headers, { method: 'POST', body: { employee_id: employeeId } });
+}
+
+export async function adminRejectSheetImportPending(headers: Record<string, string>, id: number): Promise<AdminSheetImportResolveResponse> {
+  return request(`/admin/sheet-import/pending/${id}/reject`, headers, { method: 'POST' });
 }
 
 // ---------- Operations Center ----------

@@ -161,22 +161,64 @@ export async function findShiftTextAndHours(employeeId: number, date: string): P
   return res.rows[0] || null;
 }
 
-/** POST /schedules и /schedules/bulk — тот же upsert в обоих. */
+/**
+ * POST /schedules и /schedules/bulk — тот же upsert в обоих. Всегда
+ * ставит source='manual' — правка внутри приложения по определению
+ * приоритетнее любого прошлого/будущего импорта из Google Таблиц (см.
+ * upsertFromSheet ниже), поэтому явная правка руками должна СРАЗУ снимать
+ * защиту 'sheet_import', а не оставлять её висеть на старом значении.
+ */
 export async function upsert(
   employeeId: number, storeId: string, workDate: string, shiftText: string | undefined, hours: number | undefined
 ): Promise<any> {
   const res = await query(
-    `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours, source)
+     VALUES ($1, $2, $3, $4, $5, 'manual')
      ON CONFLICT (employee_id, work_date)
      DO UPDATE SET
        store_id = EXCLUDED.store_id,
        shift_text = EXCLUDED.shift_text,
-       hours = EXCLUDED.hours
+       hours = EXCLUDED.hours,
+       source = 'manual'
      RETURNING *`,
     [employeeId, storeId, workDate, shiftText, hours]
   );
   return res.rows[0];
+}
+
+/**
+ * Импорт из Google Таблиц (core/integrations/sheet-schedule-import.ts).
+ * Если строка уже существует и её source='manual' — WHERE в DO UPDATE не
+ * совпадёт, Postgres ведёт себя как DO NOTHING для этой строки конфликта,
+ * и RETURNING ничего не вернёт: так вызывающий код отличает "применено" от
+ * "защищено ручной правкой, пропущено" без отдельного SELECT.
+ */
+export async function upsertFromSheet(
+  employeeId: number, storeId: string, workDate: string, shiftText: string | undefined, hours: number
+): Promise<any | null> {
+  const res = await query(
+    `INSERT INTO schedules (employee_id, store_id, work_date, shift_text, hours, source)
+     VALUES ($1, $2, $3, $4, $5, 'sheet_import')
+     ON CONFLICT (employee_id, work_date)
+     DO UPDATE SET
+       store_id = EXCLUDED.store_id,
+       shift_text = EXCLUDED.shift_text,
+       hours = EXCLUDED.hours,
+       source = 'sheet_import'
+     WHERE schedules.source = 'sheet_import'
+     RETURNING *`,
+    [employeeId, storeId, workDate, shiftText, hours]
+  );
+  return res.rows[0] || null;
+}
+
+/** Выходной/отпуск, пришедший из таблицы — тот же принцип защиты, что у upsertFromSheet: строку, которую руками перевели в 'manual', импорт не трогает. Возвращает true, если строка реально была удалена. */
+export async function deleteOneFromSheet(employeeId: number, workDate: string): Promise<boolean> {
+  const res = await query(
+    `DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2 AND source = 'sheet_import'`,
+    [employeeId, workDate]
+  );
+  return (res.rowCount ?? 0) > 0;
 }
 
 /**

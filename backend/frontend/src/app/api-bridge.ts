@@ -242,6 +242,9 @@ import {
   adminUpsertFeatureFlag,
   adminDeleteFeatureFlag,
   adminGetOperationsOverview,
+  adminGetSheetImportPending,
+  adminConfirmSheetImportPending,
+  adminRejectSheetImportPending,
   issueStepUpTicket
 } from '../features/admin-center/api.js';
 
@@ -428,6 +431,9 @@ declare global {
       adminUpsertFeatureFlag: typeof adminUpsertFeatureFlag;
       adminDeleteFeatureFlag: typeof adminDeleteFeatureFlag;
       adminGetOperationsOverview: typeof adminGetOperationsOverview;
+      adminGetSheetImportPending: typeof adminGetSheetImportPending;
+      adminConfirmSheetImportPending: typeof adminConfirmSheetImportPending;
+      adminRejectSheetImportPending: typeof adminRejectSheetImportPending;
       issueStepUpTicket: typeof issueStepUpTicket;
     };
   }
@@ -614,5 +620,8 @@ window.apiClient = {
   adminUpsertFeatureFlag,
   adminDeleteFeatureFlag,
   adminGetOperationsOverview,
+  adminGetSheetImportPending,
+  adminConfirmSheetImportPending,
+  adminRejectSheetImportPending,
   issueStepUpTicket
 };

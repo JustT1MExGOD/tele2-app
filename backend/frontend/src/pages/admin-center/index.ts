@@ -24,11 +24,12 @@ import { renderFeatureFlagsTab } from './feature-flags.js';
 import { renderOrgSettingsTab } from './org-settings.js';
 import { renderBusinessRulesTab } from './business-rules.js';
 import { renderOperationsTab } from './operations.js';
+import { renderSheetImportTab } from './sheet-import.js';
 import { renderAuditTab } from './audit.js';
 
 type AdminTab =
   | 'overview' | 'employees' | 'stores' | 'sales' | 'shifts' | 'schedules' | 'plans'
-  | 'feature-flags' | 'org-settings' | 'business-rules' | 'operations' | 'audit';
+  | 'feature-flags' | 'org-settings' | 'business-rules' | 'operations' | 'sheet-import' | 'audit';
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: 'overview', label: 'Обзор' },
@@ -42,6 +43,7 @@ const TABS: { id: AdminTab; label: string }[] = [
   { id: 'org-settings', label: 'Настройки сети' },
   { id: 'business-rules', label: 'Бизнес-правила' },
   { id: 'operations', label: 'Операционный центр' },
+  { id: 'sheet-import', label: 'Импорт графика из Таблиц' },
   { id: 'audit', label: 'Аудит' }
 ];
 
@@ -111,6 +113,9 @@ async function renderTabBody(body: HTMLElement): Promise<void> {
       break;
     case 'operations':
       renderOperationsTab(body);
+      break;
+    case 'sheet-import':
+      renderSheetImportTab(body);
       break;
     case 'audit':
       await renderAuditTab(body);

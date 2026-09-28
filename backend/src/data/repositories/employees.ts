@@ -447,6 +447,15 @@ export async function countByOrg(orgId: string): Promise<{ active: number; total
   return { active: Number(res.rows[0].active), total: Number(res.rows[0].total) };
 }
 
+/** Sheet schedule import — весь пул кандидатов для нечёткого сопоставления имени из таблицы (сеть небольшая, полная выборка дешевле, чем городить SQL-похожесть строк). */
+export async function listActiveNamesForOrg(orgId: string): Promise<{ id: number; full_name: string }[]> {
+  const res = await query(
+    `SELECT id, full_name FROM employees WHERE COALESCE(org_id,'default') = $1 AND is_active`,
+    [orgId]
+  );
+  return res.rows;
+}
+
 /** Admin Control Center (20.59.0) — global search fan-out, org-scoped. */
 export async function searchByName(orgId: string, term: string, limit: number): Promise<{ id: number; full_name: string; short_name: string | null; role: string }[]> {
   const res = await query(
