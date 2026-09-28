@@ -40,6 +40,17 @@ export async function listMappingsForOrg(orgId: string | null): Promise<SheetMap
   return res.rows;
 }
 
+/** core/integrations/sheet-schedule-export.ts — обратный поиск (employee_id -> как записан в таблице), быстрый путь вместо живого fuzzy-поиска по листу на каждый пуш. Если у сотрудника несколько подтверждённых написаний (не должно, но не запрещено схемой) — берётся самое недавнее. */
+export async function findMappingByEmployee(orgId: string | null, employeeId: number): Promise<SheetMappingRow | null> {
+  const res = await query(
+    `SELECT id, org_id, sheet_name_raw, employee_id FROM sheet_schedule_mappings
+     WHERE COALESCE(org_id,'') = COALESCE($1,'') AND employee_id = $2
+     ORDER BY confirmed_at DESC LIMIT 1`,
+    [orgId, employeeId]
+  );
+  return res.rows[0] || null;
+}
+
 export async function createConfirmedMapping(
   orgId: string | null, sheetNameRaw: string, employeeId: number, confirmedBy: number | null
 ): Promise<SheetMappingRow> {

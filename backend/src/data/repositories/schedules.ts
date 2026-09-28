@@ -192,6 +192,17 @@ export async function upsert(
  * совпадёт, Postgres ведёт себя как DO NOTHING для этой строки конфликта,
  * и RETURNING ничего не вернёт: так вызывающий код отличает "применено" от
  * "защищено ручной правкой, пропущено" без отдельного SELECT.
+ * Симметричная синхронизация (Phase 2): и таблица, и приложение
+ * равноправны, побеждает тот, кто правил последним. Это безусловный
+ * upsert — никакого WHERE по source (раньше здесь был WHERE
+ * schedules.source = 'sheet_import', защищавший 'manual'-строки от
+ * таблицы; больше не нужен). source='sheet_import' остаётся только для
+ * учёта/отладки, не для защиты — и, что важнее, именно эта функция
+ * НИКОГДА не запускает push обратно в таблицу (core/integrations/
+ * sheet-schedule-export.ts): это и есть та единственная граница, которая
+ * не даёт эху "таблица -> приложение -> обратно в таблицу" зациклиться —
+ * push обратно шлют только app-side писатели (upsert() и соседи), не эта
+ * функция.
  */
 export async function upsertFromSheet(
   employeeId: number, storeId: string, workDate: string, shiftText: string | undefined, hours: number
@@ -205,17 +216,16 @@ export async function upsertFromSheet(
        shift_text = EXCLUDED.shift_text,
        hours = EXCLUDED.hours,
        source = 'sheet_import'
-     WHERE schedules.source = 'sheet_import'
      RETURNING *`,
     [employeeId, storeId, workDate, shiftText, hours]
   );
   return res.rows[0] || null;
 }
 
-/** Выходной/отпуск, пришедший из таблицы — тот же принцип защиты, что у upsertFromSheet: строку, которую руками перевели в 'manual', импорт не трогает. Возвращает true, если строка реально была удалена. */
+/** Выходной/отпуск, пришедший из таблицы — тот же принцип симметрии, что у upsertFromSheet: безусловное удаление, таблица побеждает независимо от прежнего source. Возвращает true, если строка реально была удалена. */
 export async function deleteOneFromSheet(employeeId: number, workDate: string): Promise<boolean> {
   const res = await query(
-    `DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2 AND source = 'sheet_import'`,
+    `DELETE FROM schedules WHERE employee_id = $1 AND work_date = $2`,
     [employeeId, workDate]
   );
   return (res.rowCount ?? 0) > 0;
@@ -229,12 +239,14 @@ export async function deleteOneFromSheet(employeeId: number, workDate: string): 
  * only ever touches a row still holding the placeholder, never a real,
  * already-resolved schedule entry — a no-op UPDATE (0 rows) otherwise.
  */
-export async function bindReplacementPlaceholder(employeeId: number, date: string, storeId: string): Promise<void> {
-  await query(
+/** Возвращает true, если строка реально была найдена и обновлена (был placeholder) — вызывающий код (api/routes/shifts.ts) использует это, чтобы не гонять пуш в Google Таблицу (Phase 2) на каждый /shifts/open, а только когда реально что-то поменялось. */
+export async function bindReplacementPlaceholder(employeeId: number, date: string, storeId: string): Promise<boolean> {
+  const res = await query(
     `UPDATE schedules SET store_id = $3
      WHERE employee_id = $1 AND work_date::date = $2::date AND store_id = $4`,
     [employeeId, date, storeId, REPLACEMENT_PLACEHOLDER_STORE_ID]
   );
+  return (res.rowCount ?? 0) > 0;
 }
 
 /** /shifts/open — точка из графика, только смены с реальными часами (hours>0). */
@@ -267,6 +279,15 @@ export async function findAnyScheduledStoreId(employeeId: number, date: string):
  * storeless-смену (hotfix 20.57.1, finding #6). `exists` разделяет эти
  * два случая явно.
  */
+/** core/integrations/sheet-schedule-export.ts — состояние строки как есть, без фильтра hours>0 (в отличие от findShiftWithStore): выходной день (hours=0/нет строки) — тоже валидный результат для пуша в таблицу (значит, очистить ячейку). */
+export async function findRowForExport(employeeId: number, workDate: string): Promise<{ store_id: string | null; shift_text: string | null; hours: number | null } | null> {
+  const res = await query(
+    `SELECT store_id, shift_text, hours FROM schedules WHERE employee_id = $1 AND work_date = $2`,
+    [employeeId, workDate]
+  );
+  return res.rows[0] || null;
+}
+
 export async function findScheduleForDelete(employeeId: number, workDate: string): Promise<{ exists: boolean; storeId: string | null }> {
   const res = await query(`SELECT store_id FROM schedules WHERE employee_id = $1 AND work_date = $2`, [employeeId, workDate]);
   if (!res.rows.length) return { exists: false, storeId: null };

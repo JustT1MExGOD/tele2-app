@@ -9,3 +9,4 @@ import * as schedulesRepo from '../../../data/repositories/schedules.js';
 
 export const upsertFromSheet = schedulesRepo.upsertFromSheet;
 export const deleteOneFromSheet = schedulesRepo.deleteOneFromSheet;
+export const findRowForExport = schedulesRepo.findRowForExport;

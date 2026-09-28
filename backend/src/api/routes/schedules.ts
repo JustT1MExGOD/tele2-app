@@ -12,6 +12,7 @@ import { requireActive, requireManager, resolveViewOrgId, assertStoreInOrg, asse
 import * as schedulesRepo from '../../data/repositories/schedules.js';
 import type { SchedulesListResponse, ScheduleRow, ScheduleMonthResponse, SaveScheduleBulkResponse } from '../../shared/api-types.js';
 import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../shared/replacement.js';
+import { pushScheduleChangeToSheet } from '../../core/integrations/sheet-schedule-export.js';
 
 const PostScheduleBody = Type.Object({
   employee_id: Type.Number(),
@@ -78,7 +79,11 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     if (!requireManager(request, reply)) return;
     const body = request.body as PostScheduleBody;
     const { employee_id, store_id, work_date, shift_text, hours } = body;
-    return schedulesRepo.upsert(employee_id, store_id, work_date, shift_text, hours);
+    const saved = await schedulesRepo.upsert(employee_id, store_id, work_date, shift_text, hours);
+    // Симметричная синхронизация с Google Таблицей (Phase 2) — fire-and-forget,
+    // не блокирует и не может провалить сохранение смены (см. sheet-schedule-export.ts).
+    pushScheduleChangeToSheet(employee_id, work_date).catch(() => {});
+    return saved;
     }
   );
 
@@ -115,7 +120,14 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
     if (!items.length) return reply.code(400).send({ error: 'items required' });
 
     const orgId = resolveViewOrgId(request.user!, body.org_id);
-    return withTransaction(async () => {
+    // Пары (employee_id, work_date) для пуша в Таблицу собираются во время
+    // транзакции, но САМ пуш откладывается до её успешного завершения (см.
+    // ниже, после withTransaction) — если один из элементов пачки провалит
+    // всю транзакцию откатом, уже отправленный в Таблицу пуш по более
+    // раннему элементу этого отката не узнает и оставит там несуществующие
+    // (никогда не закоммиченные) данные.
+    const toPush: Array<{ employee_id: number; work_date: string }> = [];
+    const result = await withTransaction(async () => {
     const saved = [];
     for (const item of items) {
       const employee_id = Number(item.employee_id);
@@ -139,16 +151,20 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
       if (hours <= 0) {
         // удалить смену
         await schedulesRepo.deleteOne(employee_id, work_date);
+        toPush.push({ employee_id, work_date });
         saved.push({ employee_id, work_date, deleted: true });
         continue;
       }
 
       const saved_row = await schedulesRepo.upsert(employee_id, store_id, work_date, shift_text, hours);
+      toPush.push({ employee_id, work_date });
       saved.push(saved_row);
     }
 
-    return { ok: true, count: saved.length, items: saved };
+    return { ok: true as const, count: saved.length, items: saved };
     });
+    for (const { employee_id, work_date } of toPush) pushScheduleChangeToSheet(employee_id, work_date).catch(() => {});
+    return result;
     }
   );
 
@@ -184,6 +200,7 @@ export async function registerSchedulesRoutes(app: FastifyInstance) {
       }
     }
     await schedulesRepo.deleteOne(Number(employee_id), work_date);
+    pushScheduleChangeToSheet(Number(employee_id), work_date).catch(() => {});
     return { ok: true };
   });
 }

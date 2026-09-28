@@ -18,6 +18,7 @@ import {
   findByIdForAdmin, findScheduleForDateEmployee, deleteByIdVersioned, correctScheduleRow
 } from '../schedules/index.js';
 import * as auditRepo from '../../data/repositories/audit.js';
+import { pushScheduleChangeToSheet } from '../integrations/sheet-schedule-export.js';
 
 export class ScheduleVersionConflictError extends Error {
   constructor() {
@@ -58,7 +59,7 @@ export async function previewVoidSchedule(scheduleId: number) {
 export async function voidSchedule(opts: {
   scheduleId: number; version: number; reason: string; actor: Actor; requestId?: string | null;
 }) {
-  return withTransaction(async (q) => {
+  const result = await withTransaction(async (q) => {
     const row = await findByIdForAdmin(opts.scheduleId, true, q);
     if (!row) throw new ScheduleNotFoundError();
     if (Number(row.version) !== opts.version) throw new ScheduleVersionConflictError();
@@ -79,8 +80,11 @@ export async function voidSchedule(opts: {
       actorRole: opts.actor.role
     }, q);
 
-    return deleted;
+    return { deleted, employeeId: row.employee_id, workDate: row.work_date };
   });
+  // Пуш в Google Таблицу (Phase 2) только после коммита транзакции.
+  pushScheduleChangeToSheet(result.employeeId, result.workDate).catch(() => {});
+  return result.deleted;
 }
 
 export async function previewCorrectSchedule(scheduleId: number, newWorkDate?: string) {
@@ -95,7 +99,7 @@ export async function correctSchedule(opts: {
   scheduleId: number; version: number; storeId?: string; workDate?: string; hours?: number;
   reason: string; actor: Actor; requestId?: string | null;
 }) {
-  return withTransaction(async (q) => {
+  const result = await withTransaction(async (q) => {
     const row = await findByIdForAdmin(opts.scheduleId, true, q);
     if (!row) throw new ScheduleNotFoundError();
     if (Number(row.version) !== opts.version) throw new ScheduleVersionConflictError();
@@ -126,6 +130,12 @@ export async function correctSchedule(opts: {
       actorRole: opts.actor.role
     }, q);
 
-    return updated;
+    return { updated, employeeId: row.employee_id, oldWorkDate: row.work_date, newWorkDate: opts.workDate ?? row.work_date };
   });
+  // Пуш в Google Таблицу (Phase 2) только после коммита транзакции. Дата
+  // могла смениться — если да, старая ячейка тоже должна очиститься в
+  // таблице, не только новая заполниться.
+  pushScheduleChangeToSheet(result.employeeId, result.newWorkDate).catch(() => {});
+  if (result.newWorkDate !== result.oldWorkDate) pushScheduleChangeToSheet(result.employeeId, result.oldWorkDate).catch(() => {});
+  return result.updated;
 }

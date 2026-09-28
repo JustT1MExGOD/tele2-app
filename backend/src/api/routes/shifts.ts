@@ -23,6 +23,7 @@ import { notifyChat } from '../../integrations/telegram/bot.js';
 import { getStoreNotifyTarget } from '../../core/shared/tenant.js';
 import { computeDayPlanFact } from '../../core/shifts/pace.js';
 import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../shared/replacement.js';
+import { pushScheduleChangeToSheet } from '../../core/integrations/sheet-schedule-export.js';
 import { resolveActualOrScheduledStoreForDate } from '../../core/shifts/actual-store.js';
 import type {
   ShiftOpenResponse,
@@ -171,7 +172,8 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     store_id = eligibility.store.id;
     const workContext = { orgId: eligibility.workOrgId, workMode: eligibility.mode, selectionSource };
 
-    return withTransaction(async () => {
+    let placeholderBound = false;
+    const result = await withTransaction(async () => {
     await shiftsRepo.lockEmployee(employee_id);
     // Закрываем только смены предыдущих дней.
     await shiftsRepo.autoCloseHanging(employee_id, date);
@@ -191,7 +193,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
     // schedulesRepo.bindReplacementPlaceholder's own doc comment. Safe to
     // call unconditionally (no-op when there's no placeholder row); part of
     // the same transaction as the session claim above.
-    await schedulesRepo.bindReplacementPlaceholder(employee_id, date, store_id);
+    placeholderBound = await schedulesRepo.bindReplacementPlaceholder(employee_id, date, store_id);
 
     // Shift 2.0 (18.7) — фаза «до»: план на сегодня, передача от предыдущей
     // смены на этой точке (любой сотрудник), незакрытые задачи сотрудника.
@@ -203,7 +205,7 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
 
     const snapshot=await saveDaySnapshot(session.id,pace.dayPlan);
     return {
-      ok: true,
+      ok: true as const,
       session,
       deduped,
       day_plan: snapshot,
@@ -211,6 +213,11 @@ export async function registerShiftsRoutes(app: FastifyInstance) {
       open_tasks: openTasks
     };
     });
+    // Пуш в Google Таблицу (Phase 2) только если реально перепривязали
+    // "Замена" на настоящую точку — только после коммита транзакции, чтобы
+    // не отправить в таблицу то, что в итоге откатилось.
+    if (placeholderBound) pushScheduleChangeToSheet(employee_id, date).catch(() => {});
+    return result;
     }
   );
 
