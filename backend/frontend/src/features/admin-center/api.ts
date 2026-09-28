@@ -27,6 +27,8 @@ import type {
   AdminScheduleActionResponse,
   AdminScheduleVoidPreviewResponse,
   AdminScheduleCorrectPreviewResponse,
+  AdminClearStoreMonthPreviewResponse,
+  AdminClearStoreMonthResponse,
   AdminPlanDetailResponse,
   StepUpTicketResponse,
   AdminFeatureFlagsListResponse,
@@ -254,6 +256,15 @@ export async function adminPreviewCorrectSchedule(headers: Record<string, string
 
 export async function adminCorrectSchedule(headers: Record<string, string>, id: number, version: number, opts: { storeId?: string; workDate?: string; hours?: number }, reason: string): Promise<AdminScheduleActionResponse> {
   return request(`/admin/schedules/${id}/correct`, headers, { method: 'POST', body: { version, store_id: opts.storeId, work_date: opts.workDate, hours: opts.hours, reason } });
+}
+
+export async function adminPreviewClearStoreMonth(headers: Record<string, string>, storeId: string, month: string): Promise<AdminClearStoreMonthPreviewResponse> {
+  const qs = new URLSearchParams({ store_id: storeId, month });
+  return request(`/admin/schedules/clear-store-month/preview?${qs.toString()}`, headers);
+}
+
+export async function adminClearStoreMonth(headers: Record<string, string>, storeId: string, month: string, reason: string): Promise<AdminClearStoreMonthResponse> {
+  return request('/admin/schedules/clear-store-month', headers, { method: 'POST', body: { store_id: storeId, month, reason } });
 }
 
 // ---------- Plan corrections ----------

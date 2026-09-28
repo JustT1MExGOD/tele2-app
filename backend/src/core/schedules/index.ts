@@ -28,6 +28,8 @@ export {
   findByIdForAdmin,
   findScheduleForDateEmployee,
   deleteByIdVersioned,
-  correctScheduleRow
+  correctScheduleRow,
+  countStoreMonthRows,
+  clearStoreMonthRows
 } from './application/admin-correction.js';
 export { upsertFromSheet, deleteOneFromSheet, findRowForExport } from './application/sheet-import.js';

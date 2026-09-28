@@ -234,6 +234,8 @@ import {
   adminVoidSchedule,
   adminPreviewCorrectSchedule,
   adminCorrectSchedule,
+  adminPreviewClearStoreMonth,
+  adminClearStoreMonth,
   adminGetEmployeePlan,
   adminCorrectEmployeePlanMetric,
   adminGetStorePlan,
@@ -423,6 +425,8 @@ declare global {
       adminVoidSchedule: typeof adminVoidSchedule;
       adminPreviewCorrectSchedule: typeof adminPreviewCorrectSchedule;
       adminCorrectSchedule: typeof adminCorrectSchedule;
+      adminPreviewClearStoreMonth: typeof adminPreviewClearStoreMonth;
+      adminClearStoreMonth: typeof adminClearStoreMonth;
       adminGetEmployeePlan: typeof adminGetEmployeePlan;
       adminCorrectEmployeePlanMetric: typeof adminCorrectEmployeePlanMetric;
       adminGetStorePlan: typeof adminGetStorePlan;
@@ -612,6 +616,8 @@ window.apiClient = {
   adminVoidSchedule,
   adminPreviewCorrectSchedule,
   adminCorrectSchedule,
+  adminPreviewClearStoreMonth,
+  adminClearStoreMonth,
   adminGetEmployeePlan,
   adminCorrectEmployeePlanMetric,
   adminGetStorePlan,

@@ -1702,6 +1702,18 @@ export interface AdminScheduleCorrectPreviewResponse {
   destinationExists: boolean;
 }
 
+export interface AdminClearStoreMonthPreviewResponse {
+  storeId: string;
+  month: string;
+  count: number;
+}
+
+export interface AdminClearStoreMonthResponse {
+  deletedCount: number;
+  month: string;
+  storeId: string;
+}
+
 export interface AdminPlanDetailResponse {
   row: Record<string, unknown>;
   metrics: Record<string, { value: number; label: string }>;

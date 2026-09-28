@@ -5,7 +5,7 @@
  * a soft-void — see core/admin/schedule-correction.ts's header comment.
  */
 import { FastifyInstance } from 'fastify';
-import { requireAdmin, resolveViewOrgId } from '../../../auth/guards.js';
+import { requireAdmin, resolveViewOrgId, assertStoreInOrg } from '../../../auth/guards.js';
 import * as schedulesRepo from '../../../data/repositories/schedules.js';
 import * as correction from '../../../core/admin/schedule-correction.js';
 
@@ -89,6 +89,40 @@ export async function registerAdminSchedulesRoutes(app: FastifyInstance) {
         hours: body.hours !== undefined ? Number(body.hours) : undefined, reason: body.reason.trim(), actor: actorFrom(request), requestId: request.id
       });
       return { row };
+    } catch (e) { return errorReply(reply, e); }
+  });
+
+  // «Очистить график точки за месяц» — весь график одной точки, все
+  // сотрудники разом. Объёмное действие: не толкает изменения в Google
+  // Таблицу (см. core/admin/schedule-correction.ts::clearStoreMonth's
+  // header comment) — досогласовать таблицу вручную/backfill-скриптом.
+  app.get('/admin/schedules/clear-store-month/preview', async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const q = request.query as { store_id?: string; month?: string; org_id?: string };
+    if (!q.store_id || !q.month) return reply.code(400).send({ error: 'store_id_and_month_required' });
+    const orgId = resolveViewOrgId(request.user!, q.org_id);
+    if (!(await assertStoreInOrg(q.store_id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
+    try {
+      return await correction.previewClearStoreMonth(q.store_id, q.month);
+    } catch (e) { return errorReply(reply, e); }
+  });
+
+  app.post('/admin/schedules/clear-store-month', async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const body = request.body as { store_id?: string; month?: string; reason?: string; org_id?: string };
+    if (!body?.store_id || !body?.month) return reply.code(400).send({ error: 'store_id_and_month_required' });
+    if (!body?.reason?.trim()) return reply.code(400).send({ error: 'reason_required', message: 'Укажите причину' });
+    const orgId = resolveViewOrgId(request.user!, body.org_id);
+    if (!(await assertStoreInOrg(body.store_id, orgId))) {
+      return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+    }
+    try {
+      return await correction.clearStoreMonth({
+        storeId: body.store_id, orgId, month: body.month, reason: body.reason.trim(),
+        actor: actorFrom(request), requestId: request.id
+      });
     } catch (e) { return errorReply(reply, e); }
   });
 }

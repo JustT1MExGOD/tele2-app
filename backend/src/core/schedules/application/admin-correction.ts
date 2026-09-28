@@ -12,3 +12,5 @@ export const findByIdForAdmin = schedulesRepo.findByIdForAdmin;
 export const findScheduleForDateEmployee = schedulesRepo.findScheduleForDateEmployee;
 export const deleteByIdVersioned = schedulesRepo.deleteByIdVersioned;
 export const correctScheduleRow = schedulesRepo.correctScheduleRow;
+export const countStoreMonthRows = schedulesRepo.countStoreMonthRows;
+export const clearStoreMonthRows = schedulesRepo.clearStoreMonthRows;

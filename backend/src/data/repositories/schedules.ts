@@ -461,6 +461,24 @@ export async function adminSearchSchedules(f: AdminScheduleSearchFilter): Promis
   return res.rows;
 }
 
+/** Admin Control Center — «Очистить график точки за месяц». Считает, сколько строк затронет clearStoreMonthRows, без изменения данных (preview перед подтверждением, как у остальных admin-коррекций). */
+export async function countStoreMonthRows(storeId: string, monthStart: string, monthEnd: string): Promise<number> {
+  const res = await query(
+    `SELECT COUNT(*)::int as cnt FROM schedules WHERE store_id = $1 AND work_date >= $2 AND work_date < $3`,
+    [storeId, monthStart, monthEnd]
+  );
+  return Number(res.rows[0]?.cnt) || 0;
+}
+
+/** Удаляет весь график точки за месяц (все сотрудники), возвращает удалённые строки — вызывающий код (core/admin/schedule-correction.ts) снимает их в audit_log.before целиком, как и у обычного void одной строки, и использует employee_id/work_date каждой для (не)толкания в Google Таблицу (см. sheet-schedule-export.ts — этот путь намеренно НЕ толкает наружу, объёмный). */
+export async function clearStoreMonthRows(storeId: string, monthStart: string, monthEnd: string, q: typeof query = query): Promise<any[]> {
+  const res = await q(
+    `DELETE FROM schedules WHERE store_id = $1 AND work_date >= $2 AND work_date < $3 RETURNING *`,
+    [storeId, monthStart, monthEnd]
+  );
+  return res.rows;
+}
+
 export async function findByIdForAdmin(scheduleId: number, lock = false, q: typeof query = query): Promise<any | null> {
   const res = await q(
     `SELECT sch.*, e.full_name as employee_name, e.org_id as employee_org_id,

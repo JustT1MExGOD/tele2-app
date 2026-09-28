@@ -15,7 +15,8 @@
  */
 import { withTransaction } from '../../data/db/index.js';
 import {
-  findByIdForAdmin, findScheduleForDateEmployee, deleteByIdVersioned, correctScheduleRow
+  findByIdForAdmin, findScheduleForDateEmployee, deleteByIdVersioned, correctScheduleRow,
+  countStoreMonthRows, clearStoreMonthRows, monthStart, monthAdd
 } from '../schedules/index.js';
 import * as auditRepo from '../../data/repositories/audit.js';
 import { pushScheduleChangeToSheet } from '../integrations/sheet-schedule-export.js';
@@ -138,4 +139,53 @@ export async function correctSchedule(opts: {
   pushScheduleChangeToSheet(result.employeeId, result.newWorkDate).catch(() => {});
   if (result.newWorkDate !== result.oldWorkDate) pushScheduleChangeToSheet(result.employeeId, result.oldWorkDate).catch(() => {});
   return result.updated;
+}
+
+/**
+ * «Очистить график точки за месяц» — весь график ОДНОЙ точки за месяц,
+ * все сотрудники разом. Тот же snapshot-в-audit-как-recovery принцип, что
+ * у voidSchedule (одна audit-запись на всё действие, с полным списком
+ * удалённых строк в before, не по записи на строку — иначе на
+ * многолюдную точку за полный месяц audit_log захламился бы десятками
+ * записей одного и того же действия).
+ *
+ * Намеренно НЕ толкает изменения в Google Таблицу (core/integrations/
+ * sheet-schedule-export.ts) — тот же объёмный случай, что уже
+ * задокументирован как ограничение для schedule-generator APPLY и
+ * deleteFutureForEmployee (docs/SHEET-SCHEDULE-IMPORT.md): точка за месяц
+ * может дать десятки строк, а пуш даже одной ячейки — это несколько
+ * раундтрипов к Sheets API; вызывать это по одному на каждую очищенную
+ * строку рискует упереться в квоту. После этого действия таблицу нужно
+ * досогласовать вручную или повторным запуском backfill-скрипта.
+ */
+export async function previewClearStoreMonth(storeId: string, month: string) {
+  const start = monthStart(month);
+  const end = monthAdd(start, 1);
+  const count = await countStoreMonthRows(storeId, start, end);
+  return { storeId, month: start, count };
+}
+
+export async function clearStoreMonth(opts: {
+  storeId: string; orgId: string; month: string; reason: string; actor: Actor; requestId?: string | null;
+}) {
+  const start = monthStart(opts.month);
+  const end = monthAdd(start, 1);
+  return withTransaction(async (q) => {
+    const rows = await clearStoreMonthRows(opts.storeId, start, end, q);
+
+    await auditRepo.record({
+      orgId: opts.orgId,
+      actorEmployeeId: opts.actor.employeeId,
+      actorTelegramId: opts.actor.telegramId,
+      action: 'SCHEDULE_STORE_MONTH_CLEARED',
+      targetType: 'schedule',
+      targetId: opts.storeId,
+      before: { store_id: opts.storeId, month: start, rows },
+      after: { deleted_count: rows.length, reason: opts.reason },
+      requestId: opts.requestId ?? null,
+      actorRole: opts.actor.role
+    }, q);
+
+    return { deletedCount: rows.length, month: start, storeId: opts.storeId };
+  });
 }
