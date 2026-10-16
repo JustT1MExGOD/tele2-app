@@ -331,4 +331,66 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     const nonAdmin = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAsSession(empSessionToken) });
     expect(nonAdmin.statusCode).toBe(403);
   });
+
+  it('POST /miranda/accounts — requireAdmin, создаёт явный аккаунт, отклоняет чужого сотрудника/чужую точку, конфликт на дубль, аудируется', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Miranda Create Account Org');
+    const otherOrg = await fx.createOrg('Miranda Create Account Other Org');
+    const store = await fx.createStore(org, 'Космонавтов 20А');
+    const emp = await fx.createPhoneEmployee(org, '+79990000010', null, { role: 'employee', fullName: 'Новый сотрудник' });
+    const empOtherOrg = await fx.createPhoneEmployee(otherOrg, '+79990000011', null, { role: 'employee', fullName: 'Чужой сотрудник' });
+    const admin = await fx.createEmployee(org, { role: 'admin' });
+
+    const nonAdminToken = await sessionsRepo.createSession(emp.id, false, 'employee');
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/miranda/accounts',
+      headers: { ...authAsSession(nonAdminToken), 'content-type': 'application/json' },
+      payload: { employeeId: emp.id, displayLabel: 'Новый аккаунт' }
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const crossOrg = await app.inject({
+      method: 'POST',
+      url: '/miranda/accounts',
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { employeeId: empOtherOrg.id, displayLabel: 'Чужой' }
+    });
+    expect(crossOrg.statusCode).toBe(403);
+    expect(crossOrg.json().error).toBe('forbidden');
+
+    const badStore = await app.inject({
+      method: 'POST',
+      url: '/miranda/accounts',
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { employeeId: emp.id, storeId: 'no-such-store' }
+    });
+    expect(badStore.statusCode).toBe(403);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/miranda/accounts',
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { employeeId: emp.id, storeId: store, displayLabel: 'Касса у входа' }
+    });
+    expect(created.statusCode).toBe(201);
+    const corporateAccountId = Number(created.json().item.id);
+    corporateAccountIds.push(corporateAccountId);
+    expect(Number(created.json().item.employee_id)).toBe(emp.id);
+
+    const dup = await app.inject({
+      method: 'POST',
+      url: '/miranda/accounts',
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { employeeId: emp.id, storeId: store }
+    });
+    expect(dup.statusCode).toBe(409);
+    expect(dup.json().error).toBe('conflict');
+
+    const auditActions = await query(
+      `SELECT action FROM audit_log WHERE target_type = 'corporate_account' AND target_id = $1 ORDER BY id ASC`,
+      [String(corporateAccountId)]
+    );
+    expect(auditActions.rows.map((r: any) => r.action)).toEqual(expect.arrayContaining(['MIRANDA_ACCOUNT_CREATED']));
+  });
 });

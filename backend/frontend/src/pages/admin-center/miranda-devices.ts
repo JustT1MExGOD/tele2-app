@@ -12,6 +12,8 @@ import type { MirandaPendingBindingRow, MirandaCorporateAccountListItem } from '
 
 let grantAdminSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 let selectedGrantAdminId: number | null = null;
+let createAccountSearchDebounce: ReturnType<typeof setTimeout> | null = null;
+let selectedCreateEmployeeId: number | null = null;
 
 export function renderMirandaDevicesTab(container: HTMLElement): void {
   container.innerHTML = `
@@ -27,6 +29,16 @@ export function renderMirandaDevicesTab(container: HTMLElement): void {
         аккаунта нельзя, пока не отозвать прежнее. Личные аккаунты
         сотрудника можно не ограничивать — он может работать с нескольких
         компьютеров.
+      </div>
+      <div style="padding:0 16px 12px;display:flex;flex-direction:column;gap:8px">
+        <div>
+          <input type="text" id="mirandaCreateAccountSearch" placeholder="Сотрудник для нового аккаунта — поиск по имени" style="width:100%;box-sizing:border-box">
+          <div id="mirandaCreateAccountResults"></div>
+          <div id="mirandaCreateAccountSelected" class="row-sub" style="padding:4px 0"></div>
+        </div>
+        <input type="text" id="mirandaCreateAccountStoreId" placeholder="ID точки (необязательно — личный аккаунт без точки)" style="width:100%;box-sizing:border-box">
+        <input type="text" id="mirandaCreateAccountLabel" placeholder="Название аккаунта (необязательно)" style="width:100%;box-sizing:border-box">
+        <button type="button" class="btn-main" id="mirandaCreateAccountBtn" style="align-self:flex-start">Создать аккаунт</button>
       </div>
       <div id="mirandaAccountsList"></div>
     </div>
@@ -68,6 +80,21 @@ export function renderMirandaDevicesTab(container: HTMLElement): void {
   });
 
   document.getElementById('mirandaGrantBtn')?.addEventListener('click', onGrant);
+
+  const createSearchInput = document.getElementById('mirandaCreateAccountSearch') as HTMLInputElement | null;
+  createSearchInput?.addEventListener('input', () => {
+    if (createAccountSearchDebounce) clearTimeout(createAccountSearchDebounce);
+    createAccountSearchDebounce = setTimeout(() => runCreateAccountSearch(createSearchInput.value), 250);
+  });
+  document.getElementById('mirandaCreateAccountResults')?.addEventListener('click', (e) => {
+    const row = (e.target as Element | null)?.closest<HTMLElement>('[data-create-employee-id]');
+    if (!row?.dataset.createEmployeeId) return;
+    selectedCreateEmployeeId = Number(row.dataset.createEmployeeId);
+    document.getElementById('mirandaCreateAccountResults')!.innerHTML = '';
+    document.getElementById('mirandaCreateAccountSelected')!.textContent = `Выбран: ${row.dataset.createEmployeeName || ''} (#${selectedCreateEmployeeId})`;
+    if (createSearchInput) createSearchInput.value = '';
+  });
+  document.getElementById('mirandaCreateAccountBtn')?.addEventListener('click', onCreateAccount);
 
   document.getElementById('mirandaAccountsList')?.addEventListener('change', (e) => {
     const checkbox = e.target as HTMLInputElement | null;
@@ -186,6 +213,60 @@ async function loadCorporateAccounts(): Promise<void> {
     console.error(e);
     if (select) select.innerHTML = '<option value="">Не удалось загрузить аккаунты</option>';
     if (list) list.innerHTML = '<div class="empty">Не удалось загрузить аккаунты</div>';
+  }
+}
+
+async function runCreateAccountSearch(term: string): Promise<void> {
+  const box = document.getElementById('mirandaCreateAccountResults');
+  if (!box) return;
+  const trimmed = term.trim();
+  if (trimmed.length < 2) {
+    box.innerHTML = '';
+    return;
+  }
+  try {
+    const res = await window.apiClient.adminSearch(authHeaders(), trimmed, orgQueryParam());
+    if (!res.employees.length) {
+      box.innerHTML = '<div class="empty">Ничего не найдено</div>';
+      return;
+    }
+    box.innerHTML = res.employees
+      .map(
+        (emp) => `
+        <button class="row" type="button" data-create-employee-id="${emp.id}" data-create-employee-name="${esc(emp.full_name)}">
+          <div class="row-body">
+            <div class="row-title">${esc(emp.full_name)}</div>
+            <div class="row-sub">${esc(emp.role)}</div>
+          </div>
+        </button>`
+      )
+      .join('');
+  } catch (e) {
+    console.error(e);
+    box.innerHTML = '<div class="empty">Ошибка поиска</div>';
+  }
+}
+
+async function onCreateAccount(): Promise<void> {
+  if (!selectedCreateEmployeeId) {
+    toast('Выберите сотрудника', 'err');
+    return;
+  }
+  const storeIdInput = document.getElementById('mirandaCreateAccountStoreId') as HTMLInputElement | null;
+  const labelInput = document.getElementById('mirandaCreateAccountLabel') as HTMLInputElement | null;
+  const storeId = storeIdInput?.value.trim() || null;
+  const displayLabel = labelInput?.value.trim() || null;
+  try {
+    await window.apiClient.adminCreateMirandaAccount(authHeaders(), selectedCreateEmployeeId, storeId, displayLabel);
+    toast('Корпоративный аккаунт создан', 'ok');
+    selectedCreateEmployeeId = null;
+    document.getElementById('mirandaCreateAccountSelected')!.textContent = '';
+    if (storeIdInput) storeIdInput.value = '';
+    if (labelInput) labelInput.value = '';
+    loadCorporateAccounts();
+  } catch (e) {
+    const code = (e as { code?: string } | undefined)?.code;
+    toast(code === 'conflict' ? 'Такой аккаунт уже существует (этот сотрудник + точка)' : 'Не удалось создать аккаунт', 'err');
   }
 }
 

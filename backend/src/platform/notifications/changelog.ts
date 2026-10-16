@@ -1549,5 +1549,15 @@ export const CHANGELOG: ChangelogEntry[] = [
       'То же переключение и явный конфликт (409 device_exclusive_conflict) доступны и в native-админке T2 Miranda (Windows)',
       'tsc --noEmit (backend+frontend), vitest 917/917 (backend, на реальном одноразовом Postgres, включая новый isolation-тест на конфликт устройств), frontend build/smoke, все security/architecture guardrail-проверки — без регрессий'
     ]
+  },
+  {
+    version: '20.65.0',
+    title: 'T2 Miranda: явное создание корпоративного аккаунта',
+    bullets: [
+      'Новый admin-эндпоинт POST /miranda/accounts — корпоративный аккаунт теперь можно завести заранее (сотрудник + опционально точка/название), не дожидаясь первой регистрации устройства, которая раньше была единственным способом его создать',
+      'Admin Control Center «Устройства Miranda»: новая форма «Создать аккаунт» в секции корпоративных аккаунтов (поиск сотрудника, точка, название); дубль (тот же сотрудник + точка) отклоняется явным конфликтом, а не тихой подменой существующего ряда',
+      'То же в native-админке T2 Sales (Windows) — форма создания аккаунта рядом со списком и переключателем «только одно устройство»',
+      'tsc --noEmit (backend+frontend), vitest 918/918 (backend, на реальном одноразовом Postgres, включая новый isolation-тест на create/конфликт/org-изоляцию), frontend build/smoke, native desktopApp compileKotlin — без регрессий'
+    ]
   }
 ];

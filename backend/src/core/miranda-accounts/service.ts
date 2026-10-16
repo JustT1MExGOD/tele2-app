@@ -220,6 +220,39 @@ export async function switchSessionAccount(
   return { ok: true };
 }
 
+/** Admin Control Center — явное создание корпоративного аккаунта, не
+ * привязанное к регистрации устройства (в отличие от registerDevice
+ * выше). conflict означает, что для этой пары employeeId+storeId уже
+ * есть ряд — UNIQUE(employee_id, store_id), админу нужно использовать
+ * существующий аккаунт (listAllCorporateAccounts), не создавать дубль. */
+export type CreateAccountResult = { ok: true; account: mirandaRepo.CorporateAccountRow } | { ok: false; error: 'conflict' };
+
+export async function createCorporateAccount(
+  orgId: string,
+  employeeId: number,
+  storeId: string | null,
+  displayLabel: string | null,
+  actorEmployeeId: number
+): Promise<CreateAccountResult> {
+  return withTransaction(async (q) => {
+    const account = await mirandaRepo.createCorporateAccount(orgId, employeeId, storeId, displayLabel, q);
+    if (!account) return { ok: false, error: 'conflict' };
+    await auditRepo.record(
+      {
+        orgId,
+        actorEmployeeId,
+        actorTelegramId: null,
+        action: 'MIRANDA_ACCOUNT_CREATED',
+        targetType: 'corporate_account',
+        targetId: String(account.id),
+        after: { employeeId, storeId, displayLabel }
+      },
+      q
+    );
+    return { ok: true, account };
+  });
+}
+
 export async function listPendingBindings() {
   return mirandaRepo.listPendingBindings();
 }

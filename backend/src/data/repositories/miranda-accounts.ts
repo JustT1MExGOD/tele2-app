@@ -54,6 +54,29 @@ export async function findOrCreateCorporateAccount(
   return inserted.rows[0];
 }
 
+/** Admin Control Center — явное создание корпоративного аккаунта (в
+ * отличие от findOrCreateCorporateAccount выше, который только
+ * побочный эффект регистрации устройства). UNIQUE(employee_id, store_id)
+ * здесь не "найти или создать" — повтор для уже занятой пары возвращает
+ * null, чтобы роут вернул осознанный конфликт, а не тихо подсунул чужой
+ * существующий ряд под видом "созданного". */
+export async function createCorporateAccount(
+  orgId: string,
+  employeeId: number,
+  storeId: string | null,
+  displayLabel: string | null,
+  q: typeof query = query
+): Promise<CorporateAccountRow | null> {
+  const res = await q(
+    `INSERT INTO corporate_accounts (org_id, employee_id, store_id, display_label)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (employee_id, store_id) DO NOTHING
+     RETURNING id, org_id, employee_id, store_id, display_label, is_active, device_exclusive`,
+    [orgId, employeeId, storeId, displayLabel]
+  );
+  return res.rows[0] || null;
+}
+
 export async function getCorporateAccount(id: number): Promise<CorporateAccountRow | null> {
   const res = await query(
     `SELECT id, org_id, employee_id, store_id, display_label, is_active, device_exclusive FROM corporate_accounts WHERE id = $1`,

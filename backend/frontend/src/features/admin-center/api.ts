@@ -43,7 +43,8 @@ import type {
   MirandaCorporateAccountsListResponse,
   MirandaAvailableAccountsResponse,
   MirandaGrantAccountResponse,
-  MirandaSetDeviceExclusiveResponse
+  MirandaSetDeviceExclusiveResponse,
+  MirandaCreateAccountResponse
 } from '../../../../src/shared/api-types.js';
 import { request } from '../../shared/api/http-client.js';
 
@@ -343,6 +344,15 @@ export async function adminRevokeMirandaDevice(headers: Record<string, string>, 
 
 export async function adminListMirandaCorporateAccounts(headers: Record<string, string>): Promise<MirandaCorporateAccountsListResponse> {
   return request('/miranda/accounts', headers);
+}
+
+export async function adminCreateMirandaAccount(
+  headers: Record<string, string>,
+  employeeId: number,
+  storeId: string | null,
+  displayLabel: string | null
+): Promise<MirandaCreateAccountResponse> {
+  return request('/miranda/accounts', headers, { method: 'POST', body: { employeeId, storeId, displayLabel } });
 }
 
 export async function adminListMirandaAvailableAccounts(headers: Record<string, string>): Promise<MirandaAvailableAccountsResponse> {

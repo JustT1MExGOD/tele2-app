@@ -1793,6 +1793,18 @@ export interface MirandaCorporateAccountsListResponse { items: MirandaCorporateA
 export interface MirandaContactsResponse { items: MirandaCorporateAccountListItem[]; }
 export interface MirandaSetDeviceExclusiveResponse { ok: true; }
 
+export interface MirandaCorporateAccountRow {
+  id: number;
+  org_id: string;
+  employee_id: number;
+  store_id: string | null;
+  display_label: string | null;
+  is_active: boolean;
+  device_exclusive: boolean;
+  [key: string]: unknown;
+}
+export interface MirandaCreateAccountResponse { item: MirandaCorporateAccountRow; }
+
 export interface MirandaAvailableAccountRow {
   corporate_account_id: number;
   employee_id: number;

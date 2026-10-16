@@ -7,7 +7,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireActive, requireAdmin } from '../../../auth/guards.js';
+import { requireActive, requireAdmin, assertEmployeeInOrg, assertStoreInOrg } from '../../../auth/guards.js';
 import * as mirandaService from '../../../core/miranda-accounts/service.js';
 import * as messengerService from '../../../core/messenger/service.js';
 
@@ -31,6 +31,13 @@ const GrantBody = Type.Object({
   corporateAccountId: Type.Integer()
 });
 type GrantBody = Static<typeof GrantBody>;
+
+const CreateAccountBody = Type.Object({
+  employeeId: Type.Integer(),
+  storeId: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
+  displayLabel: Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()]))
+});
+type CreateAccountBody = Static<typeof CreateAccountBody>;
 
 const DeviceExclusiveParams = Type.Object({ id: Type.String({ pattern: '^[0-9]+$' }) });
 type DeviceExclusiveParams = Static<typeof DeviceExclusiveParams>;
@@ -64,6 +71,32 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
     const items = await mirandaService.listAllCorporateAccounts(request.user!.org_id);
     return reply.code(200).send({ items });
   });
+
+  // Admin Control Center — явное создание корпоративного аккаунта, не
+  // зависящее от регистрации устройства (ту ветку создаёт registerDevice
+  // неявно через findOrCreateCorporateAccount). Нужно, когда аккаунт
+  // хотят завести заранее — например, выдать грант на переключение до
+  // того, как к точке впервые привяжут устройство.
+  app.post(
+    '/miranda/accounts',
+    { schema: { body: CreateAccountBody } },
+    async (request, reply) => {
+      if (!requireAdmin(request, reply)) return;
+      const { employeeId, storeId, displayLabel } = request.body as CreateAccountBody;
+      const orgId = request.user!.org_id;
+      if (!(await assertEmployeeInOrg(employeeId, orgId))) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
+      }
+      if (storeId && !(await assertStoreInOrg(storeId, orgId))) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+      }
+      const result = await mirandaService.createCorporateAccount(orgId, employeeId, storeId || null, displayLabel || null, request.user!.employee_id!);
+      if (result.ok === false) {
+        return reply.code(409).send({ error: 'conflict', message: 'Такой корпоративный аккаунт уже существует' });
+      }
+      return reply.code(201).send({ item: result.account });
+    }
+  );
 
   // Помечает аккаунт как "точка/касса" (должен быть привязан ровно к
   // одному устройству одновременно — enforced в approveBinding, см.
