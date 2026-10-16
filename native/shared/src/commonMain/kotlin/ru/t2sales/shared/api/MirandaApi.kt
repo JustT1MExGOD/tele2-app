@@ -44,11 +44,16 @@ class MirandaApi(private val client: HttpClient) {
     suspend fun approveDevice(bindingId: Int, stepUpToken: String) {
         client.post(apiUrl("/miranda/devices/$bindingId/approve")) {
             header("X-Step-Up-Token", stepUpToken)
+            contentType(ContentType.Application.Json)
+            setBody(JsonObject(emptyMap()))
         }
     }
 
     suspend fun revokeDevice(bindingId: Int) {
-        client.post(apiUrl("/miranda/devices/$bindingId/revoke"))
+        client.post(apiUrl("/miranda/devices/$bindingId/revoke")) {
+            contentType(ContentType.Application.Json)
+            setBody(JsonObject(emptyMap()))
+        }
     }
 
     // --- admin: account-switch grants ---
