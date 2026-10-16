@@ -112,7 +112,11 @@ export async function registerMirandaAccountLoginRoutes(app: FastifyInstance) {
         targetId: String(account.id),
         targetOrgId: account.org_id
       }).catch(() => {});
-      return reply.code(200).send({ ok: true });
+      return reply.code(200).send({
+        ok: true,
+        corporateAccountId: account.id,
+        accountName: account.account_name
+      });
     }
   );
 
