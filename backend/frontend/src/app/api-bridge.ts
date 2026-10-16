@@ -247,6 +247,13 @@ import {
   adminGetSheetImportPending,
   adminConfirmSheetImportPending,
   adminRejectSheetImportPending,
+  adminListMirandaDevices,
+  adminApproveMirandaDevice,
+  adminRevokeMirandaDevice,
+  adminListMirandaCorporateAccounts,
+  adminListMirandaAvailableAccounts,
+  adminGrantMirandaAccount,
+  adminSetMirandaAccountDeviceExclusive,
   issueStepUpTicket
 } from '../features/admin-center/api.js';
 
@@ -438,6 +445,13 @@ declare global {
       adminGetSheetImportPending: typeof adminGetSheetImportPending;
       adminConfirmSheetImportPending: typeof adminConfirmSheetImportPending;
       adminRejectSheetImportPending: typeof adminRejectSheetImportPending;
+      adminListMirandaDevices: typeof adminListMirandaDevices;
+      adminApproveMirandaDevice: typeof adminApproveMirandaDevice;
+      adminRevokeMirandaDevice: typeof adminRevokeMirandaDevice;
+      adminListMirandaCorporateAccounts: typeof adminListMirandaCorporateAccounts;
+      adminListMirandaAvailableAccounts: typeof adminListMirandaAvailableAccounts;
+      adminGrantMirandaAccount: typeof adminGrantMirandaAccount;
+      adminSetMirandaAccountDeviceExclusive: typeof adminSetMirandaAccountDeviceExclusive;
       issueStepUpTicket: typeof issueStepUpTicket;
     };
   }
@@ -629,5 +643,12 @@ window.apiClient = {
   adminGetSheetImportPending,
   adminConfirmSheetImportPending,
   adminRejectSheetImportPending,
+  adminListMirandaDevices,
+  adminApproveMirandaDevice,
+  adminRevokeMirandaDevice,
+  adminListMirandaCorporateAccounts,
+  adminListMirandaAvailableAccounts,
+  adminGrantMirandaAccount,
+  adminSetMirandaAccountDeviceExclusive,
   issueStepUpTicket
 };

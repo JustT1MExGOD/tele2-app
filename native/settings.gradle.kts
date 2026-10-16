@@ -20,3 +20,4 @@ rootProject.name = "t2sales-native"
 include(":shared")
 include(":desktopApp")
 include(":androidApp")
+include(":mirandaApp")

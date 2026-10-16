@@ -56,6 +56,7 @@ import { registerAdminFeatureFlagsRoutes } from './admin/feature-flags.js';
 import { registerAdminOperationsRoutes } from './admin/operations.js';
 import { registerAdminSheetImportRoutes } from './admin/sheet-import.js';
 import { registerSheetsWebhookRoutes } from './integrations/sheets-webhook.js';
+import { registerMirandaRoutes } from './miranda/index.js';
 
 const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Plans', registerPlansRoutes],
@@ -108,7 +109,8 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Admin Control Center — Feature Flags', registerAdminFeatureFlagsRoutes],
   ['Admin Control Center — Operations Center', registerAdminOperationsRoutes],
   ['Admin Control Center — Sheet import review', registerAdminSheetImportRoutes],
-  ['Integrations — Google Sheets schedule webhook', registerSheetsWebhookRoutes]
+  ['Integrations — Google Sheets schedule webhook', registerSheetsWebhookRoutes],
+  ['T2 Miranda — корпоративные аккаунты/устройства', registerMirandaRoutes]
 ];
 
 /**

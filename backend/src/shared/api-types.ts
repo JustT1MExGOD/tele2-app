@@ -1761,3 +1761,46 @@ export interface SheetImportPendingRow {
 }
 export interface AdminSheetImportPendingListResponse { items: SheetImportPendingRow[]; }
 export interface AdminSheetImportResolveResponse { ok: boolean; outcome?: Record<string, unknown>; }
+
+// ---------- T2 Miranda — устройства/корпоративные аккаунты (Admin Control Center) ----------
+
+export interface MirandaPendingBindingRow {
+  binding_id: number;
+  device_id: number;
+  platform: 'windows' | 'android';
+  device_label: string | null;
+  corporate_account_id: number;
+  employee_id: number;
+  employee_full_name: string;
+  store_id: string | null;
+  created_at: string;
+  [key: string]: unknown;
+}
+export interface MirandaPendingBindingsListResponse { items: MirandaPendingBindingRow[]; }
+export interface MirandaApproveBindingResponse { ok: true; }
+export interface MirandaRevokeBindingResponse { ok: true; }
+
+export interface MirandaCorporateAccountListItem {
+  corporate_account_id: number;
+  employee_id: number;
+  employee_full_name: string;
+  store_id: string | null;
+  display_label: string | null;
+  device_exclusive: boolean;
+  [key: string]: unknown;
+}
+export interface MirandaCorporateAccountsListResponse { items: MirandaCorporateAccountListItem[]; }
+export interface MirandaContactsResponse { items: MirandaCorporateAccountListItem[]; }
+export interface MirandaSetDeviceExclusiveResponse { ok: true; }
+
+export interface MirandaAvailableAccountRow {
+  corporate_account_id: number;
+  employee_id: number;
+  employee_full_name: string;
+  store_id: string | null;
+  display_label: string | null;
+  is_default_for_device: boolean;
+  [key: string]: unknown;
+}
+export interface MirandaAvailableAccountsResponse { items: MirandaAvailableAccountRow[]; }
+export interface MirandaGrantAccountResponse { ok: true; }

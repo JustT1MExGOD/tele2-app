@@ -34,7 +34,7 @@ const SRC = join(__dirname, '..', 'src');
 const FORBIDDEN_CORE_PACKAGES = ['fastify', 'pg', 'grammy', 'node-cron'];
 // Files that are legitimately infrastructure-flavored but live inside core/ for now
 // (tracked as architecture debt in docs/ARCHITECTURE.md, not silently allowed forever).
-const CORE_INFRA_EXCEPTIONS = new Set(['core/chat/realtime-bridge.ts']);
+const CORE_INFRA_EXCEPTIONS = new Set(['core/chat/realtime-bridge.ts', 'core/messenger/realtime-bridge.ts']);
 // Repository -> core imports that predate this check, documented as architecture debt
 // in docs/ARCHITECTURE.md (moving them safely requires touching several call sites —
 // deferred, not silently allowed to grow beyond this list).

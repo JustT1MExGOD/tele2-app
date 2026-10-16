@@ -36,7 +36,14 @@ import type {
   AdminFeatureFlagDeleteResponse,
   AdminOperationsOverviewResponse,
   AdminSheetImportPendingListResponse,
-  AdminSheetImportResolveResponse
+  AdminSheetImportResolveResponse,
+  MirandaPendingBindingsListResponse,
+  MirandaApproveBindingResponse,
+  MirandaRevokeBindingResponse,
+  MirandaCorporateAccountsListResponse,
+  MirandaAvailableAccountsResponse,
+  MirandaGrantAccountResponse,
+  MirandaSetDeviceExclusiveResponse
 } from '../../../../src/shared/api-types.js';
 import { request } from '../../shared/api/http-client.js';
 
@@ -318,6 +325,40 @@ export async function adminRejectSheetImportPending(headers: Record<string, stri
 
 export async function adminGetOperationsOverview(headers: Record<string, string>): Promise<AdminOperationsOverviewResponse> {
   return request('/admin/operations-overview', headers);
+}
+
+// ---------- T2 Miranda — устройства/корпоративные аккаунты ----------
+
+export async function adminListMirandaDevices(headers: Record<string, string>): Promise<MirandaPendingBindingsListResponse> {
+  return request('/miranda/devices', headers);
+}
+
+export async function adminApproveMirandaDevice(headers: Record<string, string>, bindingId: number, stepUpToken?: string): Promise<MirandaApproveBindingResponse> {
+  return request(`/miranda/devices/${bindingId}/approve`, withStepUp(headers, stepUpToken), { method: 'POST' });
+}
+
+export async function adminRevokeMirandaDevice(headers: Record<string, string>, bindingId: number): Promise<MirandaRevokeBindingResponse> {
+  return request(`/miranda/devices/${bindingId}/revoke`, headers, { method: 'POST' });
+}
+
+export async function adminListMirandaCorporateAccounts(headers: Record<string, string>): Promise<MirandaCorporateAccountsListResponse> {
+  return request('/miranda/accounts', headers);
+}
+
+export async function adminListMirandaAvailableAccounts(headers: Record<string, string>): Promise<MirandaAvailableAccountsResponse> {
+  return request('/miranda/accounts/available', headers);
+}
+
+export async function adminGrantMirandaAccount(headers: Record<string, string>, adminEmployeeId: number, corporateAccountId: number): Promise<MirandaGrantAccountResponse> {
+  return request('/miranda/admin-grants', headers, { method: 'POST', body: { adminEmployeeId, corporateAccountId } });
+}
+
+export async function adminSetMirandaAccountDeviceExclusive(
+  headers: Record<string, string>,
+  corporateAccountId: number,
+  deviceExclusive: boolean
+): Promise<MirandaSetDeviceExclusiveResponse> {
+  return request(`/miranda/accounts/${corporateAccountId}/device-exclusive`, headers, { method: 'PATCH', body: { deviceExclusive } });
 }
 
 // ---------- Step-up MFA ticket (ADR-009) ----------

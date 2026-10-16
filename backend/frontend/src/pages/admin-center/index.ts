@@ -26,10 +26,12 @@ import { renderBusinessRulesTab } from './business-rules.js';
 import { renderOperationsTab } from './operations.js';
 import { renderSheetImportTab } from './sheet-import.js';
 import { renderAuditTab } from './audit.js';
+import { renderMirandaDevicesTab } from './miranda-devices.js';
 
 type AdminTab =
   | 'overview' | 'employees' | 'stores' | 'sales' | 'shifts' | 'schedules' | 'plans'
-  | 'feature-flags' | 'org-settings' | 'business-rules' | 'operations' | 'sheet-import' | 'audit';
+  | 'feature-flags' | 'org-settings' | 'business-rules' | 'operations' | 'sheet-import' | 'audit'
+  | 'miranda-devices';
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: 'overview', label: 'Обзор' },
@@ -44,7 +46,8 @@ const TABS: { id: AdminTab; label: string }[] = [
   { id: 'business-rules', label: 'Бизнес-правила' },
   { id: 'operations', label: 'Операционный центр' },
   { id: 'sheet-import', label: 'Импорт графика из Таблиц' },
-  { id: 'audit', label: 'Аудит' }
+  { id: 'audit', label: 'Аудит' },
+  { id: 'miranda-devices', label: 'Устройства Miranda' }
 ];
 
 let currentTab: AdminTab = 'overview';
@@ -119,6 +122,9 @@ async function renderTabBody(body: HTMLElement): Promise<void> {
       break;
     case 'audit':
       await renderAuditTab(body);
+      break;
+    case 'miranda-devices':
+      renderMirandaDevicesTab(body);
       break;
   }
 }

@@ -1,5 +1,6 @@
 import './env.js'; // должен быть первым — см. комментарий в env.ts
 import {startChatRealtimeBridge} from './core/chat/realtime-bridge.js';
+import {startMessengerRealtimeBridge} from './core/messenger/realtime-bridge.js';
 import { buildApp } from './app.js';
 import { runMigrations } from './data/db/migrate.js';
 import { pool } from './data/db/index.js';
@@ -9,6 +10,7 @@ import { startDigestCron } from './cron/digest.js';
 import { startAlertCron } from './cron/alerts.js';
 import { startMessageCleanupCron } from './cron/message-cleanup.js';
 import { startChatAttachmentCleanupCron } from './cron/chat-attachment-cleanup.js';
+import { startMessengerAttachmentCleanupCron } from './cron/messenger-attachment-cleanup.js';
 import { startGeoipRefreshCron, ensureGeoipDbOnStartup } from './cron/geoip-refresh.js';
 import { todayMoscow } from './utils/date.js';
 import { runSmartAlertsTick } from './core/alerts/service.js';
@@ -130,6 +132,7 @@ try {
   startBot().catch((e) => console.error('Bot failed:', e.message || e));
   const reportCronHandle = startReportCron();
   const stopChatBridge = startChatRealtimeBridge();
+  const stopMessengerBridge = startMessengerRealtimeBridge();
   const digestCronTask = startDigestCron();
   // 20.10.0 — раньше был написан (services/alerts.ts docstring это явно
   // предполагало — "подключи в startReportCron или отдельный cron"), но
@@ -138,6 +141,7 @@ try {
   const alertCronTask = startAlertCron();
   const messageCleanupTask = startMessageCleanupCron();
   const chatAttachmentCleanupTask = startChatAttachmentCleanupCron();
+  const messengerAttachmentCleanupTask = startMessengerAttachmentCleanupCron();
   const geoipRefreshTask = startGeoipRefreshCron();
   ensureGeoipDbOnStartup();
   announceReleaseIfNeeded().catch((e) => console.error('release announce:', e?.message || e));
@@ -183,10 +187,12 @@ try {
 
     clearInterval(reportCronHandle);
     await stopChatBridge();
+    await stopMessengerBridge();
     digestCronTask.stop();
     alertCronTask.stop();
     messageCleanupTask.stop();
     chatAttachmentCleanupTask.stop();
+    messengerAttachmentCleanupTask.stop();
     geoipRefreshTask.stop();
     clearInterval(smartAlertsHandle);
 
