@@ -1567,7 +1567,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Аккаунт точки/кассы теперь можно завести без привязки к конкретному сотруднику — со своим телефоном, паролем и названием («Касса Космонавтов 20А»); вход отдельный (POST /miranda/accounts/login), без очереди подтверждения устройства',
       'Admin Control Center «Устройства Miranda» и native-админка (Windows): форма создания аккаунта получила переключатель «Личный аккаунт / Аккаунт точки» — во втором режиме вместо поиска сотрудника вводятся телефон, пароль и название',
       'Мессенджер T2 Miranda принимает сообщения и от точечного аккаунта (отправитель без привязанного сотрудника), не только от личных аккаунтов сотрудников',
-      'tsc --noEmit (backend+frontend), vitest 924/924 (backend, на реальном одноразовом Postgres, включая новые isolation-тесты на логин точки, дубль телефона, доступ к мессенджеру и requireAdmin, revoke/logout, org-изоляцию), frontend build/smoke, native desktopApp compileKotlin, все security/architecture guardrail-проверки — без регрессий'
+      'tsc --noEmit (backend+frontend), vitest 924/924 (backend, на реальном одноразовом Postgres, включая новые isolation-тесты на логин точки, дубль телефона, доступ к мессенджеру и requireAdmin, revoke/logout, org-изоляцию), vitest 673/675 (frontend, включая обновлённый контракт-тест api-bridge на новую запись), frontend build/smoke, native desktopApp compileKotlin, все security/architecture guardrail-проверки — без регрессий'
     ]
   }
 ];
