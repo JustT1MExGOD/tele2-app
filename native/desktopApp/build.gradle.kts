@@ -11,7 +11,7 @@ plugins {
 
 // The native (PC) app is versioned on its own, independently of the web/backend version.
 // Single source: this value feeds the installer (packageVersion) and the runtime (app-version.properties -> AppVersion).
-val appVersion = "1.2.0"
+val appVersion = "1.2.1"
 
 kotlin {
     compilerOptions {

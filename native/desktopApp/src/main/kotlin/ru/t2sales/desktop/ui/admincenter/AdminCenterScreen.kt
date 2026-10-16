@@ -58,7 +58,8 @@ import ru.t2sales.shared.theme.T2Radius
 private enum class AcTab(val label: String) {
     Overview("Обзор"), Employees("Сотрудники"), Stores("Точки"), Sales("Коррекции продаж"), Shifts("Коррекции смен"),
     Schedules("Коррекции графика"), Plans("Коррекции планов"), Flags("Флаги функциональности"), OrgSettings("Настройки сети"),
-    Rules("Бизнес-правила"), Operations("Операционный центр"), Audit("Аудит")
+    Rules("Бизнес-правила"), Operations("Операционный центр"), SheetImport("Импорт графика из Таблиц"), Audit("Аудит"),
+    MirandaDevices("Устройства Miranda")
 }
 
 private val ROLE_LABELS = mapOf(
@@ -112,6 +113,8 @@ fun AdminCenterScreen(container: AppContainer) {
         AcTab.OrgSettings -> OrgSettingsTab(container)
         AcTab.Rules -> RulesTab(container)
         AcTab.Operations -> OperationsTab(container)
+        AcTab.SheetImport -> SheetImportTab(container)
+        AcTab.MirandaDevices -> MirandaDevicesTab(container)
         else -> PageSection(tab.label) {
             Text(WEB_ONLY, color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
         }

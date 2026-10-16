@@ -89,6 +89,27 @@ data class MirandaGrantAccountRequest(val adminEmployeeId: Int, val corporateAcc
 @Serializable
 data class MirandaSetDeviceExclusiveRequest(val deviceExclusive: Boolean)
 
+@Serializable
+data class MirandaCreateAccountRequest(
+    val employeeId: Int,
+    val storeId: String? = null,
+    val displayLabel: String? = null
+)
+
+@Serializable
+data class MirandaCorporateAccountRow(
+    val id: Int,
+    val org_id: String = "",
+    val employee_id: Int,
+    val store_id: String? = null,
+    val display_label: String? = null,
+    val is_active: Boolean = true,
+    val device_exclusive: Boolean = false
+)
+
+@Serializable
+data class MirandaCreateAccountResponse(val item: MirandaCorporateAccountRow)
+
 // ---------- Messenger ----------
 
 @Serializable

@@ -16,6 +16,7 @@ import ru.t2sales.shared.api.ChatApi
 import ru.t2sales.shared.api.CommandCenterApi
 import ru.t2sales.shared.api.FileCookiesStorage
 import ru.t2sales.shared.api.HomeApi
+import ru.t2sales.shared.api.MirandaApi
 import ru.t2sales.shared.api.PlansApi
 import ru.t2sales.shared.api.ProfileApi
 import ru.t2sales.shared.api.ReportsApi
@@ -60,6 +61,7 @@ class AppContainer {
     val infoApi = InfoApi(httpClient)
     val plansApi = PlansApi(httpClient)
     val adminCenterApi = AdminCenterApi(httpClient)
+    val mirandaApi = MirandaApi(httpClient)
     val authRepository = AuthRepository(authApi)
 
     /** Sales entered without a connection wait here (on disk) and are sent when the server answers again. */

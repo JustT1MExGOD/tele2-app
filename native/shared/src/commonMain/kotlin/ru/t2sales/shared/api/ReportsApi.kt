@@ -820,6 +820,23 @@ class AdminCenterApi(private val client: HttpClient) {
     suspend fun operations(): kotlinx.serialization.json.JsonObject =
         client.get(apiUrl("/admin/operations-overview")).body()
 
+    suspend fun sheetImportPending(): AdminSheetImportPendingListResponse =
+        client.get(apiUrl("/admin/sheet-import/pending")).body()
+
+    suspend fun confirmSheetImportPending(id: Int, employeeId: Int) {
+        client.post(apiUrl("/admin/sheet-import/pending/$id/confirm")) {
+            contentType(ContentType.Application.Json)
+            setBody(AdminSheetImportConfirmRequest(employeeId))
+        }
+    }
+
+    suspend fun rejectSheetImportPending(id: Int) {
+        client.post(apiUrl("/admin/sheet-import/pending/$id/reject")) {
+            contentType(ContentType.Application.Json)
+            setBody(kotlinx.serialization.json.JsonObject(emptyMap()))
+        }
+    }
+
     suspend fun issueStepUp(code: String): String =
         client.post(apiUrl("/auth/mfa/step-up")) {
             contentType(ContentType.Application.Json)

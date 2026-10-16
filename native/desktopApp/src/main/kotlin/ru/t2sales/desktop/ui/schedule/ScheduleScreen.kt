@@ -386,6 +386,9 @@ private fun SummaryGrid(all: List<ScheduleRow>, employees: List<EmployeeListItem
             NameCell("ФИО", CELL_H)
             byEmp.forEach { (name, _) ->
                 NameCell(name, CELL_H + HOURS_H + 4.dp)
+                // Та же строка 4.dp, что стоит после пары ShiftCell в соседней колонке ниже (byEmp.forEach { ... Spacer(4.dp) }) —
+                // без неё имя постепенно "уезжало" вверх относительно своей строки смен, на 4.dp за каждого сотрудника выше в списке.
+                Spacer(Modifier.height(4.dp))
             }
         }
         Column(

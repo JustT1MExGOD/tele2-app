@@ -136,11 +136,15 @@ namespace T2Setup
             report(0.94, "shortcuts");
             string exe = Path.Combine(InstallDir, Product.ExeName);
             string uninst = Path.Combine(InstallDir, Product.UninstallerName);
-            CreateShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Product.Name + ".lnk"), exe, "", InstallDir, exe, Product.Name);
+            // The app itself is already fully deployed at this point (files + uninstaller written above). A shortcut a locked-down
+            // profile can't write (e.g. Desktop redirected to a read-only network share) must not undo that - each shortcut is
+            // independent and best-effort, logged rather than fatal, so the parts that CAN succeed (registry, other shortcuts) still do.
+            TryCreateShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Product.Name + ".lnk"), exe, "", InstallDir, exe, Product.Name);
             string menuDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), Product.Name);
-            Directory.CreateDirectory(menuDir);
-            CreateShortcut(Path.Combine(menuDir, Product.Name + ".lnk"), exe, "", InstallDir, exe, Product.Name);
-            CreateShortcut(Path.Combine(menuDir, "Удалить " + Product.Name + ".lnk"), uninst, "", InstallDir, uninst, "Удалить " + Product.Name);
+            try { Directory.CreateDirectory(menuDir); }
+            catch (Exception ex) { Log("shortcuts: menu dir " + menuDir + ": " + ex.Message); }
+            TryCreateShortcut(Path.Combine(menuDir, Product.Name + ".lnk"), exe, "", InstallDir, exe, Product.Name);
+            TryCreateShortcut(Path.Combine(menuDir, "Удалить " + Product.Name + ".lnk"), uninst, "", InstallDir, uninst, "Удалить " + Product.Name);
             TryDelete(Path.Combine(menuDir, "Uninstall " + Product.Name + ".lnk")); // left by the previous (NSIS) installer
 
             report(0.98, "registry");
@@ -277,6 +281,12 @@ namespace T2Setup
                 }
             }
             if (Directory.Exists(dir)) throw new IOException("Не удалось удалить старые файлы:\n" + dir);
+        }
+
+        static void TryCreateShortcut(string lnk, string target, string args, string workDir, string icon, string description)
+        {
+            try { CreateShortcut(lnk, target, args, workDir, icon, description); }
+            catch (Exception ex) { Log("shortcuts: " + lnk + ": " + ex.Message); }
         }
 
         static void CreateShortcut(string lnk, string target, string args, string workDir, string icon, string description)

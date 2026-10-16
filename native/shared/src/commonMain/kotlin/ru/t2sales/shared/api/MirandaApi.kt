@@ -61,6 +61,12 @@ class MirandaApi(private val client: HttpClient) {
     suspend fun listAllCorporateAccounts(): MirandaCorporateAccountsListResponse =
         client.get(apiUrl("/miranda/accounts")).body()
 
+    suspend fun createAccount(employeeId: Int, storeId: String?, displayLabel: String?): MirandaCreateAccountResponse =
+        client.post(apiUrl("/miranda/accounts")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaCreateAccountRequest(employeeId, storeId, displayLabel))
+        }.body()
+
     suspend fun listAvailableAccounts(deviceSecret: String? = null): MirandaAvailableAccountsResponse =
         client.get(apiUrl("/miranda/accounts/available" + (deviceSecret?.let { "?deviceSecret=$it" } ?: ""))).body()
 

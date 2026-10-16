@@ -49,7 +49,7 @@ import ru.t2sales.shared.api.OrgAdminItem
 import ru.t2sales.shared.theme.T2Colors
 
 @Composable
-private fun ListRow(title: String, sub: String?, action: (@Composable () -> Unit)?) {
+internal fun ListRow(title: String, sub: String?, action: (@Composable () -> Unit)?) {
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)

@@ -660,6 +660,28 @@ data class AcEmployeeHit(val id: Int, val full_name: String = "", val role: Stri
 data class AcSearch(val employees: List<AcEmployeeHit> = emptyList())
 
 @Serializable
+data class SheetImportPendingRow(
+    val id: Int,
+    val org_id: String? = null,
+    val store_id: String? = null,
+    val store_name: String? = null,
+    val sheet_name_raw: String = "",
+    val work_date: String = "",
+    val shift_raw: String? = null,
+    val candidate_employee_id: Int? = null,
+    val candidate_full_name: String? = null,
+    val candidate_score: Double? = null,
+    val status: String = "pending",
+    val created_at: String = ""
+)
+
+@Serializable
+data class AdminSheetImportPendingListResponse(val items: List<SheetImportPendingRow> = emptyList())
+
+@Serializable
+data class AdminSheetImportConfirmRequest(val employee_id: Int)
+
+@Serializable
 data class AcEmployeeProfile(
     val id: Int,
     val full_name: String = "",
