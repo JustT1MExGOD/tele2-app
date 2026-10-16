@@ -54,7 +54,7 @@ data class MirandaPendingBindingsListResponse(val items: List<MirandaPendingBind
 @Serializable
 data class MirandaCorporateAccountListItem(
     val corporate_account_id: Int,
-    val employee_id: Int,
+    val employee_id: Int? = null, // null для аккаунта точки (Этап B) — employee_full_name тогда падает на account_name
     val employee_full_name: String,
     val store_id: String? = null,
     val display_label: String? = null,
@@ -96,11 +96,20 @@ data class MirandaCreateAccountRequest(
     val displayLabel: String? = null
 )
 
+// Этап B (вариант B) — аккаунт точки/кассы: собственный вход по телефону+паролю.
+@Serializable
+data class MirandaCreatePointAccountRequest(
+    val phone: String,
+    val password: String,
+    val accountName: String,
+    val storeId: String? = null
+)
+
 @Serializable
 data class MirandaCorporateAccountRow(
     val id: Int,
     val org_id: String = "",
-    val employee_id: Int,
+    val employee_id: Int? = null,
     val store_id: String? = null,
     val display_label: String? = null,
     val is_active: Boolean = true,

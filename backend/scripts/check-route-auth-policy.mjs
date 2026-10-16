@@ -38,7 +38,13 @@ const GUARD_PATTERNS = [
   // adversarial review): requireManager() + an inline role==='admin'
   // check, same pattern org/branding.ts's admin-only routes already use
   // inline. No shared requireAdmin() guard exists yet in auth/guards.ts.
-  'requirePlatformAdmin('
+  'requirePlatformAdmin(',
+  // resolveMirandaPrincipal — T2 Miranda, этап B: centralized guard for
+  // Miranda messenger routes, parallel to requireActive — resolves EITHER
+  // a point-account session (t2_point_session cookie) OR falls back to
+  // requireActive()+active corporate account, replying 401/409 itself on
+  // failure (core/miranda-accounts/service.ts).
+  'resolveMirandaPrincipal('
 ];
 
 /**
@@ -72,7 +78,9 @@ const PUBLIC_ROUTES = new Set([
   'GET /access/employees-directory', // публичный каталог для "я из списка" при регистрации — известный trade-off, rate-limited
   'POST /access/request', // сама заявка на доступ — inline telegram_id-check, до access_status активности
   'GET /branding', // публичное оформление (лого/цвета) для экрана логина
-  'POST /integrations/sheets/schedule-webhook' // Google Apps Script не умеет ходить с сессионной кукой/CSRF — авторизация статическим общим секретом (X-Sheets-Webhook-Secret, timingSafeEqual), см. сам роут
+  'POST /integrations/sheets/schedule-webhook', // Google Apps Script не умеет ходить с сессионной кукой/CSRF — авторизация статическим общим секретом (X-Sheets-Webhook-Secret, timingSafeEqual), см. сам роут
+  'POST /miranda/accounts/login', // точечный (Этап B) вход по телефону+паролю — сам primary credential check, зеркало POST /auth/login
+  'POST /miranda/accounts/logout' // должен работать даже с истёкшей/отсутствующей точечной сессией (idempotent clear), зеркало POST /auth/logout
 ]);
 
 function walk(dir) {

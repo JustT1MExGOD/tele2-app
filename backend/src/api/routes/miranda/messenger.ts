@@ -6,7 +6,7 @@
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireActive } from '../../../auth/guards.js';
+import { resolveMirandaPrincipal } from '../../../core/miranda-accounts/service.js';
 import * as messengerService from '../../../core/messenger/service.js';
 import { broadcastToMembers } from '../../../core/messenger/realtime-registry.js';
 import * as messengerRepo from '../../../data/repositories/messenger.js';
@@ -45,27 +45,12 @@ const PostMessageBody = Type.Object({
 });
 type PostMessageBody = Static<typeof PostMessageBody>;
 
-async function requireActiveAccountOrReply(request: any, reply: any): Promise<number | null> {
-  const sessionToken = request.sessionToken;
-  if (!sessionToken) {
-    reply.code(409).send({ error: 'no_session_token', message: 'Miranda требует сессионный вход (телефон+пароль)' });
-    return null;
-  }
-  const accountId = await messengerService.resolveActiveCorporateAccount(sessionToken);
-  if (!accountId) {
-    reply.code(409).send({ error: 'no_active_corporate_account', message: 'Нет активного корпоративного аккаунта на этом устройстве' });
-    return null;
-  }
-  return accountId;
-}
-
 export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
   app.post('/miranda/conversations/direct', { schema: { body: DirectBody } }, async (request, reply) => {
-    if (!requireActive(request, reply)) return;
-    const accountId = await requireActiveAccountOrReply(request, reply);
-    if (!accountId) return;
+    const principal = await resolveMirandaPrincipal(request, reply);
+    if (!principal) return;
     const { targetCorporateAccountId } = request.body as DirectBody;
-    const result = await messengerService.findOrCreateDirectConversation(request.user!.org_id, accountId, targetCorporateAccountId);
+    const result = await messengerService.findOrCreateDirectConversation(principal.orgId, principal.corporateAccountId, targetCorporateAccountId);
     if (result.ok !== true) {
       return reply.code(400).send({ error: result.error });
     }
@@ -73,11 +58,10 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
   });
 
   app.post('/miranda/conversations/group', { schema: { body: GroupBody } }, async (request, reply) => {
-    if (!requireActive(request, reply)) return;
-    const accountId = await requireActiveAccountOrReply(request, reply);
-    if (!accountId) return;
+    const principal = await resolveMirandaPrincipal(request, reply);
+    if (!principal) return;
     const { title, memberCorporateAccountIds } = request.body as GroupBody;
-    const result = await messengerService.createGroupConversation(request.user!.org_id, accountId, title, memberCorporateAccountIds);
+    const result = await messengerService.createGroupConversation(principal.orgId, principal.corporateAccountId, title, memberCorporateAccountIds);
     if (result.ok !== true) {
       return reply.code(400).send({ error: result.error });
     }
@@ -85,19 +69,17 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
   });
 
   app.get('/miranda/conversations', async (request, reply) => {
-    if (!requireActive(request, reply)) return;
-    const accountId = await requireActiveAccountOrReply(request, reply);
-    if (!accountId) return;
-    const items = await messengerService.listConversations(accountId);
+    const principal = await resolveMirandaPrincipal(request, reply);
+    if (!principal) return;
+    const items = await messengerService.listConversations(principal.corporateAccountId);
     return reply.code(200).send({ items });
   });
 
   app.get('/miranda/conversations/:id/members', { schema: { params: ConversationIdParams } }, async (request, reply) => {
-    if (!requireActive(request, reply)) return;
-    const accountId = await requireActiveAccountOrReply(request, reply);
-    if (!accountId) return;
+    const principal = await resolveMirandaPrincipal(request, reply);
+    if (!principal) return;
     const { id } = request.params as ConversationIdParams;
-    if (!(await messengerService.isMember(id, accountId))) {
+    if (!(await messengerService.isMember(id, principal.corporateAccountId))) {
       return reply.code(404).send({ error: 'not_found' });
     }
     const items = await messengerService.listMembers(id);
@@ -105,15 +87,14 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
   });
 
   app.post('/miranda/conversations/:id/read', { schema: { params: ConversationIdParams, body: ReadBody } }, async (request, reply) => {
-    if (!requireActive(request, reply)) return;
-    const accountId = await requireActiveAccountOrReply(request, reply);
-    if (!accountId) return;
+    const principal = await resolveMirandaPrincipal(request, reply);
+    if (!principal) return;
     const { id } = request.params as ConversationIdParams;
-    if (!(await messengerService.isMember(id, accountId))) {
+    if (!(await messengerService.isMember(id, principal.corporateAccountId))) {
       return reply.code(404).send({ error: 'not_found' });
     }
     const { messageId } = request.body as ReadBody;
-    await messengerService.markRead(id, request.user!.org_id, accountId, request.user!.employee_id!, messageId);
+    await messengerService.markRead(id, principal.orgId, principal.corporateAccountId, principal.actorEmployeeId, messageId);
     return reply.code(200).send({ ok: true });
   });
 
@@ -126,11 +107,10 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
       }
     },
     async (request, reply) => {
-      if (!requireActive(request, reply)) return;
-      const accountId = await requireActiveAccountOrReply(request, reply);
-      if (!accountId) return;
+      const principal = await resolveMirandaPrincipal(request, reply);
+      if (!principal) return;
       const { id } = request.params as ConversationIdParams;
-      if (!(await messengerService.isMember(id, accountId))) {
+      if (!(await messengerService.isMember(id, principal.corporateAccountId))) {
         return reply.code(404).send({ error: 'not_found' });
       }
       const { cursor, after, limit: limitRaw } = request.query as GetMessagesQuery;
@@ -151,7 +131,7 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
       if (cursor !== undefined && after !== undefined) {
         return reply.code(400).send({ error: 'conflicting_params', message: 'cursor и after взаимоисключающие' });
       }
-      const orgId = request.user!.org_id;
+      const orgId = principal.orgId;
       if (after !== undefined) {
         const items = await messengerService.listMessagesAfter(id, orgId, after, limit);
         return { items, nextCursor: null };
@@ -170,11 +150,10 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
       }
     },
     async (request, reply) => {
-      if (!requireActive(request, reply)) return;
-      const accountId = await requireActiveAccountOrReply(request, reply);
-      if (!accountId) return;
+      const principal = await resolveMirandaPrincipal(request, reply);
+      if (!principal) return;
       const { id } = request.params as ConversationIdParams;
-      if (!(await messengerService.isMember(id, accountId))) {
+      if (!(await messengerService.isMember(id, principal.corporateAccountId))) {
         return reply.code(404).send({ error: 'not_found' });
       }
       const body = request.body as PostMessageBody;
@@ -182,10 +161,9 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'invalid_client_message_id', message: 'clientMessageId должен быть UUID' });
       }
       const attachmentIds = body.attachmentIds || [];
-      const orgId = request.user!.org_id;
-      const employeeId = request.user!.employee_id!;
+      const orgId = principal.orgId;
 
-      const result = await messengerService.createMessage(orgId, id, accountId, employeeId, body.clientMessageId, body.body, attachmentIds);
+      const result = await messengerService.createMessage(orgId, id, principal.corporateAccountId, principal.actorEmployeeId, body.clientMessageId, body.body, attachmentIds);
       if (result.ok !== true) {
         const statusCode = result.error === 'internal_error' ? 500 : 400;
         return reply.code(statusCode).send({ error: result.error, message: result.message });

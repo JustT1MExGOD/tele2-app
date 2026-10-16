@@ -19,6 +19,58 @@ import { withTransaction } from '../../data/db/index.js';
 import * as mirandaRepo from '../../data/repositories/miranda-accounts.js';
 import { hashToken } from '../../data/repositories/sessions.js';
 import * as auditRepo from '../../data/repositories/audit.js';
+import { hashPassword } from '../../auth/password.js';
+import { requireActive } from '../../auth/guards.js';
+import * as pointSessionsRepo from '../../data/repositories/corporate-account-sessions.js';
+
+export interface MirandaPrincipal {
+  orgId: string;
+  corporateAccountId: number;
+  /** null для точечного (Этап B) принципала — нет живого сотрудника за аккаунтом. */
+  actorEmployeeId: number | null;
+}
+
+/** Этап B §4 плана — единая точка резолюции "кто сейчас пишет в
+ * мессенджер Miranda", параллельная двум разным входам:
+ * 1. Точечный аккаунт (телефон+пароль, cookie `t2_point_session`) —
+ *    проверяется первым, не трогает employee-сессию вообще.
+ * 2. Обычный сотрудник (`requireActive` + активный corporate_account_id
+ *    на employee_sessions) — существующий путь Этапа A, без изменений.
+ * Ни одно, ни другое — сама функция уже отправила 401/409 в reply.
+ * request/reply типизированы как `any` намеренно — core/ не может
+ * импортировать fastify напрямую (см. docs/ARCHITECTURE.md), это тот же
+ * приём, что уже используют api/routes/miranda/messenger.ts's
+ * локальные guard-хелперы. */
+export async function resolveMirandaPrincipal(request: any, reply: any): Promise<MirandaPrincipal | null> {
+  const pointToken = request.cookies?.[pointSessionsRepo.POINT_COOKIE_NAME];
+  if (pointToken) {
+    const session = await pointSessionsRepo.resolve(pointToken);
+    if (!session) {
+      reply.code(401).send({ error: 'invalid_point_session', message: 'Сессия точки недействительна или истекла' });
+      return null;
+    }
+    const account = await mirandaRepo.getCorporateAccount(session.corporate_account_id);
+    if (!account || !account.is_active) {
+      reply.code(401).send({ error: 'invalid_point_session', message: 'Сессия точки недействительна или истекла' });
+      return null;
+    }
+    await pointSessionsRepo.touch(pointToken);
+    return { orgId: account.org_id, corporateAccountId: account.id, actorEmployeeId: null };
+  }
+
+  if (!requireActive(request, reply)) return null;
+  const sessionToken = request.sessionToken;
+  if (!sessionToken) {
+    reply.code(409).send({ error: 'no_session_token', message: 'Miranda требует сессионный вход (телефон+пароль)' });
+    return null;
+  }
+  const corporateAccountId = await mirandaRepo.getActiveCorporateAccountForSession(hashToken(sessionToken));
+  if (!corporateAccountId) {
+    reply.code(409).send({ error: 'no_active_corporate_account', message: 'Нет активного корпоративного аккаунта на этом устройстве' });
+    return null;
+  }
+  return { orgId: request.user!.org_id, corporateAccountId, actorEmployeeId: request.user!.employee_id! };
+}
 
 export interface RegisterDeviceResult {
   deviceId: number;
@@ -246,6 +298,40 @@ export async function createCorporateAccount(
         targetType: 'corporate_account',
         targetId: String(account.id),
         after: { employeeId, storeId, displayLabel }
+      },
+      q
+    );
+    return { ok: true, account };
+  });
+}
+
+/** Этап B (вариант B) — создание аккаунта точки/кассы с собственным
+ * логином (телефон+пароль), без employee_id. conflict означает, что
+ * телефон уже занят в этой сети — UNIQUE(org_id, phone), админу нужно
+ * использовать другой телефон или существующий аккаунт. */
+export type CreatePointAccountResult = { ok: true; account: mirandaRepo.CorporateAccountRow } | { ok: false; error: 'phone_conflict' };
+
+export async function createPointCorporateAccount(
+  orgId: string,
+  phone: string,
+  password: string,
+  accountName: string,
+  storeId: string | null,
+  actorEmployeeId: number
+): Promise<CreatePointAccountResult> {
+  const passwordHash = await hashPassword(password);
+  return withTransaction(async (q) => {
+    const account = await mirandaRepo.createPointCorporateAccount(orgId, phone, passwordHash, accountName, storeId, q);
+    if (!account) return { ok: false, error: 'phone_conflict' };
+    await auditRepo.record(
+      {
+        orgId,
+        actorEmployeeId,
+        actorTelegramId: null,
+        action: 'MIRANDA_ACCOUNT_CREATED',
+        targetType: 'corporate_account',
+        targetId: String(account.id),
+        after: { accountName, storeId, kind: 'point' }
       },
       q
     );

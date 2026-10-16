@@ -31,13 +31,30 @@ export function renderMirandaDevicesTab(container: HTMLElement): void {
         компьютеров.
       </div>
       <div style="padding:0 16px 12px;display:flex;flex-direction:column;gap:8px">
-        <div>
-          <input type="text" id="mirandaCreateAccountSearch" placeholder="Сотрудник для нового аккаунта — поиск по имени" style="width:100%;box-sizing:border-box">
-          <div id="mirandaCreateAccountResults"></div>
-          <div id="mirandaCreateAccountSelected" class="row-sub" style="padding:4px 0"></div>
+        <div style="display:flex;gap:16px">
+          <label style="display:flex;align-items:center;gap:6px">
+            <input type="radio" name="mirandaCreateAccountKind" id="mirandaCreateAccountKindPersonal" value="personal" checked>
+            Личный аккаунт
+          </label>
+          <label style="display:flex;align-items:center;gap:6px">
+            <input type="radio" name="mirandaCreateAccountKind" id="mirandaCreateAccountKindPoint" value="point">
+            Аккаунт точки
+          </label>
         </div>
-        <input type="text" id="mirandaCreateAccountStoreId" placeholder="ID точки (необязательно — личный аккаунт без точки)" style="width:100%;box-sizing:border-box">
-        <input type="text" id="mirandaCreateAccountLabel" placeholder="Название аккаунта (необязательно)" style="width:100%;box-sizing:border-box">
+        <div id="mirandaCreateAccountPersonalFields">
+          <div>
+            <input type="text" id="mirandaCreateAccountSearch" placeholder="Сотрудник для нового аккаунта — поиск по имени" style="width:100%;box-sizing:border-box">
+            <div id="mirandaCreateAccountResults"></div>
+            <div id="mirandaCreateAccountSelected" class="row-sub" style="padding:4px 0"></div>
+          </div>
+          <input type="text" id="mirandaCreateAccountLabel" placeholder="Название аккаунта (необязательно)" style="width:100%;box-sizing:border-box;margin-top:8px">
+        </div>
+        <div id="mirandaCreateAccountPointFields" style="display:none;flex-direction:column;gap:8px">
+          <input type="text" id="mirandaCreateAccountPhone" placeholder="Телефон точки (например, +79991234567)" style="width:100%;box-sizing:border-box">
+          <input type="password" id="mirandaCreateAccountPassword" placeholder="Пароль (минимум 8 символов)" style="width:100%;box-sizing:border-box">
+          <input type="text" id="mirandaCreateAccountName" placeholder="Название аккаунта (например, «Касса Космонавтов 20А»)" style="width:100%;box-sizing:border-box">
+        </div>
+        <input type="text" id="mirandaCreateAccountStoreId" placeholder="ID точки (необязательно)" style="width:100%;box-sizing:border-box">
         <button type="button" class="btn-main" id="mirandaCreateAccountBtn" style="align-self:flex-start">Создать аккаунт</button>
       </div>
       <div id="mirandaAccountsList"></div>
@@ -95,6 +112,14 @@ export function renderMirandaDevicesTab(container: HTMLElement): void {
     if (createSearchInput) createSearchInput.value = '';
   });
   document.getElementById('mirandaCreateAccountBtn')?.addEventListener('click', onCreateAccount);
+
+  document.querySelectorAll<HTMLInputElement>('input[name="mirandaCreateAccountKind"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+      const isPoint = (document.getElementById('mirandaCreateAccountKindPoint') as HTMLInputElement | null)?.checked;
+      document.getElementById('mirandaCreateAccountPersonalFields')!.style.display = isPoint ? 'none' : '';
+      document.getElementById('mirandaCreateAccountPointFields')!.style.display = isPoint ? 'flex' : 'none';
+    });
+  });
 
   document.getElementById('mirandaAccountsList')?.addEventListener('change', (e) => {
     const checkbox = e.target as HTMLInputElement | null;
@@ -248,13 +273,41 @@ async function runCreateAccountSearch(term: string): Promise<void> {
 }
 
 async function onCreateAccount(): Promise<void> {
+  const storeIdInput = document.getElementById('mirandaCreateAccountStoreId') as HTMLInputElement | null;
+  const storeId = storeIdInput?.value.trim() || null;
+  const isPoint = (document.getElementById('mirandaCreateAccountKindPoint') as HTMLInputElement | null)?.checked;
+
+  if (isPoint) {
+    const phoneInput = document.getElementById('mirandaCreateAccountPhone') as HTMLInputElement | null;
+    const passwordInput = document.getElementById('mirandaCreateAccountPassword') as HTMLInputElement | null;
+    const nameInput = document.getElementById('mirandaCreateAccountName') as HTMLInputElement | null;
+    const phone = phoneInput?.value.trim() || '';
+    const password = passwordInput?.value || '';
+    const accountName = nameInput?.value.trim() || '';
+    if (!phone || !password || !accountName) {
+      toast('Заполните телефон, пароль и название аккаунта', 'err');
+      return;
+    }
+    try {
+      await window.apiClient.adminCreateMirandaPointAccount(authHeaders(), phone, password, accountName, storeId);
+      toast('Аккаунт точки создан', 'ok');
+      if (phoneInput) phoneInput.value = '';
+      if (passwordInput) passwordInput.value = '';
+      if (nameInput) nameInput.value = '';
+      if (storeIdInput) storeIdInput.value = '';
+      loadCorporateAccounts();
+    } catch (e) {
+      const code = (e as { code?: string } | undefined)?.code;
+      toast(code === 'phone_conflict' ? 'Аккаунт с таким телефоном уже существует в вашей сети' : 'Не удалось создать аккаунт', 'err');
+    }
+    return;
+  }
+
   if (!selectedCreateEmployeeId) {
     toast('Выберите сотрудника', 'err');
     return;
   }
-  const storeIdInput = document.getElementById('mirandaCreateAccountStoreId') as HTMLInputElement | null;
   const labelInput = document.getElementById('mirandaCreateAccountLabel') as HTMLInputElement | null;
-  const storeId = storeIdInput?.value.trim() || null;
   const displayLabel = labelInput?.value.trim() || null;
   try {
     await window.apiClient.adminCreateMirandaAccount(authHeaders(), selectedCreateEmployeeId, storeId, displayLabel);

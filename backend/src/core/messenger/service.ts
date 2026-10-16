@@ -24,7 +24,7 @@ export async function resolveActiveCorporateAccount(sessionToken: string): Promi
 
 export interface CanonicalSender {
   corporateAccountId: number;
-  employeeId: number;
+  employeeId: number | null;
   displayName: string;
 }
 
@@ -48,7 +48,7 @@ export interface CanonicalMessage {
 function toCanonicalSender(row: messengerRepo.MessengerMessageWithSender): CanonicalSender {
   return {
     corporateAccountId: Number(row.sender_corporate_account_id),
-    employeeId: Number(row.sender_employee_id),
+    employeeId: row.sender_employee_id === null ? null : Number(row.sender_employee_id),
     displayName: row.sender_display_label || row.sender_full_name || `#${row.sender_corporate_account_id}`
   };
 }
@@ -152,7 +152,7 @@ export async function createMessage(
   orgId: string,
   conversationId: string,
   senderCorporateAccountId: number,
-  senderEmployeeId: number,
+  senderEmployeeId: number | null,
   clientMessageId: string,
   rawBody: string | null | undefined,
   attachmentIds: string[]
@@ -286,7 +286,7 @@ export async function markRead(
   conversationId: string,
   orgId: string,
   corporateAccountId: number,
-  actorEmployeeId: number,
+  actorEmployeeId: number | null,
   messageId: string
 ): Promise<void> {
   await messengerRepo.updateLastRead(conversationId, corporateAccountId, messageId);

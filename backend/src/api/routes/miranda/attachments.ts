@@ -7,7 +7,7 @@
 import { FastifyInstance } from 'fastify';
 import * as messengerRepo from '../../../data/repositories/messenger.js';
 import * as messengerService from '../../../core/messenger/service.js';
-import { requireActive } from '../../../auth/guards.js';
+import { resolveMirandaPrincipal } from '../../../core/miranda-accounts/service.js';
 import { employeeAwareKeyGenerator } from '../../../security/rate-limit.js';
 import { messengerStorage } from '../../../core/messenger/storage.js';
 import {
@@ -27,15 +27,9 @@ export async function registerMirandaAttachmentRoutes(app: FastifyInstance) {
       }
     },
     async (request, reply) => {
-      if (!requireActive(request, reply)) return;
-      const sessionToken = request.sessionToken;
-      if (!sessionToken) {
-        return reply.code(409).send({ error: 'no_session_token', message: 'Miranda требует сессионный вход (телефон+пароль)' });
-      }
-      const accountId = await messengerService.resolveActiveCorporateAccount(sessionToken);
-      if (!accountId) {
-        return reply.code(409).send({ error: 'no_active_corporate_account', message: 'Нет активного корпоративного аккаунта на этом устройстве' });
-      }
+      const principal = await resolveMirandaPrincipal(request, reply);
+      if (!principal) return;
+      const accountId = principal.corporateAccountId;
       const data = await request.file({ limits: { fileSize: MAX_ATTACHMENT_BYTES } }).catch(() => null);
       if (!data) {
         return reply.code(400).send({ error: 'no_file', message: 'Файл не получен' });
@@ -49,7 +43,7 @@ export async function registerMirandaAttachmentRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: validation.error, message: validation.message });
       }
 
-      const orgId = request.user!.org_id;
+      const orgId = principal.orgId;
       const storageKey = generateStorageKey();
       const expiresAt = new Date(Date.now() + PREPARED_ATTACHMENT_TTL_MS).toISOString();
       const row = await messengerRepo.createPreparedAttachment(
@@ -80,17 +74,11 @@ export async function registerMirandaAttachmentRoutes(app: FastifyInstance) {
       }
     },
     async (request, reply) => {
-      if (!requireActive(request, reply)) return;
-      const sessionToken = request.sessionToken;
-      if (!sessionToken) {
-        return reply.code(409).send({ error: 'no_session_token', message: 'Miranda требует сессионный вход (телефон+пароль)' });
-      }
-      const accountId = await messengerService.resolveActiveCorporateAccount(sessionToken);
-      if (!accountId) {
-        return reply.code(409).send({ error: 'no_active_corporate_account', message: 'Нет активного корпоративного аккаунта на этом устройстве' });
-      }
+      const principal = await resolveMirandaPrincipal(request, reply);
+      if (!principal) return;
+      const accountId = principal.corporateAccountId;
       const { id } = request.params as { id: string };
-      const orgId = request.user!.org_id;
+      const orgId = principal.orgId;
       const row = await messengerRepo.getAttachmentForDownload(id, orgId);
       if (!row) {
         return reply.code(404).send({ error: 'not_found' });

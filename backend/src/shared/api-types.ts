@@ -1782,7 +1782,7 @@ export interface MirandaRevokeBindingResponse { ok: true; }
 
 export interface MirandaCorporateAccountListItem {
   corporate_account_id: number;
-  employee_id: number;
+  employee_id: number | null;
   employee_full_name: string;
   store_id: string | null;
   display_label: string | null;
@@ -1796,11 +1796,13 @@ export interface MirandaSetDeviceExclusiveResponse { ok: true; }
 export interface MirandaCorporateAccountRow {
   id: number;
   org_id: string;
-  employee_id: number;
+  employee_id: number | null;
   store_id: string | null;
   display_label: string | null;
   is_active: boolean;
   device_exclusive: boolean;
+  phone: string | null;
+  account_name: string | null;
   [key: string]: unknown;
 }
 export interface MirandaCreateAccountResponse { item: MirandaCorporateAccountRow; }

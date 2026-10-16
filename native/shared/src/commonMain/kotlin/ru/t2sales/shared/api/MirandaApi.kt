@@ -67,6 +67,13 @@ class MirandaApi(private val client: HttpClient) {
             setBody(MirandaCreateAccountRequest(employeeId, storeId, displayLabel))
         }.body()
 
+    // Этап B (вариант B) — аккаунт точки/кассы: собственный вход по телефону+паролю.
+    suspend fun createPointAccount(phone: String, password: String, accountName: String, storeId: String?): MirandaCreateAccountResponse =
+        client.post(apiUrl("/miranda/accounts")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaCreatePointAccountRequest(phone, password, accountName, storeId))
+        }.body()
+
     suspend fun listAvailableAccounts(deviceSecret: String? = null): MirandaAvailableAccountsResponse =
         client.get(apiUrl("/miranda/accounts/available" + (deviceSecret?.let { "?deviceSecret=$it" } ?: ""))).body()
 

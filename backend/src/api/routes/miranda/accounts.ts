@@ -32,11 +32,22 @@ const GrantBody = Type.Object({
 });
 type GrantBody = Static<typeof GrantBody>;
 
-const CreateAccountBody = Type.Object({
+const CreatePersonalAccountBody = Type.Object({
   employeeId: Type.Integer(),
   storeId: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
   displayLabel: Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()]))
 });
+
+// Этап B (вариант B) — аккаунт точки/кассы: собственный вход по телефону+
+// паролю, без привязки к конкретному сотруднику.
+const CreatePointAccountBody = Type.Object({
+  phone: Type.String({ minLength: 5, maxLength: 32 }),
+  password: Type.String({ minLength: 8, maxLength: 200 }),
+  accountName: Type.String({ minLength: 1, maxLength: 200 }),
+  storeId: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()]))
+});
+
+const CreateAccountBody = Type.Union([CreatePersonalAccountBody, CreatePointAccountBody]);
 type CreateAccountBody = Static<typeof CreateAccountBody>;
 
 const DeviceExclusiveParams = Type.Object({ id: Type.String({ pattern: '^[0-9]+$' }) });
@@ -82,8 +93,22 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
     { schema: { body: CreateAccountBody } },
     async (request, reply) => {
       if (!requireAdmin(request, reply)) return;
-      const { employeeId, storeId, displayLabel } = request.body as CreateAccountBody;
+      const body = request.body as CreateAccountBody;
       const orgId = request.user!.org_id;
+
+      if ('phone' in body) {
+        const { phone, password, accountName, storeId } = body;
+        if (storeId && !(await assertStoreInOrg(storeId, orgId))) {
+          return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
+        }
+        const result = await mirandaService.createPointCorporateAccount(orgId, phone, password, accountName, storeId || null, request.user!.employee_id!);
+        if (result.ok === false) {
+          return reply.code(409).send({ error: 'phone_conflict', message: 'Аккаунт с таким телефоном уже существует в вашей сети' });
+        }
+        return reply.code(201).send({ item: result.account });
+      }
+
+      const { employeeId, storeId, displayLabel } = body;
       if (!(await assertEmployeeInOrg(employeeId, orgId))) {
         return reply.code(403).send({ error: 'forbidden', message: 'Сотрудник не принадлежит вашей сети' });
       }

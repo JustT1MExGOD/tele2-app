@@ -355,6 +355,17 @@ export async function adminCreateMirandaAccount(
   return request('/miranda/accounts', headers, { method: 'POST', body: { employeeId, storeId, displayLabel } });
 }
 
+// Этап B (вариант B) — аккаунт точки/кассы: собственный вход по телефону+паролю.
+export async function adminCreateMirandaPointAccount(
+  headers: Record<string, string>,
+  phone: string,
+  password: string,
+  accountName: string,
+  storeId: string | null
+): Promise<MirandaCreateAccountResponse> {
+  return request('/miranda/accounts', headers, { method: 'POST', body: { phone, password, accountName, storeId } });
+}
+
 export async function adminListMirandaAvailableAccounts(headers: Record<string, string>): Promise<MirandaAvailableAccountsResponse> {
   return request('/miranda/accounts/available', headers);
 }

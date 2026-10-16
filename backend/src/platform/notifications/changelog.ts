@@ -1559,5 +1559,15 @@ export const CHANGELOG: ChangelogEntry[] = [
       'То же в native-админке T2 Sales (Windows) — форма создания аккаунта рядом со списком и переключателем «только одно устройство»',
       'tsc --noEmit (backend+frontend), vitest 918/918 (backend, на реальном одноразовом Postgres, включая новый isolation-тест на create/конфликт/org-изоляцию), frontend build/smoke, native desktopApp compileKotlin — без регрессий'
     ]
+  },
+  {
+    version: '20.66.0',
+    title: 'T2 Miranda: точечные аккаунты со своим входом по телефону и паролю',
+    bullets: [
+      'Аккаунт точки/кассы теперь можно завести без привязки к конкретному сотруднику — со своим телефоном, паролем и названием («Касса Космонавтов 20А»); вход отдельный (POST /miranda/accounts/login), без очереди подтверждения устройства',
+      'Admin Control Center «Устройства Miranda» и native-админка (Windows): форма создания аккаунта получила переключатель «Личный аккаунт / Аккаунт точки» — во втором режиме вместо поиска сотрудника вводятся телефон, пароль и название',
+      'Мессенджер T2 Miranda принимает сообщения и от точечного аккаунта (отправитель без привязанного сотрудника), не только от личных аккаунтов сотрудников',
+      'tsc --noEmit (backend+frontend), vitest 924/924 (backend, на реальном одноразовом Postgres, включая новые isolation-тесты на логин точки, дубль телефона, доступ к мессенджеру и requireAdmin, revoke/logout, org-изоляцию), frontend build/smoke, native desktopApp compileKotlin, все security/architecture guardrail-проверки — без регрессий'
+    ]
   }
 ];

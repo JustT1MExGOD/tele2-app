@@ -22,12 +22,17 @@ export function hashDeviceSecret(secret: string): string {
 export interface CorporateAccountRow {
   id: number;
   org_id: string;
-  employee_id: number;
+  employee_id: number | null;
   store_id: string | null;
   display_label: string | null;
   is_active: boolean;
   device_exclusive: boolean;
+  /** Этап B (вариант B) — только для точечных аккаунтов (employee_id NULL). */
+  phone: string | null;
+  account_name: string | null;
 }
+
+const CORPORATE_ACCOUNT_COLUMNS = 'id, org_id, employee_id, store_id, display_label, is_active, device_exclusive, phone, account_name';
 
 /** employee_id + store_id — UNIQUE, поэтому "найти или создать" безопасно
  * делать как findOrInsert, не придумывая отдельный upsert-конфликт-хендлер
@@ -40,7 +45,7 @@ export async function findOrCreateCorporateAccount(
   q: typeof query = query
 ): Promise<CorporateAccountRow> {
   const existing = await q(
-    `SELECT id, org_id, employee_id, store_id, display_label, is_active, device_exclusive
+    `SELECT ${CORPORATE_ACCOUNT_COLUMNS}
      FROM corporate_accounts WHERE employee_id = $1 AND store_id IS NOT DISTINCT FROM $2`,
     [employeeId, storeId]
   );
@@ -48,7 +53,7 @@ export async function findOrCreateCorporateAccount(
   const inserted = await q(
     `INSERT INTO corporate_accounts (org_id, employee_id, store_id, display_label)
      VALUES ($1, $2, $3, $4)
-     RETURNING id, org_id, employee_id, store_id, display_label, is_active, device_exclusive`,
+     RETURNING ${CORPORATE_ACCOUNT_COLUMNS}`,
     [orgId, employeeId, storeId, displayLabel]
   );
   return inserted.rows[0];
@@ -71,15 +76,53 @@ export async function createCorporateAccount(
     `INSERT INTO corporate_accounts (org_id, employee_id, store_id, display_label)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (employee_id, store_id) DO NOTHING
-     RETURNING id, org_id, employee_id, store_id, display_label, is_active, device_exclusive`,
+     RETURNING ${CORPORATE_ACCOUNT_COLUMNS}`,
     [orgId, employeeId, storeId, displayLabel]
+  );
+  return res.rows[0] || null;
+}
+
+/** Этап B (вариант B) — создание аккаунта точки/кассы: собственный вход
+ * (телефон+пароль), без employee_id. UNIQUE(org_id, phone) — повтор для
+ * занятого телефона в той же сети возвращает null (409 на уровне роута),
+ * тот же принцип, что createCorporateAccount выше для employee_id+storeId. */
+export async function createPointCorporateAccount(
+  orgId: string,
+  phone: string,
+  passwordHash: string,
+  accountName: string,
+  storeId: string | null,
+  q: typeof query = query
+): Promise<CorporateAccountRow | null> {
+  const res = await q(
+    `INSERT INTO corporate_accounts (org_id, phone, password_hash, account_name, store_id, display_label)
+     VALUES ($1, $2, $3, $4, $5, $4)
+     ON CONFLICT (org_id, phone) WHERE phone IS NOT NULL DO NOTHING
+     RETURNING ${CORPORATE_ACCOUNT_COLUMNS}`,
+    [orgId, phone, passwordHash, accountName, storeId]
+  );
+  return res.rows[0] || null;
+}
+
+export interface PointAccountWithPassword extends CorporateAccountRow {
+  password_hash: string | null;
+}
+
+/** Логин точки не знает org_id заранее (только телефон+пароль) —
+ * UNIQUE(org_id, phone) гарантирует не больше одного совпадения даже без
+ * org-фильтра, так что поиск по всем сетям не открывает межсетевой доступ. */
+export async function findPointAccountByAnyOrgPhone(phone: string): Promise<PointAccountWithPassword | null> {
+  const res = await query(
+    `SELECT ${CORPORATE_ACCOUNT_COLUMNS}, password_hash FROM corporate_accounts
+     WHERE phone = $1 AND employee_id IS NULL`,
+    [phone]
   );
   return res.rows[0] || null;
 }
 
 export async function getCorporateAccount(id: number): Promise<CorporateAccountRow | null> {
   const res = await query(
-    `SELECT id, org_id, employee_id, store_id, display_label, is_active, device_exclusive FROM corporate_accounts WHERE id = $1`,
+    `SELECT ${CORPORATE_ACCOUNT_COLUMNS} FROM corporate_accounts WHERE id = $1`,
     [id]
   );
   return res.rows[0] || null;
@@ -97,7 +140,7 @@ export async function setCorporateAccountDeviceExclusive(
 ): Promise<CorporateAccountRow | null> {
   const res = await q(
     `UPDATE corporate_accounts SET device_exclusive = $2 WHERE id = $1
-     RETURNING id, org_id, employee_id, store_id, display_label, is_active, device_exclusive`,
+     RETURNING ${CORPORATE_ACCOUNT_COLUMNS}`,
     [id, deviceExclusive]
   );
   return res.rows[0] || null;
@@ -311,7 +354,7 @@ export async function listAvailableAccountsForAdmin(adminEmployeeId: number, dev
 
 export interface CorporateAccountListItem {
   corporate_account_id: number;
-  employee_id: number;
+  employee_id: number | null;
   employee_full_name: string;
   store_id: string | null;
   display_label: string | null;
@@ -321,13 +364,16 @@ export interface CorporateAccountListItem {
 /** GET /miranda/accounts — весь список активных корпоративных аккаунтов
  * сети, для UI выдачи гранта (Admin Control Center, "Устройства Miranda") —
  * без этого у админа нет способа узнать corporateAccountId аккаунта,
- * чьё устройство уже одобрено (listPendingBindings его больше не содержит). */
+ * чьё устройство уже одобрено (listPendingBindings его больше не содержит).
+ * LEFT JOIN employees — аккаунт точки (Этап B) не имеет employee_id,
+ * employee_full_name в этом случае падает на ca.account_name. */
 export async function listAllCorporateAccounts(orgId: string): Promise<CorporateAccountListItem[]> {
   const res = await query(
-    `SELECT ca.id AS corporate_account_id, ca.employee_id, e.full_name AS employee_full_name,
+    `SELECT ca.id AS corporate_account_id, ca.employee_id,
+            COALESCE(e.full_name, ca.account_name) AS employee_full_name,
             ca.store_id, ca.display_label, ca.device_exclusive
      FROM corporate_accounts ca
-     JOIN employees e ON e.id = ca.employee_id
+     LEFT JOIN employees e ON e.id = ca.employee_id
      WHERE ca.org_id = $1 AND ca.is_active
      ORDER BY ca.id ASC`,
     [orgId]
@@ -349,14 +395,15 @@ export async function searchCorporateAccounts(
   excludeCorporateAccountId: number | null
 ): Promise<CorporateAccountListItem[]> {
   const res = await query(
-    `SELECT ca.id AS corporate_account_id, ca.employee_id, e.full_name AS employee_full_name,
+    `SELECT ca.id AS corporate_account_id, ca.employee_id,
+            COALESCE(e.full_name, ca.account_name) AS employee_full_name,
             ca.store_id, ca.display_label
      FROM corporate_accounts ca
-     JOIN employees e ON e.id = ca.employee_id
+     LEFT JOIN employees e ON e.id = ca.employee_id
      WHERE ca.org_id = $1 AND ca.is_active
-       AND e.full_name ILIKE '%' || $2 || '%'
+       AND COALESCE(e.full_name, ca.account_name) ILIKE '%' || $2 || '%'
        AND ($3::bigint IS NULL OR ca.id != $3)
-     ORDER BY e.full_name ASC
+     ORDER BY COALESCE(e.full_name, ca.account_name) ASC
      LIMIT 20`,
     [orgId, term, excludeCorporateAccountId]
   );

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.RadioButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,6 +61,10 @@ internal fun MirandaDevicesTab(container: AppContainer) {
     var selectedCreateEmployee by remember { mutableStateOf<AcEmployeeHit?>(null) }
     var createStoreId by remember { mutableStateOf("") }
     var createLabel by remember { mutableStateOf("") }
+    var createIsPoint by remember { mutableStateOf(false) }
+    var createPhone by remember { mutableStateOf("") }
+    var createPassword by remember { mutableStateOf("") }
+    var createAccountName by remember { mutableStateOf("") }
 
     LaunchedEffect(reload) {
         runCatching { mirandaApi.listPendingDevices().items }.onSuccess { pending = it }.onFailure { pending = emptyList() }
@@ -111,43 +116,83 @@ internal fun MirandaDevicesTab(container: AppContainer) {
             color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Field("", createQuery, { createQuery = it; selectedCreateEmployee = null }, placeholder = "Сотрудник для нового аккаунта — поиск по имени", fill = T2Colors.surface2)
-            selectedCreateEmployee?.let { emp ->
-                Spacer(Modifier.height(6.dp))
-                Text("Выбран: ${emp.full_name} (#${emp.id})", color = T2Colors.hint, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = !createIsPoint, onClick = { createIsPoint = false })
+                Text("Личный аккаунт", fontSize = 13.sp, modifier = Modifier.padding(end = 16.dp))
+                RadioButton(selected = createIsPoint, onClick = { createIsPoint = true })
+                Text("Аккаунт точки", fontSize = 13.sp)
             }
-            if (createResults.isNotEmpty() && selectedCreateEmployee == null) {
+            Spacer(Modifier.height(6.dp))
+            if (createIsPoint) {
+                Field("", createPhone, { createPhone = it }, placeholder = "Телефон точки (например, +79991234567)", fill = T2Colors.surface2)
                 Spacer(Modifier.height(6.dp))
-                createResults.forEach { emp ->
-                    Box(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-                        NavRow(emp.full_name, emp.role) { selectedCreateEmployee = emp; createQuery = ""; createResults = emptyList() }
+                Field("", createPassword, { createPassword = it }, placeholder = "Пароль (минимум 8 символов)", fill = T2Colors.surface2)
+                Spacer(Modifier.height(6.dp))
+                Field("", createAccountName, { createAccountName = it }, placeholder = "Название аккаунта (например, «Касса Космонавтов 20А»)", fill = T2Colors.surface2)
+            } else {
+                Field("", createQuery, { createQuery = it; selectedCreateEmployee = null }, placeholder = "Сотрудник для нового аккаунта — поиск по имени", fill = T2Colors.surface2)
+                selectedCreateEmployee?.let { emp ->
+                    Spacer(Modifier.height(6.dp))
+                    Text("Выбран: ${emp.full_name} (#${emp.id})", color = T2Colors.hint, fontSize = 12.sp)
+                }
+                if (createResults.isNotEmpty() && selectedCreateEmployee == null) {
+                    Spacer(Modifier.height(6.dp))
+                    createResults.forEach { emp ->
+                        Box(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                            NavRow(emp.full_name, emp.role) { selectedCreateEmployee = emp; createQuery = ""; createResults = emptyList() }
+                        }
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                Field("", createLabel, { createLabel = it }, placeholder = "Название аккаунта (необязательно)", fill = T2Colors.surface2)
             }
             Spacer(Modifier.height(6.dp))
-            Field("", createStoreId, { createStoreId = it }, placeholder = "ID точки (необязательно — личный аккаунт без точки)", fill = T2Colors.surface2)
-            Spacer(Modifier.height(6.dp))
-            Field("", createLabel, { createLabel = it }, placeholder = "Название аккаунта (необязательно)", fill = T2Colors.surface2)
+            Field("", createStoreId, { createStoreId = it }, placeholder = "ID точки (необязательно)", fill = T2Colors.surface2)
             Spacer(Modifier.height(10.dp))
             Box(Modifier.width(180.dp)) {
                 MainButton("Создать аккаунт", enabled = true) {
-                    val employee = selectedCreateEmployee
-                    if (employee == null) {
-                        T2Toast.show("Выберите сотрудника", true)
+                    if (createIsPoint) {
+                        val phone = createPhone.trim()
+                        val password = createPassword
+                        val accountName = createAccountName.trim()
+                        if (phone.isEmpty() || password.isEmpty() || accountName.isEmpty()) {
+                            T2Toast.show("Заполните телефон, пароль и название аккаунта", true)
+                        } else {
+                            scope.launch {
+                                runCatching {
+                                    mirandaApi.createPointAccount(phone, password, accountName, createStoreId.trim().ifBlank { null })
+                                }.onSuccess {
+                                    T2Toast.show("Аккаунт точки создан")
+                                    createPhone = ""; createPassword = ""; createAccountName = ""; createStoreId = ""
+                                    reload++
+                                }.onFailure { err ->
+                                    val conflict = (err as? io.ktor.client.plugins.ResponseException)?.response?.status?.value == 409
+                                    T2Toast.show(
+                                        if (conflict) "Аккаунт с таким телефоном уже существует в вашей сети" else "Не удалось создать аккаунт",
+                                        true
+                                    )
+                                }
+                            }
+                        }
                     } else {
-                        scope.launch {
-                            runCatching {
-                                mirandaApi.createAccount(employee.id, createStoreId.trim().ifBlank { null }, createLabel.trim().ifBlank { null })
-                            }.onSuccess {
-                                T2Toast.show("Корпоративный аккаунт создан")
-                                selectedCreateEmployee = null; createStoreId = ""; createLabel = ""
-                                reload++
-                            }.onFailure { err ->
-                                val conflict = (err as? io.ktor.client.plugins.ResponseException)?.response?.status?.value == 409
-                                T2Toast.show(
-                                    if (conflict) "Такой аккаунт уже существует (этот сотрудник + точка)" else "Не удалось создать аккаунт",
-                                    true
-                                )
+                        val employee = selectedCreateEmployee
+                        if (employee == null) {
+                            T2Toast.show("Выберите сотрудника", true)
+                        } else {
+                            scope.launch {
+                                runCatching {
+                                    mirandaApi.createAccount(employee.id, createStoreId.trim().ifBlank { null }, createLabel.trim().ifBlank { null })
+                                }.onSuccess {
+                                    T2Toast.show("Корпоративный аккаунт создан")
+                                    selectedCreateEmployee = null; createStoreId = ""; createLabel = ""
+                                    reload++
+                                }.onFailure { err ->
+                                    val conflict = (err as? io.ktor.client.plugins.ResponseException)?.response?.status?.value == 409
+                                    T2Toast.show(
+                                        if (conflict) "Такой аккаунт уже существует (этот сотрудник + точка)" else "Не удалось создать аккаунт",
+                                        true
+                                    )
+                                }
                             }
                         }
                     }

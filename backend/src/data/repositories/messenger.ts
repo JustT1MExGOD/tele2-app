@@ -116,17 +116,18 @@ export async function listConversationsForAccount(corporateAccountId: number): P
 
 export interface ConversationMemberRow {
   corporate_account_id: string;
-  employee_id: string;
+  employee_id: string | null;
   employee_full_name: string;
   display_label: string | null;
 }
 
 export async function listMembers(conversationId: string): Promise<ConversationMemberRow[]> {
   const res = await query(
-    `SELECT ca.id AS corporate_account_id, ca.employee_id, e.full_name AS employee_full_name, ca.display_label
+    `SELECT ca.id AS corporate_account_id, ca.employee_id,
+            COALESCE(e.full_name, ca.account_name) AS employee_full_name, ca.display_label
      FROM messenger_conversation_members cm
      JOIN corporate_accounts ca ON ca.id = cm.corporate_account_id
-     JOIN employees e ON e.id = ca.employee_id
+     LEFT JOIN employees e ON e.id = ca.employee_id
      WHERE cm.conversation_id = $1
      ORDER BY cm.id ASC`,
     [conversationId]
@@ -156,7 +157,7 @@ export interface MessengerMessageRow {
   conversation_id: string;
   org_id: string;
   sender_corporate_account_id: string;
-  sender_employee_id: string;
+  sender_employee_id: string | null;
   client_message_id: string;
   body: string | null;
   content_type: string;
@@ -165,12 +166,13 @@ export interface MessengerMessageRow {
 
 /** Идемпотентность — тем же приёмом, что chatRepo.insertMessageIfAbsent:
  * UNIQUE(sender_corporate_account_id, client_message_id) сам разруливает
- * конкурентный дубль на уровне БД. */
+ * конкурентный дубль на уровне БД. senderEmployeeId — NULL для точечного
+ * (Этап B) отправителя без employee_id. */
 export async function insertMessageIfAbsent(
   conversationId: string,
   orgId: string,
   senderCorporateAccountId: number,
-  senderEmployeeId: number,
+  senderEmployeeId: number | null,
   clientMessageId: string,
   body: string | null,
   q: typeof query
@@ -207,10 +209,10 @@ export async function getMessageWithSender(messageId: string, conversationId: st
   const res = await query(
     `SELECT m.id, m.conversation_id, m.org_id, m.sender_corporate_account_id, m.sender_employee_id,
             m.client_message_id, m.body, m.content_type, m.created_at,
-            e.full_name AS sender_full_name, ca.display_label AS sender_display_label
+            COALESCE(e.full_name, ca.account_name) AS sender_full_name, ca.display_label AS sender_display_label
      FROM messenger_messages m
      JOIN corporate_accounts ca ON ca.id = m.sender_corporate_account_id
-     JOIN employees e ON e.id = ca.employee_id
+     LEFT JOIN employees e ON e.id = ca.employee_id
      WHERE m.id = $1 AND m.conversation_id = $2 AND m.deleted_at IS NULL`,
     [messageId, conversationId]
   );
@@ -228,10 +230,10 @@ export async function listMessages(conversationId: string, limit: number, before
   const res = await query(
     `SELECT m.id, m.conversation_id, m.org_id, m.sender_corporate_account_id, m.sender_employee_id,
             m.client_message_id, m.body, m.content_type, m.created_at,
-            e.full_name AS sender_full_name, ca.display_label AS sender_display_label
+            COALESCE(e.full_name, ca.account_name) AS sender_full_name, ca.display_label AS sender_display_label
      FROM messenger_messages m
      JOIN corporate_accounts ca ON ca.id = m.sender_corporate_account_id
-     JOIN employees e ON e.id = ca.employee_id
+     LEFT JOIN employees e ON e.id = ca.employee_id
      WHERE m.conversation_id = $1 AND m.deleted_at IS NULL ${cursorFilter}
      ORDER BY m.id DESC
      LIMIT $${params.length}`,
@@ -244,10 +246,10 @@ export async function listMessagesAfter(conversationId: string, afterId: string,
   const res = await query(
     `SELECT m.id, m.conversation_id, m.org_id, m.sender_corporate_account_id, m.sender_employee_id,
             m.client_message_id, m.body, m.content_type, m.created_at,
-            e.full_name AS sender_full_name, ca.display_label AS sender_display_label
+            COALESCE(e.full_name, ca.account_name) AS sender_full_name, ca.display_label AS sender_display_label
      FROM messenger_messages m
      JOIN corporate_accounts ca ON ca.id = m.sender_corporate_account_id
-     JOIN employees e ON e.id = ca.employee_id
+     LEFT JOIN employees e ON e.id = ca.employee_id
      WHERE m.conversation_id = $1 AND m.deleted_at IS NULL AND m.id > $2
      ORDER BY m.id ASC
      LIMIT $3`,

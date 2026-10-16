@@ -6,10 +6,10 @@
  */
 import { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
-import { requireActive } from '../../../auth/guards.js';
 import * as employeesRepo from '../../../data/repositories/employees.js';
 import * as mirandaRepo from '../../../data/repositories/miranda-accounts.js';
-import * as messengerService from '../../../core/messenger/service.js';
+import * as pointSessionsRepo from '../../../data/repositories/corporate-account-sessions.js';
+import { resolveMirandaPrincipal, MirandaPrincipal } from '../../../core/miranda-accounts/service.js';
 import {
   registerConnection,
   unregisterConnection,
@@ -20,11 +20,21 @@ import { jobLogger } from '../../../cron/job-logger.js';
 
 const HEARTBEAT_MS = 30_000;
 
-export async function isMessengerConnectionStillValid(employeeId: number, orgId: string, corporateAccountId: number): Promise<boolean> {
-  const employee = await employeesRepo.findById(employeeId).catch(() => null);
-  if (!employee || employee.is_active === false || employee.access_status !== 'active' || employee.org_id !== orgId) return false;
-  const account = await mirandaRepo.getCorporateAccount(corporateAccountId).catch(() => null);
-  return !!account && account.is_active && account.org_id === orgId;
+/** Этап B — две параллельные ветки ревалидации на каждый heartbeat:
+ * обычный сотрудник (employeeId известен) или точка (point-сессия,
+ * ревалидируется по хэшу собственного токена, не employee_sessions). */
+export async function isMessengerConnectionStillValid(principal: MirandaPrincipal, pointToken: string | null): Promise<boolean> {
+  if (principal.actorEmployeeId !== null) {
+    const employee = await employeesRepo.findById(principal.actorEmployeeId).catch(() => null);
+    if (!employee || employee.is_active === false || employee.access_status !== 'active' || employee.org_id !== principal.orgId) return false;
+  } else if (pointToken) {
+    const stillValid = await pointSessionsRepo.isStillValid(principal.corporateAccountId, pointSessionsRepo.hashToken(pointToken)).catch(() => false);
+    if (!stillValid) return false;
+  } else {
+    return false;
+  }
+  const account = await mirandaRepo.getCorporateAccount(principal.corporateAccountId).catch(() => null);
+  return !!account && account.is_active && account.org_id === principal.orgId;
 }
 
 export async function registerMirandaWsRoutes(app: FastifyInstance) {
@@ -33,23 +43,19 @@ export async function registerMirandaWsRoutes(app: FastifyInstance) {
     {
       websocket: true,
       preHandler: async (request, reply) => {
-        if (!requireActive(request, reply)) return;
+        const principal = await resolveMirandaPrincipal(request, reply);
+        (request as any).mirandaPrincipal = principal;
       }
     },
     (socket: WebSocket, request) => {
       void (async () => {
-        const orgId = request.user!.org_id;
-        const employeeId = request.user!.employee_id!;
-        const sessionToken = request.sessionToken;
-        if (!sessionToken) {
-          socket.close(4000, 'no_session_token');
+        const principal = (request as any).mirandaPrincipal as MirandaPrincipal | null;
+        if (!principal) {
+          socket.close(4000, 'unauthorized');
           return;
         }
-        const corporateAccountId = await messengerService.resolveActiveCorporateAccount(sessionToken);
-        if (!corporateAccountId) {
-          socket.close(4000, 'no_active_corporate_account');
-          return;
-        }
+        const corporateAccountId = principal.corporateAccountId;
+        const pointToken = request.cookies?.[pointSessionsRepo.POINT_COOKIE_NAME] || null;
 
         if (connectionCountForAccount(corporateAccountId) >= MAX_CONNECTIONS_PER_ACCOUNT) {
           socket.close(4008, 'too_many_connections');
@@ -70,7 +76,7 @@ export async function registerMirandaWsRoutes(app: FastifyInstance) {
               return;
             }
             alive = false;
-            if (!(await isMessengerConnectionStillValid(employeeId, orgId, corporateAccountId))) {
+            if (!(await isMessengerConnectionStillValid(principal, pointToken))) {
               socket.close(4001, 'session_invalidated');
               return;
             }
