@@ -8,6 +8,7 @@ import ru.t2sales.shared.api.MirandaApi
 import ru.t2sales.shared.api.createHttpClient
 import ru.t2sales.shared.auth.AuthRepository
 import ru.t2sales.shared.auth.MirandaDeviceSecretStore
+import ru.t2sales.miranda.session.PointSessionStore
 
 /**
  * Manual DI, same approach as desktopApp's AppContainer — no Hilt/Koin for
@@ -24,4 +25,5 @@ class MirandaContainer {
     val mirandaApi = MirandaApi(httpClient)
     val authRepository = AuthRepository(authApi)
     val deviceSecretStore = MirandaDeviceSecretStore()
+    val pointSessionStore = PointSessionStore()
 }

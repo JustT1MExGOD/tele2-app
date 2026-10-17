@@ -1569,5 +1569,14 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Мессенджер T2 Miranda принимает сообщения и от точечного аккаунта (отправитель без привязанного сотрудника), не только от личных аккаунтов сотрудников',
       'tsc --noEmit (backend+frontend), vitest 924/924 (backend, на реальном одноразовом Postgres, включая новые isolation-тесты на логин точки, дубль телефона, доступ к мессенджеру и requireAdmin, revoke/logout, org-изоляцию), vitest 673/675 (frontend, включая обновлённый контракт-тест api-bridge на новую запись), frontend build/smoke, native desktopApp compileKotlin, все security/architecture guardrail-проверки — без регрессий'
     ]
+  },
+  {
+    version: '20.67.0',
+    title: 'T2 Miranda: дерево контактов сети в мессенджере',
+    bullets: [
+      'Главный экран мессенджера T2 Miranda приведён к формату легаси-клиента Miranda NG: все точки и сотрудники сети одним раскрывающимся деревом, сгруппированным по точке (новый GET /miranda/contacts/all, доступный и сотруднику, и точечному аккаунту)',
+      'Двойной клик по контакту открывает (или создаёт) с ним диалог — чат раскрывается рядом со списком, окно приложения расширяется, а не всплывает отдельным окном',
+      'tsc --noEmit (backend), vitest 924/924 (backend, одноразовый Postgres), frontend build/smoke, native mirandaApp compileKotlin, визуальная проверка окна — без регрессий'
+    ]
   }
 ];

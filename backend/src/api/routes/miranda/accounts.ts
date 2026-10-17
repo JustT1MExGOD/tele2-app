@@ -9,6 +9,7 @@ import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import { requireActive, requireAdmin, assertEmployeeInOrg, assertStoreInOrg } from '../../../auth/guards.js';
 import * as mirandaService from '../../../core/miranda-accounts/service.js';
+import { resolveMirandaPrincipal } from '../../../core/miranda-accounts/service.js';
 import * as messengerService from '../../../core/messenger/service.js';
 
 const AvailableQuery = Type.Object({
@@ -69,6 +70,18 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
     const ownAccountId = sessionToken ? await messengerService.resolveActiveCorporateAccount(sessionToken) : null;
     const { q } = request.query as ContactsQuery;
     const items = await mirandaService.searchCorporateAccounts(request.user!.org_id, q, ownAccountId);
+    return reply.code(200).send({ items });
+  });
+
+  // Дерево контактов для главного экрана мессенджера (аналог основного
+  // окна Miranda NG: все точки/сотрудники сети, сгруппированные по точке,
+  // всегда видны — не только по явному поисковому запросу, как
+  // /miranda/contacts). Доступно и сотруднику, и аккаунту точки (Этап B) —
+  // поэтому resolveMirandaPrincipal, а не requireActive/requireAdmin.
+  app.get('/miranda/contacts/all', async (request, reply) => {
+    const principal = await resolveMirandaPrincipal(request, reply);
+    if (!principal) return;
+    const items = await mirandaService.listAllCorporateAccounts(principal.orgId);
     return reply.code(200).send({ items });
   });
 

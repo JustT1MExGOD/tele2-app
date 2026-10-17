@@ -100,10 +100,31 @@ class MirandaApi(private val client: HttpClient) {
         }
     }
 
+    // --- point-account login (Этап B, вариант B) — независимый от /auth/login
+    // вход по телефону+паролю для аккаунтов точек/касс, пишет отдельную
+    // cookie t2_point_session (см. backend/.../miranda/accounts-login.ts). ---
+
+    suspend fun pointLogin(phone: String, password: String): MirandaPointLoginResponse =
+        client.post(apiUrl("/miranda/accounts/login")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaPointLoginRequest(phone, password))
+        }.body()
+
+    suspend fun pointLogout() {
+        client.post(apiUrl("/miranda/accounts/logout")) {
+            contentType(ContentType.Application.Json)
+            setBody(JsonObject(emptyMap()))
+        }
+    }
+
     // --- contacts (regular user; not admin-gated) ---
 
     suspend fun searchContacts(q: String): MirandaContactsResponse =
         client.get(apiUrl("/miranda/contacts?q=" + java.net.URLEncoder.encode(q, "UTF-8"))).body()
+
+    /** Полное дерево контактов сети (не поиск) - для главного экрана мессенджера. */
+    suspend fun listAllContacts(): MirandaAllContactsResponse =
+        client.get(apiUrl("/miranda/contacts/all")).body()
 
     // --- conversations / messages ---
 

@@ -57,6 +57,7 @@ data class MirandaCorporateAccountListItem(
     val employee_id: Int? = null, // null для аккаунта точки (Этап B) — employee_full_name тогда падает на account_name
     val employee_full_name: String,
     val store_id: String? = null,
+    val store_name: String? = null, // человекочитаемая группа для дерева контактов (store_id - технический код)
     val display_label: String? = null,
     val device_exclusive: Boolean = false
 )
@@ -66,6 +67,10 @@ data class MirandaCorporateAccountsListResponse(val items: List<MirandaCorporate
 
 @Serializable
 data class MirandaContactsResponse(val items: List<MirandaCorporateAccountListItem>)
+
+/** GET /miranda/contacts/all - полное дерево контактов сети (не поиск), доступно и сотруднику, и аккаунту точки. */
+@Serializable
+data class MirandaAllContactsResponse(val items: List<MirandaCorporateAccountListItem>)
 
 @Serializable
 data class MirandaAvailableAccountRow(
@@ -103,6 +108,16 @@ data class MirandaCreatePointAccountRequest(
     val password: String,
     val accountName: String,
     val storeId: String? = null
+)
+
+@Serializable
+data class MirandaPointLoginRequest(val phone: String, val password: String)
+
+@Serializable
+data class MirandaPointLoginResponse(
+    val ok: Boolean,
+    val corporateAccountId: Int,
+    val accountName: String? = null
 )
 
 @Serializable
@@ -160,7 +175,7 @@ data class MirandaConversationIdResponse(val conversationId: Int)
 @Serializable
 data class MirandaMessageSender(
     val corporateAccountId: Int,
-    val employeeId: Int,
+    val employeeId: Int? = null, // null для отправителя-точки (Этап B, без привязанного сотрудника)
     val displayName: String
 )
 

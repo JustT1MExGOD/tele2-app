@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.RadioButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import ru.t2sales.shared.api.MeResponse
+import ru.t2sales.shared.api.MirandaApi
 import ru.t2sales.shared.auth.AuthRepository
 import ru.t2sales.miranda.ui.components.MainButton
 import ru.t2sales.miranda.ui.components.Field
@@ -49,11 +52,14 @@ import ru.t2sales.shared.theme.T2Colors
 @Composable
 fun LoginScreen(
     authRepository: AuthRepository,
-    onLoggedIn: (MeResponse) -> Unit
+    mirandaApi: MirandaApi,
+    onLoggedIn: (MeResponse) -> Unit,
+    onPointLoggedIn: (corporateAccountId: Int, accountName: String) -> Unit
 ) {
-    val viewModel = remember { LoginViewModel(authRepository) }
+    val viewModel = remember { LoginViewModel(authRepository, mirandaApi) }
     val scope = rememberCoroutineScope()
 
+    var mode by remember { mutableStateOf(LoginMode.EMPLOYEE) }
     var uiState by remember { mutableStateOf<LoginUiState>(LoginUiState.PhonePassword) }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -65,7 +71,7 @@ fun LoginScreen(
         busy = true
         scope.launch {
             try {
-                applyOutcome(block(), onLoggedIn) { uiState = it }
+                applyOutcome(block(), onLoggedIn, onPointLoggedIn) { uiState = it }
             } finally {
                 busy = false
             }
@@ -134,13 +140,28 @@ fun LoginScreen(
 
                     LoginUiState.PhonePassword -> {
                         Title("Вход с телефоном и паролем")
-                        Desc("Пароль привязывается в T2 Sales («Мой план» → «Вход с компьютера»).")
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 10.dp)) {
+                            RadioButton(selected = mode == LoginMode.EMPLOYEE, onClick = { mode = LoginMode.EMPLOYEE })
+                            Text("Личный аккаунт", fontSize = 13.sp, modifier = Modifier.padding(end = 16.dp))
+                            RadioButton(selected = mode == LoginMode.POINT, onClick = { mode = LoginMode.POINT })
+                            Text("Аккаунт точки", fontSize = 13.sp)
+                        }
+                        Desc(
+                            if (mode == LoginMode.EMPLOYEE)
+                                "Пароль привязывается в T2 Sales («Мой план» → «Вход с компьютера»)."
+                            else
+                                "Телефон и пароль, выданные администратором для этой точки/кассы."
+                        )
                         Field("Телефон", phone, { phone = it })
                         Spacer(Modifier.height(12.dp))
                         Field("Пароль", password, { password = it }, password = true)
                         Spacer(Modifier.height(16.dp))
                         MainButton(if (busy) "Входим…" else "Войти", enabled = !busy) {
-                            run { viewModel.submitPhonePassword(phone, password) }
+                            if (mode == LoginMode.EMPLOYEE) {
+                                run { viewModel.submitPhonePassword(phone, password) }
+                            } else {
+                                run { viewModel.submitPointLogin(phone, password) }
+                            }
                         }
                     }
                 }
@@ -164,10 +185,12 @@ private fun Desc(text: String, color: Color = T2Colors.hint) {
 private fun applyOutcome(
     outcome: LoginOutcome,
     onLoggedIn: (MeResponse) -> Unit,
+    onPointLoggedIn: (corporateAccountId: Int, accountName: String) -> Unit,
     setState: (LoginUiState) -> Unit
 ) {
     when (outcome) {
         is LoginOutcome.LoggedIn -> onLoggedIn(outcome.me)
+        is LoginOutcome.PointLoggedIn -> onPointLoggedIn(outcome.corporateAccountId, outcome.accountName)
         is LoginOutcome.NextState -> setState(outcome.state)
     }
 }

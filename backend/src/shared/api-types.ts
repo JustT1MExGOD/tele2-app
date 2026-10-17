@@ -1785,12 +1785,14 @@ export interface MirandaCorporateAccountListItem {
   employee_id: number | null;
   employee_full_name: string;
   store_id: string | null;
+  store_name: string | null;
   display_label: string | null;
   device_exclusive: boolean;
   [key: string]: unknown;
 }
 export interface MirandaCorporateAccountsListResponse { items: MirandaCorporateAccountListItem[]; }
 export interface MirandaContactsResponse { items: MirandaCorporateAccountListItem[]; }
+export interface MirandaAllContactsResponse { items: MirandaCorporateAccountListItem[]; }
 export interface MirandaSetDeviceExclusiveResponse { ok: true; }
 
 export interface MirandaCorporateAccountRow {

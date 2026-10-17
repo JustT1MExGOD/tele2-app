@@ -357,23 +357,28 @@ export interface CorporateAccountListItem {
   employee_id: number | null;
   employee_full_name: string;
   store_id: string | null;
+  store_name: string | null;
   display_label: string | null;
   device_exclusive: boolean;
 }
 
-/** GET /miranda/accounts — весь список активных корпоративных аккаунтов
- * сети, для UI выдачи гранта (Admin Control Center, "Устройства Miranda") —
- * без этого у админа нет способа узнать corporateAccountId аккаунта,
- * чьё устройство уже одобрено (listPendingBindings его больше не содержит).
- * LEFT JOIN employees — аккаунт точки (Этап B) не имеет employee_id,
- * employee_full_name в этом случае падает на ca.account_name. */
+/** GET /miranda/accounts и GET /miranda/contacts/all — весь список активных
+ * корпоративных аккаунтов сети. Админский UI (выдача гранта) и дерево
+ * контактов мессенджера (группировка по точке, §Контакты) используют одну
+ * и ту же выборку — без этого у админа нет способа узнать corporateAccountId
+ * аккаунта, чьё устройство уже одобрено (listPendingBindings его больше не
+ * содержит). LEFT JOIN employees — аккаунт точки (Этап B) не имеет
+ * employee_id, employee_full_name в этом случае падает на ca.account_name.
+ * LEFT JOIN stores — store_name для группировки дерева контактов по точке
+ * (store_id сам по себе не человекочитаем). */
 export async function listAllCorporateAccounts(orgId: string): Promise<CorporateAccountListItem[]> {
   const res = await query(
     `SELECT ca.id AS corporate_account_id, ca.employee_id,
             COALESCE(e.full_name, ca.account_name) AS employee_full_name,
-            ca.store_id, ca.display_label, ca.device_exclusive
+            ca.store_id, s.name AS store_name, ca.display_label, ca.device_exclusive
      FROM corporate_accounts ca
      LEFT JOIN employees e ON e.id = ca.employee_id
+     LEFT JOIN stores s ON s.id = ca.store_id
      WHERE ca.org_id = $1 AND ca.is_active
      ORDER BY ca.id ASC`,
     [orgId]

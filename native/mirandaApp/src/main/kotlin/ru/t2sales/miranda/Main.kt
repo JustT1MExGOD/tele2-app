@@ -17,6 +17,8 @@ import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,20 +31,28 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import ru.t2sales.miranda.di.MirandaContainer
 import ru.t2sales.miranda.ui.admin.MirandaAdminScreen
 import ru.t2sales.miranda.ui.chat.MirandaChatScreen
 import ru.t2sales.miranda.ui.components.ToastHost
-import ru.t2sales.miranda.ui.conversations.ConversationsScreen
+import ru.t2sales.miranda.ui.conversations.ContactsTreeScreen
 import ru.t2sales.miranda.ui.device.DeviceActivationScreen
 import ru.t2sales.miranda.ui.device.DeviceActivationViewModel
 import ru.t2sales.miranda.ui.device.DeviceState
 import ru.t2sales.miranda.ui.login.LoginScreen
+import ru.t2sales.miranda.session.PointSessionInfo
 import ru.t2sales.shared.api.MeResponse
 import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Theme
+
+/** Сессия сотрудника (MeResponse) или аккаунта точки (Этап B) - разные принципалы, без общего "me". */
+private sealed class MirandaSession {
+    data class Employee(val me: MeResponse) : MirandaSession()
+    data class Point(val corporateAccountId: Int, val accountName: String) : MirandaSession()
+}
 
 /**
  * Much simpler than desktopApp's Main.kt per the plan's scope cut for
@@ -59,7 +69,7 @@ fun main() {
         Window(onCloseRequest = ::exitApplication, title = "T2 Miranda", state = windowState) {
             T2Theme {
                 Box(Modifier.fillMaxSize()) {
-                    MirandaRoot(container)
+                    MirandaRoot(container, windowState)
                     ToastHost(Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
                 }
             }
@@ -68,12 +78,34 @@ fun main() {
 }
 
 @Composable
-private fun MirandaRoot(container: MirandaContainer) {
-    var me by remember { mutableStateOf<MeResponse?>(null) }
+private fun MirandaRoot(container: MirandaContainer, windowState: WindowState) {
+    var session by remember { mutableStateOf<MirandaSession?>(null) }
     var checkedSession by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        me = container.authRepository.currentSession()
+        val me = container.authRepository.currentSession()
+        session = if (me != null) {
+            MirandaSession.Employee(me)
+        } else {
+            // Нет "/me"-аналога для точечной сессии - локально сохранённая
+            // identity (PointSessionStore) - только подсказка для UI, не
+            // доказательство; подтверждаем обращением к серверу, иначе
+            // отозванная/просроченная t2_point_session вернёт 401 только
+            // при первом реальном запросе внутри мессенджера.
+            val cached = container.pointSessionStore.load()
+            if (cached != null) {
+                val stillValid = runCatching { container.mirandaApi.listConversations() }.isSuccess
+                if (stillValid) {
+                    MirandaSession.Point(cached.corporateAccountId, cached.accountName)
+                } else {
+                    container.pointSessionStore.clear()
+                    null
+                }
+            } else {
+                null
+            }
+        }
         checkedSession = true
     }
 
@@ -84,16 +116,33 @@ private fun MirandaRoot(container: MirandaContainer) {
         return
     }
 
-    val currentMe = me
-    if (currentMe == null) {
-        LoginScreen(authRepository = container.authRepository, onLoggedIn = { me = it })
-    } else {
-        MirandaShell(container, currentMe, onLogout = { me = null })
+    when (val s = session) {
+        null -> LoginScreen(
+            authRepository = container.authRepository,
+            mirandaApi = container.mirandaApi,
+            onLoggedIn = { session = MirandaSession.Employee(it) },
+            onPointLoggedIn = { corporateAccountId, accountName ->
+                container.pointSessionStore.save(PointSessionInfo(corporateAccountId, accountName))
+                session = MirandaSession.Point(corporateAccountId, accountName)
+            }
+        )
+        is MirandaSession.Employee -> MirandaShell(container, s.me, windowState, onLogout = { session = null })
+        is MirandaSession.Point -> MirandaMessengerShell(
+            container = container,
+            myCorporateAccountId = s.corporateAccountId,
+            isAdmin = false,
+            windowState = windowState,
+            onLogout = {
+                scope.launch { runCatching { container.mirandaApi.pointLogout() } }
+                container.pointSessionStore.clear()
+                session = null
+            }
+        )
     }
 }
 
 @Composable
-private fun MirandaShell(container: MirandaContainer, me: MeResponse, onLogout: () -> Unit) {
+private fun MirandaShell(container: MirandaContainer, me: MeResponse, windowState: WindowState, onLogout: () -> Unit) {
     val isAdmin = me.role == "admin"
     val viewModel = remember { DeviceActivationViewModel(container.mirandaApi, container.deviceSecretStore) }
     var state by remember { mutableStateOf<DeviceState>(DeviceState.Checking) }
@@ -106,6 +155,7 @@ private fun MirandaShell(container: MirandaContainer, me: MeResponse, onLogout: 
             container = container,
             myCorporateAccountId = s.corporateAccountId,
             isAdmin = isAdmin,
+            windowState = windowState,
             onLogout = onLogout
         )
         else -> DeviceActivationScreen(
@@ -120,15 +170,33 @@ private fun MirandaShell(container: MirandaContainer, me: MeResponse, onLogout: 
 
 private enum class MirandaTab { Conversations, Admin }
 
+// Насколько шире становится окно, когда рядом с деревом контактов
+// открывается панель чата - раскрытие "на месте", без отдельного окна
+// (явная правка пользователя: "рядом экран приложения расширялся").
+private val CHAT_PANEL_WIDTH = 440.dp
+
 @Composable
 private fun MirandaMessengerShell(
     container: MirandaContainer,
     myCorporateAccountId: Int,
     isAdmin: Boolean,
+    windowState: WindowState,
     onLogout: () -> Unit
 ) {
     var tab by remember { mutableStateOf(MirandaTab.Conversations) }
     var openConversation by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    var chatPanelWidened by remember { mutableStateOf(false) }
+
+    LaunchedEffect(openConversation, tab) {
+        val shouldBeOpen = tab == MirandaTab.Conversations && openConversation != null
+        if (shouldBeOpen && !chatPanelWidened) {
+            windowState.size = DpSize(windowState.size.width + CHAT_PANEL_WIDTH, windowState.size.height)
+            chatPanelWidened = true
+        } else if (!shouldBeOpen && chatPanelWidened) {
+            windowState.size = DpSize(windowState.size.width - CHAT_PANEL_WIDTH, windowState.size.height)
+            chatPanelWidened = false
+        }
+    }
 
     Row(Modifier.fillMaxSize().background(T2Colors.bg)) {
         Column(
@@ -136,32 +204,41 @@ private fun MirandaMessengerShell(
         ) {
             Text("T2 Miranda", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = T2Colors.text)
             Spacer(Modifier.height(20.dp))
-            NavItem("Диалоги", tab == MirandaTab.Conversations) { tab = MirandaTab.Conversations; openConversation = null }
+            NavItem("Диалоги", tab == MirandaTab.Conversations) { tab = MirandaTab.Conversations }
             if (isAdmin) {
                 Spacer(Modifier.height(4.dp))
-                NavItem("Админ", tab == MirandaTab.Admin) { tab = MirandaTab.Admin; openConversation = null }
+                NavItem("Админ", tab == MirandaTab.Admin) { tab = MirandaTab.Admin }
             }
             Spacer(Modifier.weight(1f, fill = true))
             NavItem("Выйти", false, onClick = onLogout)
         }
 
-        Box(Modifier.fillMaxSize()) {
-            when (tab) {
-                MirandaTab.Conversations -> {
+        when (tab) {
+            MirandaTab.Admin -> Box(Modifier.fillMaxSize()) {
+                MirandaAdminScreen(mirandaApi = container.mirandaApi, adminCenterApi = container.adminCenterApi)
+            }
+            MirandaTab.Conversations -> {
+                Box(Modifier.width(320.dp).fillMaxHeight()) {
+                    ContactsTreeScreen(
+                        api = container.mirandaApi,
+                        myCorporateAccountId = myCorporateAccountId,
+                        onOpenConversation = { id, title -> openConversation = id to title }
+                    )
+                }
+                Box(Modifier.width(1.dp).fillMaxHeight().background(T2Colors.border))
+                Box(Modifier.weight(1f).fillMaxHeight()) {
                     val open = openConversation
                     if (open == null) {
-                        ConversationsScreen(
-                            api = container.mirandaApi,
-                            myCorporateAccountId = myCorporateAccountId,
-                            onOpenConversation = { id, title -> openConversation = id to title }
-                        )
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Выберите контакт, чтобы открыть чат", color = T2Colors.hint, fontSize = 14.sp)
+                        }
                     } else {
                         Column(Modifier.fillMaxSize()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("←", fontSize = 18.sp, color = T2Colors.text, modifier = Modifier.clickable { openConversation = null }.padding(end = 12.dp))
+                                Text("✕", fontSize = 16.sp, color = T2Colors.text, modifier = Modifier.clickable { openConversation = null }.padding(end = 12.dp))
                                 Text(open.second, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = T2Colors.text)
                             }
                             Box(Modifier.fillMaxSize()) {
@@ -170,7 +247,6 @@ private fun MirandaMessengerShell(
                         }
                     }
                 }
-                MirandaTab.Admin -> MirandaAdminScreen(mirandaApi = container.mirandaApi, adminCenterApi = container.adminCenterApi)
             }
         }
     }
