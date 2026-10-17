@@ -136,15 +136,15 @@ class MirandaApi(private val client: HttpClient) {
         }
     }
 
-    // --- личные группы контактов (не групповые чаты — см. MirandaCreateGroupRequest ниже) ---
+    // --- общие для сети группы контактов, настраивает администратор; вложенные (не групповые чаты — см. MirandaCreateGroupRequest ниже) ---
 
     suspend fun listContactGroups(): MirandaContactGroupsListResponse =
         client.get(apiUrl("/miranda/groups")).body()
 
-    suspend fun createContactGroup(name: String): MirandaCreateContactGroupResponse =
+    suspend fun createContactGroup(name: String, parentGroupId: Int? = null): MirandaCreateContactGroupResponse =
         client.post(apiUrl("/miranda/groups")) {
             contentType(ContentType.Application.Json)
-            setBody(MirandaCreateContactGroupRequest(name))
+            setBody(MirandaCreateContactGroupRequest(name, parentGroupId))
         }.body()
 
     suspend fun renameContactGroup(groupId: Int, name: String) {

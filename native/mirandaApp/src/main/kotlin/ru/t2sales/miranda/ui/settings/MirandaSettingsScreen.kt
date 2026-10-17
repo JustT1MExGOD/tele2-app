@@ -73,8 +73,8 @@ fun MirandaSettingsScreen(api: MirandaApi) {
         SectionTitle("Отображение")
         Spacer(Modifier.height(12.dp))
         SettingToggleRow(
-            label = "Группировать по своим группам контактов",
-            hint = "Выключено - группировка по точке",
+            label = "Группировать по группам контактов сети",
+            hint = "Выключено - группировка по точке; группы настраивает администратор",
             checked = groupByCustom,
             onCheckedChange = {
                 groupByCustom = it

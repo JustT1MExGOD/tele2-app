@@ -44,33 +44,40 @@ import ru.t2sales.shared.api.MirandaCorporateAccountListItem
 import ru.t2sales.shared.theme.T2Colors
 
 private const val NO_STORE_GROUP = "Без точки"
-private const val NO_CUSTOM_GROUP = "Без группы"
+private const val NO_CUSTOM_GROUP_KEY = "nogroup"
+private const val NO_CUSTOM_GROUP_LABEL = "Без группы"
 private const val PRESENCE_POLL_MS = 20_000L
 
 /**
  * Дерево контактов всей сети (аналог главного окна Miranda NG) -
- * группировка по точке (store_name) либо по личным группам контакт-листа
- * (MirandaSettingsStore.groupByMode), раскрывающиеся группы, статус
- * в сети/не в сети, сортировка "в сети - вверху", двойной клик по
- * контакту открывает/создаёт прямой диалог.
+ * группировка по точке (store_name) либо по общим для сети группам
+ * контактов (настраивает администратор, MirandaSettingsStore.groupByMode),
+ * с произвольной вложенностью (группа внутри группы), раскрывающиеся
+ * группы, статус в сети/не в сети, сортировка "в сети - вверху", двойной
+ * клик по контакту открывает/создаёт прямой диалог.
  */
 @Composable
 fun ContactsTreeScreen(
     api: MirandaApi,
     myCorporateAccountId: Int,
+    isAdmin: Boolean,
     onOpenConversation: (Int, String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var items by remember { mutableStateOf<List<MirandaCorporateAccountListItem>?>(null) }
     var customGroups by remember { mutableStateOf<List<MirandaContactGroup>>(emptyList()) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    // Ключ — стабильный id ("group:<id>"/"store:<name>"), не отображаемое
+    // имя: переименование группы раньше сбрасывало раскрытие (имя было
+    // ключом) — теперь ключ переживает переименование.
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
     var groupByCustom by remember { mutableStateOf(MirandaSettingsStore.groupByMode == "custom") }
     var showOffline by remember { mutableStateOf(MirandaSettingsStore.showOfflineContacts) }
     var sortOnlineFirst by remember { mutableStateOf(MirandaSettingsStore.sortOnlineFirst) }
 
-    var createGroupDialog by remember { mutableStateOf(false) }
+    var createGroupDialogParent by remember { mutableStateOf<MirandaContactGroup?>(null) }
+    var showCreateRootGroupDialog by remember { mutableStateOf(false) }
     var manageGroupDialogFor by remember { mutableStateOf<MirandaContactGroup?>(null) }
     var membershipDialogFor by remember { mutableStateOf<MirandaCorporateAccountListItem?>(null) }
 
@@ -126,24 +133,6 @@ fun ContactsTreeScreen(
         .filter { it.corporate_account_id != myCorporateAccountId }
         .filter { showOffline || it.online }
 
-    val groups: Map<String, List<MirandaCorporateAccountListItem>> = if (groupByCustom) {
-        val byId = visible.associateBy { it.corporate_account_id }
-        val grouped = linkedMapOf<String, List<MirandaCorporateAccountListItem>>()
-        val inAnyGroup = mutableSetOf<Int>()
-        customGroups.sortedBy { it.sort_order }.forEach { g ->
-            val members = g.member_corporate_account_ids.mapNotNull { byId[it] }
-            inAnyGroup.addAll(g.member_corporate_account_ids)
-            grouped[g.name] = members
-        }
-        val ungrouped = visible.filter { it.corporate_account_id !in inAnyGroup }
-        if (ungrouped.isNotEmpty() || grouped.isEmpty()) grouped[NO_CUSTOM_GROUP] = ungrouped
-        grouped
-    } else {
-        visible
-            .groupBy { it.store_name?.takeIf { s -> s.isNotBlank() } ?: NO_STORE_GROUP }
-            .toSortedMap(compareBy { if (it == NO_STORE_GROUP) "￿" else it })
-    }
-
     fun sortedMembers(members: List<MirandaCorporateAccountListItem>): List<MirandaCorporateAccountListItem> {
         val byName = compareBy<MirandaCorporateAccountListItem> { it.display_label ?: it.employee_full_name }
         return if (sortOnlineFirst) {
@@ -153,6 +142,47 @@ fun ContactsTreeScreen(
         }
     }
 
+    val rows: List<TreeRow> = if (groupByCustom) {
+        val byId = visible.associateBy { it.corporate_account_id }
+        val childrenByParent = customGroups.groupBy { it.parent_group_id }
+        val inAnyGroup = mutableSetOf<Int>()
+        customGroups.forEach { inAnyGroup.addAll(it.member_corporate_account_ids) }
+
+        val out = mutableListOf<TreeRow>()
+        fun walk(group: MirandaContactGroup, depth: Int) {
+            val key = "group:${group.id}"
+            val isExpanded = expanded[key] ?: true
+            val members = sortedMembers(group.member_corporate_account_ids.mapNotNull { byId[it] })
+            out += TreeRow.Header(group, group.name, depth, members.size, key, isExpanded)
+            if (isExpanded) {
+                out += members.map { TreeRow.Leaf(it, depth + 1) }
+                childrenByParent[group.id].orEmpty().sortedBy { it.sort_order }.forEach { walk(it, depth + 1) }
+            }
+        }
+        childrenByParent[null].orEmpty().sortedBy { it.sort_order }.forEach { walk(it, 0) }
+
+        val ungrouped = visible.filter { it.corporate_account_id !in inAnyGroup }
+        if (ungrouped.isNotEmpty() || customGroups.isEmpty()) {
+            val isExpanded = expanded[NO_CUSTOM_GROUP_KEY] ?: true
+            out += TreeRow.Header(null, NO_CUSTOM_GROUP_LABEL, 0, ungrouped.size, NO_CUSTOM_GROUP_KEY, isExpanded)
+            if (isExpanded) out += sortedMembers(ungrouped).map { TreeRow.Leaf(it, 1) }
+        }
+        out
+    } else {
+        val byStore = visible
+            .groupBy { it.store_name?.takeIf { s -> s.isNotBlank() } ?: NO_STORE_GROUP }
+            .toSortedMap(compareBy { if (it == NO_STORE_GROUP) "￿" else it })
+        val out = mutableListOf<TreeRow>()
+        byStore.forEach { (storeName, accountsRaw) ->
+            val key = "store:$storeName"
+            val isExpanded = expanded[key] ?: true
+            val accounts = sortedMembers(accountsRaw)
+            out += TreeRow.Header(null, storeName, 0, accounts.size, key, isExpanded)
+            if (isExpanded) out += accounts.map { TreeRow.Leaf(it, 1) }
+        }
+        out
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -160,62 +190,78 @@ fun ContactsTreeScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Контакты", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = T2Colors.text)
-            if (groupByCustom) {
+            if (groupByCustom && isAdmin) {
                 Text(
                     "+",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = T2Colors.primary,
-                    modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { createGroupDialog = true }) }
+                    modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { showCreateRootGroupDialog = true }) }
                 )
             }
         }
 
-        if (groups.isEmpty()) {
+        if (rows.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Нет контактов", color = T2Colors.hint, fontSize = 14.sp)
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                groups.forEach { (groupName, accountsRaw) ->
-                    val accounts = sortedMembers(accountsRaw)
-                    val isExpanded = expanded[groupName] ?: true
-                    val customGroup = if (groupByCustom) customGroups.find { it.name == groupName } else null
-                    val rows: List<Any> = listOf(GroupHeader(groupName, accounts.size)) +
-                        if (isExpanded) accounts else emptyList()
-                    items(
-                        rows,
-                        key = { entry -> if (entry is GroupHeader) "group:${entry.name}" else "acc:${(entry as MirandaCorporateAccountListItem).corporate_account_id}" }
-                    ) { entry ->
+                items(
+                    rows,
+                    key = { entry ->
                         when (entry) {
-                            is GroupHeader -> GroupHeaderRow(
-                                entry.name,
-                                entry.count,
-                                isExpanded,
-                                manageable = customGroup != null,
-                                onToggle = { expanded[groupName] = !isExpanded },
-                                onManage = { manageGroupDialogFor = customGroup }
-                            )
-                            is MirandaCorporateAccountListItem -> ContactLeafRow(
-                                entry,
-                                showManage = groupByCustom,
-                                onDoubleClick = { openContact(entry) },
-                                onManage = { membershipDialogFor = entry }
-                            )
+                            is TreeRow.Header -> "h:${entry.key}"
+                            is TreeRow.Leaf -> "a:${entry.contact.corporate_account_id}:${entry.depth}"
                         }
+                    }
+                ) { entry ->
+                    when (entry) {
+                        is TreeRow.Header -> GroupHeaderRow(
+                            name = entry.label,
+                            count = entry.count,
+                            depth = entry.depth,
+                            expanded = entry.isExpanded,
+                            manageable = entry.group != null && isAdmin,
+                            canAddSubgroup = groupByCustom && entry.group != null && isAdmin,
+                            onToggle = { expanded[entry.key] = !entry.isExpanded },
+                            onManage = { manageGroupDialogFor = entry.group },
+                            onAddSubgroup = { createGroupDialogParent = entry.group }
+                        )
+                        is TreeRow.Leaf -> ContactLeafRow(
+                            entry.contact,
+                            depth = entry.depth,
+                            showManage = groupByCustom && isAdmin,
+                            onDoubleClick = { openContact(entry.contact) },
+                            onManage = { membershipDialogFor = entry.contact }
+                        )
                     }
                 }
             }
         }
     }
 
-    if (createGroupDialog) {
+    if (showCreateRootGroupDialog) {
         CreateGroupDialog(
-            onDismiss = { createGroupDialog = false },
+            parentName = null,
+            onDismiss = { showCreateRootGroupDialog = false },
             onCreate = { name ->
                 scope.launch {
                     runCatching { api.createContactGroup(name) }.onSuccess { reloadGroups() }
-                    createGroupDialog = false
+                    showCreateRootGroupDialog = false
+                }
+            }
+        )
+    }
+
+    createGroupDialogParent?.let { parent ->
+        CreateGroupDialog(
+            parentName = parent.name,
+            onDismiss = { createGroupDialogParent = null },
+            onCreate = { name ->
+                scope.launch {
+                    runCatching { api.createContactGroup(name, parent.id) }.onSuccess { reloadGroups() }
+                    createGroupDialogParent = null
                 }
             }
         )
@@ -259,36 +305,60 @@ fun ContactsTreeScreen(
     }
 }
 
-private data class GroupHeader(val name: String, val count: Int)
+private sealed class TreeRow {
+    data class Header(
+        val group: MirandaContactGroup?,
+        val label: String,
+        val depth: Int,
+        val count: Int,
+        val key: String,
+        val isExpanded: Boolean
+    ) : TreeRow()
+
+    data class Leaf(val contact: MirandaCorporateAccountListItem, val depth: Int) : TreeRow()
+}
 
 @Composable
 private fun GroupHeaderRow(
     name: String,
     count: Int,
+    depth: Int,
     expanded: Boolean,
     manageable: Boolean,
+    canAddSubgroup: Boolean,
     onToggle: () -> Unit,
-    onManage: () -> Unit
+    onManage: () -> Unit,
+    onAddSubgroup: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(T2Colors.surface)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .pointerInput(name) { detectTapGestures(onTap = { onToggle() }) },
+            .padding(start = 16.dp + (depth * 16).dp, end = 16.dp, top = 10.dp, bottom = 10.dp)
+            .pointerInput(name, depth) { detectTapGestures(onTap = { onToggle() }) },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(if (expanded) "▾" else "▸", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.width(18.dp))
         Text(name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = T2Colors.text)
         Spacer(Modifier.width(6.dp))
         Text("($count)", fontSize = 12.sp, color = T2Colors.hint)
+        Spacer(Modifier.width(8.dp).weight(1f))
+        if (canAddSubgroup) {
+            Text(
+                "+",
+                color = T2Colors.primary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.pointerInput(name, depth) { detectTapGestures(onTap = { onAddSubgroup() }) }
+            )
+            Spacer(Modifier.width(12.dp))
+        }
         if (manageable) {
-            Spacer(Modifier.width(8.dp).weight(1f))
             Text(
                 "⋯",
                 color = T2Colors.hint,
                 fontSize = 14.sp,
-                modifier = Modifier.pointerInput(name) { detectTapGestures(onTap = { onManage() }) }
+                modifier = Modifier.pointerInput(name, depth) { detectTapGestures(onTap = { onManage() }) }
             )
         }
     }
@@ -297,6 +367,7 @@ private fun GroupHeaderRow(
 @Composable
 private fun ContactLeafRow(
     contact: MirandaCorporateAccountListItem,
+    depth: Int,
     showManage: Boolean,
     onDoubleClick: () -> Unit,
     onManage: () -> Unit
@@ -304,7 +375,7 @@ private fun ContactLeafRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 34.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
+            .padding(start = 18.dp + (depth * 16).dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
             .pointerInput(contact.corporate_account_id) { detectTapGestures(onDoubleTap = { onDoubleClick() }) },
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -333,9 +404,10 @@ private fun ContactLeafRow(
 }
 
 @Composable
-private fun CreateGroupDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+private fun CreateGroupDialog(parentName: String?, onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
-    SheetDialog(title = "Новая группа", onDismiss = onDismiss) {
+    val title = if (parentName != null) "Новая подгруппа в «$parentName»" else "Новая группа"
+    SheetDialog(title = title, onDismiss = onDismiss) {
         ru.t2sales.miranda.ui.components.Field(label = "Название", value = name, onChange = { name = it })
         Spacer(Modifier.height(16.dp))
         ru.t2sales.miranda.ui.components.MainButton(text = "Создать", enabled = name.isNotBlank()) { onCreate(name.trim()) }

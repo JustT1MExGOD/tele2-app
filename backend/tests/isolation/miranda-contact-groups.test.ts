@@ -1,8 +1,11 @@
 /**
- * T2 Miranda — личные группы контактов (§2 плана) + статус "в сети" (§1
- * плана): владелец видит/редактирует только свои группы, чужой
- * corporate_account_id нельзя добавить из другой сети (org-изоляция),
- * presence_override меняет только свой же аккаунт.
+ * T2 Miranda — группы контактов, общие для всей сети (§2 плана, пересмотр:
+ * не личный контакт-лист, а разметка, которую задаёт администратор для
+ * всех) + статус "в сети" (§1 плана): только requireAdmin может
+ * создавать/переименовывать/удалять группы и управлять составом, но
+ * читает дерево (GET) любой принципал сети; вложенность (parent_group_id)
+ * работает и валидируется на ту же сеть; чужая сеть — 404/403; presence
+ * меняет только свой же аккаунт.
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { getApp, authAsSession } from '../helpers/app.js';
@@ -22,7 +25,6 @@ describe('T2 Miranda — группы контактов и presence', () => {
     }
     if (corporateAccountIds.length) {
       await query(`DELETE FROM miranda_contact_group_members WHERE member_corporate_account_id = ANY($1)`, [corporateAccountIds]);
-      await query(`DELETE FROM miranda_contact_groups WHERE owner_corporate_account_id = ANY($1)`, [corporateAccountIds]);
       await query(`UPDATE employee_sessions SET active_corporate_account_id = NULL WHERE active_corporate_account_id = ANY($1)`, [corporateAccountIds]);
       await query(`DELETE FROM corporate_accounts WHERE id = ANY($1)`, [corporateAccountIds]);
     }
@@ -41,14 +43,19 @@ describe('T2 Miranda — группы контактов и presence', () => {
     return corporateAccountId;
   }
 
-  it('создаёт группу, добавляет контакт из своей сети, переименовывает, удаляет — всё аудируется', async () => {
+  it('админ создаёт вложенную группу, добавляет контакт, переименовывает, удаляет (каскадом сносит подгруппу) — всё аудируется, читает и обычный сотрудник', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Miranda Groups Org');
-    const owner = await fx.createPhoneEmployee(org, '+79990100001', null, { role: 'employee', fullName: 'Владелец' });
-    const ownerToken = await sessionsRepo.createSession(owner.id, false, 'employee');
-    const ownerAccountId = await activeAccount(org, owner.id, ownerToken);
+    const admin = await fx.createPhoneEmployee(org, '+79990100001', null, { role: 'admin', fullName: 'Админ' });
+    await fx.enrollTotpFor(admin.id);
+    const adminToken = await sessionsRepo.createSession(admin.id, true, 'admin');
+    await activeAccount(org, admin.id, adminToken);
 
-    const contact = await fx.createPhoneEmployee(org, '+79990100002', null, { role: 'employee', fullName: 'Коллега' });
+    const employee = await fx.createPhoneEmployee(org, '+79990100002', null, { role: 'employee', fullName: 'Сотрудник' });
+    const employeeToken = await sessionsRepo.createSession(employee.id, false, 'employee');
+    await activeAccount(org, employee.id, employeeToken);
+
+    const contact = await fx.createPhoneEmployee(org, '+79990100003', null, { role: 'employee', fullName: 'Коллега' });
     const contactAccountRes = await query(
       `INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, $3) RETURNING id`,
       [org, contact.id, 'Коллега']
@@ -59,52 +66,84 @@ describe('T2 Miranda — группы контактов и presence', () => {
     const create = await app.inject({
       method: 'POST',
       url: '/miranda/groups',
-      headers: { ...authAsSession(ownerToken), 'content-type': 'application/json' },
+      headers: { ...authAsSession(adminToken), 'content-type': 'application/json' },
       payload: { name: 'Склад' }
     });
     expect(create.statusCode).toBe(201);
     const groupId = Number(create.json().item.id);
     groupIds.push(groupId);
 
+    // не-админ не может создавать/мутировать группы.
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/miranda/groups',
+      headers: { ...authAsSession(employeeToken), 'content-type': 'application/json' },
+      payload: { name: 'Чужая попытка' }
+    });
+    expect(forbidden.statusCode).toBe(403);
+
     const dup = await app.inject({
       method: 'POST',
       url: '/miranda/groups',
-      headers: { ...authAsSession(ownerToken), 'content-type': 'application/json' },
+      headers: { ...authAsSession(adminToken), 'content-type': 'application/json' },
       payload: { name: 'Склад' }
     });
     expect(dup.statusCode).toBe(409);
 
+    // вложенная подгруппа — та же сеть, валидный parentGroupId.
+    const createSub = await app.inject({
+      method: 'POST',
+      url: '/miranda/groups',
+      headers: { ...authAsSession(adminToken), 'content-type': 'application/json' },
+      payload: { name: 'Смена A', parentGroupId: groupId }
+    });
+    expect(createSub.statusCode).toBe(201);
+    const subGroupId = Number(createSub.json().item.id);
+    expect(Number(createSub.json().item.parent_group_id)).toBe(groupId);
+    groupIds.push(subGroupId);
+
     const addMember = await app.inject({
       method: 'POST',
       url: `/miranda/groups/${groupId}/members`,
-      headers: { ...authAsSession(ownerToken), 'content-type': 'application/json' },
+      headers: { ...authAsSession(adminToken), 'content-type': 'application/json' },
       payload: { corporateAccountId: contactAccountId }
     });
     expect(addMember.statusCode).toBe(200);
 
-    const list = await app.inject({ method: 'GET', url: '/miranda/groups', headers: authAsSession(ownerToken) });
+    // читает (GET) любой принципал сети, не только админ.
+    const list = await app.inject({ method: 'GET', url: '/miranda/groups', headers: authAsSession(employeeToken) });
     expect(list.statusCode).toBe(200);
     const group = list.json().items.find((g: any) => Number(g.id) === groupId);
     expect(group.member_corporate_account_ids.map(Number)).toContain(contactAccountId);
+    const sub = list.json().items.find((g: any) => Number(g.id) === subGroupId);
+    expect(Number(sub.parent_group_id)).toBe(groupId);
 
     const rename = await app.inject({
       method: 'PATCH',
       url: `/miranda/groups/${groupId}`,
-      headers: { ...authAsSession(ownerToken), 'content-type': 'application/json' },
+      headers: { ...authAsSession(adminToken), 'content-type': 'application/json' },
       payload: { name: 'Склад 2' }
     });
     expect(rename.statusCode).toBe(200);
 
+    const afterRename = await app.inject({ method: 'GET', url: '/miranda/groups', headers: authAsSession(employeeToken) });
+    expect(afterRename.json().items.find((g: any) => Number(g.id) === groupId).name).toBe('Склад 2');
+
     const removeMember = await app.inject({
       method: 'DELETE',
       url: `/miranda/groups/${groupId}/members/${contactAccountId}`,
-      headers: authAsSession(ownerToken)
+      headers: authAsSession(adminToken)
     });
     expect(removeMember.statusCode).toBe(200);
 
-    const del = await app.inject({ method: 'DELETE', url: `/miranda/groups/${groupId}`, headers: authAsSession(ownerToken) });
+    // удаление родителя каскадом сносит подгруппу (ON DELETE CASCADE на parent_group_id).
+    const del = await app.inject({ method: 'DELETE', url: `/miranda/groups/${groupId}`, headers: authAsSession(adminToken) });
     expect(del.statusCode).toBe(200);
     groupIds.splice(groupIds.indexOf(groupId), 1);
+    groupIds.splice(groupIds.indexOf(subGroupId), 1);
+
+    const afterDelete = await app.inject({ method: 'GET', url: '/miranda/groups', headers: authAsSession(employeeToken) });
+    expect(afterDelete.json().items.some((g: any) => Number(g.id) === subGroupId)).toBe(false);
 
     const auditActions = await query(
       `SELECT action FROM audit_log WHERE target_type = 'miranda_contact_group' AND target_id = $1 ORDER BY id ASC`,
@@ -121,19 +160,25 @@ describe('T2 Miranda — группы контактов и presence', () => {
     );
   });
 
-  it('чужая группа — 404 на rename/delete/members; чужой из другой сети — 404 на добавление в группу', async () => {
+  it('чужая сеть — 404 на rename/delete/members и на parentGroupId из другой сети; не-админ той же сети — 403', async () => {
     const app = await getApp();
     const orgA = await fx.createOrg('Miranda Groups Org A');
     const orgB = await fx.createOrg('Miranda Groups Org B');
-    const owner = await fx.createPhoneEmployee(orgA, '+79990100003', null, { role: 'employee', fullName: 'Владелец A' });
-    const ownerToken = await sessionsRepo.createSession(owner.id, false, 'employee');
-    await activeAccount(orgA, owner.id, ownerToken);
+    const adminA = await fx.createPhoneEmployee(orgA, '+79990100004', null, { role: 'admin', fullName: 'Админ A' });
+    await fx.enrollTotpFor(adminA.id);
+    const adminAToken = await sessionsRepo.createSession(adminA.id, true, 'admin');
+    await activeAccount(orgA, adminA.id, adminAToken);
 
-    const stranger = await fx.createPhoneEmployee(orgA, '+79990100004', null, { role: 'employee', fullName: 'Посторонний A' });
-    const strangerToken = await sessionsRepo.createSession(stranger.id, false, 'employee');
-    await activeAccount(orgA, stranger.id, strangerToken);
+    const adminB = await fx.createPhoneEmployee(orgB, '+79990100005', null, { role: 'admin', fullName: 'Админ B' });
+    await fx.enrollTotpFor(adminB.id);
+    const adminBToken = await sessionsRepo.createSession(adminB.id, true, 'admin');
+    await activeAccount(orgB, adminB.id, adminBToken);
 
-    const otherOrgEmployee = await fx.createPhoneEmployee(orgB, '+79990100005', null, { role: 'employee', fullName: 'Сотрудник B' });
+    const nonAdminA = await fx.createPhoneEmployee(orgA, '+79990100006', null, { role: 'employee', fullName: 'Сотрудник A' });
+    const nonAdminAToken = await sessionsRepo.createSession(nonAdminA.id, false, 'employee');
+    await activeAccount(orgA, nonAdminA.id, nonAdminAToken);
+
+    const otherOrgEmployee = await fx.createPhoneEmployee(orgB, '+79990100007', null, { role: 'employee', fullName: 'Сотрудник B' });
     const otherOrgAccountRes = await query(
       `INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, $3) RETURNING id`,
       [orgB, otherOrgEmployee.id, 'Чужая сеть']
@@ -144,36 +189,52 @@ describe('T2 Miranda — группы контактов и presence', () => {
     const create = await app.inject({
       method: 'POST',
       url: '/miranda/groups',
-      headers: { ...authAsSession(ownerToken), 'content-type': 'application/json' },
-      payload: { name: 'Личная группа' }
+      headers: { ...authAsSession(adminAToken), 'content-type': 'application/json' },
+      payload: { name: 'Группа сети A' }
     });
     const groupId = Number(create.json().item.id);
     groupIds.push(groupId);
 
-    const strangerRename = await app.inject({
+    const crossOrgRename = await app.inject({
       method: 'PATCH',
       url: `/miranda/groups/${groupId}`,
-      headers: { ...authAsSession(strangerToken), 'content-type': 'application/json' },
+      headers: { ...authAsSession(adminBToken), 'content-type': 'application/json' },
       payload: { name: 'Угон' }
     });
-    expect(strangerRename.statusCode).toBe(404);
+    expect(crossOrgRename.statusCode).toBe(404);
 
-    const strangerDelete = await app.inject({ method: 'DELETE', url: `/miranda/groups/${groupId}`, headers: authAsSession(strangerToken) });
-    expect(strangerDelete.statusCode).toBe(404);
+    const crossOrgDelete = await app.inject({ method: 'DELETE', url: `/miranda/groups/${groupId}`, headers: authAsSession(adminBToken) });
+    expect(crossOrgDelete.statusCode).toBe(404);
+
+    const sameOrgNonAdminRename = await app.inject({
+      method: 'PATCH',
+      url: `/miranda/groups/${groupId}`,
+      headers: { ...authAsSession(nonAdminAToken), 'content-type': 'application/json' },
+      payload: { name: 'Попытка не-админа' }
+    });
+    expect(sameOrgNonAdminRename.statusCode).toBe(403);
 
     const crossOrgMember = await app.inject({
       method: 'POST',
       url: `/miranda/groups/${groupId}/members`,
-      headers: { ...authAsSession(ownerToken), 'content-type': 'application/json' },
+      headers: { ...authAsSession(adminAToken), 'content-type': 'application/json' },
       payload: { corporateAccountId: otherOrgAccountId }
     });
     expect(crossOrgMember.statusCode).toBe(404);
+
+    const crossOrgParent = await app.inject({
+      method: 'POST',
+      url: '/miranda/groups',
+      headers: { ...authAsSession(adminBToken), 'content-type': 'application/json' },
+      payload: { name: 'Подгруппа из чужой сети', parentGroupId: groupId }
+    });
+    expect(crossOrgParent.statusCode).toBe(404);
   });
 
   it('PATCH /miranda/presence — меняет только свой же статус, виден в /miranda/contacts/all как online', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Miranda Presence Org');
-    const emp = await fx.createPhoneEmployee(org, '+79990100006', null, { role: 'employee', fullName: 'Статус-тест' });
+    const emp = await fx.createPhoneEmployee(org, '+79990100008', null, { role: 'employee', fullName: 'Статус-тест' });
     const token = await sessionsRepo.createSession(emp.id, false, 'employee');
     const accountId = await activeAccount(org, emp.id, token);
 

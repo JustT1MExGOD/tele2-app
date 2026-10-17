@@ -1798,11 +1798,11 @@ export interface MirandaAllContactsResponse { items: MirandaCorporateAccountList
 export interface MirandaSetDeviceExclusiveResponse { ok: true; }
 export interface MirandaSetPresenceResponse { ok: true; }
 
-// §2 плана — личные группы контактов.
+// §2 плана — группы контактов, общие для всей сети (настраивает админ).
 export interface MirandaContactGroup {
   id: number;
   org_id: string;
-  owner_corporate_account_id: number;
+  parent_group_id: number | null;
   name: string;
   sort_order: number;
   member_corporate_account_ids: number[];

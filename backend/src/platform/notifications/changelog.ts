@@ -1589,5 +1589,16 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Иконка приложения T2 Miranda заменена на собственный логотип (заголовок окна, инсталлятор, ярлыки) вместо generic-иконки T2 Sales',
       'tsc --noEmit (backend+frontend), vitest 927/927 (backend, на реальном одноразовом Postgres, включая новый isolation-тест на группы контактов), frontend build/smoke, native mirandaApp compileKotlin, визуальная проверка окна, все security/architecture guardrail-проверки — без регрессий'
     ]
+  },
+  {
+    version: '20.69.0',
+    title: 'T2 Miranda: группы контактов становятся общими для сети и вложенными',
+    bullets: [
+      'Пересмотр по фидбэку: группы контактов — общая для сети разметка, настраивает администратор (requireAdmin на всех мутациях), читают дерево все через GET /miranda/groups',
+      'Вложенность — группа внутри группы (parentGroupId, ON DELETE CASCADE), дерево контактов рендерит произвольную глубину с отступами',
+      'Исправлены переименование (не отражалось в UI) и раскрытие/скрытие групп — раскрытие теперь ключуется стабильным id группы, а не отображаемым именем',
+      'Новая миграция 0044 поверх уже живой 0043: owner_corporate_account_id → created_by_employee_id (аудит, не владение) + parent_group_id',
+      'tsc --noEmit (backend), vitest 927/927 (backend, одноразовый Postgres, переписанный isolation-тест на вложенные группы и admin-only мутации), native mirandaApp compileKotlin, визуальная проверка окна — без регрессий'
+    ]
   }
 ];

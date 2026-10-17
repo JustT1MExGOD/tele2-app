@@ -235,6 +235,7 @@ private fun MirandaMessengerShell(
                     ContactsTreeScreen(
                         api = container.mirandaApi,
                         myCorporateAccountId = myCorporateAccountId,
+                        isAdmin = isAdmin,
                         onOpenConversation = { id, title -> openConversation = id to title }
                     )
                 }

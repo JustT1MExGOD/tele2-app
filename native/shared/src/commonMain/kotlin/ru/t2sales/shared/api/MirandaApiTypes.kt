@@ -64,13 +64,13 @@ data class MirandaCorporateAccountListItem(
     val online: Boolean = false
 )
 
-// ---------- Группы контактов (личный контакт-лист, не общесетевой) ----------
+// ---------- Группы контактов (общие для сети, настраивает администратор; вложенные) ----------
 
 @Serializable
 data class MirandaContactGroup(
     val id: Int,
     val org_id: String = "",
-    val owner_corporate_account_id: Int = 0,
+    val parent_group_id: Int? = null,
     val name: String,
     val sort_order: Int = 0,
     val member_corporate_account_ids: List<Int> = emptyList()
@@ -80,7 +80,7 @@ data class MirandaContactGroup(
 data class MirandaContactGroupsListResponse(val items: List<MirandaContactGroup>)
 
 @Serializable
-data class MirandaCreateContactGroupRequest(val name: String)
+data class MirandaCreateContactGroupRequest(val name: String, val parentGroupId: Int? = null)
 
 @Serializable
 data class MirandaCreateContactGroupResponse(val item: MirandaContactGroup)

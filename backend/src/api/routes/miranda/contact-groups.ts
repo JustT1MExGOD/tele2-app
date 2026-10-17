@@ -1,21 +1,30 @@
 /**
- * T2 Miranda — личные группы контактов (§2 плана). Доступно и сотруднику,
- * и аккаунту точки (resolveMirandaPrincipal) — группа всегда скоупится на
- * principal.corporateAccountId, никогда на значение из тела запроса.
- * Группа другого владельца отвечает 404 (не 403, чтобы не подтверждать
- * существование чужой группы) — тот же приём, что у миранда-роутов,
- * скоупящих ресурс на запрашивающего.
+ * T2 Miranda — группы контактов, общие для всей сети (§2 плана, пересмотр
+ * после фидбэка: не личный контакт-лист каждого аккаунта, а разметка,
+ * которую задаёт администратор для всех сразу). Чтение (GET) доступно
+ * любому принципалу мессенджера (сотрудник или точка) через
+ * resolveMirandaPrincipal — скоупится на orgId. Мутации (создание/
+ * переименование/удаление/состав) — только requireAdmin, та же гарантия,
+ * что у остальных admin-only Miranda-роутов в accounts.ts; точечные
+ * аккаунты (нет request.user) не проходят requireAdmin в принципе.
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
 import * as mirandaService from '../../../core/miranda-accounts/service.js';
 import { resolveMirandaPrincipal } from '../../../core/miranda-accounts/service.js';
+import { requireAdmin } from '../../../auth/guards.js';
 
 const GroupIdParams = Type.Object({ id: Type.String({ pattern: '^[0-9]+$' }) });
 type GroupIdParams = Static<typeof GroupIdParams>;
 
 const MemberParams = Type.Object({ id: Type.String({ pattern: '^[0-9]+$' }), corporateAccountId: Type.String({ pattern: '^[0-9]+$' }) });
 type MemberParams = Static<typeof MemberParams>;
+
+const CreateGroupBody = Type.Object({
+  name: Type.String({ minLength: 1, maxLength: 100 }),
+  parentGroupId: Type.Optional(Type.Union([Type.Integer(), Type.Null()]))
+});
+type CreateGroupBody = Static<typeof CreateGroupBody>;
 
 const GroupNameBody = Type.Object({ name: Type.String({ minLength: 1, maxLength: 100 }) });
 type GroupNameBody = Static<typeof GroupNameBody>;
@@ -31,16 +40,15 @@ export async function registerMirandaContactGroupRoutes(app: FastifyInstance) {
   app.get('/miranda/groups', async (request, reply) => {
     const principal = await resolveMirandaPrincipal(request, reply);
     if (!principal) return;
-    const items = await mirandaService.listContactGroups(principal.corporateAccountId);
+    const items = await mirandaService.listContactGroups(principal.orgId);
     return reply.code(200).send({ items });
   });
 
-  app.post('/miranda/groups', { schema: { body: GroupNameBody } }, async (request, reply) => {
-    const principal = await resolveMirandaPrincipal(request, reply);
-    if (!principal) return;
-    const { name } = request.body as GroupNameBody;
-    const result = await mirandaService.createContactGroup(principal.orgId, principal.corporateAccountId, name);
-    if (!result.ok) return reply.code(409).send({ error: 'conflict', message: 'Группа с таким названием уже существует' });
+  app.post('/miranda/groups', { schema: { body: CreateGroupBody } }, async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const { name, parentGroupId } = request.body as CreateGroupBody;
+    const result = await mirandaService.createContactGroup(request.user!.org_id, name, parentGroupId ?? null, request.user!.employee_id!);
+    if (result.ok === false) return reply.code(statusForMutationError(result.error)).send({ error: result.error, message: result.error === 'conflict' ? 'Группа с таким названием уже существует' : 'Родительская группа не найдена' });
     return reply.code(201).send({ item: result.group });
   });
 
@@ -48,21 +56,19 @@ export async function registerMirandaContactGroupRoutes(app: FastifyInstance) {
     '/miranda/groups/:id',
     { schema: { params: GroupIdParams, body: GroupNameBody } },
     async (request, reply) => {
-      const principal = await resolveMirandaPrincipal(request, reply);
-      if (!principal) return;
+      if (!requireAdmin(request, reply)) return;
       const { id } = request.params as GroupIdParams;
       const { name } = request.body as GroupNameBody;
-      const result = await mirandaService.renameContactGroup(Number(id), principal.corporateAccountId, name, principal.orgId);
+      const result = await mirandaService.renameContactGroup(Number(id), name, request.user!.org_id, request.user!.employee_id!);
       if (result.ok === false) return reply.code(statusForMutationError(result.error)).send({ error: result.error });
       return reply.code(200).send({ ok: true });
     }
   );
 
   app.delete('/miranda/groups/:id', { schema: { params: GroupIdParams } }, async (request, reply) => {
-    const principal = await resolveMirandaPrincipal(request, reply);
-    if (!principal) return;
+    if (!requireAdmin(request, reply)) return;
     const { id } = request.params as GroupIdParams;
-    const result = await mirandaService.deleteContactGroup(Number(id), principal.corporateAccountId, principal.orgId);
+    const result = await mirandaService.deleteContactGroup(Number(id), request.user!.org_id, request.user!.employee_id!);
     if (result.ok === false) return reply.code(statusForMutationError(result.error)).send({ error: result.error });
     return reply.code(200).send({ ok: true });
   });
@@ -71,11 +77,10 @@ export async function registerMirandaContactGroupRoutes(app: FastifyInstance) {
     '/miranda/groups/:id/members',
     { schema: { params: GroupIdParams, body: AddMemberBody } },
     async (request, reply) => {
-      const principal = await resolveMirandaPrincipal(request, reply);
-      if (!principal) return;
+      if (!requireAdmin(request, reply)) return;
       const { id } = request.params as GroupIdParams;
       const { corporateAccountId } = request.body as AddMemberBody;
-      const result = await mirandaService.addContactToGroup(Number(id), principal.corporateAccountId, corporateAccountId, principal.orgId);
+      const result = await mirandaService.addContactToGroup(Number(id), corporateAccountId, request.user!.org_id, request.user!.employee_id!);
       if (result.ok === false) return reply.code(statusForMutationError(result.error)).send({ error: result.error });
       return reply.code(200).send({ ok: true });
     }
@@ -85,10 +90,9 @@ export async function registerMirandaContactGroupRoutes(app: FastifyInstance) {
     '/miranda/groups/:id/members/:corporateAccountId',
     { schema: { params: MemberParams } },
     async (request, reply) => {
-      const principal = await resolveMirandaPrincipal(request, reply);
-      if (!principal) return;
+      if (!requireAdmin(request, reply)) return;
       const { id, corporateAccountId } = request.params as MemberParams;
-      const result = await mirandaService.removeContactFromGroup(Number(id), principal.corporateAccountId, Number(corporateAccountId), principal.orgId);
+      const result = await mirandaService.removeContactFromGroup(Number(id), Number(corporateAccountId), request.user!.org_id, request.user!.employee_id!);
       if (result.ok === false) return reply.code(statusForMutationError(result.error)).send({ error: result.error });
       return reply.code(200).send({ ok: true });
     }
