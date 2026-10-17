@@ -11,6 +11,15 @@ import * as orgsRepo from '../../data/repositories/organizations.js';
 import * as supervisorSectorsRepo from '../../data/repositories/supervisor-sectors.js';
 import type { DealersTreeResponse, DealerNode, SectorNode, DealerOrgRef, DealerSupervisorRef } from '../../shared/api-types.js';
 
+/** T2 Miranda — видимость контактов/групп/переписки в рамках всего дилера
+ * (не одной сети): все org_id дилера, которому принадлежит orgId, включая
+ * сам orgId. Фолбэк на [orgId], если у сети нет сектора/дилера — для всех
+ * сетей без дилера поведение Miranda не меняется вообще. */
+export async function resolveDealerOrgIds(orgId: string): Promise<string[]> {
+  const ids = await dealersRepo.listOrgIdsForDealerOfOrg(orgId);
+  return ids.length ? ids : [orgId];
+}
+
 export async function getDealersTree(): Promise<DealersTreeResponse> {
   const [dealers, sectors, orgs, supervisors] = await Promise.all([
     dealersRepo.listAllDealers(),

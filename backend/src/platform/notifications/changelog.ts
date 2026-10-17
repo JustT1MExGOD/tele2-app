@@ -1600,5 +1600,16 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Новая миграция 0044 поверх уже живой 0043: owner_corporate_account_id → created_by_employee_id (аудит, не владение) + parent_group_id',
       'tsc --noEmit (backend), vitest 927/927 (backend, одноразовый Postgres, переписанный isolation-тест на вложенные группы и admin-only мутации), native mirandaApp compileKotlin, визуальная проверка окна — без регрессий'
     ]
+  },
+  {
+    version: '20.70.0',
+    title: 'T2 Miranda: видимость контактов/групп/переписки в рамках дилера',
+    bullets: [
+      'Контакты, группы контактов и диалоги мессенджера больше не изолированы строго по одной сети — видны и доступны в рамках всего дилера (сотрудники разных организаций одного дилера видят друг друга, переписываются, состоят в общих группах)',
+      'core/orgs/dealers.ts::resolveDealerOrgIds(orgId) — переиспользует существующую схему dealers → sectors → organizations.sector_id, без новых таблиц/миграций',
+      'Сети без сектора/дилера не затронуты (fallback на свою org) — все существующие org-isolation гарантии Miranda сохранены там, где дилер не настроен',
+      'Администрирование корпоративных аккаунтов (Admin Control Center) осознанно осталось строго по своей сети',
+      'tsc --noEmit (backend), vitest 929/929 (backend, одноразовый Postgres, новый isolation-тест miranda-dealer-scope.test.ts), check:route-auth, check:architecture — без регрессий'
+    ]
   }
 ];

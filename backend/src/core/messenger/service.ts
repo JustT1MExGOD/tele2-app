@@ -14,6 +14,7 @@ import * as mirandaRepo from '../../data/repositories/miranda-accounts.js';
 import * as auditRepo from '../../data/repositories/audit.js';
 import { hashToken } from '../../data/repositories/sessions.js';
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '../chat/attachment-validation.js';
+import { resolveDealerOrgIds } from '../orgs/dealers.js';
 
 /** §3.3 плана, применённое к мессенджеру — "какой corporate_account_id
  * активен на ЭТОЙ сессии прямо сейчас" перечитывается с сервера на каждый
@@ -62,8 +63,8 @@ function toCanonicalAttachment(row: messengerRepo.MessengerAttachmentRow): Canon
   };
 }
 
-async function attachmentsForMessages(messageIds: string[], orgId: string): Promise<Map<string, CanonicalAttachment[]>> {
-  const rows = await messengerRepo.listAttachmentsForMessages(messageIds, orgId);
+async function attachmentsForMessages(messageIds: string[], orgIds: string[]): Promise<Map<string, CanonicalAttachment[]>> {
+  const rows = await messengerRepo.listAttachmentsForMessages(messageIds, orgIds);
   const map = new Map<string, CanonicalAttachment[]>();
   for (const row of rows) {
     if (!row.message_id) continue;
@@ -79,11 +80,15 @@ export type FindOrCreateDirectResult =
   | { ok: false; error: 'self_conversation' | 'not_active' };
 
 /** Начать (или получить уже существующий) 1:1-диалог с другим корпоративным
- * аккаунтом. targetCorporateAccountId должен принадлежать активному и
- * существующему аккаунту — чужой org недостижим, т.к. corporate_account_id
- * не передаётся в SQL без org-скоупа ниже. */
+ * аккаунтом. targetCorporateAccountId должен принадлежать активному
+ * аккаунту В ТОМ ЖЕ ДИЛЕРЕ (dealerOrgIds — весь дилер запрашивающего, не
+ * только его org, см. план дилер-видимости Miranda) — чужой дилер
+ * недостижим, т.к. corporate_account_id не передаётся в SQL без этого
+ * скоупа ниже. Новый диалог пишется с org_id запрашивающего (чисто
+ * происхождение). */
 export async function findOrCreateDirectConversation(
   orgId: string,
+  dealerOrgIds: string[],
   requesterCorporateAccountId: number,
   targetCorporateAccountId: number
 ): Promise<FindOrCreateDirectResult> {
@@ -91,10 +96,10 @@ export async function findOrCreateDirectConversation(
     return { ok: false, error: 'self_conversation' };
   }
   const target = await mirandaRepo.getCorporateAccount(targetCorporateAccountId);
-  if (!target || !target.is_active || target.org_id !== orgId) {
+  if (!target || !target.is_active || !dealerOrgIds.includes(target.org_id)) {
     return { ok: false, error: 'not_active' };
   }
-  const existing = await messengerRepo.findDirectConversationBetween(orgId, requesterCorporateAccountId, targetCorporateAccountId);
+  const existing = await messengerRepo.findDirectConversationBetween(dealerOrgIds, requesterCorporateAccountId, targetCorporateAccountId);
   if (existing) return { ok: true, conversationId: existing.id };
 
   const conversation = await withTransaction(async (q) => {
@@ -107,6 +112,7 @@ export type CreateGroupResult = { ok: true; conversationId: string } | { ok: fal
 
 export async function createGroupConversation(
   orgId: string,
+  dealerOrgIds: string[],
   requesterCorporateAccountId: number,
   title: string,
   memberCorporateAccountIds: number[]
@@ -115,7 +121,7 @@ export async function createGroupConversation(
   for (const accountId of allMembers) {
     if (accountId === requesterCorporateAccountId) continue;
     const account = await mirandaRepo.getCorporateAccount(accountId);
-    if (!account || !account.is_active || account.org_id !== orgId) {
+    if (!account || !account.is_active || !dealerOrgIds.includes(account.org_id)) {
       return { ok: false, error: 'invalid_member' };
     }
   }
@@ -224,7 +230,7 @@ export async function createMessage(
   if (!row) {
     return { ok: false, error: 'internal_error', message: 'Сообщение не найдено после создания' };
   }
-  const attachmentsMap = await attachmentsForMessages([result.id], orgId);
+  const attachmentsMap = await attachmentsForMessages([result.id], [orgId]);
   const message: CanonicalMessage = {
     id: row.id,
     conversationId: row.conversation_id,
@@ -254,23 +260,26 @@ function toCanonicalMessages(rows: messengerRepo.MessengerMessageWithSender[], a
   }));
 }
 
-export async function listMessages(conversationId: string, orgId: string, limit: number, beforeId?: string): Promise<ListMessagesResult> {
+export async function listMessages(conversationId: string, orgIds: string[], limit: number, beforeId?: string): Promise<ListMessagesResult> {
   const rows = await messengerRepo.listMessages(conversationId, limit, beforeId);
-  const attachmentsMap = await attachmentsForMessages(rows.map((r) => r.id), orgId);
+  const attachmentsMap = await attachmentsForMessages(rows.map((r) => r.id), orgIds);
   const nextCursor = rows.length === limit ? rows[rows.length - 1].id : null;
   return { items: toCanonicalMessages(rows, attachmentsMap), nextCursor };
 }
 
-export async function listMessagesAfter(conversationId: string, orgId: string, afterId: string, limit: number): Promise<CanonicalMessage[]> {
+export async function listMessagesAfter(conversationId: string, orgIds: string[], afterId: string, limit: number): Promise<CanonicalMessage[]> {
   const rows = await messengerRepo.listMessagesAfter(conversationId, afterId, limit);
-  const attachmentsMap = await attachmentsForMessages(rows.map((r) => r.id), orgId);
+  const attachmentsMap = await attachmentsForMessages(rows.map((r) => r.id), orgIds);
   return toCanonicalMessages(rows, attachmentsMap);
 }
 
+/** orgId — единственный, из NOTIFY-payload (realtime-bridge.ts) — дилер
+ * резолвится здесь же, чтобы не менять формат payload/канал. */
 export async function getRealtimeMessage(id: string, conversationId: string, orgId: string): Promise<CanonicalMessage | null> {
   const row = await messengerRepo.getMessageWithSender(id, conversationId);
   if (!row) return null;
-  const attachments = await attachmentsForMessages([id], orgId);
+  const dealerOrgIds = await resolveDealerOrgIds(orgId);
+  const attachments = await attachmentsForMessages([id], dealerOrgIds);
   return {
     id: row.id,
     conversationId: row.conversation_id,

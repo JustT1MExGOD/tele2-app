@@ -42,21 +42,24 @@ export async function createConversation(
 
 /** Найти уже существующий 1:1-диалог между ровно этими двумя аккаунтами —
  * избегаем задвоения direct-диалогов при повторном "написать этому
- * человеку" с разных устройств/заходов. */
+ * человеку" с разных устройств/заходов. orgIds — весь дилер запрашивающего
+ * (не только его org): диалог хранит org_id ТОГО, кто его создал первым
+ * (может быть другая сеть того же дилера), поэтому строгое равенство
+ * своей org_id здесь привело бы к задвоению диалога у второй стороны. */
 export async function findDirectConversationBetween(
-  orgId: string,
+  orgIds: string[],
   accountIdA: number,
   accountIdB: number
 ): Promise<ConversationRow | null> {
   const res = await query(
     `SELECT c.id, c.org_id, c.type, c.title, c.created_by_corporate_account_id, c.created_at
      FROM messenger_conversations c
-     WHERE c.org_id = $1 AND c.type = 'direct'
+     WHERE c.org_id = ANY($1::text[]) AND c.type = 'direct'
        AND (SELECT count(*) FROM messenger_conversation_members m WHERE m.conversation_id = c.id) = 2
        AND EXISTS (SELECT 1 FROM messenger_conversation_members m WHERE m.conversation_id = c.id AND m.corporate_account_id = $2)
        AND EXISTS (SELECT 1 FROM messenger_conversation_members m WHERE m.conversation_id = c.id AND m.corporate_account_id = $3)
      LIMIT 1`,
-    [orgId, accountIdA, accountIdB]
+    [orgIds, accountIdA, accountIdB]
   );
   return res.rows[0] || null;
 }
@@ -271,12 +274,18 @@ export interface MessengerAttachmentRow {
   expires_at: string | null;
 }
 
-export async function listAttachmentsForMessages(messageIds: string[], orgId: string): Promise<MessengerAttachmentRow[]> {
+/** orgIds — весь дилер читающего (не только его org): вложение могло
+ * быть загружено участником другой сети того же дилера (см. план
+ * дилер-видимости Miranda). Реальная авторизация на чтение — членство в
+ * диалоге (messengerService.isMember, проверяется в роуте ДО вызова) —
+ * org_id здесь не граница безопасности, а просто фильтр по "видимым"
+ * вложениям. */
+export async function listAttachmentsForMessages(messageIds: string[], orgIds: string[]): Promise<MessengerAttachmentRow[]> {
   if (!messageIds.length) return [];
   const res = await query(
     `SELECT id, org_id, message_id, uploader_corporate_account_id, storage_key, original_filename, mime_type, size_bytes, created_at, expires_at
-     FROM messenger_attachments WHERE org_id = $1 AND message_id = ANY($2) ORDER BY id`,
-    [orgId, messageIds]
+     FROM messenger_attachments WHERE org_id = ANY($1::text[]) AND message_id = ANY($2) ORDER BY id`,
+    [orgIds, messageIds]
   );
   return res.rows;
 }

@@ -21,16 +21,39 @@ export class TestFixtures {
   orgIds: string[] = [];
   storeIds: string[] = [];
   employeeIds: number[] = [];
+  sectorIds: string[] = [];
+  dealerIds: number[] = [];
 
   private nextId(label: string) {
     counter += 1;
     return `${RUN_ID}${label}_${counter}`;
   }
 
-  async createOrg(name = 'Test Org'): Promise<string> {
+  /** sectorId — опционально, для тестов дилер-видимости Miranda (см.
+   * core/orgs/dealers.ts::resolveDealerOrgIds) — две сети с одним и тем же
+   * sectorId (у которого есть dealer_id) принадлежат одному дилеру. */
+  async createOrg(name = 'Test Org', sectorId: string | null = null): Promise<string> {
     const id = this.nextId('org');
-    await query(`INSERT INTO organizations (id, name) VALUES ($1, $2)`, [id, name]);
+    await query(`INSERT INTO organizations (id, name, sector_id) VALUES ($1, $2, $3)`, [id, name, sectorId]);
     this.orgIds.push(id);
+    return id;
+  }
+
+  /** Дилер — только ownership-запись (data/repositories/dealers.ts),
+   * имя уникально — используем nextId(), чтобы не коллизировать между
+   * тестами/прогонами. */
+  async createDealer(name?: string): Promise<number> {
+    const dealerName = name ?? this.nextId('dealer');
+    const res = await query(`INSERT INTO dealers (name) VALUES ($1) RETURNING id::int`, [dealerName]);
+    const id = Number(res.rows[0].id);
+    this.dealerIds.push(id);
+    return id;
+  }
+
+  async createSector(name?: string, dealerId: number | null = null): Promise<string> {
+    const id = this.nextId('sector');
+    await query(`INSERT INTO sectors (id, name, dealer_id) VALUES ($1, $2, $3)`, [id, name ?? id, dealerId]);
+    this.sectorIds.push(id);
     return id;
   }
 
@@ -158,8 +181,18 @@ export class TestFixtures {
     if (this.orgIds.length) {
       await query(`DELETE FROM organizations WHERE id = ANY($1)`, [this.orgIds]);
     }
+    // sectors.dealer_id → dealers(id) FK — секторы удаляются до дилеров;
+    // organizations.sector_id без FK, но org-строки уже удалены выше.
+    if (this.sectorIds.length) {
+      await query(`DELETE FROM sectors WHERE id = ANY($1)`, [this.sectorIds]);
+    }
+    if (this.dealerIds.length) {
+      await query(`DELETE FROM dealers WHERE id = ANY($1)`, [this.dealerIds]);
+    }
     this.orgIds = [];
     this.storeIds = [];
     this.employeeIds = [];
+    this.sectorIds = [];
+    this.dealerIds = [];
   }
 }

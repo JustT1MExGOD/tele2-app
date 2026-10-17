@@ -1,0 +1,199 @@
+/**
+ * T2 Miranda — видимость контактов/групп/переписки в рамках всего дилера
+ * (не одной сети), см. core/orgs/dealers.ts::resolveDealerOrgIds: два org
+ * под одним дилером/сектором видят контакты друг друга в
+ * /miranda/contacts(/all), могут добавлять контакт другой сети дилера в
+ * общую группу и переписываться напрямую (дедуп диалога работает даже
+ * когда диалог создан под org_id другой стороны); два org без общего
+ * дилера остаются изолированы ровно как раньше (fallback dealerOrgIds =
+ * [orgId] для сетей без сектора/дилера).
+ */
+import { describe, it, expect, afterAll } from 'vitest';
+import { getApp, authAsSession } from '../helpers/app.js';
+import { TestFixtures } from '../helpers/fixtures.js';
+import { query } from '../../src/data/db/index.js';
+import * as sessionsRepo from '../../src/data/repositories/sessions.js';
+
+describe('T2 Miranda — видимость в рамках дилера', () => {
+  const fx = new TestFixtures();
+  const corporateAccountIds: number[] = [];
+  const groupIds: number[] = [];
+  const conversationIds: string[] = [];
+
+  afterAll(async () => {
+    if (conversationIds.length) {
+      await query(`DELETE FROM messenger_messages WHERE conversation_id = ANY($1)`, [conversationIds]);
+      await query(`DELETE FROM messenger_conversation_members WHERE conversation_id = ANY($1)`, [conversationIds]);
+      await query(`DELETE FROM messenger_conversations WHERE id = ANY($1)`, [conversationIds]);
+    }
+    if (groupIds.length) {
+      await query(`DELETE FROM miranda_contact_group_members WHERE group_id = ANY($1)`, [groupIds]);
+      await query(`DELETE FROM miranda_contact_groups WHERE id = ANY($1)`, [groupIds]);
+    }
+    if (corporateAccountIds.length) {
+      await query(`DELETE FROM miranda_contact_group_members WHERE member_corporate_account_id = ANY($1)`, [corporateAccountIds]);
+      await query(`UPDATE employee_sessions SET active_corporate_account_id = NULL WHERE active_corporate_account_id = ANY($1)`, [corporateAccountIds]);
+      await query(`DELETE FROM corporate_accounts WHERE id = ANY($1)`, [corporateAccountIds]);
+    }
+    await query(`DELETE FROM audit_log WHERE action LIKE 'MIRANDA_CONTACT_GROUP_%'`);
+    await fx.cleanup();
+  });
+
+  async function makeAccount(orgId: string, phone: string, fullName: string): Promise<{ accountId: number; sessionToken: string; employeeId: number }> {
+    const emp = await fx.createPhoneEmployee(orgId, phone, null, { role: 'employee', fullName });
+    const sessionToken = await sessionsRepo.createSession(emp.id, false, 'employee');
+    const acctRes = await query(
+      `INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, $3) RETURNING id`,
+      [orgId, emp.id, fullName]
+    );
+    const accountId = Number(acctRes.rows[0].id);
+    corporateAccountIds.push(accountId);
+    await query(
+      `UPDATE employee_sessions SET active_corporate_account_id = $1 WHERE token_hash = encode(sha256($2::bytea), 'hex')`,
+      [accountId, sessionToken]
+    );
+    return { accountId, sessionToken, employeeId: emp.id };
+  }
+
+  async function makeAdmin(orgId: string, phone: string, fullName: string): Promise<{ accountId: number; sessionToken: string; employeeId: number }> {
+    const emp = await fx.createPhoneEmployee(orgId, phone, null, { role: 'admin', fullName });
+    await fx.enrollTotpFor(emp.id);
+    const sessionToken = await sessionsRepo.createSession(emp.id, true, 'admin');
+    const acctRes = await query(
+      `INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, $3) RETURNING id`,
+      [orgId, emp.id, fullName]
+    );
+    const accountId = Number(acctRes.rows[0].id);
+    corporateAccountIds.push(accountId);
+    await query(
+      `UPDATE employee_sessions SET active_corporate_account_id = $1 WHERE token_hash = encode(sha256($2::bytea), 'hex')`,
+      [accountId, sessionToken]
+    );
+    return { accountId, sessionToken, employeeId: emp.id };
+  }
+
+  it('два org одного дилера: видят контакты друг друга, общая группа, переписка с дедупом', async () => {
+    const app = await getApp();
+    const dealer = await fx.createDealer();
+    const sector = await fx.createSector(undefined, dealer);
+    const orgA = await fx.createOrg('Dealer Org A', sector);
+    const orgB = await fx.createOrg('Dealer Org B', sector);
+
+    const adminA = await makeAdmin(orgA, '+79992000001', 'Админ A');
+    const empA = await makeAccount(orgA, '+79992000002', 'Сотрудник A');
+    const empB = await makeAccount(orgB, '+79992000003', 'Сотрудник B');
+
+    const allContacts = await app.inject({ method: 'GET', url: '/miranda/contacts/all', headers: authAsSession(empA.sessionToken) });
+    expect(allContacts.statusCode).toBe(200);
+    expect(allContacts.json().items.some((i: any) => Number(i.corporate_account_id) === empB.accountId)).toBe(true);
+
+    const search = await app.inject({
+      method: 'GET',
+      url: '/miranda/contacts?q=' + encodeURIComponent('Сотрудник B'),
+      headers: authAsSession(empA.sessionToken)
+    });
+    expect(search.statusCode).toBe(200);
+    expect(search.json().items.some((i: any) => Number(i.corporate_account_id) === empB.accountId)).toBe(true);
+
+    const createGroup = await app.inject({
+      method: 'POST',
+      url: '/miranda/groups',
+      headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
+      payload: { name: 'Общая группа дилера' }
+    });
+    expect(createGroup.statusCode).toBe(201);
+    const groupId = Number(createGroup.json().item.id);
+    groupIds.push(groupId);
+
+    const addMember = await app.inject({
+      method: 'POST',
+      url: `/miranda/groups/${groupId}/members`,
+      headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
+      payload: { corporateAccountId: empB.accountId }
+    });
+    expect(addMember.statusCode).toBe(200);
+
+    const listGroups = await app.inject({ method: 'GET', url: '/miranda/groups', headers: authAsSession(empB.sessionToken) });
+    expect(listGroups.statusCode).toBe(200);
+    const group = listGroups.json().items.find((g: any) => Number(g.id) === groupId);
+    expect(group.member_corporate_account_ids.map(Number)).toContain(empB.accountId);
+
+    const direct = await app.inject({
+      method: 'POST',
+      url: '/miranda/conversations/direct',
+      headers: { ...authAsSession(empA.sessionToken), 'content-type': 'application/json' },
+      payload: { targetCorporateAccountId: empB.accountId }
+    });
+    expect(direct.statusCode).toBe(200);
+    const conversationId = direct.json().conversationId;
+    conversationIds.push(conversationId);
+
+    const post = await app.inject({
+      method: 'POST',
+      url: `/miranda/conversations/${conversationId}/messages`,
+      headers: { ...authAsSession(empA.sessionToken), 'content-type': 'application/json' },
+      payload: { clientMessageId: crypto.randomUUID(), body: 'Привет из другой сети' }
+    });
+    expect(post.statusCode).toBe(200);
+
+    const listMsgs = await app.inject({
+      method: 'GET',
+      url: `/miranda/conversations/${conversationId}/messages`,
+      headers: authAsSession(empB.sessionToken)
+    });
+    expect(listMsgs.statusCode).toBe(200);
+    expect(listMsgs.json().items.length).toBeGreaterThan(0);
+
+    // Дедуп: B инициирует "новый" direct с A — должен вернуть ТОТ ЖЕ
+    // диалог, хотя его org_id = orgA (diалог создала A), а не orgB.
+    const second = await app.inject({
+      method: 'POST',
+      url: '/miranda/conversations/direct',
+      headers: { ...authAsSession(empB.sessionToken), 'content-type': 'application/json' },
+      payload: { targetCorporateAccountId: empA.accountId }
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().conversationId).toBe(conversationId);
+  });
+
+  it('два org без общего дилера — контакты/группы/диалог остаются изолированы', async () => {
+    const app = await getApp();
+    const orgA = await fx.createOrg('No Dealer Org A');
+    const orgB = await fx.createOrg('No Dealer Org B');
+
+    const adminA = await makeAdmin(orgA, '+79992000004', 'Админ без дилера');
+    const empA = await makeAccount(orgA, '+79992000005', 'Сотрудник без дилера A');
+    const empB = await makeAccount(orgB, '+79992000006', 'Сотрудник без дилера B');
+
+    const allContacts = await app.inject({ method: 'GET', url: '/miranda/contacts/all', headers: authAsSession(empA.sessionToken) });
+    expect(allContacts.statusCode).toBe(200);
+    expect(allContacts.json().items.some((i: any) => Number(i.corporate_account_id) === empB.accountId)).toBe(false);
+
+    const createGroup = await app.inject({
+      method: 'POST',
+      url: '/miranda/groups',
+      headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
+      payload: { name: 'Своя группа без дилера' }
+    });
+    expect(createGroup.statusCode).toBe(201);
+    const groupId = Number(createGroup.json().item.id);
+    groupIds.push(groupId);
+
+    const addMember = await app.inject({
+      method: 'POST',
+      url: `/miranda/groups/${groupId}/members`,
+      headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
+      payload: { corporateAccountId: empB.accountId }
+    });
+    expect(addMember.statusCode).toBe(404);
+
+    const direct = await app.inject({
+      method: 'POST',
+      url: '/miranda/conversations/direct',
+      headers: { ...authAsSession(empA.sessionToken), 'content-type': 'application/json' },
+      payload: { targetCorporateAccountId: empB.accountId }
+    });
+    expect(direct.statusCode).toBe(400);
+    expect(direct.json().error).toBe('not_active');
+  });
+});

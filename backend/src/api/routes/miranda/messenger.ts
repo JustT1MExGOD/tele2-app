@@ -50,7 +50,7 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
     const principal = await resolveMirandaPrincipal(request, reply);
     if (!principal) return;
     const { targetCorporateAccountId } = request.body as DirectBody;
-    const result = await messengerService.findOrCreateDirectConversation(principal.orgId, principal.corporateAccountId, targetCorporateAccountId);
+    const result = await messengerService.findOrCreateDirectConversation(principal.orgId, principal.dealerOrgIds, principal.corporateAccountId, targetCorporateAccountId);
     if (result.ok !== true) {
       return reply.code(400).send({ error: result.error });
     }
@@ -61,7 +61,7 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
     const principal = await resolveMirandaPrincipal(request, reply);
     if (!principal) return;
     const { title, memberCorporateAccountIds } = request.body as GroupBody;
-    const result = await messengerService.createGroupConversation(principal.orgId, principal.corporateAccountId, title, memberCorporateAccountIds);
+    const result = await messengerService.createGroupConversation(principal.orgId, principal.dealerOrgIds, principal.corporateAccountId, title, memberCorporateAccountIds);
     if (result.ok !== true) {
       return reply.code(400).send({ error: result.error });
     }
@@ -131,12 +131,12 @@ export async function registerMirandaMessengerRoutes(app: FastifyInstance) {
       if (cursor !== undefined && after !== undefined) {
         return reply.code(400).send({ error: 'conflicting_params', message: 'cursor и after взаимоисключающие' });
       }
-      const orgId = principal.orgId;
+      const orgIds = principal.dealerOrgIds;
       if (after !== undefined) {
-        const items = await messengerService.listMessagesAfter(id, orgId, after, limit);
+        const items = await messengerService.listMessagesAfter(id, orgIds, after, limit);
         return { items, nextCursor: null };
       }
-      const result = await messengerService.listMessages(id, orgId, limit, cursor);
+      const result = await messengerService.listMessages(id, orgIds, limit, cursor);
       return { items: result.items, nextCursor: result.nextCursor };
     }
   );

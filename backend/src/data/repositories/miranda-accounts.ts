@@ -374,7 +374,7 @@ export interface CorporateAccountListItem {
  * employee_id, employee_full_name в этом случае падает на ca.account_name.
  * LEFT JOIN stores — store_name для группировки дерева контактов по точке
  * (store_id сам по себе не человекочитаем). */
-export async function listAllCorporateAccounts(orgId: string): Promise<CorporateAccountListItem[]> {
+export async function listAllCorporateAccounts(orgIds: string[]): Promise<CorporateAccountListItem[]> {
   const res = await query(
     `SELECT ca.id AS corporate_account_id, ca.employee_id,
             COALESCE(e.full_name, ca.account_name) AS employee_full_name,
@@ -383,9 +383,9 @@ export async function listAllCorporateAccounts(orgId: string): Promise<Corporate
      FROM corporate_accounts ca
      LEFT JOIN employees e ON e.id = ca.employee_id
      LEFT JOIN stores s ON s.id = ca.store_id
-     WHERE ca.org_id = $1 AND ca.is_active
+     WHERE ca.org_id = ANY($1::text[]) AND ca.is_active
      ORDER BY ca.id ASC`,
-    [orgId]
+    [orgIds]
   );
   return res.rows;
 }
@@ -411,7 +411,7 @@ export async function setPresenceOverride(
  * собственный аккаунт запрашивающего.
  */
 export async function searchCorporateAccounts(
-  orgId: string,
+  orgIds: string[],
   term: string,
   excludeCorporateAccountId: number | null
 ): Promise<CorporateAccountListItem[]> {
@@ -421,12 +421,12 @@ export async function searchCorporateAccounts(
             ca.store_id, ca.display_label
      FROM corporate_accounts ca
      LEFT JOIN employees e ON e.id = ca.employee_id
-     WHERE ca.org_id = $1 AND ca.is_active
+     WHERE ca.org_id = ANY($1::text[]) AND ca.is_active
        AND COALESCE(e.full_name, ca.account_name) ILIKE '%' || $2 || '%'
        AND ($3::bigint IS NULL OR ca.id != $3)
      ORDER BY COALESCE(e.full_name, ca.account_name) ASC
      LIMIT 20`,
-    [orgId, term, excludeCorporateAccountId]
+    [orgIds, term, excludeCorporateAccountId]
   );
   return res.rows;
 }

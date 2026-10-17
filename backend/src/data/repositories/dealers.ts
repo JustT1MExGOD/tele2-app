@@ -63,3 +63,21 @@ export async function listAllSectorsWithDealer(): Promise<{ id: string; name: st
 export async function renameSector(id: string, name: string): Promise<void> {
   await query(`UPDATE sectors SET name = $1 WHERE id = $2`, [name, id]);
 }
+
+/** core/orgs/dealers.ts::resolveDealerOrgIds() — все org_id, принадлежащие
+ * тому же дилеру, что и данный org (через sector_id → dealer_id → все
+ * sectors этого дилера → все organizations этих секторов), включая сам
+ * orgId. Пусто, если у сети нет сектора или у сектора нет дилера —
+ * вызывающая сторона фолбэчит на [orgId] сама (см. core/orgs/dealers.ts). */
+export async function listOrgIdsForDealerOfOrg(orgId: string): Promise<string[]> {
+  const res = await query(
+    `SELECT DISTINCT o2.id
+     FROM organizations o1
+     JOIN sectors s1 ON s1.id = o1.sector_id AND s1.dealer_id IS NOT NULL
+     JOIN sectors s2 ON s2.dealer_id = s1.dealer_id
+     JOIN organizations o2 ON o2.sector_id = s2.id
+     WHERE o1.id = $1`,
+    [orgId]
+  );
+  return res.rows.map((r) => r.id);
+}

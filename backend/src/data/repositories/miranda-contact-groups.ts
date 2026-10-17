@@ -19,16 +19,16 @@ export interface ContactGroupWithMembers extends ContactGroupRow {
   member_corporate_account_ids: number[];
 }
 
-export async function listGroupsWithMembers(orgId: string): Promise<ContactGroupWithMembers[]> {
+export async function listGroupsWithMembers(orgIds: string[]): Promise<ContactGroupWithMembers[]> {
   const res = await query(
     `SELECT g.id, g.org_id, g.parent_group_id, g.name, g.sort_order,
             COALESCE(array_agg(m.member_corporate_account_id) FILTER (WHERE m.member_corporate_account_id IS NOT NULL), '{}') AS member_corporate_account_ids
      FROM miranda_contact_groups g
      LEFT JOIN miranda_contact_group_members m ON m.group_id = g.id
-     WHERE g.org_id = $1
+     WHERE g.org_id = ANY($1::text[])
      GROUP BY g.id
      ORDER BY g.sort_order ASC, g.id ASC`,
-    [orgId]
+    [orgIds]
   );
   return res.rows;
 }
@@ -38,11 +38,15 @@ export async function getGroup(id: number, q: typeof query = query): Promise<Con
   return res.rows[0] || null;
 }
 
-/** Сиблинги (тот же parentGroupId, та же сеть) не дублируются по названию
- * — проверка и вставка в одной транзакции (вызывающая сторона уже внутри
- * withTransaction), возвращает null при дубле, роут отвечает явным 409. */
+/** Сиблинги (тот же parentGroupId, тот же дилер) не дублируются по
+ * названию — проверка по всему dealerOrgIds, а не только своей сети
+ * (группы общие для дилера) и вставка в одной транзакции (вызывающая
+ * сторона уже внутри withTransaction), возвращает null при дубле, роут
+ * отвечает явным 409. Сама строка пишется с org_id создающего админа —
+ * чисто происхождение, на видимость не влияет (см. dealerOrgIds). */
 export async function createGroup(
   orgId: string,
+  dealerOrgIds: string[],
   name: string,
   parentGroupId: number | null,
   createdByEmployeeId: number | null,
@@ -50,9 +54,9 @@ export async function createGroup(
 ): Promise<ContactGroupRow | null> {
   const existing = await q(
     parentGroupId === null
-      ? `SELECT 1 FROM miranda_contact_groups WHERE org_id = $1 AND parent_group_id IS NULL AND name = $2`
-      : `SELECT 1 FROM miranda_contact_groups WHERE org_id = $1 AND parent_group_id = $2 AND name = $3`,
-    parentGroupId === null ? [orgId, name] : [orgId, parentGroupId, name]
+      ? `SELECT 1 FROM miranda_contact_groups WHERE org_id = ANY($1::text[]) AND parent_group_id IS NULL AND name = $2`
+      : `SELECT 1 FROM miranda_contact_groups WHERE org_id = ANY($1::text[]) AND parent_group_id = $2 AND name = $3`,
+    parentGroupId === null ? [dealerOrgIds, name] : [dealerOrgIds, parentGroupId, name]
   );
   if (existing.rows.length > 0) return null;
   const res = await q(

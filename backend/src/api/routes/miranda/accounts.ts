@@ -76,7 +76,8 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
     const sessionToken = request.sessionToken;
     const ownAccountId = sessionToken ? await messengerService.resolveActiveCorporateAccount(sessionToken) : null;
     const { q } = request.query as ContactsQuery;
-    const items = await mirandaService.searchCorporateAccounts(request.user!.org_id, q, ownAccountId);
+    const dealerOrgIds = await mirandaService.resolveDealerOrgIds(request.user!.org_id);
+    const items = await mirandaService.searchCorporateAccounts(dealerOrgIds, q, ownAccountId);
     return reply.code(200).send({ items });
   });
 
@@ -85,10 +86,11 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   // всегда видны — не только по явному поисковому запросу, как
   // /miranda/contacts). Доступно и сотруднику, и аккаунту точки (Этап B) —
   // поэтому resolveMirandaPrincipal, а не requireActive/requireAdmin.
+  // Видимость — весь дилер (dealerOrgIds), не только своя сеть.
   app.get('/miranda/contacts/all', async (request, reply) => {
     const principal = await resolveMirandaPrincipal(request, reply);
     if (!principal) return;
-    const items = await mirandaService.listAllCorporateAccounts(principal.orgId);
+    const items = await mirandaService.listAllCorporateAccounts(principal.dealerOrgIds);
     return reply.code(200).send({ items });
   });
 
@@ -97,9 +99,11 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   // только НЕодобренные устройства, а listAvailableAccountsForAdmin —
   // только то, что уже разрешено запрашивающему админу (замкнутый круг
   // без этого роута, см. обсуждение этапа 3 плана).
+  // Администрирование — строго по своей сети (не дилер): намеренно НЕ
+  // dealerOrgIds, см. §6 плана дилер-видимости Miranda.
   app.get('/miranda/accounts', async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
-    const items = await mirandaService.listAllCorporateAccounts(request.user!.org_id);
+    const items = await mirandaService.listAllCorporateAccounts([request.user!.org_id]);
     return reply.code(200).send({ items });
   });
 
