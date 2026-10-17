@@ -59,8 +59,39 @@ data class MirandaCorporateAccountListItem(
     val store_id: String? = null,
     val store_name: String? = null, // человекочитаемая группа для дерева контактов (store_id - технический код)
     val display_label: String? = null,
-    val device_exclusive: Boolean = false
+    val device_exclusive: Boolean = false,
+    val presence_override: String? = null, // "online" | "offline" | null (авто)
+    val online: Boolean = false
 )
+
+// ---------- Группы контактов (личный контакт-лист, не общесетевой) ----------
+
+@Serializable
+data class MirandaContactGroup(
+    val id: Int,
+    val org_id: String = "",
+    val owner_corporate_account_id: Int = 0,
+    val name: String,
+    val sort_order: Int = 0,
+    val member_corporate_account_ids: List<Int> = emptyList()
+)
+
+@Serializable
+data class MirandaContactGroupsListResponse(val items: List<MirandaContactGroup>)
+
+@Serializable
+data class MirandaCreateContactGroupRequest(val name: String)
+
+@Serializable
+data class MirandaCreateContactGroupResponse(val item: MirandaContactGroup)
+
+@Serializable
+data class MirandaAddGroupMemberRequest(val corporateAccountId: Int)
+
+// ---------- Presence ----------
+
+@Serializable
+data class MirandaSetPresenceRequest(val status: String) // "online" | "offline" | "auto"
 
 @Serializable
 data class MirandaCorporateAccountsListResponse(val items: List<MirandaCorporateAccountListItem>)

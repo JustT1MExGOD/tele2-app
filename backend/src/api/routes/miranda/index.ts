@@ -5,6 +5,7 @@ import { registerMirandaAccountLoginRoutes } from './accounts-login.js';
 import { registerMirandaMessengerRoutes } from './messenger.js';
 import { registerMirandaAttachmentRoutes } from './attachments.js';
 import { registerMirandaWsRoutes } from './ws.js';
+import { registerMirandaContactGroupRoutes } from './contact-groups.js';
 
 export async function registerMirandaRoutes(app: FastifyInstance) {
   await registerMirandaDeviceRoutes(app);
@@ -13,4 +14,5 @@ export async function registerMirandaRoutes(app: FastifyInstance) {
   await registerMirandaMessengerRoutes(app);
   await registerMirandaAttachmentRoutes(app);
   await registerMirandaWsRoutes(app);
+  await registerMirandaContactGroupRoutes(app);
 }

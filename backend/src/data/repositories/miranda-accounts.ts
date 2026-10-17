@@ -30,9 +30,11 @@ export interface CorporateAccountRow {
   /** Этап B (вариант B) — только для точечных аккаунтов (employee_id NULL). */
   phone: string | null;
   account_name: string | null;
+  /** NULL = авто (онлайн, если есть живой WS-сокет — см. core/miranda-accounts/service.ts). */
+  presence_override: 'online' | 'offline' | null;
 }
 
-const CORPORATE_ACCOUNT_COLUMNS = 'id, org_id, employee_id, store_id, display_label, is_active, device_exclusive, phone, account_name';
+const CORPORATE_ACCOUNT_COLUMNS = 'id, org_id, employee_id, store_id, display_label, is_active, device_exclusive, phone, account_name, presence_override';
 
 /** employee_id + store_id — UNIQUE, поэтому "найти или создать" безопасно
  * делать как findOrInsert, не придумывая отдельный upsert-конфликт-хендлер
@@ -360,6 +362,7 @@ export interface CorporateAccountListItem {
   store_name: string | null;
   display_label: string | null;
   device_exclusive: boolean;
+  presence_override: 'online' | 'offline' | null;
 }
 
 /** GET /miranda/accounts и GET /miranda/contacts/all — весь список активных
@@ -375,7 +378,8 @@ export async function listAllCorporateAccounts(orgId: string): Promise<Corporate
   const res = await query(
     `SELECT ca.id AS corporate_account_id, ca.employee_id,
             COALESCE(e.full_name, ca.account_name) AS employee_full_name,
-            ca.store_id, s.name AS store_name, ca.display_label, ca.device_exclusive
+            ca.store_id, s.name AS store_name, ca.display_label, ca.device_exclusive,
+            ca.presence_override
      FROM corporate_accounts ca
      LEFT JOIN employees e ON e.id = ca.employee_id
      LEFT JOIN stores s ON s.id = ca.store_id
@@ -384,6 +388,18 @@ export async function listAllCorporateAccounts(orgId: string): Promise<Corporate
     [orgId]
   );
   return res.rows;
+}
+
+/** Ручное переключение своего статуса "в сети" (§6 плана) — `status: null`
+ * возвращает к авто-режиму (онлайн по живому WS-сокету, см.
+ * core/miranda-accounts/service.ts). Пишет только на corporateAccountId,
+ * который сервис берёт из принципала запроса, никогда из тела запроса. */
+export async function setPresenceOverride(
+  corporateAccountId: number,
+  status: 'online' | 'offline' | null,
+  q: typeof query = query
+): Promise<void> {
+  await q(`UPDATE corporate_accounts SET presence_override = $2 WHERE id = $1`, [corporateAccountId, status]);
 }
 
 /**

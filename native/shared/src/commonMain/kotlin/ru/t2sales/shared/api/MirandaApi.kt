@@ -5,6 +5,7 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.patch
@@ -125,6 +126,48 @@ class MirandaApi(private val client: HttpClient) {
     /** Полное дерево контактов сети (не поиск) - для главного экрана мессенджера. */
     suspend fun listAllContacts(): MirandaAllContactsResponse =
         client.get(apiUrl("/miranda/contacts/all")).body()
+
+    // --- presence (свой статус "в сети") ---
+
+    suspend fun setPresence(status: String) {
+        client.patch(apiUrl("/miranda/presence")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaSetPresenceRequest(status))
+        }
+    }
+
+    // --- личные группы контактов (не групповые чаты — см. MirandaCreateGroupRequest ниже) ---
+
+    suspend fun listContactGroups(): MirandaContactGroupsListResponse =
+        client.get(apiUrl("/miranda/groups")).body()
+
+    suspend fun createContactGroup(name: String): MirandaCreateContactGroupResponse =
+        client.post(apiUrl("/miranda/groups")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaCreateContactGroupRequest(name))
+        }.body()
+
+    suspend fun renameContactGroup(groupId: Int, name: String) {
+        client.patch(apiUrl("/miranda/groups/$groupId")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaCreateContactGroupRequest(name))
+        }
+    }
+
+    suspend fun deleteContactGroup(groupId: Int) {
+        client.delete(apiUrl("/miranda/groups/$groupId"))
+    }
+
+    suspend fun addContactToGroup(groupId: Int, corporateAccountId: Int) {
+        client.post(apiUrl("/miranda/groups/$groupId/members")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaAddGroupMemberRequest(corporateAccountId))
+        }
+    }
+
+    suspend fun removeContactFromGroup(groupId: Int, corporateAccountId: Int) {
+        client.delete(apiUrl("/miranda/groups/$groupId/members/$corporateAccountId"))
+    }
 
     // --- conversations / messages ---
 

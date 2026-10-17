@@ -57,6 +57,13 @@ type DeviceExclusiveParams = Static<typeof DeviceExclusiveParams>;
 const DeviceExclusiveBody = Type.Object({ deviceExclusive: Type.Boolean() });
 type DeviceExclusiveBody = Static<typeof DeviceExclusiveBody>;
 
+// §1 плана — ручное переключение своего статуса "в сети"; 'auto' возвращает
+// к автоопределению по живому WS-сокету мессенджера.
+const SetPresenceBody = Type.Object({
+  status: Type.Union([Type.Literal('online'), Type.Literal('offline'), Type.Literal('auto')])
+});
+type SetPresenceBody = Static<typeof SetPresenceBody>;
+
 export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   // Поиск контакта для обычного (не-admin) пользователя мессенджера,
   // чтобы начать диалог (§4 плана) — все остальные роуты этого файла
@@ -188,6 +195,22 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   // аккаунтов для грантования строится на UI поверх уже существующих
   // Admin Control Center справочников (сотрудники/точки) — здесь только
   // запись самого гранта и аудит.
+  // §1 плана — ручное переключение своего статуса "в сети"/"не в сети".
+  // Доступно и сотруднику, и аккаунту точки (resolveMirandaPrincipal) —
+  // всегда пишет на свой же corporateAccountId из принципала, никогда из
+  // тела запроса.
+  app.patch(
+    '/miranda/presence',
+    { schema: { body: SetPresenceBody } },
+    async (request, reply) => {
+      const principal = await resolveMirandaPrincipal(request, reply);
+      if (!principal) return;
+      const { status } = request.body as SetPresenceBody;
+      await mirandaService.setPresence(principal.corporateAccountId, status === 'auto' ? null : status, principal.orgId);
+      return reply.code(200).send({ ok: true });
+    }
+  );
+
   app.post(
     '/miranda/admin-grants',
     { schema: { body: GrantBody } },

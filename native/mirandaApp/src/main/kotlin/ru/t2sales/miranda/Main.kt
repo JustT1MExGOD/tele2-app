@@ -25,6 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.res.loadImageBitmap
+import androidx.compose.ui.res.useResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -35,6 +38,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import ru.t2sales.miranda.di.MirandaContainer
+import ru.t2sales.miranda.settings.MirandaSettingsStore
 import ru.t2sales.miranda.ui.admin.MirandaAdminScreen
 import ru.t2sales.miranda.ui.chat.MirandaChatScreen
 import ru.t2sales.miranda.ui.components.ToastHost
@@ -43,10 +47,13 @@ import ru.t2sales.miranda.ui.device.DeviceActivationScreen
 import ru.t2sales.miranda.ui.device.DeviceActivationViewModel
 import ru.t2sales.miranda.ui.device.DeviceState
 import ru.t2sales.miranda.ui.login.LoginScreen
+import ru.t2sales.miranda.ui.settings.MirandaSettingsScreen
 import ru.t2sales.miranda.session.PointSessionInfo
 import ru.t2sales.shared.api.MeResponse
 import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Theme
+
+private fun loadImageBitmapFrom(stream: java.io.InputStream) = loadImageBitmap(stream)
 
 /** Сессия сотрудника (MeResponse) или аккаунта точки (Этап B) - разные принципалы, без общего "me". */
 private sealed class MirandaSession {
@@ -66,7 +73,8 @@ fun main() {
             size = DpSize(1000.dp, 700.dp),
             position = WindowPosition.Aligned(Alignment.Center)
         )
-        Window(onCloseRequest = ::exitApplication, title = "T2 Miranda", state = windowState) {
+        val icon = remember { BitmapPainter(useResource("icon.png", ::loadImageBitmapFrom)) }
+        Window(onCloseRequest = ::exitApplication, title = "T2 Miranda", state = windowState, icon = icon) {
             T2Theme {
                 Box(Modifier.fillMaxSize()) {
                     MirandaRoot(container, windowState)
@@ -168,7 +176,7 @@ private fun MirandaShell(container: MirandaContainer, me: MeResponse, windowStat
     }
 }
 
-private enum class MirandaTab { Conversations, Admin }
+private enum class MirandaTab { Conversations, Settings, Admin }
 
 // Насколько шире становится окно, когда рядом с деревом контактов
 // открывается панель чата - раскрытие "на месте", без отдельного окна
@@ -205,6 +213,8 @@ private fun MirandaMessengerShell(
             Text("T2 Miranda", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = T2Colors.text)
             Spacer(Modifier.height(20.dp))
             NavItem("Диалоги", tab == MirandaTab.Conversations) { tab = MirandaTab.Conversations }
+            Spacer(Modifier.height(4.dp))
+            NavItem("Настройки", tab == MirandaTab.Settings) { tab = MirandaTab.Settings }
             if (isAdmin) {
                 Spacer(Modifier.height(4.dp))
                 NavItem("Админ", tab == MirandaTab.Admin) { tab = MirandaTab.Admin }
@@ -216,6 +226,9 @@ private fun MirandaMessengerShell(
         when (tab) {
             MirandaTab.Admin -> Box(Modifier.fillMaxSize()) {
                 MirandaAdminScreen(mirandaApi = container.mirandaApi, adminCenterApi = container.adminCenterApi)
+            }
+            MirandaTab.Settings -> Box(Modifier.fillMaxSize()) {
+                MirandaSettingsScreen(api = container.mirandaApi)
             }
             MirandaTab.Conversations -> {
                 Box(Modifier.width(320.dp).fillMaxHeight()) {

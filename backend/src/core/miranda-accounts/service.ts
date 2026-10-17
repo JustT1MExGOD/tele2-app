@@ -17,11 +17,13 @@
  */
 import { withTransaction } from '../../data/db/index.js';
 import * as mirandaRepo from '../../data/repositories/miranda-accounts.js';
+import * as contactGroupsRepo from '../../data/repositories/miranda-contact-groups.js';
 import { hashToken } from '../../data/repositories/sessions.js';
 import * as auditRepo from '../../data/repositories/audit.js';
 import { hashPassword } from '../../auth/password.js';
 import { requireActive } from '../../auth/guards.js';
 import * as pointSessionsRepo from '../../data/repositories/corporate-account-sessions.js';
+import { connectionCountForAccount } from '../messenger/realtime-registry.js';
 
 export interface MirandaPrincipal {
   orgId: string;
@@ -352,8 +354,123 @@ export async function listAvailableAccountsForAdmin(adminEmployeeId: number, dev
   return mirandaRepo.listAvailableAccountsForAdmin(adminEmployeeId, deviceId);
 }
 
+/** online вычисляется здесь (не в репозитории — тот не должен импортировать
+ * realtime-registry): presence_override выигрывает, если задан явно;
+ * иначе — авто по живому WS-сокету мессенджера (§1 плана). */
 export async function listAllCorporateAccounts(orgId: string) {
-  return mirandaRepo.listAllCorporateAccounts(orgId);
+  const rows = await mirandaRepo.listAllCorporateAccounts(orgId);
+  return rows.map((row) => ({
+    ...row,
+    online:
+      row.presence_override === 'online'
+        ? true
+        : row.presence_override === 'offline'
+          ? false
+          : connectionCountForAccount(row.corporate_account_id) > 0
+  }));
+}
+
+/** §1 плана — ручное переключение своего статуса "в сети"/"не в сети",
+ * или возврат к авто-режиму (status = null). Пишет только на свой же
+ * corporateAccountId (из принципала, не из тела запроса, см. роут). */
+export async function setPresence(
+  corporateAccountId: number,
+  status: 'online' | 'offline' | null,
+  orgId: string
+): Promise<void> {
+  await mirandaRepo.setPresenceOverride(corporateAccountId, status);
+  await auditRepo.record({
+    orgId,
+    actorEmployeeId: null,
+    actorTelegramId: null,
+    action: 'MIRANDA_PRESENCE_SET',
+    targetType: 'corporate_account',
+    targetId: String(corporateAccountId),
+    after: { status }
+  });
+}
+
+/** §2 плана — личные группы контактов (как папки в легаси Miranda NG).
+ * Всегда скоупится на ownerId из принципала запроса, никогда из тела. */
+export async function listContactGroups(ownerId: number) {
+  return contactGroupsRepo.listGroupsWithMembers(ownerId);
+}
+
+export type CreateContactGroupResult = { ok: true; group: contactGroupsRepo.ContactGroupRow } | { ok: false; error: 'conflict' };
+
+export async function createContactGroup(orgId: string, ownerId: number, name: string): Promise<CreateContactGroupResult> {
+  return withTransaction(async (q) => {
+    const group = await contactGroupsRepo.createGroup(orgId, ownerId, name, q);
+    if (!group) return { ok: false, error: 'conflict' };
+    await auditRepo.record(
+      { orgId, actorEmployeeId: null, actorTelegramId: null, action: 'MIRANDA_CONTACT_GROUP_CREATED', targetType: 'miranda_contact_group', targetId: String(group.id), after: { name } },
+      q
+    );
+    return { ok: true, group };
+  });
+}
+
+export type ContactGroupMutationResult = { ok: true } | { ok: false; error: 'not_found' | 'conflict' };
+
+/** ownerId — владелец из принципала запроса; группа другого владельца
+ * отвечает not_found (не 403 — не подтверждаем существование чужой группы). */
+export async function renameContactGroup(groupId: number, ownerId: number, name: string, orgId: string): Promise<ContactGroupMutationResult> {
+  return withTransaction(async (q) => {
+    const existing = await contactGroupsRepo.getGroup(groupId, q);
+    if (!existing || Number(existing.owner_corporate_account_id) !== ownerId) return { ok: false, error: 'not_found' };
+    const updated = await contactGroupsRepo.renameGroup(groupId, name, q);
+    if (!updated) return { ok: false, error: 'conflict' };
+    await auditRepo.record(
+      { orgId, actorEmployeeId: null, actorTelegramId: null, action: 'MIRANDA_CONTACT_GROUP_RENAMED', targetType: 'miranda_contact_group', targetId: String(groupId), before: { name: existing.name }, after: { name } },
+      q
+    );
+    return { ok: true };
+  });
+}
+
+export async function deleteContactGroup(groupId: number, ownerId: number, orgId: string): Promise<ContactGroupMutationResult> {
+  return withTransaction(async (q) => {
+    const existing = await contactGroupsRepo.getGroup(groupId, q);
+    if (!existing || Number(existing.owner_corporate_account_id) !== ownerId) return { ok: false, error: 'not_found' };
+    await contactGroupsRepo.deleteGroup(groupId, q);
+    await auditRepo.record(
+      { orgId, actorEmployeeId: null, actorTelegramId: null, action: 'MIRANDA_CONTACT_GROUP_DELETED', targetType: 'miranda_contact_group', targetId: String(groupId), before: { name: existing.name } },
+      q
+    );
+    return { ok: true };
+  });
+}
+
+/** Добавление контакта в группу — targetCorporateAccountId должен быть в
+ * той же org_id, что владелец группы (та же org-изоляция, что everywhere
+ * в Miranda), проверяется здесь через listAllCorporateAccounts-источник
+ * (mirandaRepo.getCorporateAccount), не доверяем клиенту. */
+export async function addContactToGroup(groupId: number, ownerId: number, targetCorporateAccountId: number, orgId: string): Promise<ContactGroupMutationResult> {
+  return withTransaction(async (q) => {
+    const existing = await contactGroupsRepo.getGroup(groupId, q);
+    if (!existing || Number(existing.owner_corporate_account_id) !== ownerId) return { ok: false, error: 'not_found' };
+    const target = await mirandaRepo.getCorporateAccount(targetCorporateAccountId);
+    if (!target || target.org_id !== orgId) return { ok: false, error: 'not_found' };
+    await contactGroupsRepo.addMember(groupId, targetCorporateAccountId, q);
+    await auditRepo.record(
+      { orgId, actorEmployeeId: null, actorTelegramId: null, action: 'MIRANDA_CONTACT_GROUP_MEMBER_ADDED', targetType: 'miranda_contact_group', targetId: String(groupId), after: { targetCorporateAccountId } },
+      q
+    );
+    return { ok: true };
+  });
+}
+
+export async function removeContactFromGroup(groupId: number, ownerId: number, targetCorporateAccountId: number, orgId: string): Promise<ContactGroupMutationResult> {
+  return withTransaction(async (q) => {
+    const existing = await contactGroupsRepo.getGroup(groupId, q);
+    if (!existing || Number(existing.owner_corporate_account_id) !== ownerId) return { ok: false, error: 'not_found' };
+    await contactGroupsRepo.removeMember(groupId, targetCorporateAccountId, q);
+    await auditRepo.record(
+      { orgId, actorEmployeeId: null, actorTelegramId: null, action: 'MIRANDA_CONTACT_GROUP_MEMBER_REMOVED', targetType: 'miranda_contact_group', targetId: String(groupId), after: { targetCorporateAccountId } },
+      q
+    );
+    return { ok: true };
+  });
 }
 
 /** Поиск контактов для обычного пользователя мессенджера (не admin) — см.

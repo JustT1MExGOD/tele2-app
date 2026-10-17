@@ -1788,12 +1788,28 @@ export interface MirandaCorporateAccountListItem {
   store_name: string | null;
   display_label: string | null;
   device_exclusive: boolean;
+  presence_override: 'online' | 'offline' | null;
+  online: boolean;
   [key: string]: unknown;
 }
 export interface MirandaCorporateAccountsListResponse { items: MirandaCorporateAccountListItem[]; }
 export interface MirandaContactsResponse { items: MirandaCorporateAccountListItem[]; }
 export interface MirandaAllContactsResponse { items: MirandaCorporateAccountListItem[]; }
 export interface MirandaSetDeviceExclusiveResponse { ok: true; }
+export interface MirandaSetPresenceResponse { ok: true; }
+
+// §2 плана — личные группы контактов.
+export interface MirandaContactGroup {
+  id: number;
+  org_id: string;
+  owner_corporate_account_id: number;
+  name: string;
+  sort_order: number;
+  member_corporate_account_ids: number[];
+}
+export interface MirandaContactGroupsListResponse { items: MirandaContactGroup[]; }
+export interface MirandaCreateContactGroupResponse { item: MirandaContactGroup; }
+export interface MirandaContactGroupMutationResponse { ok: true; }
 
 export interface MirandaCorporateAccountRow {
   id: number;
