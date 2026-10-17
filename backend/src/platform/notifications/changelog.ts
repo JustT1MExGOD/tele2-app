@@ -1611,5 +1611,14 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Администрирование корпоративных аккаунтов (Admin Control Center) осознанно осталось строго по своей сети',
       'tsc --noEmit (backend), vitest 929/929 (backend, одноразовый Postgres, новый isolation-тест miranda-dealer-scope.test.ts), check:route-auth, check:architecture — без регрессий'
     ]
+  },
+  {
+    version: '20.71.0',
+    title: 'T2 Miranda: администрирование аккаунтов — тоже в рамках дилера',
+    bullets: [
+      'GET/POST /miranda/accounts — единственный админ дилера видит и может создавать аккаунты в любой сети своего дилера (явный orgId, провалидированный по resolveDealerOrgIds), без orgId — прежнее поведение (своя сеть)',
+      'Попытка указать orgId вне своего дилера — явный 403 forbidden',
+      'tsc --noEmit (backend), vitest 930/930 (backend, одноразовый Postgres), check:route-auth, check:architecture — без регрессий'
+    ]
   }
 ];

@@ -33,10 +33,14 @@ const GrantBody = Type.Object({
 });
 type GrantBody = Static<typeof GrantBody>;
 
+// orgId — опционально, какую сеть ДИЛЕРА заводить аккаунт (валидируется
+// на dealerOrgIds ниже, не доверяем клиенту слепо); отсутствует — своя
+// сеть (обратная совместимость, прежнее поведение).
 const CreatePersonalAccountBody = Type.Object({
   employeeId: Type.Integer(),
   storeId: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
-  displayLabel: Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()]))
+  displayLabel: Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()])),
+  orgId: Type.Optional(Type.String({ maxLength: 64 }))
 });
 
 // Этап B (вариант B) — аккаунт точки/кассы: собственный вход по телефону+
@@ -45,7 +49,8 @@ const CreatePointAccountBody = Type.Object({
   phone: Type.String({ minLength: 5, maxLength: 32 }),
   password: Type.String({ minLength: 8, maxLength: 200 }),
   accountName: Type.String({ minLength: 1, maxLength: 200 }),
-  storeId: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()]))
+  storeId: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
+  orgId: Type.Optional(Type.String({ maxLength: 64 }))
 });
 
 const CreateAccountBody = Type.Union([CreatePersonalAccountBody, CreatePointAccountBody]);
@@ -99,11 +104,14 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   // только НЕодобренные устройства, а listAvailableAccountsForAdmin —
   // только то, что уже разрешено запрашивающему админу (замкнутый круг
   // без этого роута, см. обсуждение этапа 3 плана).
-  // Администрирование — строго по своей сети (не дилер): намеренно НЕ
-  // dealerOrgIds, см. §6 плана дилер-видимости Miranda.
+  // Администрирование — весь дилер (dealerOrgIds), не только своя сеть:
+  // пересмотр §6 плана дилер-видимости Miranda — единственный админ
+  // дилера должен видеть/заводить аккаунты в любой сети своего дилера,
+  // не только в своей собственной.
   app.get('/miranda/accounts', async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
-    const items = await mirandaService.listAllCorporateAccounts([request.user!.org_id]);
+    const dealerOrgIds = await mirandaService.resolveDealerOrgIds(request.user!.org_id);
+    const items = await mirandaService.listAllCorporateAccounts(dealerOrgIds);
     return reply.code(200).send({ items });
   });
 
@@ -118,7 +126,11 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!requireAdmin(request, reply)) return;
       const body = request.body as CreateAccountBody;
-      const orgId = request.user!.org_id;
+      const dealerOrgIds = await mirandaService.resolveDealerOrgIds(request.user!.org_id);
+      if (body.orgId && !dealerOrgIds.includes(body.orgId)) {
+        return reply.code(403).send({ error: 'forbidden', message: 'Сеть не принадлежит вашему дилеру' });
+      }
+      const orgId = body.orgId || request.user!.org_id;
 
       if ('phone' in body) {
         const { phone, password, accountName, storeId } = body;

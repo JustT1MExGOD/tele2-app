@@ -196,4 +196,39 @@ describe('T2 Miranda — видимость в рамках дилера', () =>
     expect(direct.statusCode).toBe(400);
     expect(direct.json().error).toBe('not_active');
   });
+
+  it('администрирование аккаунтов — дилер-скоуп: админ создаёт точечный аккаунт в ЧУЖОЙ сети своего дилера (явный orgId), видит его в общем списке; чужой дилер — 403', async () => {
+    const app = await getApp();
+    const dealer = await fx.createDealer();
+    const sector = await fx.createSector(undefined, dealer);
+    const orgA = await fx.createOrg('Dealer Admin Org A', sector);
+    const orgB = await fx.createOrg('Dealer Admin Org B', sector);
+    const foreignOrg = await fx.createOrg('Foreign Dealer Org');
+
+    const adminA = await makeAdmin(orgA, '+79992000007', 'Админ-создатель A');
+
+    const createInB = await app.inject({
+      method: 'POST',
+      url: '/miranda/accounts',
+      headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
+      payload: { phone: '+79993000001', password: 'pass1234', accountName: 'Точка в сети B', orgId: orgB }
+    });
+    expect(createInB.statusCode).toBe(201);
+    const pointAccountId = Number(createInB.json().item.id);
+    corporateAccountIds.push(pointAccountId);
+    expect(createInB.json().item.org_id).toBe(orgB);
+
+    const list = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAsSession(adminA.sessionToken) });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().items.some((i: any) => Number(i.corporate_account_id) === pointAccountId)).toBe(true);
+
+    const createInForeign = await app.inject({
+      method: 'POST',
+      url: '/miranda/accounts',
+      headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
+      payload: { phone: '+79993000002', password: 'pass1234', accountName: 'Точка в чужом дилере', orgId: foreignOrg }
+    });
+    expect(createInForeign.statusCode).toBe(403);
+    expect(createInForeign.json().error).toBe('forbidden');
+  });
 });
