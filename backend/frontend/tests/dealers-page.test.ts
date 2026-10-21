@@ -31,13 +31,15 @@ function setupGlobals() {
   const getDealersTree = vi.fn().mockResolvedValue({ dealers: [], unassigned_sectors: [], unassigned_supervisors: [] });
   const renameDealer = vi.fn().mockResolvedValue({ ok: true });
   const renameSector = vi.fn().mockResolvedValue({ ok: true });
+  const createDealer = vi.fn().mockResolvedValue({ item: { id: 99, name: 'Новый дилер' } });
+  const createSector = vi.fn().mockResolvedValue({ item: { id: 'new-sector', name: 'Новый сектор', dealer_id: null } });
   const assignSupervisorSector = vi.fn().mockResolvedValue({ ok: true, sector_id: 'sector-1' });
-  (window as any).apiClient = { getDealersTree, renameDealer, renameSector, assignSupervisorSector };
+  (window as any).apiClient = { getDealersTree, renameDealer, renameSector, createDealer, createSector, assignSupervisorSector };
 
   const openSectorPickerModal = vi.fn();
   (window as any).openSectorPickerModal = openSectorPickerModal;
 
-  return { getDealersTree, renameDealer, renameSector, assignSupervisorSector, openSectorPickerModal };
+  return { getDealersTree, renameDealer, renameSector, createDealer, createSector, assignSupervisorSector, openSectorPickerModal };
 }
 
 describe('Дилеры/Секторы (src/pages/dealers)', () => {
@@ -172,7 +174,7 @@ describe('Дилеры/Секторы (src/pages/dealers)', () => {
     expect(document.getElementById('dealersTree')!.textContent).toContain(payload);
   });
 
-  it('window.* мост — все 6 функций', async () => {
+  it('window.* мост — все 10 функций', async () => {
     setupGlobals();
     await import('../src/pages/dealers/index.js');
     for (const name of [
@@ -181,9 +183,53 @@ describe('Дилеры/Секторы (src/pages/dealers)', () => {
       'openRenameDealerModal',
       'submitRenameDealer',
       'openRenameSectorModal',
-      'submitRenameSector'
+      'submitRenameSector',
+      'openCreateDealerModal',
+      'submitCreateDealer',
+      'openCreateSectorModal',
+      'submitCreateSector'
     ]) {
       expect(typeof (window as any)[name]).toBe('function');
     }
+  });
+
+  it('submitCreateDealer: создаёт дилера и перезагружает дерево; пустое имя — toast err, API не вызывается', async () => {
+    const { createDealer, getDealersTree } = setupGlobals();
+    const { openCreateDealerModal, submitCreateDealer } = await import('../src/pages/dealers/index.js');
+
+    openCreateDealerModal();
+    (document.getElementById('dealerCreateInput') as HTMLInputElement).value = '';
+    await submitCreateDealer();
+    expect(createDealer).not.toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Укажите название', 'err');
+
+    (document.getElementById('dealerCreateInput') as HTMLInputElement).value = 'ООО Новый';
+    await submitCreateDealer();
+    expect(createDealer).toHaveBeenCalledWith(expect.anything(), 'ООО Новый');
+    expect(getDealersTree).toHaveBeenCalled();
+  });
+
+  it('submitCreateSector: создаёт сектор (с дилером и без), перезагружает дерево; без id/названия — toast err', async () => {
+    const { createSector, getDealersTree } = setupGlobals();
+    getDealersTree.mockResolvedValue({
+      dealers: [{ id: 42, name: 'ООО Ромашка', sectors: [] }],
+      unassigned_sectors: [],
+      unassigned_supervisors: []
+    });
+    const { loadDealersAdmin, openCreateSectorModal, submitCreateSector } = await import('../src/pages/dealers/index.js');
+    await loadDealersAdmin();
+
+    openCreateSectorModal();
+    (document.getElementById('sectorCreateId') as HTMLInputElement).value = '';
+    (document.getElementById('sectorCreateName') as HTMLInputElement).value = '';
+    await submitCreateSector();
+    expect(createSector).not.toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Укажите ID и название', 'err');
+
+    (document.getElementById('sectorCreateId') as HTMLInputElement).value = 'new_sector';
+    (document.getElementById('sectorCreateName') as HTMLInputElement).value = 'Новый сектор';
+    (document.getElementById('sectorCreateDealer') as HTMLSelectElement).value = 'ООО Ромашка';
+    await submitCreateSector();
+    expect(createSector).toHaveBeenCalledWith(expect.anything(), 'new_sector', 'Новый сектор', 42);
   });
 });

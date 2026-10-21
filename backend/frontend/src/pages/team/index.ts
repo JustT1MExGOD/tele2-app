@@ -204,7 +204,11 @@ export function switchAdminOrg(orgId: string): void {
   // после смены сети admin продолжил бы видеть точки прошлой сети.
   window.__stores = null;
   stores = [];
-  loadTeam();
+  // 21.x (глобальная админка) — переключатель теперь в персистентной
+  // шапке, виден на ЛЮБОМ экране, не только на «Команде»: перезагружаем
+  // ТЕКУЩУЮ открытую страницу (window.page), тот же приём, что
+  // nav.ts:329 уже использует для "обновить" — не хардкодим loadTeam().
+  window.loadPage(window.page);
 }
 
 export async function loadTeam(): Promise<void> {

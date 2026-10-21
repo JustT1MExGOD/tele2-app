@@ -32,6 +32,8 @@ import {
   getDealersTree,
   renameDealer,
   renameSector,
+  createDealer,
+  createSector,
   assignSupervisorSector
 } from '../features/admin/api.js';
 import {
@@ -392,6 +394,8 @@ declare global {
       getDealersTree: typeof getDealersTree;
       renameDealer: typeof renameDealer;
       renameSector: typeof renameSector;
+      createDealer: typeof createDealer;
+      createSector: typeof createSector;
       assignSupervisorSector: typeof assignSupervisorSector;
       getChatMessages: typeof getChatMessages;
       postChatMessage: typeof postChatMessage;
@@ -592,6 +596,8 @@ window.apiClient = {
   getDealersTree,
   renameDealer,
   renameSector,
+  createDealer,
+  createSector,
   assignSupervisorSector,
   getChatMessages,
   postChatMessage,

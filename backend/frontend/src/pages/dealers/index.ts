@@ -167,6 +167,97 @@ export async function submitRenameSector(id: string): Promise<void> {
   loadDealersAdmin();
 }
 
+// §D плана (глобальная админка) — явное создание дилера/сектора, раньше
+// можно было только переименовать существующего. Сектор создаётся с
+// явным id (как у organizations.id — не auto-increment), дилер —
+// опционален (список берётся из уже загруженного дерева, та же кэш-идея,
+// что switcherOrgsCache в team/index.ts, но здесь не нужен — дерево уже
+// в DOM на этом экране через loadDealersAdmin()).
+export function openCreateDealerModal(): void {
+  const modalTitle = document.getElementById('modalTitle');
+  if (modalTitle) modalTitle.textContent = 'Новый дилер';
+  const modalBody = document.getElementById('modalBody');
+  if (modalBody) {
+    modalBody.innerHTML = `
+      <div class="field"><label>Название</label><input id="dealerCreateInput" placeholder="ООО «Название»"></div>
+      <button class="btn-main" onclick="submitCreateDealer()">Создать</button>
+    `;
+  }
+  document.getElementById('overlay')?.classList.add('show');
+}
+
+export async function submitCreateDealer(): Promise<void> {
+  const name = (document.getElementById('dealerCreateInput') as HTMLInputElement | null)?.value.trim();
+  if (!name) {
+    toast('Укажите название', 'err');
+    return;
+  }
+  try {
+    await window.apiClient.createDealer(authHeaders(true), name);
+  } catch (e: any) {
+    toast(e?.message || 'Ошибка', 'err');
+    return;
+  }
+  toast('Дилер создан', 'ok');
+  closeModal();
+  loadDealersAdmin();
+}
+
+export function openCreateSectorModal(): void {
+  const modalTitle = document.getElementById('modalTitle');
+  if (modalTitle) modalTitle.textContent = 'Новый сектор';
+  const modalBody = document.getElementById('modalBody');
+  if (modalBody) {
+    const dealerOptions = Array.from(document.querySelectorAll('#dealersTree .section-title > span'))
+      .map((el) => (el.textContent || '').trim())
+      .filter(Boolean);
+    modalBody.innerHTML = `
+      <div class="field"><label>ID (латиница, как у сетей)</label><input id="sectorCreateId" placeholder="north_region"></div>
+      <div class="field"><label>Название</label><input id="sectorCreateName" placeholder="Северный регион"></div>
+      <div class="field"><label>Дилер (необязательно)</label>
+        <select id="sectorCreateDealer">
+          <option value="">— без дилера —</option>
+          ${dealerOptions.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn-main" onclick="submitCreateSector()">Создать</button>
+    `;
+  }
+  document.getElementById('overlay')?.classList.add('show');
+}
+
+export async function submitCreateSector(): Promise<void> {
+  const id = (document.getElementById('sectorCreateId') as HTMLInputElement | null)?.value.trim();
+  const name = (document.getElementById('sectorCreateName') as HTMLInputElement | null)?.value.trim();
+  const dealerName = (document.getElementById('sectorCreateDealer') as HTMLSelectElement | null)?.value || '';
+  if (!id || !name) {
+    toast('Укажите ID и название', 'err');
+    return;
+  }
+  // Экран оперирует именами дилеров (то же дерево, что и переименование) —
+  // id дилера для POST /admin/sectors ищем по уже загрученному дереву
+  // через GET /admin/dealers ещё раз (проще и надёжнее, чем тащить id
+  // через DOM-атрибуты модалки создания сектора).
+  let dealerId: number | null = null;
+  if (dealerName) {
+    try {
+      const tree = await window.apiClient.getDealersTree(authHeaders());
+      dealerId = tree.dealers.find((d) => d.name === dealerName)?.id ?? null;
+    } catch (_) {
+      // best-effort — если дерево не подтянулось, создаём сектор без дилера
+    }
+  }
+  try {
+    await window.apiClient.createSector(authHeaders(true), id, name, dealerId);
+  } catch (e: any) {
+    toast(e?.message || 'Ошибка', 'err');
+    return;
+  }
+  toast('Сектор создан', 'ok');
+  closeModal();
+  loadDealersAdmin();
+}
+
 declare global {
   interface Window {
     loadDealersAdmin: typeof loadDealersAdmin;
@@ -175,6 +266,10 @@ declare global {
     submitRenameDealer: typeof submitRenameDealer;
     openRenameSectorModal: typeof openRenameSectorModal;
     submitRenameSector: typeof submitRenameSector;
+    openCreateDealerModal: typeof openCreateDealerModal;
+    submitCreateDealer: typeof submitCreateDealer;
+    openCreateSectorModal: typeof openCreateSectorModal;
+    submitCreateSector: typeof submitCreateSector;
   }
 }
 window.loadDealersAdmin = loadDealersAdmin;
@@ -183,3 +278,7 @@ window.openRenameDealerModal = openRenameDealerModal;
 window.submitRenameDealer = submitRenameDealer;
 window.openRenameSectorModal = openRenameSectorModal;
 window.submitRenameSector = submitRenameSector;
+window.openCreateDealerModal = openCreateDealerModal;
+window.submitCreateDealer = submitCreateDealer;
+window.openCreateSectorModal = openCreateSectorModal;
+window.submitCreateSector = submitCreateSector;

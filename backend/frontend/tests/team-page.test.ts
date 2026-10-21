@@ -57,6 +57,10 @@ function setupGlobals(overrides: { role?: string } = {}) {
   vi.stubGlobal('employees', []);
   vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
   vi.stubGlobal('closeModal', vi.fn());
+  // 21.x — switchAdminOrg() reloads the current page via window.loadPage
+  // (persistent-header switcher, not just "Команда" anymore).
+  vi.stubGlobal('page', 'team');
+  vi.stubGlobal('loadPage', vi.fn());
   (window as any).__stores = null;
   const openEmployeeProfile = vi.fn();
   (window as any).openEmployeeProfile = openEmployeeProfile;

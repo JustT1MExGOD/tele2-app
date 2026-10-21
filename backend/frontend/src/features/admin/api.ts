@@ -73,6 +73,21 @@ export async function renameSector(headers: Record<string, string>, id: string, 
   return request(`/admin/sectors/${encodeURIComponent(id)}`, headers, { method: 'PATCH', body: { name } });
 }
 
+// 21.x (глобальная админка) — явное создание дилера/сектора, раньше
+// дилера/сектора можно было только переименовать.
+export async function createDealer(headers: Record<string, string>, name: string): Promise<{ item: { id: number; name: string } }> {
+  return request('/admin/dealers', headers, { method: 'POST', body: { name } });
+}
+
+export async function createSector(
+  headers: Record<string, string>,
+  id: string,
+  name: string,
+  dealerId: number | null
+): Promise<{ item: { id: string; name: string; dealer_id: number | null } }> {
+  return request('/admin/sectors', headers, { method: 'POST', body: { id, name, dealerId } });
+}
+
 export async function assignSupervisorSector(headers: Record<string, string>, supervisorId: number, sectorId: string): Promise<{ ok: true; sector_id: string }> {
   return request(`/supervisor/${supervisorId}/sector`, headers, { method: 'PUT', body: { sector_id: sectorId } });
 }

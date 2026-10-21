@@ -1633,5 +1633,14 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Перенос точки между сетями (в т.ч. разных дилеров) — POST /admin/stores/:id/move',
       'tsc --noEmit (backend), vitest 935/935 (backend, одноразовый Postgres), check:route-auth, check:architecture — без регрессий'
     ]
+  },
+  {
+    version: '20.73.0',
+    title: 'Переключатель сети в шапке везде + создание дилера/сектора в UI',
+    bullets: [
+      'Переключатель сети (Дилер → Сектор → Сеть) переехал из «Команды» в персистентную шапку — виден на любом admin-экране, переключение перезагружает текущий открытый экран',
+      'Экран «Дилеры/Секторы»: кнопки «+ Дилер»/«+ Сектор» — явное создание, не только переименование',
+      'tsc --noEmit (backend+frontend), vitest 935/935 (backend) + 675/675 (frontend), build:frontend, smoke:frontend — без регрессий'
+    ]
   }
 ];

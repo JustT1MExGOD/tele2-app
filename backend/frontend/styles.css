@@ -977,6 +977,23 @@
       color: var(--text);
     }
     .field { margin-bottom: 14px; }
+    /* 21.x (глобальная админка) — переключатель Дилер→Сектор→Сеть теперь
+       в персистентной шапке (раньше жил только на экране «Команда», где
+       .field занимал всю ширину вертикально — тут нужна компактная
+       строка из трёх select'ов). */
+    #orgSwitcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    #orgSwitcher .field {
+      margin-bottom: 0;
+      flex: 1 1 140px;
+      min-width: 120px;
+    }
+    #orgSwitcher .field label { margin-bottom: 3px; font-size: 10px; }
+    #orgSwitcher .field select { padding: 8px 10px; font-size: 13px; border-radius: 10px; }
     .field label {
       display: block;
       font-size: 12px;

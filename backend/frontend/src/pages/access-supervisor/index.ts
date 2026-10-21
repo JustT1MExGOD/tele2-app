@@ -64,6 +64,13 @@ function applyRoleGatedNav(): void {
   gateSidebarSection('sidebarSectionManage', canManage());
   gateSidebarSection('sidebarSectionSupervisor', isSupervisor() || canAdmin());
   gateSidebarSection('sidebarSectionAdmin', canAdmin());
+
+  // 21.x (глобальная админка) — переключатель сети теперь в
+  // персистентной шапке (index.html), не только на «Команде»; вызывается
+  // один раз здесь (единственная точка, через которую проходят все 5
+  // веток bootApp() после успешного входа) — сама функция кэширует
+  // загрузку (dataset.loaded) и прячет себя для не-admin.
+  void window.renderOrgSwitcher?.();
 }
 
 export function showAccessGate(st: { status?: string; user?: any }): void {

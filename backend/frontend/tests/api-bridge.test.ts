@@ -59,6 +59,7 @@ const EXPECTED_KEYS = [
   'getStatsDaily', 'getDashboard', 'getEmployeeProgress',
   'getMyInsight', 'getSelfStats', 'getBranding', 'getOrgsAdmin', 'saveOrg',
   'getAuditLog', 'getDealersTree', 'renameDealer', 'renameSector',
+  'createDealer', 'createSector',
   'assignSupervisorSector', 'getHeatmapPrecise', 'getForecast',
   'getStaffingHints', 'getAnnouncements', 'createAnnouncement',
   'markAnnouncementRead', 'getAnnouncementReads', 'getReportDay',
@@ -94,7 +95,7 @@ const EXPECTED_KEYS = [
 describe('api-bridge (window.apiClient contract)', () => {
   it('exposes exactly the expected 195-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 195
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 197
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 

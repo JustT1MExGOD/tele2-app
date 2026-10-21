@@ -324,6 +324,11 @@
             <div class="store-pill-addr" id="headerStoreAddr"></div>
           </div>
         </div>
+        <!-- 21.x (глобальная админка) — переключатель Дилер→Сектор→Сеть,
+             в персистентной шапке, видим на ЛЮБОМ экране для admin (раньше
+             был только внутри #page-team) — renderOrgSwitcher() сам
+             скрывает/показывает по роли, см. team/index.ts. -->
+        <div id="orgSwitcher" style="display:none;margin:8px 16px 0"></div>
       </div>
 
       <div class="sheet">
@@ -714,7 +719,6 @@
 
     <!-- ===== MORE / TEAM ===== -->
     <div id="page-team" class="page">
-      <div id="orgSwitcher" style="display:none;margin:0 16px 8px"></div>
       <div class="section">
         <div class="section-title">Сотрудники</div>
         <div id="teamList"><div class="skeleton"></div></div>
@@ -868,7 +872,13 @@
         <div id="dealersUnassignedList"></div>
       </div>
       <div class="section">
-        <div class="section-title">Дилеры/Секторы</div>
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Дилеры/Секторы</span>
+          <span style="display:flex;gap:8px">
+            <button class="mchip" onclick="openCreateDealerModal()">+ Дилер</button>
+            <button class="mchip" onclick="openCreateSectorModal()">+ Сектор</button>
+          </span>
+        </div>
         <div id="dealersTree"><div class="skeleton"></div></div>
       </div>
     </div>

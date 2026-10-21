@@ -97,8 +97,15 @@ describe('Команда — каскадный переключатель Ди�
 
   it('смена дилера сужает список секторов до его секторов и сходится на первой сети (switchAdminDealer)', async () => {
     const { getEmployees } = setupGlobals('admin', 'orgA');
-    const { renderOrgSwitcher, switchAdminDealer } = await import('../src/pages/team/index.js');
+    const { renderOrgSwitcher, switchAdminDealer, loadTeam } = await import('../src/pages/team/index.js');
     await renderOrgSwitcher();
+    // 21.x — switchAdminOrg теперь перезагружает ТЕКУЩУЮ страницу через
+    // window.loadPage(window.page), не хардкодит loadTeam() (переключатель
+    // живёт в персистентной шапке, виден на любом экране).
+    vi.stubGlobal('page', 'team');
+    vi.stubGlobal('loadPage', (name: string) => {
+      if (name === 'team') loadTeam();
+    });
 
     switchAdminDealer('ИП Иванов');
 
