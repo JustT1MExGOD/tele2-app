@@ -148,6 +148,32 @@ export async function setCorporateAccountDeviceExclusive(
   return res.rows[0] || null;
 }
 
+/** Деактивация/реактивация (§C плана — "удаление" Miranda-аккаунта на
+ * самом деле обратимая деактивация, подтверждено пользователем): сама
+ * фильтрация по is_active везде уже есть (listAllCorporateAccounts,
+ * searchCorporateAccounts, /miranda/accounts/login, isMessengerConnectionStillValid
+ * в ws.ts) — эта функция только пишет флаг. */
+export async function setAccountActive(id: number, isActive: boolean, q: typeof query = query): Promise<CorporateAccountRow | null> {
+  const res = await q(
+    `UPDATE corporate_accounts SET is_active = $2 WHERE id = $1
+     RETURNING ${CORPORATE_ACCOUNT_COLUMNS}`,
+    [id, isActive]
+  );
+  return res.rows[0] || null;
+}
+
+/** Самостоятельное переименование (§G плана) — пишет на СВОЙ же id,
+ * вызывающая сторона (service.ts) берёт его из resolveMirandaPrincipal,
+ * никогда не доверяя клиенту чужой id. */
+export async function setDisplayLabel(id: number, displayLabel: string | null, q: typeof query = query): Promise<CorporateAccountRow | null> {
+  const res = await q(
+    `UPDATE corporate_accounts SET display_label = $2 WHERE id = $1
+     RETURNING ${CORPORATE_ACCOUNT_COLUMNS}`,
+    [id, displayLabel]
+  );
+  return res.rows[0] || null;
+}
+
 /** Есть ли у этого корпоративного аккаунта уже активная привязка к ДРУГОМУ
  * устройству — проверяется только для device_exclusive=true аккаунтов
  * перед approve (см. core/miranda-accounts/service.ts). */

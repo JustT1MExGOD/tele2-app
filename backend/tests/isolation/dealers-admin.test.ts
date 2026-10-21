@@ -40,11 +40,16 @@ describe('Дилеры/Секторы (GET /admin/dealers, PATCH /admin/dealers/
     // supervisorUnassigned намеренно без строки в supervisor_sectors.
   });
 
+  const createdSectorIds: string[] = [];
+  const createdDealerIds: number[] = [];
+
   afterAll(async () => {
     await query(`DELETE FROM supervisor_sectors WHERE sector_id = ANY($1)`, [[sectorAssignedId, sectorUnassignedId]]);
     await fx.cleanup(); // сначала сотрудники/сеть — освобождает FK на sectors
     await query(`DELETE FROM sectors WHERE id = ANY($1)`, [[sectorAssignedId, sectorUnassignedId]]);
     await query(`DELETE FROM dealers WHERE id = $1`, [dealerId]);
+    if (createdSectorIds.length) await query(`DELETE FROM sectors WHERE id = ANY($1)`, [createdSectorIds]);
+    if (createdDealerIds.length) await query(`DELETE FROM dealers WHERE id = ANY($1)`, [createdDealerIds]);
   });
 
   it('GET /admin/dealers — не admin получает 403', async () => {
@@ -108,5 +113,57 @@ describe('Дилеры/Секторы (GET /admin/dealers, PATCH /admin/dealers/
     const row = await query(`SELECT name FROM sectors WHERE id = $1`, [sectorAssignedId]);
     expect(row.rows[0].name).toBe('Северный сектор');
     expect(row.rows[0].name).not.toBe(sectorAssignedId);
+  });
+
+  it('POST /admin/dealers — не admin получает 403; admin создаёт нового дилера', async () => {
+    const app = await getApp();
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/admin/dealers',
+      headers: { ...authAs(manager.telegramId), 'content-type': 'application/json' },
+      payload: { name: 'Hacked Dealer' }
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/dealers',
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { name: `t21_new_dealer_${Date.now()}` }
+    });
+    expect(res.statusCode).toBe(201);
+    const newDealerId = Number(res.json().item.id);
+    createdDealerIds.push(newDealerId);
+    expect(res.json().item.name).toContain('t21_new_dealer_');
+  });
+
+  it('POST /admin/sectors — не admin получает 403; admin создаёт сектор с явным дилером', async () => {
+    const app = await getApp();
+    const dealerRes = await query(`INSERT INTO dealers (name) VALUES ($1) RETURNING id`, [`t21_sector_test_dealer_${Date.now()}`]);
+    const newDealerId = Number(dealerRes.rows[0].id);
+    createdDealerIds.push(newDealerId);
+    const newSectorId = `t21_new_sector_${Date.now()}`;
+
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/admin/sectors',
+      headers: { ...authAs(manager.telegramId), 'content-type': 'application/json' },
+      payload: { id: newSectorId, name: 'Hacked Sector', dealerId: newDealerId }
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/sectors',
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { id: newSectorId, name: 'Новый сектор', dealerId: newDealerId }
+    });
+    expect(res.statusCode).toBe(201);
+    createdSectorIds.push(newSectorId);
+    expect(res.json().item).toEqual({ id: newSectorId, name: 'Новый сектор', dealer_id: newDealerId });
+
+    const tree = await app.inject({ method: 'GET', url: '/admin/dealers', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
+    const dealer = tree.json().dealers.find((d: any) => d.id === newDealerId);
+    expect(dealer.sectors.some((s: any) => s.id === newSectorId)).toBe(true);
   });
 });

@@ -7,10 +7,12 @@
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireActive, requireAdmin, assertEmployeeInOrg, assertStoreInOrg } from '../../../auth/guards.js';
+import { requireActive, requireAdmin, resolveViewOrgId, assertEmployeeInOrg, assertStoreInOrg } from '../../../auth/guards.js';
 import * as mirandaService from '../../../core/miranda-accounts/service.js';
 import { resolveMirandaPrincipal } from '../../../core/miranda-accounts/service.js';
 import * as messengerService from '../../../core/messenger/service.js';
+import * as orgsRepo from '../../../data/repositories/organizations.js';
+import { normalizePhone } from '../../../utils/phone.js';
 
 const AvailableQuery = Type.Object({
   deviceSecret: Type.Optional(Type.String({ maxLength: 128 }))
@@ -33,9 +35,9 @@ const GrantBody = Type.Object({
 });
 type GrantBody = Static<typeof GrantBody>;
 
-// orgId — опционально, какую сеть ДИЛЕРА заводить аккаунт (валидируется
-// на dealerOrgIds ниже, не доверяем клиенту слепо); отсутствует — своя
-// сеть (обратная совместимость, прежнее поведение).
+// orgId — опционально, в какой сети заводить аккаунт (любая сеть любого
+// дилера — admin глобальный, см. resolveViewOrgId; проверяется, что сеть
+// вообще существует); отсутствует — своя сеть (обратная совместимость).
 const CreatePersonalAccountBody = Type.Object({
   employeeId: Type.Integer(),
   storeId: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
@@ -68,6 +70,13 @@ const SetPresenceBody = Type.Object({
   status: Type.Union([Type.Literal('online'), Type.Literal('offline'), Type.Literal('auto')])
 });
 type SetPresenceBody = Static<typeof SetPresenceBody>;
+
+// §G плана — самостоятельное переименование (любой принципал меняет свой
+// display_label); null сбрасывает на дефолт (имя сотрудника/account_name).
+const SetDisplayLabelBody = Type.Object({
+  displayLabel: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()])
+});
+type SetDisplayLabelBody = Static<typeof SetDisplayLabelBody>;
 
 export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   // Поиск контакта для обычного (не-admin) пользователя мессенджера,
@@ -104,14 +113,15 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   // только НЕодобренные устройства, а listAvailableAccountsForAdmin —
   // только то, что уже разрешено запрашивающему админу (замкнутый круг
   // без этого роута, см. обсуждение этапа 3 плана).
-  // Администрирование — весь дилер (dealerOrgIds), не только своя сеть:
-  // пересмотр §6 плана дилер-видимости Miranda — единственный админ
-  // дилера должен видеть/заводить аккаунты в любой сети своего дилера,
-  // не только в своей собственной.
+  // Администрирование — глобально, любая сеть любого дилера (как и
+  // остальной Admin Control Center — resolveViewOrgId, см.
+  // auth/guards.ts): единственный админ управляет всем приложением, не
+  // только своим дилером. ?org_id= выбирает, какую сеть смотреть —
+  // своя по умолчанию.
   app.get('/miranda/accounts', async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
-    const dealerOrgIds = await mirandaService.resolveDealerOrgIds(request.user!.org_id);
-    const items = await mirandaService.listAllCorporateAccounts(dealerOrgIds);
+    const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
+    const items = await mirandaService.listAllCorporateAccounts([orgId]);
     return reply.code(200).send({ items });
   });
 
@@ -126,18 +136,21 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!requireAdmin(request, reply)) return;
       const body = request.body as CreateAccountBody;
-      const dealerOrgIds = await mirandaService.resolveDealerOrgIds(request.user!.org_id);
-      if (body.orgId && !dealerOrgIds.includes(body.orgId)) {
-        return reply.code(403).send({ error: 'forbidden', message: 'Сеть не принадлежит вашему дилеру' });
+      const orgId = resolveViewOrgId(request.user!, body.orgId);
+      if (orgId !== request.user!.org_id && !(await orgsRepo.findActiveById(orgId))) {
+        return reply.code(404).send({ error: 'org_not_found', message: 'Сеть не найдена' });
       }
-      const orgId = body.orgId || request.user!.org_id;
 
       if ('phone' in body) {
         const { phone, password, accountName, storeId } = body;
+        const normalizedPhone = normalizePhone(phone);
+        if (!normalizedPhone) {
+          return reply.code(400).send({ error: 'invalid_phone', message: 'Некорректный формат телефона' });
+        }
         if (storeId && !(await assertStoreInOrg(storeId, orgId))) {
           return reply.code(403).send({ error: 'forbidden', message: 'Точка не принадлежит вашей сети' });
         }
-        const result = await mirandaService.createPointCorporateAccount(orgId, phone, password, accountName, storeId || null, request.user!.employee_id!);
+        const result = await mirandaService.createPointCorporateAccount(orgId, normalizedPhone, password, accountName, storeId || null, request.user!.employee_id!);
         if (result.ok === false) {
           return reply.code(409).send({ error: 'phone_conflict', message: 'Аккаунт с таким телефоном уже существует в вашей сети' });
         }
@@ -234,6 +247,52 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
       if (!requireAdmin(request, reply)) return;
       const { adminEmployeeId, corporateAccountId } = request.body as GrantBody;
       await mirandaService.grantAdminAccount(adminEmployeeId, corporateAccountId, request.user!.employee_id!, request.user!.org_id);
+      return reply.code(200).send({ ok: true });
+    }
+  );
+
+  // Деактивация ненужного аккаунта (не удаление — обратимо, история/
+  // данные не трогаются). Деактивированный аккаунт уже автоматически
+  // пропадает из contacts/search (listAllCorporateAccounts/
+  // searchCorporateAccounts фильтруют is_active), не может войти
+  // (/miranda/accounts/login проверяет is_active), и его живой WS рвётся
+  // на следующем heartbeat (isMessengerConnectionStillValid в ws.ts) —
+  // ничего дополнительно чистить не нужно. Глобально, любая сеть.
+  app.post('/miranda/accounts/:id/deactivate', async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const ok = await mirandaService.deactivateAccount(Number(id), request.user!.employee_id!);
+    if (!ok) return reply.code(404).send({ error: 'account_not_found' });
+    return reply.code(200).send({ ok: true });
+  });
+
+  app.post('/miranda/accounts/:id/reactivate', async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const ok = await mirandaService.reactivateAccount(Number(id), request.user!.employee_id!);
+    if (!ok) return reply.code(404).send({ error: 'account_not_found' });
+    return reply.code(200).send({ ok: true });
+  });
+
+  // Самостоятельное переименование — любой принципал Miranda (сотрудник
+  // или точка) меняет СВОЙ display_label, никогда чужой: corporateAccountId
+  // всегда берётся из resolveMirandaPrincipal, не из тела запроса.
+  app.get('/miranda/accounts/me', async (request, reply) => {
+    const principal = await resolveMirandaPrincipal(request, reply);
+    if (!principal) return;
+    const item = await mirandaService.getOwnAccount(principal.corporateAccountId);
+    if (!item) return reply.code(404).send({ error: 'account_not_found' });
+    return reply.code(200).send({ item });
+  });
+
+  app.patch(
+    '/miranda/accounts/me',
+    { schema: { body: SetDisplayLabelBody } },
+    async (request, reply) => {
+      const principal = await resolveMirandaPrincipal(request, reply);
+      if (!principal) return;
+      const { displayLabel } = request.body as SetDisplayLabelBody;
+      await mirandaService.setOwnDisplayLabel(principal.corporateAccountId, displayLabel);
       return reply.code(200).send({ ok: true });
     }
   );

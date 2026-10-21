@@ -81,3 +81,19 @@ export async function listOrgIdsForDealerOfOrg(orgId: string): Promise<string[]>
   );
   return res.rows.map((r) => r.id);
 }
+
+/** §D плана (глобальная админка) — явное создание сектора с заданным ID
+ * (та же дисциплина, что у organizations.id — не auto-increment) и,
+ * опционально, сразу привязанным дилером. `upsertSector` в
+ * organizations.ts остаётся для неявного автозаведения по id=name из
+ * формы редактирования сети — этот роут для настоящего экрана
+ * Дилеры/Секторы, где имя и дилер задаются явно. */
+export async function createSector(id: string, name: string, dealerId: number | null): Promise<{ id: string; name: string; dealer_id: number | null }> {
+  const res = await query(
+    `INSERT INTO sectors (id, name, dealer_id) VALUES ($1, $2, $3)
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, dealer_id = EXCLUDED.dealer_id
+     RETURNING id, name, dealer_id::int as dealer_id`,
+    [id, name, dealerId]
+  );
+  return res.rows[0];
+}

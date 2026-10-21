@@ -88,3 +88,13 @@ export async function renameDealer(id: number, name: string): Promise<void> {
 export async function renameSector(id: string, name: string): Promise<void> {
   await dealersRepo.renameSector(id, name);
 }
+
+/** §D плана — создание дилера/сектора явно, с экрана Дилеры/Секторы (до
+ * этого заводились только неявно по имени из формы сети). */
+export async function createDealer(name: string): Promise<{ id: number; name: string }> {
+  return dealersRepo.upsertDealerByName(name);
+}
+
+export async function createSector(id: string, name: string, dealerId: number | null): Promise<{ id: string; name: string; dealer_id: number | null }> {
+  return dealersRepo.createSector(id, name, dealerId);
+}

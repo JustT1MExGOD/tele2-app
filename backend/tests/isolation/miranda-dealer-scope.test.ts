@@ -156,7 +156,7 @@ describe('T2 Miranda — видимость в рамках дилера', () =>
     expect(second.json().conversationId).toBe(conversationId);
   });
 
-  it('два org без общего дилера — контакты/группы/диалог остаются изолированы', async () => {
+  it('два org без общего дилера — чтение контактов/диалог для СОТРУДНИКА остаётся изолированным (админ-мутации — глобальные, см. §A)', async () => {
     const app = await getApp();
     const orgA = await fx.createOrg('No Dealer Org A');
     const orgB = await fx.createOrg('No Dealer Org B');
@@ -179,13 +179,16 @@ describe('T2 Miranda — видимость в рамках дилера', () =>
     const groupId = Number(createGroup.json().item.id);
     groupIds.push(groupId);
 
+    // §A — админ глобальный, добавление участника из чужого (без общего
+    // дилера) org больше не блокируется на уровне группы: мутации
+    // контактных групп admin-only и работают с любой сетью.
     const addMember = await app.inject({
       method: 'POST',
       url: `/miranda/groups/${groupId}/members`,
       headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
       payload: { corporateAccountId: empB.accountId }
     });
-    expect(addMember.statusCode).toBe(404);
+    expect(addMember.statusCode).toBe(200);
 
     const direct = await app.inject({
       method: 'POST',
@@ -197,7 +200,7 @@ describe('T2 Miranda — видимость в рамках дилера', () =>
     expect(direct.json().error).toBe('not_active');
   });
 
-  it('администрирование аккаунтов — дилер-скоуп: админ создаёт точечный аккаунт в ЧУЖОЙ сети своего дилера (явный orgId), видит его в общем списке; чужой дилер — 403', async () => {
+  it('§A — глобальная админка: один админ создаёт/видит/деактивирует точечные аккаунты в ЛЮБОЙ сети, в т.ч. другого дилера; невалидный телефон — 400', async () => {
     const app = await getApp();
     const dealer = await fx.createDealer();
     const sector = await fx.createSector(undefined, dealer);
@@ -218,17 +221,44 @@ describe('T2 Miranda — видимость в рамках дилера', () =>
     corporateAccountIds.push(pointAccountId);
     expect(createInB.json().item.org_id).toBe(orgB);
 
-    const list = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAsSession(adminA.sessionToken) });
-    expect(list.statusCode).toBe(200);
-    expect(list.json().items.some((i: any) => Number(i.corporate_account_id) === pointAccountId)).toBe(true);
+    // GET без org_id — по умолчанию своя сеть (orgA), точка из orgB не видна.
+    const listOwn = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAsSession(adminA.sessionToken) });
+    expect(listOwn.statusCode).toBe(200);
+    expect(listOwn.json().items.some((i: any) => Number(i.corporate_account_id) === pointAccountId)).toBe(false);
 
+    // Явный ?org_id=orgB — та же глобальная админка, видно.
+    const listB = await app.inject({ method: 'GET', url: `/miranda/accounts?org_id=${encodeURIComponent(orgB)}`, headers: authAsSession(adminA.sessionToken) });
+    expect(listB.statusCode).toBe(200);
+    expect(listB.json().items.some((i: any) => Number(i.corporate_account_id) === pointAccountId)).toBe(true);
+
+    // Сеть другого дилера, вообще без общего дилера с admin'ом — всё равно создаётся (глобальная админка).
     const createInForeign = await app.inject({
       method: 'POST',
       url: '/miranda/accounts',
       headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
       payload: { phone: '+79993000002', password: 'pass1234', accountName: 'Точка в чужом дилере', orgId: foreignOrg }
     });
-    expect(createInForeign.statusCode).toBe(403);
-    expect(createInForeign.json().error).toBe('forbidden');
+    expect(createInForeign.statusCode).toBe(201);
+    const foreignAccountId = Number(createInForeign.json().item.id);
+    corporateAccountIds.push(foreignAccountId);
+
+    // §B — невалидный телефон отклоняется на создании, не сохраняется молча.
+    const createBadPhone = await app.inject({
+      method: 'POST',
+      url: '/miranda/accounts',
+      headers: { ...authAsSession(adminA.sessionToken), 'content-type': 'application/json' },
+      payload: { phone: '12345', password: 'pass1234', accountName: 'Плохой телефон', orgId: orgA }
+    });
+    expect(createBadPhone.statusCode).toBe(400);
+    expect(createBadPhone.json().error).toBe('invalid_phone');
+
+    // §C — деактивация, глобально; аккаунт пропадает из списка (listAllCorporateAccounts фильтрует is_active).
+    const deactivate = await app.inject({ method: 'POST', url: `/miranda/accounts/${foreignAccountId}/deactivate`, headers: authAsSession(adminA.sessionToken) });
+    expect(deactivate.statusCode).toBe(200);
+    const listForeignAfter = await app.inject({ method: 'GET', url: `/miranda/accounts?org_id=${encodeURIComponent(foreignOrg)}`, headers: authAsSession(adminA.sessionToken) });
+    expect(listForeignAfter.json().items.some((i: any) => Number(i.corporate_account_id) === foreignAccountId)).toBe(false);
+
+    const reactivate = await app.inject({ method: 'POST', url: `/miranda/accounts/${foreignAccountId}/reactivate`, headers: authAsSession(adminA.sessionToken) });
+    expect(reactivate.statusCode).toBe(200);
   });
 });

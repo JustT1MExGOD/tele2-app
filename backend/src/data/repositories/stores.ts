@@ -288,6 +288,21 @@ export async function update(orgId: string, storeId: string, patch: StorePatch):
   return res.rows[0] || null;
 }
 
+/** §D плана (глобальная админка) — перенос точки в другую сеть
+ * (org_id сознательно исключён из PATCHABLE_FIELDS/update() — перенос
+ * отдельная, более редкая и более опасная операция, со своим аудитом в
+ * роуте). WHERE на fromOrgId — защита от гонки (точку не перенесли в
+ * процессе из-под ног), не auth-граница (та уже проверена вызывающим
+ * роутом через resolveViewOrgId). null — точки нет или она уже не в
+ * fromOrgId. */
+export async function moveToOrg(storeId: string, fromOrgId: string, toOrgId: string): Promise<StoreRecord | null> {
+  const res = await query(
+    `UPDATE stores SET org_id = $1 WHERE id = $2 AND COALESCE(org_id, 'default') = $3 RETURNING *`,
+    [toOrgId, storeId, fromOrgId]
+  );
+  return res.rows[0] || null;
+}
+
 /** Admin Control Center (20.59.0) — global search fan-out, org-scoped. */
 export async function searchByNameOrCode(orgId: string, term: string, limit: number): Promise<{ id: string; name: string; code: string }[]> {
   const like = `%${term}%`;

@@ -160,7 +160,7 @@ describe('T2 Miranda — группы контактов и presence', () => {
     );
   });
 
-  it('чужая сеть — 404 на rename/delete/members и на parentGroupId из другой сети; не-админ той же сети — 403', async () => {
+  it('§A — глобальная админка: админ любой сети управляет группой другой сети (rename/delete/member/parentGroupId); не-админ своей сети — всё ещё 403', async () => {
     const app = await getApp();
     const orgA = await fx.createOrg('Miranda Groups Org A');
     const orgB = await fx.createOrg('Miranda Groups Org B');
@@ -195,16 +195,15 @@ describe('T2 Miranda — группы контактов и presence', () => {
     const groupId = Number(create.json().item.id);
     groupIds.push(groupId);
 
+    // Админ B (другая сеть, другой дилер по умолчанию в фикстурах без
+    // sector) переименовывает группу сети A — глобальная админка, 200.
     const crossOrgRename = await app.inject({
       method: 'PATCH',
       url: `/miranda/groups/${groupId}`,
       headers: { ...authAsSession(adminBToken), 'content-type': 'application/json' },
       payload: { name: 'Угон' }
     });
-    expect(crossOrgRename.statusCode).toBe(404);
-
-    const crossOrgDelete = await app.inject({ method: 'DELETE', url: `/miranda/groups/${groupId}`, headers: authAsSession(adminBToken) });
-    expect(crossOrgDelete.statusCode).toBe(404);
+    expect(crossOrgRename.statusCode).toBe(200);
 
     const sameOrgNonAdminRename = await app.inject({
       method: 'PATCH',
@@ -214,21 +213,30 @@ describe('T2 Miranda — группы контактов и presence', () => {
     });
     expect(sameOrgNonAdminRename.statusCode).toBe(403);
 
+    // Админ A добавляет в группу контакт сети B — глобальная админка, 200.
     const crossOrgMember = await app.inject({
       method: 'POST',
       url: `/miranda/groups/${groupId}/members`,
       headers: { ...authAsSession(adminAToken), 'content-type': 'application/json' },
       payload: { corporateAccountId: otherOrgAccountId }
     });
-    expect(crossOrgMember.statusCode).toBe(404);
+    expect(crossOrgMember.statusCode).toBe(200);
 
+    // Админ B (своя сеть — orgB) явно создаёт подгруппу В СЕТИ A
+    // (orgId: orgA) с parentGroupId = группа сети A — глобальная
+    // админка позволяет управлять чужой сетью напрямую, 201. Родитель
+    // и потомок в одной сети (orgA) — дилер-containment не нарушается.
     const crossOrgParent = await app.inject({
       method: 'POST',
       url: '/miranda/groups',
       headers: { ...authAsSession(adminBToken), 'content-type': 'application/json' },
-      payload: { name: 'Подгруппа из чужой сети', parentGroupId: groupId }
+      payload: { name: 'Подгруппа из чужой сети', parentGroupId: groupId, orgId: orgA }
     });
-    expect(crossOrgParent.statusCode).toBe(404);
+    expect(crossOrgParent.statusCode).toBe(201);
+    groupIds.push(Number(crossOrgParent.json().item.id));
+
+    const crossOrgDelete = await app.inject({ method: 'DELETE', url: `/miranda/groups/${groupId}`, headers: authAsSession(adminBToken) });
+    expect(crossOrgDelete.statusCode).toBe(200);
   });
 
   it('PATCH /miranda/presence — меняет только свой же статус, виден в /miranda/contacts/all как online', async () => {

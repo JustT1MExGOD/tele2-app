@@ -236,6 +236,49 @@ export async function setAccountDeviceExclusive(
   });
 }
 
+/** §C плана — деактивация/реактивация, глобально (любая сеть, admin
+ * единый на всё приложение — см. §A). orgId для аудита берётся из самой
+ * записи аккаунта (та сеть, которой он реально принадлежит), не из
+ * actор'а — иначе аудит чужой сети писался бы под org_id админа. */
+export async function deactivateAccount(corporateAccountId: number, actorEmployeeId: number): Promise<boolean> {
+  return withTransaction(async (q) => {
+    const before = await mirandaRepo.getCorporateAccount(corporateAccountId);
+    if (!before) return false;
+    const updated = await mirandaRepo.setAccountActive(corporateAccountId, false, q);
+    if (!updated) return false;
+    await auditRepo.record(
+      { orgId: before.org_id, actorEmployeeId, actorTelegramId: null, action: 'MIRANDA_ACCOUNT_DEACTIVATED', targetType: 'corporate_account', targetId: String(corporateAccountId), before: { is_active: true }, after: { is_active: false } },
+      q
+    );
+    return true;
+  });
+}
+
+export async function reactivateAccount(corporateAccountId: number, actorEmployeeId: number): Promise<boolean> {
+  return withTransaction(async (q) => {
+    const before = await mirandaRepo.getCorporateAccount(corporateAccountId);
+    if (!before) return false;
+    const updated = await mirandaRepo.setAccountActive(corporateAccountId, true, q);
+    if (!updated) return false;
+    await auditRepo.record(
+      { orgId: before.org_id, actorEmployeeId, actorTelegramId: null, action: 'MIRANDA_ACCOUNT_REACTIVATED', targetType: 'corporate_account', targetId: String(corporateAccountId), before: { is_active: false }, after: { is_active: true } },
+      q
+    );
+    return true;
+  });
+}
+
+/** §G плана — самостоятельное переименование: GET для предзаполнения
+ * поля в Settings, PATCH пишет только на свой же corporateAccountId
+ * (вызывающий роут берёт id из resolveMirandaPrincipal, не из тела). */
+export async function getOwnAccount(corporateAccountId: number) {
+  return mirandaRepo.getCorporateAccount(corporateAccountId);
+}
+
+export async function setOwnDisplayLabel(corporateAccountId: number, displayLabel: string | null): Promise<void> {
+  await mirandaRepo.setDisplayLabel(corporateAccountId, displayLabel);
+}
+
 export async function revokeBinding(bindingId: number, revokedByEmployeeId: number, revokerOrgId: string): Promise<boolean> {
   return withTransaction(async (q) => {
     const before = await mirandaRepo.getBinding(bindingId);
@@ -416,20 +459,23 @@ export type CreateContactGroupResult =
   | { ok: true; group: contactGroupsRepo.ContactGroupRow }
   | { ok: false; error: 'conflict' | 'not_found' };
 
-/** parentGroupId (если задан) должен существовать в том же дилере —
- * иначе not_found, та же проверка, что остальные Miranda-мутации не
- * доверяют клиенту org_id родителя. Новая строка пишется с org_id
- * создающего админа (чисто происхождение — на видимость не влияет,
- * см. dealerOrgIds), а проверка дубля имени (siblings) ищет по всему
- * dealerOrgIds. */
+/** §A плана — группы контактов администрируются глобально: любой admin
+ * может создать/изменить группу в ЛЮБОЙ сети любого дилера (не обязан
+ * принадлежать её дилеру), admin единый на всё приложение. Чтение
+ * остаётся dealer-scoped для обычных сотрудников (listContactGroups/
+ * GET /miranda/groups — не трогаем) — поэтому проверка дубля имени
+ * (siblings) и containment родителя по-прежнему считаются по дилеру
+ * ЦЕЛЕВОЙ сети (orgId), не по дилеру админа: иначе два одноимённых
+ * корня могли бы попасть в один и тот же dealer-wide список, который
+ * увидит сотрудник. */
 export async function createContactGroup(
   orgId: string,
-  dealerOrgIds: string[],
   name: string,
   parentGroupId: number | null,
   createdByEmployeeId: number | null
 ): Promise<CreateContactGroupResult> {
   return withTransaction(async (q) => {
+    const dealerOrgIds = await resolveDealerOrgIds(orgId);
     if (parentGroupId !== null) {
       const parent = await contactGroupsRepo.getGroup(parentGroupId, q);
       if (!parent || !dealerOrgIds.includes(parent.org_id)) return { ok: false, error: 'not_found' };
@@ -446,10 +492,10 @@ export async function createContactGroup(
 
 export type ContactGroupMutationResult = { ok: true } | { ok: false; error: 'not_found' | 'conflict' };
 
-export async function renameContactGroup(groupId: number, name: string, orgId: string, dealerOrgIds: string[], actorEmployeeId: number | null): Promise<ContactGroupMutationResult> {
+export async function renameContactGroup(groupId: number, name: string, orgId: string, actorEmployeeId: number | null): Promise<ContactGroupMutationResult> {
   return withTransaction(async (q) => {
     const existing = await contactGroupsRepo.getGroup(groupId, q);
-    if (!existing || !dealerOrgIds.includes(existing.org_id)) return { ok: false, error: 'not_found' };
+    if (!existing) return { ok: false, error: 'not_found' };
     const updated = await contactGroupsRepo.renameGroup(groupId, name, q);
     if (!updated) return { ok: false, error: 'conflict' };
     await auditRepo.record(
@@ -460,10 +506,10 @@ export async function renameContactGroup(groupId: number, name: string, orgId: s
   });
 }
 
-export async function deleteContactGroup(groupId: number, orgId: string, dealerOrgIds: string[], actorEmployeeId: number | null): Promise<ContactGroupMutationResult> {
+export async function deleteContactGroup(groupId: number, orgId: string, actorEmployeeId: number | null): Promise<ContactGroupMutationResult> {
   return withTransaction(async (q) => {
     const existing = await contactGroupsRepo.getGroup(groupId, q);
-    if (!existing || !dealerOrgIds.includes(existing.org_id)) return { ok: false, error: 'not_found' };
+    if (!existing) return { ok: false, error: 'not_found' };
     await contactGroupsRepo.deleteGroup(groupId, q);
     await auditRepo.record(
       { orgId, actorEmployeeId, actorTelegramId: null, action: 'MIRANDA_CONTACT_GROUP_DELETED', targetType: 'miranda_contact_group', targetId: String(groupId), before: { name: existing.name } },
@@ -473,16 +519,16 @@ export async function deleteContactGroup(groupId: number, orgId: string, dealerO
   });
 }
 
-/** Добавление контакта в группу — targetCorporateAccountId должен быть в
- * том же дилере, что и группа (dealerOrgIds), не обязательно в той же
- * сети — проверяется здесь через mirandaRepo.getCorporateAccount, не
- * доверяем клиенту. */
-export async function addContactToGroup(groupId: number, targetCorporateAccountId: number, orgId: string, dealerOrgIds: string[], actorEmployeeId: number | null): Promise<ContactGroupMutationResult> {
+/** Добавление контакта в группу — глобально (§A плана): админ может
+ * добавить в группу контакт из ЛЮБОЙ сети, не обязательно дилера самой
+ * группы — проверяется здесь только существование через
+ * mirandaRepo.getCorporateAccount, не доверяем клиенту. */
+export async function addContactToGroup(groupId: number, targetCorporateAccountId: number, orgId: string, actorEmployeeId: number | null): Promise<ContactGroupMutationResult> {
   return withTransaction(async (q) => {
     const existing = await contactGroupsRepo.getGroup(groupId, q);
-    if (!existing || !dealerOrgIds.includes(existing.org_id)) return { ok: false, error: 'not_found' };
+    if (!existing) return { ok: false, error: 'not_found' };
     const target = await mirandaRepo.getCorporateAccount(targetCorporateAccountId);
-    if (!target || !dealerOrgIds.includes(target.org_id)) return { ok: false, error: 'not_found' };
+    if (!target) return { ok: false, error: 'not_found' };
     await contactGroupsRepo.addMember(groupId, targetCorporateAccountId, q);
     await auditRepo.record(
       { orgId, actorEmployeeId, actorTelegramId: null, action: 'MIRANDA_CONTACT_GROUP_MEMBER_ADDED', targetType: 'miranda_contact_group', targetId: String(groupId), after: { targetCorporateAccountId } },
@@ -492,10 +538,10 @@ export async function addContactToGroup(groupId: number, targetCorporateAccountI
   });
 }
 
-export async function removeContactFromGroup(groupId: number, targetCorporateAccountId: number, orgId: string, dealerOrgIds: string[], actorEmployeeId: number | null): Promise<ContactGroupMutationResult> {
+export async function removeContactFromGroup(groupId: number, targetCorporateAccountId: number, orgId: string, actorEmployeeId: number | null): Promise<ContactGroupMutationResult> {
   return withTransaction(async (q) => {
     const existing = await contactGroupsRepo.getGroup(groupId, q);
-    if (!existing || !dealerOrgIds.includes(existing.org_id)) return { ok: false, error: 'not_found' };
+    if (!existing) return { ok: false, error: 'not_found' };
     await contactGroupsRepo.removeMember(groupId, targetCorporateAccountId, q);
     await auditRepo.record(
       { orgId, actorEmployeeId, actorTelegramId: null, action: 'MIRANDA_CONTACT_GROUP_MEMBER_REMOVED', targetType: 'miranda_contact_group', targetId: String(groupId), after: { targetCorporateAccountId } },

@@ -1620,5 +1620,18 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Попытка указать orgId вне своего дилера — явный 403 forbidden',
       'tsc --noEmit (backend), vitest 930/930 (backend, одноразовый Postgres), check:route-auth, check:architecture — без регрессий'
     ]
+  },
+  {
+    version: '20.72.0',
+    title: 'Глобальная админка + дилеры/секторы: создание и перенос точек',
+    bullets: [
+      'Админка по-настоящему глобальная: админ управляет любой сетью любого дилера — Miranda-роуты (аккаунты/группы) приведены к тому же паттерну resolveViewOrgId, что и остальной Admin Control Center',
+      'Фикс бага: телефон при создании точечного Miranda-аккаунта теперь валидируется (normalizePhone), не сохраняется молча некорректным',
+      'Деактивация (не удаление) ненужных Miranda-аккаунтов — POST /miranda/accounts/:id/deactivate|reactivate, глобально, обратимо',
+      'Самостоятельное переименование в Miranda — GET/PATCH /miranda/accounts/me',
+      'Дилеры/Секторы: явное создание (POST /admin/dealers, POST /admin/sectors), не только переименование',
+      'Перенос точки между сетями (в т.ч. разных дилеров) — POST /admin/stores/:id/move',
+      'tsc --noEmit (backend), vitest 935/935 (backend, одноразовый Postgres), check:route-auth, check:architecture — без регрессий'
+    ]
   }
 ];

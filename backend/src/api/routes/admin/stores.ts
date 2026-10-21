@@ -4,9 +4,17 @@
  * org-scoped) — nothing new at the data layer.
  */
 import { FastifyInstance } from 'fastify';
+import { Type, Static } from '@sinclair/typebox';
 import { requireAdmin, resolveViewOrgId } from '../../../auth/guards.js';
 import { record as recordAudit } from '../../../data/repositories/audit.js';
 import * as storesRepo from '../../../data/repositories/stores.js';
+import * as orgsRepo from '../../../data/repositories/organizations.js';
+
+const MoveStoreBody = Type.Object({
+  toOrgId: Type.String({ minLength: 1, maxLength: 64 }),
+  org_id: Type.Optional(Type.String({ maxLength: 64 }))
+});
+type MoveStoreBody = Static<typeof MoveStoreBody>;
 
 function actorFields(request: any) {
   return {
@@ -74,4 +82,28 @@ export async function registerAdminStoresRoutes(app: FastifyInstance) {
     });
     return { store: updated };
   });
+
+  // §D плана (глобальная админка) — перенос точки в другую сеть, в т.ч.
+  // другого дилера (той же дисциплины достаточно: toOrgId должен
+  // существовать, fromOrgId — текущая сеть через resolveViewOrgId).
+  app.post(
+    '/admin/stores/:id/move',
+    { schema: { body: MoveStoreBody } },
+    async (request, reply) => {
+      if (!requireAdmin(request, reply)) return;
+      const { id } = request.params as { id: string };
+      const { toOrgId, org_id } = request.body as MoveStoreBody;
+      const fromOrgId = resolveViewOrgId(request.user!, org_id);
+      if (!(await orgsRepo.findActiveById(toOrgId))) {
+        return reply.code(404).send({ error: 'target_org_not_found', message: 'Целевая сеть не найдена' });
+      }
+      const updated = await storesRepo.moveToOrg(id, fromOrgId, toOrgId);
+      if (!updated) return reply.code(404).send({ error: 'not_found' });
+      await recordAudit({
+        orgId: fromOrgId, ...actorFields(request), action: 'admin.store_moved',
+        targetType: 'store', targetId: id, before: { org_id: fromOrgId }, after: { org_id: toOrgId }, requestId: request.id
+      });
+      return { store: updated };
+    }
+  );
 }
