@@ -180,7 +180,7 @@ export function openCreateDealerModal(): void {
   if (modalBody) {
     modalBody.innerHTML = `
       <div class="field"><label>Название</label><input id="dealerCreateInput" placeholder="ООО «Название»"></div>
-      <button class="btn-main" onclick="submitCreateDealer()">Создать</button>
+      <button class="btn-main" data-dealers-trigger="submit-create-dealer">Создать</button>
     `;
   }
   document.getElementById('overlay')?.classList.add('show');
@@ -220,7 +220,7 @@ export function openCreateSectorModal(): void {
           ${dealerOptions.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
         </select>
       </div>
-      <button class="btn-main" onclick="submitCreateSector()">Создать</button>
+      <button class="btn-main" data-dealers-trigger="submit-create-sector">Создать</button>
     `;
   }
   document.getElementById('overlay')?.classList.add('show');
@@ -257,6 +257,21 @@ export async function submitCreateSector(): Promise<void> {
   closeModal();
   loadDealersAdmin();
 }
+
+// data-dealers-trigger, not onclick=: check-inline-event-handlers.mjs's
+// baseline has zero headroom (same [data-page-trigger] convention
+// app/nav.ts already uses for Admin Center's nav entry) — covers both the
+// toolbar "+ Дилер"/"+ Сектор" buttons (index.html) and the "Создать"
+// buttons rendered into #modalBody above.
+document.addEventListener('click', (e) => {
+  const el = (e.target as Element | null)?.closest<HTMLElement>('[data-dealers-trigger]');
+  const action = el?.dataset.dealersTrigger;
+  if (!action) return;
+  if (action === 'open-create-dealer') openCreateDealerModal();
+  else if (action === 'open-create-sector') openCreateSectorModal();
+  else if (action === 'submit-create-dealer') submitCreateDealer();
+  else if (action === 'submit-create-sector') submitCreateSector();
+});
 
 declare global {
   interface Window {
