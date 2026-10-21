@@ -103,6 +103,31 @@ data class MirandaContactsResponse(val items: List<MirandaCorporateAccountListIt
 @Serializable
 data class MirandaAllContactsResponse(val items: List<MirandaCorporateAccountListItem>)
 
+// ---------- Самостоятельное переименование (§G плана) ----------
+
+/** GET /miranda/accounts/me - сырая строка corporate_accounts (не
+ * joined-вид MirandaCorporateAccountListItem) - для предзаполнения поля
+ * "моё отображаемое имя" в Settings. */
+@Serializable
+data class MirandaOwnAccount(
+    val id: Int,
+    val org_id: String = "",
+    val employee_id: Int? = null,
+    val store_id: String? = null,
+    val display_label: String? = null,
+    val is_active: Boolean = true,
+    val device_exclusive: Boolean = false,
+    val phone: String? = null,
+    val account_name: String? = null,
+    val presence_override: String? = null
+)
+
+@Serializable
+data class MirandaOwnAccountResponse(val item: MirandaOwnAccount)
+
+@Serializable
+data class MirandaSetDisplayLabelRequest(val displayLabel: String?)
+
 @Serializable
 data class MirandaAvailableAccountRow(
     val corporate_account_id: Int,

@@ -46,7 +46,11 @@ import ru.t2sales.shared.theme.T2Colors
 private const val NO_STORE_GROUP = "Без точки"
 private const val NO_CUSTOM_GROUP_KEY = "nogroup"
 private const val NO_CUSTOM_GROUP_LABEL = "Без группы"
-private const val PRESENCE_POLL_MS = 20_000L
+// §H плана — "довести до идеала" = точность/задержка не устраивала при
+// 20с; 5с ближе к тому, что даёт опрос сообщений в чате (4-5с), без
+// нового WS-канала вещания presence всем участникам дилера (отдельный,
+// больший кусок работы — не делаем сейчас).
+private const val PRESENCE_POLL_MS = 5_000L
 
 /**
  * Дерево контактов всей сети (аналог главного окна Miranda NG) -

@@ -38,7 +38,7 @@ import ru.t2sales.shared.theme.T2Colors
 
 /** Вкладка «Настройки» - отображение дерева контактов (локально) + свой статус "в сети" (на сервере). */
 @Composable
-fun MirandaSettingsScreen(api: MirandaApi) {
+fun MirandaSettingsScreen(api: MirandaApi, onLogout: () -> Unit) {
     val scope = rememberCoroutineScope()
 
     var groupByCustom by remember { mutableStateOf(MirandaSettingsStore.groupByMode == "custom") }
@@ -49,12 +49,31 @@ fun MirandaSettingsScreen(api: MirandaApi) {
     var presence by remember { mutableStateOf<String?>(null) }
     var presenceError by remember { mutableStateOf<String?>(null) }
 
+    // §G плана — самостоятельное переименование. null = ещё не загружено.
+    var displayName by remember { mutableStateOf<String?>(null) }
+    var displayNameSaving by remember { mutableStateOf(false) }
+    var displayNameError by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(Unit) {
         runCatching { api.listAllContacts() }
             .onFailure { presenceError = it.toString() }
         // Текущий presence_override не отдаётся отдельным эндпойнтом - дефолт
         // "авто" безопасен (ровно то, что уже активно, если ничего не меняли).
         presence = "auto"
+        runCatching { api.getOwnAccount() }
+            .onSuccess { displayName = it.item.display_label ?: it.item.account_name ?: "" }
+            .onFailure { displayName = ""; displayNameError = it.toString() }
+    }
+
+    fun saveDisplayName() {
+        val name = displayName?.trim().orEmpty()
+        displayNameSaving = true
+        displayNameError = null
+        scope.launch {
+            runCatching { api.setOwnDisplayLabel(name.ifBlank { null }) }
+                .onFailure { displayNameError = it.toString() }
+            displayNameSaving = false
+        }
     }
 
     fun setPresence(status: String) {
@@ -117,6 +136,24 @@ fun MirandaSettingsScreen(api: MirandaApi) {
             Spacer(Modifier.height(8.dp))
             Text(presenceError!!, color = T2Colors.text, fontSize = 12.sp)
         }
+
+        Spacer(Modifier.height(32.dp))
+        SectionTitle("Моё отображаемое имя")
+        Spacer(Modifier.height(12.dp))
+        if (displayName == null) {
+            CircularProgressIndicator()
+        } else {
+            ru.t2sales.miranda.ui.components.Field(label = "Имя", value = displayName!!, onChange = { displayName = it })
+            Spacer(Modifier.height(12.dp))
+            ru.t2sales.miranda.ui.components.MainButton(text = if (displayNameSaving) "Сохранение…" else "Сохранить", enabled = !displayNameSaving) { saveDisplayName() }
+        }
+        if (displayNameError != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(displayNameError!!, color = T2Colors.text, fontSize = 12.sp)
+        }
+
+        Spacer(Modifier.height(32.dp))
+        ru.t2sales.miranda.ui.components.MainButton(text = "Выйти", enabled = true, container = T2Colors.danger) { onLogout() }
     }
 }
 

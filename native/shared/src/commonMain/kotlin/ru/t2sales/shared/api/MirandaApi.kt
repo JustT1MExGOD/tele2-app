@@ -136,6 +136,18 @@ class MirandaApi(private val client: HttpClient) {
         }
     }
 
+    // --- §G плана — самостоятельное переименование (свой display_label, любой принципал) ---
+
+    suspend fun getOwnAccount(): MirandaOwnAccountResponse =
+        client.get(apiUrl("/miranda/accounts/me")).body()
+
+    suspend fun setOwnDisplayLabel(displayLabel: String?) {
+        client.patch(apiUrl("/miranda/accounts/me")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaSetDisplayLabelRequest(displayLabel))
+        }
+    }
+
     // --- общие для сети группы контактов, настраивает администратор; вложенные (не групповые чаты — см. MirandaCreateGroupRequest ниже) ---
 
     suspend fun listContactGroups(): MirandaContactGroupsListResponse =

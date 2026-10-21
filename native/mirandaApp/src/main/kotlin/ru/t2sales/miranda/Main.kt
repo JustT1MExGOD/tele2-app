@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,13 +33,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Notification
+import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import ru.t2sales.miranda.di.MirandaContainer
 import ru.t2sales.miranda.settings.MirandaSettingsStore
+import ru.t2sales.miranda.system.MirandaAppWindow
+import ru.t2sales.miranda.system.MirandaNotifier
 import ru.t2sales.miranda.ui.admin.MirandaAdminScreen
 import ru.t2sales.miranda.ui.chat.MirandaChatScreen
 import ru.t2sales.miranda.ui.components.ToastHost
@@ -50,6 +58,7 @@ import ru.t2sales.miranda.ui.login.LoginScreen
 import ru.t2sales.miranda.ui.settings.MirandaSettingsScreen
 import ru.t2sales.miranda.session.PointSessionInfo
 import ru.t2sales.shared.api.MeResponse
+import ru.t2sales.shared.api.MirandaMessage
 import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Theme
 
@@ -62,9 +71,11 @@ private sealed class MirandaSession {
 }
 
 /**
- * Much simpler than desktopApp's Main.kt per the plan's scope cut for
- * Miranda's first iteration: no tray/relay/outbox/updater - just
- * Login -> Device Activation -> Messenger/Admin shell.
+ * Simpler than desktopApp's Main.kt per the plan's scope cut for
+ * Miranda's first iteration: no relay/outbox/updater - just
+ * Login -> Device Activation -> Messenger/Admin shell. Tray (§F плана) —
+ * только для всплывающих уведомлений о сообщениях, без скрытия окна в
+ * трей (Miranda не живёт в фоне как T2 Sales).
  */
 fun main() {
     application {
@@ -74,7 +85,21 @@ fun main() {
             position = WindowPosition.Aligned(Alignment.Center)
         )
         val icon = remember { BitmapPainter(useResource("icon.png", ::loadImageBitmapFrom)) }
+
+        // §F плана — иконка в трее только ради системных уведомлений
+        // (всплывающее окно со звуком по умолчанию ОС, правый нижний угол
+        // на Windows) — тот же Compose Desktop Tray API, что desktopApp
+        // уже использует (system/System.kt::AppNotifier).
+        val trayState = rememberTrayState()
+        LaunchedEffect(Unit) {
+            MirandaNotifier.send = { title, text -> trayState.sendNotification(Notification(title, text, Notification.Type.Info)) }
+        }
+        Tray(icon = icon, state = trayState, tooltip = "T2 Miranda") {
+            Item("Выйти", onClick = ::exitApplication)
+        }
+
         Window(onCloseRequest = ::exitApplication, title = "T2 Miranda", state = windowState, icon = icon) {
+            LaunchedEffect(Unit) { MirandaAppWindow.awt = window }
             T2Theme {
                 Box(Modifier.fillMaxSize()) {
                     MirandaRoot(container, windowState)
@@ -206,6 +231,44 @@ private fun MirandaMessengerShell(
         }
     }
 
+    // §F плана — всплывающие уведомления о сообщениях. /miranda/ws — один
+    // сокет на ВЕСЬ аккаунт (не per-conversation; MirandaChatScreen.kt
+    // открывает свой собственный listen() и фильтрует кадры клиентски по
+    // conversationId уже открытого чата) — здесь он же слушается на
+    // уровне всего приложения, не привязан к конкретному открытому
+    // экрану, поэтому ловит сообщения из ЛЮБОГО диалога пользователя.
+    // Не уведомляем о собственных сообщениях и о сообщениях в диалоге,
+    // который прямо сейчас открыт на фокусированном окне.
+    val tabState = rememberUpdatedState(tab)
+    val openConversationState = rememberUpdatedState(openConversation)
+    LaunchedEffect(Unit) {
+        var retry = 5000L
+        while (isActive) {
+            runCatching {
+                container.mirandaApi.listen(
+                    onOpen = { retry = 5000L },
+                    onFrame = { f ->
+                        if (f["type"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } == "message") {
+                            (f["message"] as? kotlinx.serialization.json.JsonObject)?.let { m ->
+                                runCatching { kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromJsonElement(MirandaMessage.serializer(), m) }
+                                    .getOrNull()?.let { message ->
+                                        if (message.sender.corporateAccountId == myCorporateAccountId) return@let
+                                        val viewingThisConversation = tabState.value == MirandaTab.Conversations &&
+                                            openConversationState.value?.first == message.conversationId
+                                        if (MirandaAppWindow.isFocused && viewingThisConversation) return@let
+                                        val preview = message.body?.take(120) ?: if (message.attachments.isNotEmpty()) "Вложение" else ""
+                                        MirandaNotifier.notify(message.sender.displayName, preview)
+                                    }
+                            }
+                        }
+                    }
+                )
+            }
+            delay(retry)
+            retry = (retry * 3 / 2).coerceAtMost(60000L)
+        }
+    }
+
     Row(Modifier.fillMaxSize().background(T2Colors.bg)) {
         Column(
             modifier = Modifier.width(220.dp).fillMaxHeight().background(T2Colors.surface).padding(16.dp)
@@ -220,15 +283,16 @@ private fun MirandaMessengerShell(
                 NavItem("Админ", tab == MirandaTab.Admin) { tab = MirandaTab.Admin }
             }
             Spacer(Modifier.weight(1f, fill = true))
-            NavItem("Выйти", false, onClick = onLogout)
         }
 
         when (tab) {
             MirandaTab.Admin -> Box(Modifier.fillMaxSize()) {
                 MirandaAdminScreen(mirandaApi = container.mirandaApi, adminCenterApi = container.adminCenterApi)
             }
+            // §G плана — «Выйти» переехало внутрь «Настроек» (было отдельным
+            // пунктом навигации), там же самостоятельное переименование.
             MirandaTab.Settings -> Box(Modifier.fillMaxSize()) {
-                MirandaSettingsScreen(api = container.mirandaApi)
+                MirandaSettingsScreen(api = container.mirandaApi, onLogout = onLogout)
             }
             MirandaTab.Conversations -> {
                 Box(Modifier.width(320.dp).fillMaxHeight()) {
