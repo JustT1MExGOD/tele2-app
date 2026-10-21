@@ -34,6 +34,7 @@ import { registerCommsRoutes } from './ops/comms.js';
 import { registerForecastRoutes } from './analytics/forecast.js';
 import { registerHeatmapRoutes } from './analytics/heatmap.js';
 import { registerMetricsRoutes } from './metrics.js';
+import { registerLeaderboardRoutes } from './leaderboard.js';
 import { registerSupervisorRoutes } from './analytics/supervisor.js';
 import { registerCommandCenterRoutes } from './analytics/command-center.js';
 import { registerTasksRoutes } from './ops/tasks.js';
@@ -88,6 +89,7 @@ const routeModules: Array<[string, (app: FastifyInstance) => Promise<void>]> = [
   ['Forecast/BI export', registerForecastRoutes],
   ['Heatmap', registerHeatmapRoutes],
   ['Metrics', registerMetricsRoutes],
+  ['Leaderboard (топы сотрудников)', registerLeaderboardRoutes],
   ['Supervisor', registerSupervisorRoutes],
   ['Command Center', registerCommandCenterRoutes],
   ['Tasks', registerTasksRoutes],

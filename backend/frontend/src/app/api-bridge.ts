@@ -63,6 +63,9 @@ import {
   saveBfqManual
 } from '../features/bfq/api.js';
 import {
+  getLeaderboard
+} from '../features/leaderboard/api.js';
+import {
   getMetrics,
   getCashTable,
   saveCash,
@@ -397,6 +400,7 @@ declare global {
       createDealer: typeof createDealer;
       createSector: typeof createSector;
       assignSupervisorSector: typeof assignSupervisorSector;
+      getLeaderboard: typeof getLeaderboard;
       getChatMessages: typeof getChatMessages;
       postChatMessage: typeof postChatMessage;
       uploadChatAttachment: typeof uploadChatAttachment;
@@ -599,6 +603,7 @@ window.apiClient = {
   createDealer,
   createSector,
   assignSupervisorSector,
+  getLeaderboard,
   getChatMessages,
   postChatMessage,
   uploadChatAttachment,

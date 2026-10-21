@@ -1474,6 +1474,28 @@ export interface CreateStoreRequest {
   org_id?: string;
 }
 
+// ---------- /leaderboard (топы сотрудников) ----------
+export interface LeaderboardMetric {
+  id: string;
+  label: string;
+  short_label: string;
+  unit: 'count' | 'money';
+}
+
+export interface LeaderboardItem {
+  rank: number;
+  employee_id: number;
+  full_name: string;
+  value: number;
+}
+
+export interface LeaderboardResponse {
+  metric: LeaderboardMetric;
+  from: string;
+  to: string;
+  items: LeaderboardItem[];
+}
+
 // ===== T2 Academy (redesigned tutorial) =====
 
 export interface AcademyProgressResponse {

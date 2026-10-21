@@ -322,6 +322,9 @@ export function loadPage(name: string): void {
   if (name === 'admin-center') {
     renderAdminCenter();
   }
+  if (name === 'leaderboard') {
+    loadLeaderboard();
+  }
 }
 
 export async function refreshAll(): Promise<void> {

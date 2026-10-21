@@ -243,6 +243,14 @@
         <button class="nav-item" data-page="chat" data-tutorial-id="academy-nav-chat" onclick="switchPage('chat')">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> </svg></span>Чат
         </button>
+        <!-- «Топы сотрудников» (20.75.0) — видно всем ролям, та же секция,
+             что team/chat, не гейтится ролью. data-page-trigger, not
+             onclick=: тот же делегированный клик-листенер app/nav.ts
+             (admin-center's precedent), check-inline-event-handlers.mjs
+             baseline не растёт. -->
+        <button class="nav-item" data-page="leaderboard" data-page-trigger="leaderboard">
+          <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 21h8" /> <path d="M12 17v4" /> <path d="M7 4h10v5a5 5 0 0 1-10 0z" /> <path d="M17 4h3a2 2 0 0 1 2 2v1a4 4 0 0 1-4 4" /> <path d="M7 4H4a2 2 0 0 0-2 2v1a4 4 0 0 0 4 4" /> </svg></span>Топы
+        </button>
       </div>
 
       <div class="sidebar-section" id="sidebarSectionAnalytics" style="display:none">
@@ -1178,6 +1186,20 @@
         </div>
       </div>
     </div>
+
+    <!-- ===== ТОПЫ СОТРУДНИКОВ (20.75.0) — видно всем ролям, отдельный топ
+         по каждой метрике каталога (прогресс-бары), не сводный score. -->
+    <div id="page-leaderboard" class="page">
+      <div class="section">
+        <div class="section-title">Топы сотрудников</div>
+        <div style="padding:0 16px 8px;display:flex;gap:8px;flex-wrap:wrap">
+          <input type="date" id="lbFrom">
+          <input type="date" id="lbTo">
+        </div>
+        <div class="data-table-toolbar" id="leaderboardMetricTabs" style="flex-wrap:wrap;gap:8px;justify-content:flex-start"></div>
+        <div id="leaderboardBody"><div class="skeleton"></div></div>
+      </div>
+    </div>
   </div>
     </div>
   </div>
@@ -1203,6 +1225,9 @@
     </button>
     <button class="nav-item" data-page="chat" data-tutorial-id="academy-nav-chat" onclick="switchPage('chat')">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> </svg></span>Чат
+    </button>
+    <button class="nav-item" data-page="leaderboard" data-page-trigger="leaderboard">
+      <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 21h8" /> <path d="M12 17v4" /> <path d="M7 4h10v5a5 5 0 0 1-10 0z" /> <path d="M17 4h3a2 2 0 0 1 2 2v1a4 4 0 0 1-4 4" /> <path d="M7 4H4a2 2 0 0 0-2 2v1a4 4 0 0 0 4 4" /> </svg></span>Топы
     </button>
   </nav>
 
@@ -1255,6 +1280,7 @@
        критичен, но держим рядом с network-admin по смыслу страницы. -->
   <script src="/dist/pages/dealers.bundle.js"></script>
   <script src="/dist/pages/admin-center.bundle.js"></script>
+  <script src="/dist/pages/leaderboard.bundle.js"></script>
   <script src="/dist/features/tutorial.bundle.js"></script>
   <script src="/dist/pages/chat.bundle.js"></script>
   <!-- access-supervisor.bundle.js calls bootApp() at load time — must load

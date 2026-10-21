@@ -96,3 +96,61 @@ export async function count(): Promise<number> {
   const res = await query(`SELECT COUNT(*)::int AS c FROM plan_metrics`);
   return Number(res.rows[0]?.c) || 0;
 }
+
+export interface LeaderboardRow {
+  employee_id: number;
+  full_name: string;
+  value: number;
+}
+
+/** «Топы сотрудников» (план, 20.75.0) — сумма одной метрики по
+ * сотрудникам за период, по образцу findTopEmployees в
+ * supervisor-analytics.ts, но на ОДНУ метрику (не сводный score) и на
+ * произвольный набор сетей (dealer/org-switcher-aware вызывающая
+ * сторона, не захардкожено на storeIds сектора супервайзера).
+ *
+ * isSalesColumn — резолвится вызывающей стороной
+ * (metrics-catalog.ts::getEmployeeLeaderboard через getSalesSumColumns())
+ * ДО вызова этой функции: metricId интерполируется в SQL (имя колонки
+ * нельзя параметризовать), поэтому вызывающая сторона обязана была уже
+ * проверить, что metricId входит в реальный список колонок sales — та
+ * же дисциплина, что ensureColumn() выше применяет к DDL. Эта функция
+ * сама НИКОГДА не доверяет client-controlled metricId без этой
+ * проверки apriori. */
+export async function findEmployeeLeaderboard(
+  orgIds: string[],
+  metricId: string,
+  from: string,
+  to: string,
+  isSalesColumn: boolean
+): Promise<LeaderboardRow[]> {
+  if (isSalesColumn) {
+    const res = await query(
+      `SELECT e.id AS employee_id, e.full_name, COALESCE(SUM(s."${metricId}"), 0) AS value
+       FROM sales s
+       JOIN employees e ON e.id = s.employee_id
+       JOIN stores st ON st.id = s.store_id
+       WHERE COALESCE(st.org_id, 'default') = ANY($1::text[])
+         AND s.sale_date >= $2::date AND s.sale_date <= $3::date
+       GROUP BY e.id, e.full_name
+       HAVING COALESCE(SUM(s."${metricId}"), 0) > 0
+       ORDER BY value DESC, e.full_name ASC`,
+      [orgIds, from, to]
+    );
+    return res.rows.map((r: any) => ({ employee_id: Number(r.employee_id), full_name: r.full_name, value: Number(r.value) }));
+  }
+  const res = await query(
+    `SELECT e.id AS employee_id, e.full_name, COALESCE(SUM(v.value), 0) AS value
+     FROM sale_metric_values v
+     JOIN employees e ON e.id = v.employee_id
+     JOIN stores st ON st.id = v.store_id
+     WHERE v.metric_id = $1
+       AND COALESCE(st.org_id, 'default') = ANY($2::text[])
+       AND v.sale_date >= $3::date AND v.sale_date <= $4::date
+     GROUP BY e.id, e.full_name
+     HAVING COALESCE(SUM(v.value), 0) > 0
+     ORDER BY value DESC, e.full_name ASC`,
+    [metricId, orgIds, from, to]
+  );
+  return res.rows.map((r: any) => ({ employee_id: Number(r.employee_id), full_name: r.full_name, value: Number(r.value) }));
+}

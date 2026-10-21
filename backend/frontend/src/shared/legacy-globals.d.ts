@@ -290,6 +290,8 @@ declare global {
   function loadChatPage(): void;
   /** src/pages/admin-center — bridges to router.ts's renderPage('admin-center'). */
   function renderAdminCenter(): void;
+  /** src/pages/leaderboard — loads «Топы сотрудников» (per-metric progress-bar leaderboards). */
+  function loadLeaderboard(): Promise<void>;
   /** src/pages/network-admin — (re)fetches the org-scoped store picker options into the various *Store selects, falling back to a hardcoded 3-store list if the network cache is empty. */
   function fillStoreSelects(): Promise<void>;
   /** frontend/offline-queue.js — separate standalone script, IndexedDB-backed sales retry queue. */

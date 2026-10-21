@@ -38,12 +38,24 @@ export async function getMetricDefs(force = false): Promise<MetricDef[]> {
   try {
     const rows = await repo.listActiveDefs();
     if (rows.length) {
-      cache = rows.map((r: any) => ({
+      const fromDb: MetricDef[] = rows.map((r: any) => ({
         id: String(r.id),
         label: r.label || r.id,
         short_label: r.short_label || r.label || r.id,
         unit: r.unit === 'money' ? 'money' : 'count'
       }));
+      // Базовые метрики (sim/mnp/pa/...) никогда не становятся строками
+      // plan_metrics автоматически — там живут только кастомные метрики,
+      // заведённые через экран метрик (upsert() в
+      // data/repositories/metrics.ts вызывается только из POST /metrics).
+      // Если использовать ТОЛЬКО rows, то с первой же кастомной метрикой
+      // любой сети базовые метрики молча исчезают из каталога (а значит
+      // и из getEmployeeLeaderboard/валидации везде, где каталог —
+      // источник истины) — это и произошло бы в проде, не только в
+      // тесте. FALLBACK — гарантированный минимум, DB-строка того же id
+      // (если когда-нибудь появится) её переопределяет.
+      const ids = new Set(fromDb.map((m) => m.id));
+      cache = [...fromDb, ...FALLBACK.filter((m) => !ids.has(m.id))];
       cacheAt = Date.now();
       return cache;
     }
@@ -136,4 +148,41 @@ export async function getSalesSumColumns(force = false): Promise<string[]> {
 /** SQL-фрагмент "COALESCE(SUM(col),0) as col, ..." по всем колонкам sales. */
 export function buildSumSelect(columns: string[]): string {
   return columns.map((c) => `COALESCE(SUM(${c}),0) as ${c}`).join(', ');
+}
+
+export type LeaderboardResult = {
+  metric: MetricDef;
+  items: { rank: number; employee_id: number; full_name: string; value: number }[];
+};
+
+export type LeaderboardError = 'unknown_metric';
+
+/** «Топы сотрудников» (план, 20.75.0) — топ по ОДНОЙ метрике каталога за
+ * период, на произвольный набор сетей (org-switcher-aware вызывающая
+ * сторона, см. api/routes/leaderboard.ts). Резолвит, где физически
+ * живёт эта метрика — реальная numeric-колонка sales (getSalesSumColumns,
+ * уже провалидированный источник имён колонок) или EAV-таблица
+ * sale_metric_values — и зовёт repo.findEmployeeLeaderboard с нужным
+ * флагом; сам metricId ПЕРЕД интерполяцией в SQL (repo-слой) проверяется
+ * и против getMetricDefs() (каталог), и против getSalesSumColumns()
+ * (реальные колонки) — unknown_metric, если ни там, ни там нет. */
+export async function getEmployeeLeaderboard(
+  orgIds: string[],
+  metricId: string,
+  from: string,
+  to: string
+): Promise<{ ok: true; result: LeaderboardResult } | { ok: false; error: LeaderboardError }> {
+  const defs = await getMetricDefs();
+  const metric = defs.find((m) => m.id === metricId);
+  if (!metric) return { ok: false, error: 'unknown_metric' };
+  const salesColumns = await getSalesSumColumns();
+  const isSalesColumn = salesColumns.includes(metricId);
+  const rows = await repo.findEmployeeLeaderboard(orgIds, metricId, from, to, isSalesColumn);
+  return {
+    ok: true,
+    result: {
+      metric,
+      items: rows.map((r, i) => ({ rank: i + 1, employee_id: r.employee_id, full_name: r.full_name, value: r.value }))
+    }
+  };
 }
