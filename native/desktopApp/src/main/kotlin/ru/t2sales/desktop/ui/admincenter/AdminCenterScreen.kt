@@ -400,10 +400,17 @@ private fun StoresTab(container: AppContainer) {
     var failed by remember { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
     var selected by remember { mutableStateOf<String?>(null) }
+    var orgId by remember { mutableStateOf("") }
 
-    LaunchedEffect(reload) { runCatching { api.stores().items }.onSuccess { stores = it }.onFailure { failed = true } }
+    LaunchedEffect(reload, orgId) {
+        failed = false
+        runCatching { api.stores(orgId.trim().ifEmpty { null }).items }.onSuccess { stores = it }.onFailure { failed = true }
+    }
 
     PageSection("Точки сети") {
+        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
+            Field("", orgId, { orgId = it; selected = null }, placeholder = "org_id (пусто = своя сеть)", fill = T2Colors.surface2)
+        }
         val list = stores
         when {
             failed -> EmptyText("Не удалось загрузить точки")
@@ -415,12 +422,12 @@ private fun StoresTab(container: AppContainer) {
     val id = selected
     if (id != null) {
         Spacer(Modifier.height(12.dp))
-        StoreDetail(api, id) { reload++ }
+        StoreDetail(api, id, orgId.trim().ifEmpty { null }) { reload++ }
     }
 }
 
 @Composable
-private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, onChanged: () -> Unit) {
+private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, orgId: String?, onChanged: () -> Unit) {
     val scope = rememberCoroutineScope()
     var store by remember(id) { mutableStateOf<AcStore?>(null) }
     var failed by remember(id) { mutableStateOf(false) }
@@ -428,9 +435,9 @@ private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, o
     var name by remember(id) { mutableStateOf("") }
     var danger by remember { mutableStateOf(false) }
 
-    LaunchedEffect(id, reload) {
+    LaunchedEffect(id, orgId, reload) {
         failed = false
-        runCatching { api.store(id).store }.onSuccess { store = it; name = it.name }.onFailure { failed = true }
+        runCatching { api.store(id, orgId).store }.onSuccess { store = it; name = it.name }.onFailure { failed = true }
     }
     val s = store
     when {
@@ -450,7 +457,7 @@ private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, o
                     MChipButton("Сохранить") {
                         if (name.isBlank()) { T2Toast.show("Укажите название", true); return@MChipButton }
                         scope.launch {
-                            runCatching { api.editStoreName(id, name.trim()) }
+                            runCatching { api.editStoreName(id, name.trim(), orgId) }
                                 .onSuccess { T2Toast.show("Сохранено"); reload++; onChanged() }
                                 .onFailure { T2Toast.show("Ошибка сохранения", true) }
                         }
@@ -458,7 +465,7 @@ private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, o
                     if (s.is_active) MChipButton("Деактивировать") { danger = true }
                     else MChipButton("Восстановить") {
                         scope.launch {
-                            runCatching { api.reactivateStore(id) }.onSuccess { T2Toast.show("Точка восстановлена"); reload++; onChanged() }.onFailure { T2Toast.show("Ошибка", true) }
+                            runCatching { api.reactivateStore(id, orgId) }.onSuccess { T2Toast.show("Точка восстановлена"); reload++; onChanged() }.onFailure { T2Toast.show("Ошибка", true) }
                         }
                     }
                 }
@@ -473,7 +480,7 @@ private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, o
             onConfirm = {
                 danger = false
                 scope.launch {
-                    runCatching { api.deactivateStore(id) }.onSuccess { T2Toast.show("Точка деактивирована"); reload++; onChanged() }.onFailure { T2Toast.show("Ошибка", true) }
+                    runCatching { api.deactivateStore(id, orgId) }.onSuccess { T2Toast.show("Точка деактивирована"); reload++; onChanged() }.onFailure { T2Toast.show("Ошибка", true) }
                 }
             }
         )

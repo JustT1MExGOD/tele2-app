@@ -101,20 +101,26 @@ export async function adminListStores(headers: Record<string, string>, orgQuery:
   return request(`/admin/stores${orgQuery ? '?' + orgQuery.slice(1) : ''}`, headers);
 }
 
-export async function adminGetStore(headers: Record<string, string>, id: string): Promise<AdminStoreDetailResponse> {
-  return request(`/admin/stores/${encodeURIComponent(id)}`, headers);
+// org-switcher-aware (20.76.0 fix): раньше эти 4 функции не передавали
+// org_id вообще, resolveViewOrgId() на бэкенде тихо откатывался на
+// СОБСТВЕННУЮ сеть админа — список точек (adminListStores, ниже) уже
+// уважал переключатель сети, а клик по точке другой сети (не своей)
+// падал 404 "не удалось загрузить точку", потому что detail/edit/
+// деактивация искали точку не в той сети.
+export async function adminGetStore(headers: Record<string, string>, id: string, orgQuery: string): Promise<AdminStoreDetailResponse> {
+  return request(`/admin/stores/${encodeURIComponent(id)}${orgQuery ? '?' + orgQuery.slice(1) : ''}`, headers);
 }
 
-export async function adminEditStore(headers: Record<string, string>, id: string, body: Record<string, unknown>): Promise<AdminStoreDetailResponse> {
-  return request(`/admin/stores/${encodeURIComponent(id)}`, headers, { method: 'PATCH', body });
+export async function adminEditStore(headers: Record<string, string>, id: string, body: Record<string, unknown>, orgId: string | null): Promise<AdminStoreDetailResponse> {
+  return request(`/admin/stores/${encodeURIComponent(id)}`, headers, { method: 'PATCH', body: orgId ? { ...body, org_id: orgId } : body });
 }
 
-export async function adminDeactivateStore(headers: Record<string, string>, id: string): Promise<{ ok: true }> {
-  return request(`/admin/stores/${encodeURIComponent(id)}/deactivate`, headers, { method: 'POST' });
+export async function adminDeactivateStore(headers: Record<string, string>, id: string, orgId: string | null): Promise<{ ok: true }> {
+  return request(`/admin/stores/${encodeURIComponent(id)}/deactivate`, headers, { method: 'POST', body: orgId ? { org_id: orgId } : undefined });
 }
 
-export async function adminReactivateStore(headers: Record<string, string>, id: string): Promise<AdminStoreDetailResponse> {
-  return request(`/admin/stores/${encodeURIComponent(id)}/reactivate`, headers, { method: 'POST' });
+export async function adminReactivateStore(headers: Record<string, string>, id: string, orgId: string | null): Promise<AdminStoreDetailResponse> {
+  return request(`/admin/stores/${encodeURIComponent(id)}/reactivate`, headers, { method: 'POST', body: orgId ? { org_id: orgId } : undefined });
 }
 
 // ---------- Sales correction ----------

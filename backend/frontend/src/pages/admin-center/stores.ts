@@ -53,7 +53,7 @@ async function renderStoreDetail(storeId: string): Promise<void> {
   if (!box) return;
   box.innerHTML = '<div class="skeleton"></div>';
   try {
-    const d = await window.apiClient.adminGetStore(authHeaders(), storeId);
+    const d = await window.apiClient.adminGetStore(authHeaders(), storeId, orgQueryParam());
     const s = d.store;
     box.innerHTML = `
       <div class="section">
@@ -89,7 +89,7 @@ async function onSaveStoreName(storeId: string): Promise<void> {
     return;
   }
   try {
-    await window.apiClient.adminEditStore(authHeaders(true), storeId, { name });
+    await window.apiClient.adminEditStore(authHeaders(true), storeId, { name }, window.adminViewOrgId);
     toast('Сохранено', 'ok');
     loadStoreList();
     renderStoreDetail(storeId);
@@ -105,7 +105,7 @@ async function onDeactivateStore(storeId: string): Promise<void> {
   });
   if (reason === null) return;
   try {
-    await window.apiClient.adminDeactivateStore(authHeaders(true), storeId);
+    await window.apiClient.adminDeactivateStore(authHeaders(true), storeId, window.adminViewOrgId);
     toast('Точка деактивирована', 'ok');
     loadStoreList();
     renderStoreDetail(storeId);
@@ -116,7 +116,7 @@ async function onDeactivateStore(storeId: string): Promise<void> {
 
 async function onReactivateStore(storeId: string): Promise<void> {
   try {
-    await window.apiClient.adminReactivateStore(authHeaders(true), storeId);
+    await window.apiClient.adminReactivateStore(authHeaders(true), storeId, window.adminViewOrgId);
     toast('Точка восстановлена', 'ok');
     loadStoreList();
     renderStoreDetail(storeId);

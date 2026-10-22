@@ -619,28 +619,36 @@ class AdminCenterApi(private val client: HttpClient) {
             setBody(kotlinx.serialization.json.JsonObject(emptyMap()))
         }.body()
 
-    suspend fun stores(): AcStoresList = client.get(apiUrl("/admin/stores")).body()
+    // orgId — тот же паттерн, что TeamApi.getEmployees()/FlagsTab уже
+    // используют (org-switcher-aware вызов): web-версия нашла реальный
+    // баг ровно здесь (detail/edit/деактивация точки игнорировали
+    // переключённую сеть, список — нет), нативный клиент эту же
+    // org_id-передачу не имел вообще ни на одном из 5 вызовов — чинится
+    // синхронно с веб-фиксом.
+    suspend fun stores(orgId: String? = null): AcStoresList =
+        client.get(apiUrl("/admin/stores" + (orgId?.let { "?org_id=$it" } ?: ""))).body()
 
-    suspend fun store(id: String): AcStoreDetail = client.get(apiUrl("/admin/stores/$id")).body()
+    suspend fun store(id: String, orgId: String? = null): AcStoreDetail =
+        client.get(apiUrl("/admin/stores/$id" + (orgId?.let { "?org_id=$it" } ?: ""))).body()
 
-    suspend fun editStoreName(id: String, name: String) {
+    suspend fun editStoreName(id: String, name: String, orgId: String? = null) {
         client.patch(apiUrl("/admin/stores/$id")) {
             contentType(ContentType.Application.Json)
-            setBody(kotlinx.serialization.json.buildJsonObject { put("name", kotlinx.serialization.json.JsonPrimitive(name)) })
+            setBody(json("name" to name, "org_id" to orgId))
         }
     }
 
-    suspend fun deactivateStore(id: String) {
+    suspend fun deactivateStore(id: String, orgId: String? = null) {
         client.post(apiUrl("/admin/stores/$id/deactivate")) {
             contentType(ContentType.Application.Json)
-            setBody(kotlinx.serialization.json.JsonObject(emptyMap()))
+            setBody(json("org_id" to orgId))
         }
     }
 
-    suspend fun reactivateStore(id: String) {
+    suspend fun reactivateStore(id: String, orgId: String? = null) {
         client.post(apiUrl("/admin/stores/$id/reactivate")) {
             contentType(ContentType.Application.Json)
-            setBody(kotlinx.serialization.json.JsonObject(emptyMap()))
+            setBody(json("org_id" to orgId))
         }
     }
 
