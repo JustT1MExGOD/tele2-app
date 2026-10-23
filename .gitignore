@@ -47,3 +47,13 @@ android/ios/App/*.p12
 android/ios/App/*.mobileprovision
 android/ios/ExportOptions.plist
 
+# --- Локальная рабочая среда (машинно-специфичное, не часть проекта) ---
+# локальные агентские скиллы (gsap-* и пр.)
+.agents/
+# локальные настройки Claude Code (settings.json, settings.local.json)
+.claude/
+# lock-файл локальных скиллов — состояние конкретной машины, не репозитория
+skills-lock.json
+# одноразовый локальный Postgres для vitest; пересоздаётся по .env.test.local
+backend/.tmp-test-pg/
+
