@@ -59,8 +59,24 @@ class MirandaApi(private val client: HttpClient) {
 
     // --- admin: account-switch grants ---
 
-    suspend fun listAllCorporateAccounts(): MirandaCorporateAccountsListResponse =
-        client.get(apiUrl("/miranda/accounts")).body()
+    suspend fun listAllCorporateAccounts(includeInactive: Boolean = false): MirandaCorporateAccountsListResponse =
+        client.get(apiUrl("/miranda/accounts" + if (includeInactive) "?include_inactive=1" else "")).body()
+
+    // 20.76.0 (§C плана, "деактивация — не удаление") — бэкенд-роуты
+    // существовали с 20.72.0, нативного клиента не было вообще.
+    suspend fun deactivateAccount(corporateAccountId: Int) {
+        client.post(apiUrl("/miranda/accounts/$corporateAccountId/deactivate")) {
+            contentType(ContentType.Application.Json)
+            setBody(JsonObject(emptyMap()))
+        }
+    }
+
+    suspend fun reactivateAccount(corporateAccountId: Int) {
+        client.post(apiUrl("/miranda/accounts/$corporateAccountId/reactivate")) {
+            contentType(ContentType.Application.Json)
+            setBody(JsonObject(emptyMap()))
+        }
+    }
 
     suspend fun createAccount(employeeId: Int, storeId: String?, displayLabel: String?): MirandaCreateAccountResponse =
         client.post(apiUrl("/miranda/accounts")) {

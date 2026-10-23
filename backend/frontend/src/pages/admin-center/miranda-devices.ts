@@ -57,6 +57,10 @@ export function renderMirandaDevicesTab(container: HTMLElement): void {
         <input type="text" id="mirandaCreateAccountStoreId" placeholder="ID точки (необязательно)" style="width:100%;box-sizing:border-box">
         <button type="button" class="btn-main" id="mirandaCreateAccountBtn" style="align-self:flex-start">Создать аккаунт</button>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;padding:0 16px 8px">
+        <input type="checkbox" id="mirandaShowInactive">
+        Показывать деактивированные
+      </label>
       <div id="mirandaAccountsList"></div>
     </div>
     <div class="section">
@@ -126,6 +130,15 @@ export function renderMirandaDevicesTab(container: HTMLElement): void {
     if (!checkbox?.dataset.mirandaDeviceExclusive) return;
     onToggleDeviceExclusive(Number(checkbox.dataset.mirandaDeviceExclusive), checkbox.checked);
   });
+
+  document.getElementById('mirandaAccountsList')?.addEventListener('click', (e) => {
+    const btn = (e.target as Element | null)?.closest<HTMLElement>('[data-miranda-deactivate],[data-miranda-reactivate]');
+    if (!btn) return;
+    if (btn.dataset.mirandaDeactivate !== undefined) onDeactivateAccount(Number(btn.dataset.mirandaDeactivate));
+    if (btn.dataset.mirandaReactivate !== undefined) onReactivateAccount(Number(btn.dataset.mirandaReactivate));
+  });
+
+  document.getElementById('mirandaShowInactive')?.addEventListener('change', () => loadCorporateAccounts());
 
   loadPending();
   loadCorporateAccounts();
@@ -229,10 +242,14 @@ async function runGrantAdminSearch(term: string): Promise<void> {
 async function loadCorporateAccounts(): Promise<void> {
   const select = document.getElementById('mirandaGrantAccountSelect') as HTMLSelectElement | null;
   const list = document.getElementById('mirandaAccountsList');
+  const includeInactive = (document.getElementById('mirandaShowInactive') as HTMLInputElement | null)?.checked || false;
   if (list) list.innerHTML = '<div class="skeleton"></div>';
   try {
-    const res = await window.apiClient.adminListMirandaCorporateAccounts(authHeaders());
-    if (select) renderAccountOptions(select, res.items);
+    const res = await window.apiClient.adminListMirandaCorporateAccounts(authHeaders(), includeInactive);
+    // грант на переключение имеет смысл только на активный аккаунт —
+    // деактивированные остаются в списке выше для возможной реактивации,
+    // но не засоряют выпадающий список здесь.
+    if (select) renderAccountOptions(select, res.items.filter((a) => a.is_active));
     if (list) renderAccountsList(list, res.items);
   } catch (e) {
     console.error(e);
@@ -334,13 +351,16 @@ function renderAccountsList(box: HTMLElement, items: MirandaCorporateAccountList
       return `
       <div class="row" style="cursor:default">
         <div class="row-body">
-          <div class="row-title">${esc(label)}</div>
+          <div class="row-title">${esc(label)}${a.is_active ? '' : ' · деактивирован'}</div>
           <div class="row-sub">${esc(a.store_id || 'без точки')}</div>
         </div>
         <label style="display:flex;align-items:center;gap:6px;white-space:nowrap">
-          <input type="checkbox" data-miranda-device-exclusive="${a.corporate_account_id}" ${a.device_exclusive ? 'checked' : ''}>
+          <input type="checkbox" data-miranda-device-exclusive="${a.corporate_account_id}" ${a.device_exclusive ? 'checked' : ''} ${a.is_active ? '' : 'disabled'}>
           только одно устройство
         </label>
+        ${a.is_active
+          ? `<button type="button" class="mchip" data-miranda-deactivate="${a.corporate_account_id}">Деактивировать</button>`
+          : `<button type="button" class="mchip" data-miranda-reactivate="${a.corporate_account_id}">Восстановить</button>`}
       </div>`;
     })
     .join('');
@@ -353,6 +373,26 @@ async function onToggleDeviceExclusive(corporateAccountId: number, deviceExclusi
   } catch (e) {
     toast('Не удалось изменить настройку', 'err');
     loadCorporateAccounts();
+  }
+}
+
+async function onDeactivateAccount(corporateAccountId: number): Promise<void> {
+  try {
+    await window.apiClient.adminDeactivateMirandaAccount(authHeaders(), corporateAccountId);
+    toast('Аккаунт деактивирован', 'ok');
+    loadCorporateAccounts();
+  } catch (e) {
+    toast('Не удалось деактивировать аккаунт', 'err');
+  }
+}
+
+async function onReactivateAccount(corporateAccountId: number): Promise<void> {
+  try {
+    await window.apiClient.adminReactivateMirandaAccount(authHeaders(), corporateAccountId);
+    toast('Аккаунт восстановлен', 'ok');
+    loadCorporateAccounts();
+  } catch (e) {
+    toast('Не удалось восстановить аккаунт', 'err');
   }
 }
 

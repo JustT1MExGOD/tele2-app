@@ -414,8 +414,8 @@ export async function listAvailableAccountsForAdmin(adminEmployeeId: number, dev
 /** online вычисляется здесь (не в репозитории — тот не должен импортировать
  * realtime-registry): presence_override выигрывает, если задан явно;
  * иначе — авто по живому WS-сокету мессенджера (§1 плана). */
-export async function listAllCorporateAccounts(orgIds: string[]) {
-  const rows = await mirandaRepo.listAllCorporateAccounts(orgIds);
+export async function listAllCorporateAccounts(orgIds: string[], includeInactive = false) {
+  const rows = await mirandaRepo.listAllCorporateAccounts(orgIds, includeInactive);
   return rows.map((row) => ({
     ...row,
     online:

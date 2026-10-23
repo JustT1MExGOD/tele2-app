@@ -121,7 +121,8 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   app.get('/miranda/accounts', async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
     const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
-    const items = await mirandaService.listAllCorporateAccounts([orgId]);
+    const includeInactive = (request.query as any)?.include_inactive === '1' || (request.query as any)?.include_inactive === 'true';
+    const items = await mirandaService.listAllCorporateAccounts([orgId], includeInactive);
     return reply.code(200).send({ items });
   });
 

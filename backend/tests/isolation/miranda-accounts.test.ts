@@ -332,6 +332,42 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     expect(nonAdmin.statusCode).toBe(403);
   });
 
+  // 20.76.0 (§C плана, "деактивация — не удаление") — без include_inactive
+  // деактивированный аккаунт был не виден НИОТКУДА и восстановить его
+  // было нечем (нашлось при аудите фронтенда: кнопки "Восстановить" не
+  // было нигде, потому что список её физически не возвращал).
+  it('GET /miranda/accounts — деактивированный аккаунт пропадает из списка по умолчанию и виден с include_inactive=1', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Miranda Accounts Inactive Org');
+    const emp = await fx.createPhoneEmployee(org, '+79990000012', null, { role: 'employee', fullName: 'Сотрудник' });
+    const admin = await fx.createEmployee(org, { role: 'admin' });
+
+    const acct = await query(`INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, $3) RETURNING id`, [org, emp.id, 'Аккаунт']);
+    const corporateAccountId = Number(acct.rows[0].id);
+    corporateAccountIds.push(corporateAccountId);
+
+    const beforeDeactivate = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
+    expect(beforeDeactivate.json().items.map((i: any) => Number(i.corporate_account_id))).toContain(corporateAccountId);
+    expect(beforeDeactivate.json().items.find((i: any) => Number(i.corporate_account_id) === corporateAccountId).is_active).toBe(true);
+
+    const deactivate = await app.inject({ method: 'POST', url: `/miranda/accounts/${corporateAccountId}/deactivate`, headers: authAs(admin.telegramId, admin.telegramGrantToken) });
+    expect(deactivate.statusCode).toBe(200);
+
+    const defaultList = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
+    expect(defaultList.json().items.map((i: any) => Number(i.corporate_account_id))).not.toContain(corporateAccountId);
+
+    const withInactive = await app.inject({ method: 'GET', url: '/miranda/accounts?include_inactive=1', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
+    const found = withInactive.json().items.find((i: any) => Number(i.corporate_account_id) === corporateAccountId);
+    expect(found).toBeDefined();
+    expect(found.is_active).toBe(false);
+
+    const reactivate = await app.inject({ method: 'POST', url: `/miranda/accounts/${corporateAccountId}/reactivate`, headers: authAs(admin.telegramId, admin.telegramGrantToken) });
+    expect(reactivate.statusCode).toBe(200);
+
+    const afterReactivate = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
+    expect(afterReactivate.json().items.map((i: any) => Number(i.corporate_account_id))).toContain(corporateAccountId);
+  });
+
   it('POST /miranda/accounts — requireAdmin, создаёт явный аккаунт, отклоняет чужого сотрудника/чужую точку, конфликт на дубль, аудируется', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Miranda Create Account Org');

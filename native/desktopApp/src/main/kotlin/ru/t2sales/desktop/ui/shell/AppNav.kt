@@ -18,6 +18,12 @@ object AppNav {
     /** Manager or admin: may enter a colleague's sale (the quick-sale window then understands "фамилия 3 аксы"). */
     var canManageSales: Boolean = false
 
+    /** Admin Control Center org-switcher (20.76.0) — null unless admin
+     * explicitly switched away from their own network. Window-wide, same
+     * semantics as web's window.adminViewOrgId (app/core.ts) — persists
+     * across every Admin Center tab, not just one screen. */
+    var adminViewOrgId by mutableStateOf<String?>(null)
+
     /** Current and previous screen — «Назад» on detail pages (goBack in the web). */
     var current: Screen = Screen.Home
     var previous: Screen = Screen.Home

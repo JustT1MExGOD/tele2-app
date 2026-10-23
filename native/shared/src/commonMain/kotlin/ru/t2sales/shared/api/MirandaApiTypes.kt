@@ -61,6 +61,7 @@ data class MirandaCorporateAccountListItem(
     val display_label: String? = null,
     val device_exclusive: Boolean = false,
     val presence_override: String? = null, // "online" | "offline" | null (авто)
+    val is_active: Boolean = true,
     val online: Boolean = false
 )
 

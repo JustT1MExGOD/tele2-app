@@ -1811,6 +1811,7 @@ export interface MirandaCorporateAccountListItem {
   display_label: string | null;
   device_exclusive: boolean;
   presence_override: 'online' | 'offline' | null;
+  is_active: boolean;
   online: boolean;
   [key: string]: unknown;
 }

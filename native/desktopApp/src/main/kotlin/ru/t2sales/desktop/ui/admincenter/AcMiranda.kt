@@ -65,10 +65,11 @@ internal fun MirandaDevicesTab(container: AppContainer) {
     var createPhone by remember { mutableStateOf("") }
     var createPassword by remember { mutableStateOf("") }
     var createAccountName by remember { mutableStateOf("") }
+    var showInactive by remember { mutableStateOf(false) }
 
-    LaunchedEffect(reload) {
+    LaunchedEffect(reload, showInactive) {
         runCatching { mirandaApi.listPendingDevices().items }.onSuccess { pending = it }.onFailure { pending = emptyList() }
-        runCatching { mirandaApi.listAllCorporateAccounts().items }.onSuccess { accounts = it }.onFailure { accounts = emptyList() }
+        runCatching { mirandaApi.listAllCorporateAccounts(showInactive).items }.onSuccess { accounts = it }.onFailure { accounts = emptyList() }
         runCatching { mirandaApi.listAvailableAccounts().items }.onSuccess { available = it }.onFailure { available = emptyList() }
     }
     LaunchedEffect(grantQuery) {
@@ -199,21 +200,45 @@ internal fun MirandaDevicesTab(container: AppContainer) {
                 }
             }
         }
+        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = showInactive, onCheckedChange = { showInactive = it })
+            Text("Показывать деактивированные", color = T2Colors.hint, fontSize = 12.sp)
+        }
         val list = accounts
         when {
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Корпоративных аккаунтов пока нет")
             else -> list.forEach { acc ->
-                ListRow(acc.display_label ?: "${acc.employee_full_name} · ${acc.store_id ?: "без точки"}", acc.store_id ?: "без точки") {
+                ListRow(
+                    (acc.display_label ?: "${acc.employee_full_name} · ${acc.store_id ?: "без точки"}") + if (!acc.is_active) " · деактивирован" else "",
+                    acc.store_id ?: "без точки"
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = acc.device_exclusive, onCheckedChange = { checked ->
+                        Checkbox(checked = acc.device_exclusive, enabled = acc.is_active, onCheckedChange = { checked ->
                             scope.launch {
                                 runCatching { mirandaApi.setAccountDeviceExclusive(acc.corporate_account_id, checked) }
                                     .onSuccess { reload++ }
                                     .onFailure { T2Toast.show("Не удалось изменить настройку", true) }
                             }
                         })
-                        Text("только одно устройство", color = T2Colors.hint, fontSize = 12.sp)
+                        Text("только одно устройство", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                        if (acc.is_active) {
+                            MChipButton("Деактивировать") {
+                                scope.launch {
+                                    runCatching { mirandaApi.deactivateAccount(acc.corporate_account_id) }
+                                        .onSuccess { T2Toast.show("Аккаунт деактивирован"); reload++ }
+                                        .onFailure { T2Toast.show("Не удалось деактивировать аккаунт", true) }
+                                }
+                            }
+                        } else {
+                            MChipButton("Восстановить") {
+                                scope.launch {
+                                    runCatching { mirandaApi.reactivateAccount(acc.corporate_account_id) }
+                                        .onSuccess { T2Toast.show("Аккаунт восстановлен"); reload++ }
+                                        .onFailure { T2Toast.show("Не удалось восстановить аккаунт", true) }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -237,7 +262,8 @@ internal fun MirandaDevicesTab(container: AppContainer) {
                 }
             }
             Spacer(Modifier.height(10.dp))
-            val accs = accounts.orEmpty()
+            // грант на переключение имеет смысл только на активный аккаунт.
+            val accs = accounts.orEmpty().filter { it.is_active }
             if (accs.isEmpty()) {
                 EmptyText("Корпоративных аккаунтов пока нет")
             } else {

@@ -49,6 +49,13 @@ private sealed class Rename {
     class Sector(val id: String, val name: String) : Rename()
 }
 
+// 20.76.0 ("нативный клиент всегда должен соответствовать вебу") — явное
+// создание дилера/сектора, раньше здесь можно было только переименовать.
+private sealed class CreateMode {
+    object Dealer : CreateMode()
+    object Sector : CreateMode()
+}
+
 /** Port of the «Дилеры/Секторы» page: unassigned supervisors, dealer -> sector cards, rename dialogs, sector assignment. */
 @Composable
 fun DealersScreen(api: AdminApi) {
@@ -58,6 +65,7 @@ fun DealersScreen(api: AdminApi) {
     var reload by remember { mutableStateOf(0) }
     var rename by remember { mutableStateOf<Rename?>(null) }
     var assignFor by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    var createMode by remember { mutableStateOf<CreateMode?>(null) }
 
     LaunchedEffect(reload) {
         failed = false
@@ -79,7 +87,17 @@ fun DealersScreen(api: AdminApi) {
         Spacer(Modifier.height(12.dp))
     }
 
-    PageSection("Дилеры/Секторы") {
+    PageSection(null) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("ДИЛЕРЫ/СЕКТОРЫ", color = T2Colors.hint, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.7.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MChipButton("+ Дилер") { createMode = CreateMode.Dealer }
+                MChipButton("+ Сектор") { createMode = CreateMode.Sector }
+            }
+        }
         when {
             failed -> Text("Не удалось загрузить дилеров/секторы", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             t == null -> LoadingBlock(Modifier.padding(16.dp))
@@ -120,6 +138,53 @@ fun DealersScreen(api: AdminApi) {
                     runCatching { if (r is Rename.Dealer) api.renameDealer(r.id, name.trim()) else api.renameSector((r as Rename.Sector).id, name.trim()) }
                         .onSuccess { T2Toast.show("Сохранено"); rename = null; reload++ }
                         .onFailure { T2Toast.show(it.message ?: "Ошибка", true) }
+                }
+            }
+        }
+    }
+
+    val cm = createMode
+    if (cm != null) {
+        when (cm) {
+            is CreateMode.Dealer -> {
+                var name by remember(cm) { mutableStateOf("") }
+                SheetDialog("Новый дилер", onDismiss = { createMode = null }) {
+                    Field("Название", name, { name = it }, placeholder = "ООО «Название»", fill = T2Colors.surface2)
+                    Spacer(Modifier.height(16.dp))
+                    MainButton("Создать", enabled = true) {
+                        if (name.isBlank()) { T2Toast.show("Укажите название", true); return@MainButton }
+                        scope.launch {
+                            runCatching { api.createDealer(name.trim()) }
+                                .onSuccess { T2Toast.show("Дилер создан"); createMode = null; reload++ }
+                                .onFailure { T2Toast.show(it.message ?: "Ошибка", true) }
+                        }
+                    }
+                }
+            }
+            is CreateMode.Sector -> {
+                var id by remember(cm) { mutableStateOf("") }
+                var name by remember(cm) { mutableStateOf("") }
+                val dealerNames = listOf("— без дилера —") + (t?.dealers?.map { it.name } ?: emptyList())
+                var dealerName by remember(cm) { mutableStateOf(dealerNames.first()) }
+                SheetDialog("Новый сектор", onDismiss = { createMode = null }) {
+                    Field("ID (латиница, как у сетей)", id, { id = it }, placeholder = "north_region", fill = T2Colors.surface2)
+                    Spacer(Modifier.height(10.dp))
+                    Field("Название", name, { name = it }, placeholder = "Северный регион", fill = T2Colors.surface2)
+                    Spacer(Modifier.height(10.dp))
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        androidx.compose.material.Text("Дилер (необязательно)", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
+                        ru.t2sales.desktop.ui.components.DropdownField(dealerName, dealerNames) { dealerName = it }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    MainButton("Создать", enabled = true) {
+                        if (id.isBlank() || name.isBlank()) { T2Toast.show("Укажите ID и название", true); return@MainButton }
+                        val dealerId = t?.dealers?.firstOrNull { it.name == dealerName }?.id
+                        scope.launch {
+                            runCatching { api.createSector(id.trim(), name.trim(), dealerId) }
+                                .onSuccess { T2Toast.show("Сектор создан"); createMode = null; reload++ }
+                                .onFailure { T2Toast.show(it.message ?: "Ошибка", true) }
+                        }
+                    }
                 }
             }
         }

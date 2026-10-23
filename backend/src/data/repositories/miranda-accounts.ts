@@ -389,6 +389,7 @@ export interface CorporateAccountListItem {
   display_label: string | null;
   device_exclusive: boolean;
   presence_override: 'online' | 'offline' | null;
+  is_active: boolean;
 }
 
 /** GET /miranda/accounts и GET /miranda/contacts/all — весь список активных
@@ -400,18 +401,24 @@ export interface CorporateAccountListItem {
  * employee_id, employee_full_name в этом случае падает на ca.account_name.
  * LEFT JOIN stores — store_name для группировки дерева контактов по точке
  * (store_id сам по себе не человекочитаем). */
-export async function listAllCorporateAccounts(orgIds: string[]): Promise<CorporateAccountListItem[]> {
+/** includeInactive — только для GET /miranda/accounts (админский список,
+ * §C плана "деактивация — не удаление"): без этого деактивированный
+ * аккаунт был бы не виден НИ ОТКУДА и восстановить его было бы нечем.
+ * GET /miranda/contacts/all (дерево контактов мессенджера, обычные
+ * сотрудники) продолжает звать эту же функцию с дефолтом false —
+ * поведение для них не меняется. */
+export async function listAllCorporateAccounts(orgIds: string[], includeInactive = false): Promise<CorporateAccountListItem[]> {
   const res = await query(
     `SELECT ca.id AS corporate_account_id, ca.employee_id,
             COALESCE(e.full_name, ca.account_name) AS employee_full_name,
             ca.store_id, s.name AS store_name, ca.display_label, ca.device_exclusive,
-            ca.presence_override
+            ca.presence_override, ca.is_active
      FROM corporate_accounts ca
      LEFT JOIN employees e ON e.id = ca.employee_id
      LEFT JOIN stores s ON s.id = ca.store_id
-     WHERE ca.org_id = ANY($1::text[]) AND ca.is_active
+     WHERE ca.org_id = ANY($1::text[]) AND (ca.is_active OR $2::boolean)
      ORDER BY ca.id ASC`,
-    [orgIds]
+    [orgIds, includeInactive]
   );
   return res.rows;
 }

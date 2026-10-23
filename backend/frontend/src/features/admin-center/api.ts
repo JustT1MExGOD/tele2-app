@@ -348,8 +348,20 @@ export async function adminRevokeMirandaDevice(headers: Record<string, string>, 
   return request(`/miranda/devices/${bindingId}/revoke`, headers, { method: 'POST' });
 }
 
-export async function adminListMirandaCorporateAccounts(headers: Record<string, string>): Promise<MirandaCorporateAccountsListResponse> {
-  return request('/miranda/accounts', headers);
+export async function adminListMirandaCorporateAccounts(headers: Record<string, string>, includeInactive = false): Promise<MirandaCorporateAccountsListResponse> {
+  return request(`/miranda/accounts${includeInactive ? '?include_inactive=1' : ''}`, headers);
+}
+
+// §C плана (глобальная админка) — деактивация/восстановление (не
+// удаление) ненужного Miranda-аккаунта. Бэкенд существовал с 20.72.0,
+// фронтенда не было нигде (ни веб, ни native) — найдено как пробел
+// 20.76.0, "нативный клиент всегда должен соответствовать вебу".
+export async function adminDeactivateMirandaAccount(headers: Record<string, string>, corporateAccountId: number): Promise<{ ok: true }> {
+  return request(`/miranda/accounts/${corporateAccountId}/deactivate`, headers, { method: 'POST' });
+}
+
+export async function adminReactivateMirandaAccount(headers: Record<string, string>, corporateAccountId: number): Promise<{ ok: true }> {
+  return request(`/miranda/accounts/${corporateAccountId}/reactivate`, headers, { method: 'POST' });
 }
 
 export async function adminCreateMirandaAccount(

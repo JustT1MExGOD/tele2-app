@@ -1665,5 +1665,15 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Попутный фикс: GET /metrics (и всё, что валидирует метрику через каталог) больше не теряет базовые метрики (sim/mnp/pa/...), когда в plan_metrics появляется хотя бы одна кастомная метрика',
       'tsc --noEmit (backend+frontend), vitest 941/941 (backend) + 683/683 (frontend), check:route-auth, check:architecture, build:frontend, smoke:frontend — без регрессий'
     ]
+  },
+  {
+    version: '20.76.0',
+    title: 'Нативный клиент всегда соответствует вебу — 3 закрытых пробела',
+    bullets: [
+      'Фикс: «Точки сети» в Admin Control Center игнорировали переключённую сеть (веб) — detail/edit/деактивация/восстановление точки не передавали org_id, список передавал; клик по точке другой сети падал 404',
+      'Деактивация/восстановление Miranda-аккаунтов — backend-роуты существовали с 20.72.0, кнопки не было НИГДЕ (ни веб, ни native): добавлена на обеих сторонах + GET /miranda/accounts?include_inactive=1, без которого деактивированный аккаунт был не виден ни одним способом для последующего восстановления',
+      'Нативный клиент (desktopApp): переключатель сети (Дилер→Сектор→Сеть) теперь персистентен на уровне всего Admin Center, не только «Команды»; создание дилера/сектора (раньше только переименование)',
+      'tsc --noEmit (backend+frontend), vitest 942/942 (backend) + 687/687 (frontend), check:route-auth, check:architecture, build:frontend, smoke:frontend, compileKotlin (desktopApp/mirandaApp/androidApp) — без регрессий'
+    ]
   }
 ];

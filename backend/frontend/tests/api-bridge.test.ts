@@ -88,14 +88,14 @@ const EXPECTED_KEYS = [
   'adminGetSheetImportPending', 'adminConfirmSheetImportPending', 'adminRejectSheetImportPending',
   'adminPreviewClearStoreMonth', 'adminClearStoreMonth',
   'adminListMirandaDevices', 'adminApproveMirandaDevice', 'adminRevokeMirandaDevice',
-  'adminListMirandaCorporateAccounts', 'adminCreateMirandaAccount', 'adminCreateMirandaPointAccount', 'adminListMirandaAvailableAccounts',
+  'adminListMirandaCorporateAccounts', 'adminDeactivateMirandaAccount', 'adminReactivateMirandaAccount', 'adminCreateMirandaAccount', 'adminCreateMirandaPointAccount', 'adminListMirandaAvailableAccounts',
   'adminGrantMirandaAccount', 'adminSetMirandaAccountDeviceExclusive'
 ] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
   it('exposes exactly the expected 195-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 198
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 200
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 

@@ -144,7 +144,7 @@ fun TeamScreen(teamApi: TeamApi, scheduleApi: ScheduleApi, salesApi: SalesApi, a
     }
 
     if (isAdmin && orgs.isNotEmpty()) {
-        OrgSwitcher(orgs, viewOrgId ?: me?.org_id) { viewOrgId = it }
+        ru.t2sales.desktop.ui.components.AdminOrgSwitcher(orgs, viewOrgId ?: me?.org_id) { viewOrgId = it }
         Spacer(Modifier.height(T2Spacing.sp3))
     }
 
@@ -428,31 +428,6 @@ private fun ToolRow(icon: ImageVector, title: String, sub: String?, onClick: () 
             if (sub != null) Text(sub, color = T2Colors.hint, fontSize = 12.sp)
         }
         Text("›", color = T2Colors.hint, fontSize = 22.sp)
-    }
-}
-
-@Composable
-private fun OrgSwitcher(orgs: List<OrgAdminItem>, currentId: String?, onPick: (String) -> Unit) {
-    fun dealerOf(o: OrgAdminItem) = o.dealer_name ?: "Без дилера"
-    fun sectorOf(o: OrgAdminItem) = o.sector_id ?: "default"
-    val current = orgs.firstOrNull { it.id == currentId } ?: orgs.first()
-    val dealers = orgs.map(::dealerOf).distinct().sorted()
-    val sectors = orgs.filter { dealerOf(it) == dealerOf(current) }.map(::sectorOf).distinct().sorted()
-    val inSector = orgs.filter { dealerOf(it) == dealerOf(current) && sectorOf(it) == sectorOf(current) }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Picker("Дилер", dealerOf(current), dealers) { d ->
-            val firstSector = orgs.filter { dealerOf(it) == d }.map(::sectorOf).distinct().sorted().first()
-            orgs.firstOrNull { dealerOf(it) == d && sectorOf(it) == firstSector }?.let { onPick(it.id) }
-        }
-        Spacer(Modifier.height(T2Spacing.sp2))
-        Picker("Сектор", sectorOf(current), sectors) { s ->
-            orgs.firstOrNull { dealerOf(it) == dealerOf(current) && sectorOf(it) == s }?.let { onPick(it.id) }
-        }
-        Spacer(Modifier.height(T2Spacing.sp2))
-        Picker("Сеть", current.name, inSector.map { it.name }) { n ->
-            inSector.firstOrNull { it.name == n }?.let { onPick(it.id) }
-        }
     }
 }
 

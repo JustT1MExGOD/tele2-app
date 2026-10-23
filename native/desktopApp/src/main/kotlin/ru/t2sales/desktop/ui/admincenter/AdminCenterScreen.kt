@@ -74,8 +74,26 @@ private const val WEB_ONLY = "Эта вкладка пока доступна т
 /** Port of the Admin Control Center shell (index.html #page-admin-center, pages/admin-center/index.ts): tab bar + tab body. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AdminCenterScreen(container: AppContainer) {
+fun AdminCenterScreen(container: AppContainer, me: ru.t2sales.shared.api.MeResponse) {
     var tab by remember { mutableStateOf(AcTab.Overview) }
+    // org-switcher (20.76.0, "нативный клиент всегда должен соответствовать
+    // вебу") — тот же Дилер→Сектор→Сеть переключатель, что уже был только
+    // на «Команде», теперь персистентно виден на Admin Center целиком
+    // (ближайший native-эквивалент web'овской шапки, 20.73.0): переключение
+    // сети держится, пока открыт Admin Center, независимо от смены вкладки.
+    var orgs by remember { mutableStateOf<List<ru.t2sales.shared.api.OrgAdminItem>>(emptyList()) }
+    LaunchedEffect(Unit) { runCatching { container.teamApi.getOrgs() }.onSuccess { orgs = it } }
+
+    if (orgs.size > 1) {
+        PageSection(null) {
+            Box(Modifier.padding(16.dp)) {
+                ru.t2sales.desktop.ui.components.AdminOrgSwitcher(orgs, ru.t2sales.desktop.ui.shell.AppNav.adminViewOrgId ?: me.org_id) {
+                    ru.t2sales.desktop.ui.shell.AppNav.adminViewOrgId = it
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
 
     PageSection(null) {
         FlowRow(
@@ -400,17 +418,18 @@ private fun StoresTab(container: AppContainer) {
     var failed by remember { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
     var selected by remember { mutableStateOf<String?>(null) }
-    var orgId by remember { mutableStateOf("") }
+    // 20.76.0 — был локальный org_id-текстфилд, заменён на общий
+    // AdminOrgSwitcher (персистентный на уровне всего Admin Center,
+    // см. AdminCenterScreen выше), тот же паттерн, что веб использует с
+    // 20.73.0 (переключатель в шапке, не на каждой вкладке свой).
+    val orgId = ru.t2sales.desktop.ui.shell.AppNav.adminViewOrgId
 
     LaunchedEffect(reload, orgId) {
         failed = false
-        runCatching { api.stores(orgId.trim().ifEmpty { null }).items }.onSuccess { stores = it }.onFailure { failed = true }
+        runCatching { api.stores(orgId).items }.onSuccess { stores = it }.onFailure { failed = true }
     }
 
     PageSection("Точки сети") {
-        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
-            Field("", orgId, { orgId = it; selected = null }, placeholder = "org_id (пусто = своя сеть)", fill = T2Colors.surface2)
-        }
         val list = stores
         when {
             failed -> EmptyText("Не удалось загрузить точки")
@@ -422,7 +441,7 @@ private fun StoresTab(container: AppContainer) {
     val id = selected
     if (id != null) {
         Spacer(Modifier.height(12.dp))
-        StoreDetail(api, id, orgId.trim().ifEmpty { null }) { reload++ }
+        StoreDetail(api, id, orgId) { reload++ }
     }
 }
 

@@ -550,6 +550,30 @@ class AdminApi(private val client: HttpClient) {
         }
     }
 
+    // 20.76.0 ("нативный клиент всегда должен соответствовать вебу") —
+    // явное создание дилера/сектора существовало на бэкенде и на вебе
+    // с 20.72.0/20.73.0, нативного клиента не было вообще (только
+    // переименование существующих).
+    suspend fun createDealer(name: String): Int {
+        val res: kotlinx.serialization.json.JsonObject = client.post(apiUrl("/admin/dealers")) {
+            contentType(ContentType.Application.Json)
+            setBody(kotlinx.serialization.json.buildJsonObject { put("name", kotlinx.serialization.json.JsonPrimitive(name)) })
+        }.body()
+        val item = res["item"] as kotlinx.serialization.json.JsonObject
+        return (item["id"] as kotlinx.serialization.json.JsonPrimitive).content.toInt()
+    }
+
+    suspend fun createSector(id: String, name: String, dealerId: Int?) {
+        client.post(apiUrl("/admin/sectors")) {
+            contentType(ContentType.Application.Json)
+            setBody(kotlinx.serialization.json.buildJsonObject {
+                put("id", kotlinx.serialization.json.JsonPrimitive(id))
+                put("name", kotlinx.serialization.json.JsonPrimitive(name))
+                put("dealerId", dealerId?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+            })
+        }
+    }
+
     suspend fun assignSupervisorSector(supervisorId: Int, sectorId: String) {
         client.put(apiUrl("/supervisor/$supervisorId/sector")) {
             contentType(ContentType.Application.Json)

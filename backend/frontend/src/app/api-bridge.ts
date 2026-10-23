@@ -256,6 +256,8 @@ import {
   adminApproveMirandaDevice,
   adminRevokeMirandaDevice,
   adminListMirandaCorporateAccounts,
+  adminDeactivateMirandaAccount,
+  adminReactivateMirandaAccount,
   adminCreateMirandaAccount,
   adminCreateMirandaPointAccount,
   adminListMirandaAvailableAccounts,
@@ -459,6 +461,8 @@ declare global {
       adminApproveMirandaDevice: typeof adminApproveMirandaDevice;
       adminRevokeMirandaDevice: typeof adminRevokeMirandaDevice;
       adminListMirandaCorporateAccounts: typeof adminListMirandaCorporateAccounts;
+      adminDeactivateMirandaAccount: typeof adminDeactivateMirandaAccount;
+      adminReactivateMirandaAccount: typeof adminReactivateMirandaAccount;
       adminCreateMirandaAccount: typeof adminCreateMirandaAccount;
       adminCreateMirandaPointAccount: typeof adminCreateMirandaPointAccount;
       adminListMirandaAvailableAccounts: typeof adminListMirandaAvailableAccounts;
@@ -662,6 +666,8 @@ window.apiClient = {
   adminApproveMirandaDevice,
   adminRevokeMirandaDevice,
   adminListMirandaCorporateAccounts,
+  adminDeactivateMirandaAccount,
+  adminReactivateMirandaAccount,
   adminCreateMirandaAccount,
   adminCreateMirandaPointAccount,
   adminListMirandaAvailableAccounts,

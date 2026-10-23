@@ -283,7 +283,7 @@ private fun AppRoot(container: AppContainer, initialMe: MeResponse?) {
                 Screen.NetMonth -> NetMonthScreen(container)
                 Screen.History -> HistoryScreen(container.salesApi, me = me!!)
                 Screen.Bfq -> BfqScreen(container, me = me!!)
-                Screen.AdminCenter -> AdminCenterScreen(container)
+                Screen.AdminCenter -> AdminCenterScreen(container, me = me!!)
                 Screen.Orgs -> OrgsScreen(container.adminApi)
                 Screen.Audit -> AuditScreen(container.adminApi)
                 Screen.Dealers -> DealersScreen(container.adminApi)
