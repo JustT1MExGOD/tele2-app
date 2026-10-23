@@ -1698,6 +1698,15 @@ export const CHANGELOG: ChangelogEntry[] = [
     ]
   },
   {
+    version: '20.78.3',
+    title: 'Miranda: предсоздание аккаунтов администраторов',
+    bullets: [
+      'Миграция 0045 заранее создаёт личные corporate_accounts для действующих сотрудников с ролью admin и связывает их с employee_id T2 Sales',
+      'Аккаунты используют тот же org_id, store_id = NULL и device_exclusive = false, поэтому администратор появляется в Miranda без отдельного пользователя',
+      'Backfill идемпотентен и не затрагивает точечные аккаунты без employee_id'
+    ]
+  },
+  {
     version: '20.78.2',
     title: 'Miranda: корректные числовые ID в JSON-ответах устройств',
     bullets: [

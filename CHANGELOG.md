@@ -6,6 +6,12 @@
 
 > **Версии исходного архива:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Номер в исходниках не подтверждает публикацию или развёртывание.
 
+## 20.78.3 — Miranda: предсоздание аккаунтов администраторов
+
+- Добавлена миграция `0045_miranda_admin_accounts_backfill.sql`: для действующих сотрудников с ролью `admin` заранее создаётся личный `corporate_accounts` с `employee_id = employees.id`, тем же `org_id`, `store_id = NULL` и `device_exclusive = false`.
+- Backfill идемпотентен: существующий личный аккаунт восстанавливается как активный, повторное выполнение не создаёт новый аккаунт; точечные аккаунты без `employee_id` не затрагиваются.
+- После применения миграции администраторы появляются в `/miranda/contacts/all` как связанные аккаунты T2 Sales.
+
 ## 20.78.2 — Miranda: корректные числовые ID в JSON-ответах устройств
 
 - Исправлен wire-контракт `/miranda/devices/register`, `/miranda/devices/activate` и `GET /miranda/devices`: `deviceId`, `corporateAccountId`, `binding_id`, `device_id` и `employee_id` теперь сериализуются числами, а не строками PostgreSQL; нативный клиент Miranda снова может разобрать успешный ответ активации.
