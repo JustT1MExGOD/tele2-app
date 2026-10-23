@@ -25,7 +25,8 @@ import '../src/app/api-bridge.js';
 // sheet-import-review entries (20.61.0, Google Sheets schedule import) + 2
 // clear-store-month entries (20.63.0, Admin Control Center bulk schedule clear) + 8
 // Miranda device/account-grant entries (20.64.0, T2 Miranda — device binding +
-// admin account switch grants + explicit account creation)),
+// admin account switch grants + explicit account creation) + Admin Center
+// corporate-account rename and contact-group entries (20.79.0),
 // preserved verbatim by the split (see the architecture trace/plan).
 const EXPECTED_KEYS = [
   'getOrgStores', 'getMetrics', 'getPromos', 'getPromoCard', 'createPromo',
@@ -89,13 +90,15 @@ const EXPECTED_KEYS = [
   'adminPreviewClearStoreMonth', 'adminClearStoreMonth',
   'adminListMirandaDevices', 'adminApproveMirandaDevice', 'adminRevokeMirandaDevice',
   'adminListMirandaCorporateAccounts', 'adminDeactivateMirandaAccount', 'adminReactivateMirandaAccount', 'adminCreateMirandaAccount', 'adminCreateMirandaPointAccount', 'adminListMirandaAvailableAccounts',
-  'adminGrantMirandaAccount', 'adminSetMirandaAccountDeviceExclusive'
-] as const;
+  'adminGrantMirandaAccount', 'adminSetMirandaAccountDeviceExclusive',
+  'adminRenameMirandaAccount', 'adminListMirandaGroups', 'adminCreateMirandaGroup',
+  'adminRenameMirandaGroup', 'adminDeleteMirandaGroup', 'adminAddMirandaGroupMember',
+  'adminRemoveMirandaGroupMember'] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 195-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 208-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 201
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 208
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 

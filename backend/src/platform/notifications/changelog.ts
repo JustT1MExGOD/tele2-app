@@ -12,6 +12,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '20.79.1',
+    title: 'Hotfix: JSON-мутации Admin Center Miranda',
+    bullets: [
+      'Операции с группами и корпоративными аккаунтами теперь передают корректный Content-Type для JSON-тел запросов',
+      'Добавление аккаунта в группу Miranda больше не отклоняется с ошибкой body must be object'
+    ]
+  },
+  {
     version: '20.79.0',
     title: 'Miranda: группы контактов и переименование аккаунтов администратором',
     bullets: [

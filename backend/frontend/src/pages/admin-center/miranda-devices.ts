@@ -344,7 +344,7 @@ async function onCreateAccount(): Promise<void> {
       return;
     }
     try {
-      await window.apiClient.adminCreateMirandaPointAccount(authHeaders(), phone, password, accountName, storeId);
+      await window.apiClient.adminCreateMirandaPointAccount(authHeaders(true), phone, password, accountName, storeId);
       toast('Аккаунт точки создан', 'ok');
       if (phoneInput) phoneInput.value = '';
       if (passwordInput) passwordInput.value = '';
@@ -365,7 +365,7 @@ async function onCreateAccount(): Promise<void> {
   const labelInput = document.getElementById('mirandaCreateAccountLabel') as HTMLInputElement | null;
   const displayLabel = labelInput?.value.trim() || null;
   try {
-    await window.apiClient.adminCreateMirandaAccount(authHeaders(), selectedCreateEmployeeId, storeId, displayLabel);
+    await window.apiClient.adminCreateMirandaAccount(authHeaders(true), selectedCreateEmployeeId, storeId, displayLabel);
     toast('Корпоративный аккаунт создан', 'ok');
     selectedCreateEmployeeId = null;
     document.getElementById('mirandaCreateAccountSelected')!.textContent = '';
@@ -408,7 +408,7 @@ function renderAccountsList(box: HTMLElement, items: MirandaCorporateAccountList
 
 async function onToggleDeviceExclusive(corporateAccountId: number, deviceExclusive: boolean): Promise<void> {
   try {
-    await window.apiClient.adminSetMirandaAccountDeviceExclusive(authHeaders(), corporateAccountId, deviceExclusive);
+    await window.apiClient.adminSetMirandaAccountDeviceExclusive(authHeaders(true), corporateAccountId, deviceExclusive);
     toast(deviceExclusive ? 'Аккаунт теперь привязывается только к одному устройству' : 'Ограничение снято', 'ok');
   } catch (e) {
     toast('Не удалось изменить настройку', 'err');
@@ -418,7 +418,7 @@ async function onToggleDeviceExclusive(corporateAccountId: number, deviceExclusi
 
 async function onDeactivateAccount(corporateAccountId: number): Promise<void> {
   try {
-    await window.apiClient.adminDeactivateMirandaAccount(authHeaders(), corporateAccountId);
+    await window.apiClient.adminDeactivateMirandaAccount(authHeaders(true), corporateAccountId);
     toast('Аккаунт деактивирован', 'ok');
     loadCorporateAccounts();
   } catch (e) {
@@ -428,7 +428,7 @@ async function onDeactivateAccount(corporateAccountId: number): Promise<void> {
 
 async function onReactivateAccount(corporateAccountId: number): Promise<void> {
   try {
-    await window.apiClient.adminReactivateMirandaAccount(authHeaders(), corporateAccountId);
+    await window.apiClient.adminReactivateMirandaAccount(authHeaders(true), corporateAccountId);
     toast('Аккаунт восстановлен', 'ok');
     loadCorporateAccounts();
   } catch (e) {
@@ -461,7 +461,7 @@ async function onGrant(): Promise<void> {
     return;
   }
   try {
-    await window.apiClient.adminGrantMirandaAccount(authHeaders(), selectedGrantAdminId, corporateAccountId);
+    await window.apiClient.adminGrantMirandaAccount(authHeaders(true), selectedGrantAdminId, corporateAccountId);
     toast('Грант выдан', 'ok');
     loadAvailableAccounts();
   } catch (e) {
@@ -567,7 +567,7 @@ async function onCreateGroup(): Promise<void> {
     return;
   }
   try {
-    await window.apiClient.adminCreateMirandaGroup(authHeaders(), name, null);
+    await window.apiClient.adminCreateMirandaGroup(authHeaders(true), name, null);
     toast('Группа создана', 'ok');
     if (input) input.value = '';
     loadContactGroups();
@@ -581,7 +581,7 @@ async function onRenameGroup(groupId: number, currentName: string): Promise<void
   const name = window.prompt('Новое название группы', currentName)?.trim();
   if (!name || name === currentName) return;
   try {
-    await window.apiClient.adminRenameMirandaGroup(authHeaders(), groupId, name);
+    await window.apiClient.adminRenameMirandaGroup(authHeaders(true), groupId, name);
     toast('Группа переименована', 'ok');
     loadContactGroups();
   } catch (e) {
@@ -593,7 +593,7 @@ async function onRenameGroup(groupId: number, currentName: string): Promise<void
 async function onDeleteGroup(groupId: number, groupName: string): Promise<void> {
   if (!window.confirm(`Удалить группу «${groupName}»? Контакты останутся в списке вне групп.`)) return;
   try {
-    await window.apiClient.adminDeleteMirandaGroup(authHeaders(), groupId);
+    await window.apiClient.adminDeleteMirandaGroup(authHeaders(true), groupId);
     toast('Группа удалена', 'ok');
     loadContactGroups();
   } catch (e) {
@@ -607,7 +607,7 @@ async function onAddGroupMember(groupId: number): Promise<void> {
     return;
   }
   try {
-    await window.apiClient.adminAddMirandaGroupMember(authHeaders(), groupId, selectedGroupAccountId);
+    await window.apiClient.adminAddMirandaGroupMember(authHeaders(true), groupId, selectedGroupAccountId);
     toast('Аккаунт добавлен в группу', 'ok');
     loadContactGroups();
   } catch (e) {
@@ -617,7 +617,7 @@ async function onAddGroupMember(groupId: number): Promise<void> {
 
 async function onRemoveGroupMember(groupId: number, corporateAccountId: number): Promise<void> {
   try {
-    await window.apiClient.adminRemoveMirandaGroupMember(authHeaders(), groupId, corporateAccountId);
+    await window.apiClient.adminRemoveMirandaGroupMember(authHeaders(true), groupId, corporateAccountId);
     toast('Аккаунт убран из группы', 'ok');
     loadContactGroups();
   } catch (e) {
@@ -630,7 +630,7 @@ async function onRenameAccount(corporateAccountId: number, currentLabel: string 
   if (input === null) return;
   const displayLabel = input.trim() || null;
   try {
-    await window.apiClient.adminRenameMirandaAccount(authHeaders(), corporateAccountId, displayLabel);
+    await window.apiClient.adminRenameMirandaAccount(authHeaders(true), corporateAccountId, displayLabel);
     toast(displayLabel ? 'Имя контакта обновлено' : 'Возвращено стандартное имя', 'ok');
     loadCorporateAccounts();
   } catch (e) {
