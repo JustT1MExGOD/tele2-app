@@ -74,6 +74,60 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     expect(pending.json().items.some((i: any) => i.device_id === deviceId)).toBe(false);
   });
 
+  it('legacy pending personal binding auto-activates on re-login without re-registration', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Miranda Legacy Activation Org');
+    const emp = await fx.createPhoneEmployee(org, '+79990000016', null, { role: 'employee', fullName: 'Старый профиль' });
+    const token = await sessionsRepo.createSession(emp.id, false, 'employee');
+
+    const reg = await app.inject({
+      method: 'POST',
+      url: '/miranda/devices/register',
+      headers: { ...authAsSession(token), 'content-type': 'application/json' },
+      payload: { platform: 'windows', label: 'Старое устройство' }
+    });
+    expect(reg.statusCode).toBe(200);
+    const { deviceId, deviceSecret } = reg.json();
+    deviceIds.push(deviceId);
+
+    const bindingRow = await query(
+      `SELECT id, corporate_account_id FROM miranda_device_bindings WHERE device_id = $1`,
+      [deviceId]
+    );
+    const bindingId = Number(bindingRow.rows[0].id);
+    const corporateAccountId = Number(bindingRow.rows[0].corporate_account_id);
+    corporateAccountIds.push(corporateAccountId);
+
+    // Имитируем устройство, зарегистрированное до 20.78.0: тогда первое
+    // устройство личного аккаунта сохранялось pending и ждало второго админа.
+    await query(`UPDATE miranda_device_bindings SET status = 'pending', approved_by_employee_id = NULL, approved_at = NULL WHERE id = $1`, [bindingId]);
+    await query(`UPDATE employee_sessions SET active_corporate_account_id = NULL WHERE token_hash = encode(sha256($1::bytea), 'hex')`, [token]);
+
+    const activate = await app.inject({
+      method: 'POST',
+      url: '/miranda/devices/activate',
+      headers: { ...authAsSession(token), 'content-type': 'application/json' },
+      payload: { deviceSecret }
+    });
+    expect(activate.statusCode).toBe(200);
+    expect(activate.json().status).toBe('active');
+    expect(Number(activate.json().corporateAccountId)).toBe(corporateAccountId);
+
+    const binding = await query(`SELECT status FROM miranda_device_bindings WHERE id = $1`, [bindingId]);
+    expect(binding.rows[0].status).toBe('active');
+    const session = await query(
+      `SELECT active_corporate_account_id FROM employee_sessions WHERE token_hash = encode(sha256($1::bytea), 'hex')`,
+      [token]
+    );
+    expect(Number(session.rows[0].active_corporate_account_id)).toBe(corporateAccountId);
+
+    const audit = await query(
+      `SELECT action FROM audit_log WHERE action = 'MIRANDA_DEVICE_AUTO_APPROVED' AND target_id = $1 AND actor_employee_id = $2`,
+      [String(bindingId), emp.id]
+    );
+    expect(audit.rows).toHaveLength(1);
+  });
+
   it('другой сотрудник с чужим device_secret не активирует и не видит привязку (изоляция)', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Miranda Isolation Org');

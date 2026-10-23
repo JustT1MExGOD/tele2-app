@@ -164,7 +164,41 @@ export async function activateDevice(
   }
 
   const pendingBinding = await mirandaRepo.findPendingBindingForEmployee(device.id, employeeId);
-  if (pendingBinding) return { status: 'pending' };
+  if (pendingBinding) {
+    // 20.78.1 — обратная совместимость для устройств, зарегистрированных
+    // до 20.78.0: их личный binding уже был сохранён как pending. При
+    // следующем запуске применяем те же правила auto-approve, что и в
+    // registerDevice: личный аккаунт активируется сам, точка/касса
+    // (device_exclusive) остаётся в очереди администратора.
+    const account = await mirandaRepo.getCorporateAccount(pendingBinding.corporate_account_id);
+    if (!account?.device_exclusive) {
+      const activated = await withTransaction(async (q) => {
+        const conflict = await mirandaRepo.hasOtherActiveBinding(account.id, device.id, q);
+        if (conflict) return null;
+        const binding = await mirandaRepo.activatePendingBinding(pendingBinding.id, q);
+        if (!binding) return null;
+        await mirandaRepo.touchDeviceLastSeen(device.id, q);
+        await mirandaRepo.setActiveCorporateAccountForSession(hashToken(sessionToken), account.id);
+        await auditRepo.record(
+          {
+            orgId: account.org_id,
+            actorEmployeeId: employeeId,
+            actorTelegramId: null,
+            action: 'MIRANDA_DEVICE_AUTO_APPROVED',
+            targetType: 'miranda_device_binding',
+            targetId: String(binding.id),
+            after: { deviceId: device.id, corporateAccountId: account.id, legacyPendingBinding: true }
+          },
+          q
+        );
+        return binding;
+      });
+      if (activated) {
+        return { status: 'active', corporateAccountId: account.id, displayLabel: account.display_label };
+      }
+    }
+    return { status: 'pending' };
+  }
 
   return { status: 'unknown_device' };
 }

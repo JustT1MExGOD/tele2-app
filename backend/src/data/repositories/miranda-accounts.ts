@@ -220,8 +220,8 @@ export async function createDevice(
   return res.rows[0];
 }
 
-export async function touchDeviceLastSeen(deviceId: number): Promise<void> {
-  await query(`UPDATE miranda_devices SET last_seen_at = now() WHERE id = $1`, [deviceId]);
+export async function touchDeviceLastSeen(deviceId: number, q: typeof query = query): Promise<void> {
+  await q(`UPDATE miranda_devices SET last_seen_at = now() WHERE id = $1`, [deviceId]);
 }
 
 export async function revokeDevice(deviceId: number, q: typeof query = query): Promise<void> {
@@ -274,6 +274,20 @@ export async function findActiveBindingForEmployee(deviceId: number, employeeId:
      ORDER BY b.is_default DESC, b.id ASC
      LIMIT 1`,
     [deviceId, employeeId]
+  );
+  return res.rows[0] || null;
+}
+
+export async function activatePendingBinding(
+  bindingId: number,
+  q: typeof query = query
+): Promise<MirandaDeviceBindingRow | null> {
+  const res = await q(
+    `UPDATE miranda_device_bindings
+     SET status = 'active', approved_at = COALESCE(approved_at, now())
+     WHERE id = $1 AND status = 'pending'
+     RETURNING *`,
+    [bindingId]
   );
   return res.rows[0] || null;
 }
@@ -497,8 +511,12 @@ export async function revokeAdminAccountGrant(adminEmployeeId: number, corporate
 
 /** §3.3/3.4 плана — активация на текущей сессии (обычный автологин ИЛИ
  * admin-переключение, оба пишут в то же поле employee_sessions). */
-export async function setActiveCorporateAccountForSession(sessionTokenHash: string, corporateAccountId: number | null): Promise<void> {
-  await query(`UPDATE employee_sessions SET active_corporate_account_id = $2 WHERE token_hash = $1`, [sessionTokenHash, corporateAccountId]);
+export async function setActiveCorporateAccountForSession(
+  sessionTokenHash: string,
+  corporateAccountId: number | null,
+  q: typeof query = query
+): Promise<void> {
+  await q(`UPDATE employee_sessions SET active_corporate_account_id = $2 WHERE token_hash = $1`, [sessionTokenHash, corporateAccountId]);
 }
 
 /** Мессенджер (этап 2 плана) — на каждый чувствительный запрос сервер
