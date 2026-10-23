@@ -126,4 +126,23 @@ describe('Изоляция назначения ролей и секторов',
     const row = await query(`SELECT sector_id FROM supervisor_sectors WHERE supervisor_id = $1`, [candidate.id]);
     expect(row.rows.length).toBe(0);
   });
+
+  // 20.78.0 — admin, переключившийся на другую сеть через org-switcher, не мог
+  // назначить роль (в т.ч. admin) сотруднику этой сети: requireEmployeeInOrg
+  // сверял employee_id с СВОЕЙ сетью admin'а → 403. С org_id в body
+  // resolveViewOrgId() берёт переключённую сеть — тот же класс бага, что у
+  // Точек и Заявок на доступ.
+  it('PATCH /employees/:id/role — admin назначает роль сотруднику переключённой сети с org_id', async () => {
+    const app = await getApp();
+    const candidate = await fx.createEmployee(orgB, { role: 'employee' });
+    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId, admin.telegramGrantToken));
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/employees/${candidate.id}/role`,
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json', ...stepUp },
+      payload: { role: 'admin', org_id: orgB }
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().role).toBe('admin');
+  });
 });

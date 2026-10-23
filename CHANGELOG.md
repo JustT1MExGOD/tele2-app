@@ -6,6 +6,12 @@
 
 > **Версии исходного архива:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Номер в исходниках не подтверждает публикацию или развёртывание.
 
+## 20.77.1 — Fix: admin не мог назначить роль сотруднику переключённой сети
+
+- `PATCH /employees/:id/role` и `POST /admin/employees/:id/role` не передавали `org_id` — admin, переключившийся на другую сеть через org-switcher и пытавшийся назначить роль (в т.ч. `admin`) сотруднику этой сети, получал 403 «Сотрудник не принадлежит вашей сети» (`requireEmployeeInOrg` сверял сотрудника с сетью **активного** admin'а, а не переключённой).
+- Исправлено в обоих путях: `setEmployeeRole` (Team page → applyRoleChange) и `adminChangeEmployeeRole` (Admin Center → Сотрудники → onChangeRole) теперь передают `adminViewOrgId` в body.
+- Изоляционный тест `roles-sectors` покрывает именно этот сценарий — 8/8 (admin назначает `role: 'admin'` сотруднику `orgB` с `org_id: orgB` → 200).
+
 ## 20.77.0 — Перенос точек, native-топы, Miranda cookie-fix, заявки на доступ, компактный switcher
 
 - Перенос точки между сетями/дилерами: `POST /admin/stores/:id/move` существовал на backend с 20.72.0, UI не было нигде — добавлено поле `org_id` сети-получателя и кнопка «Перенести» на вебе (Admin Center → Точки → деталь) и в нативном клиенте, с подтверждением через dangerous-action диалог.

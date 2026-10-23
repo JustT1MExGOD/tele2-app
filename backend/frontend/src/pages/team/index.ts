@@ -516,7 +516,16 @@ export async function setRole(id: number, role: string): Promise<void> {
 
 async function applyRoleChange(id: number, role: string, sectorId?: string): Promise<void> {
   try {
-    await window.apiClient.setEmployeeRole(authHeaders(true), id, role, sectorId);
+    // org-switcher-aware (20.78.0): setEmployeeRole теперь принимает org_id —
+    // без него requireEmployeeInOrg сверял сотрудника с СВОЕЙ сетью admin'а,
+    // и назначение роли (в т.ч. admin) в переключённой сети падало 403.
+    await window.apiClient.setEmployeeRole(
+      authHeaders(true),
+      id,
+      role,
+      sectorId,
+      window.adminViewOrgId
+    );
   } catch (e: any) {
     toast(e?.message || 'Ошибка', 'err');
     return;

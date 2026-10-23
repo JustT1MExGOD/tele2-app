@@ -149,7 +149,7 @@ async function onChangeRole(employeeId: number, currentRole: string): Promise<vo
       if (!ticket) return;
       stepUpToken = ticket;
     }
-    await window.apiClient.adminChangeEmployeeRole(authHeaders(true), employeeId, { role: newRole }, stepUpToken);
+    await window.apiClient.adminChangeEmployeeRole(authHeaders(true), employeeId, { role: newRole }, stepUpToken, window.adminViewOrgId);
     toast('Роль изменена', 'ok');
     renderEmployeeDetail(employeeId);
   } catch (e: any) {
@@ -157,7 +157,7 @@ async function onChangeRole(employeeId: number, currentRole: string): Promise<vo
       const ticket = await requestStepUpTicket();
       if (!ticket) return;
       try {
-        await window.apiClient.adminChangeEmployeeRole(authHeaders(true), employeeId, { role: newRole }, ticket);
+        await window.apiClient.adminChangeEmployeeRole(authHeaders(true), employeeId, { role: newRole }, ticket, window.adminViewOrgId);
         toast('Роль изменена', 'ok');
         renderEmployeeDetail(employeeId);
         return;

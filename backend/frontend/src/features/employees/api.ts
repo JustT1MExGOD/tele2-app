@@ -44,8 +44,20 @@ export async function deactivateEmployee(headers: Record<string, string>, id: nu
   return request(`/employees/${id}`, headers, { method: 'DELETE' });
 }
 
-export async function setEmployeeRole(headers: Record<string, string>, id: number, role: string, sectorId?: string): Promise<unknown> {
-  const body: { role: string; sector_id?: string } = { role };
+// org-switcher-aware (20.78.0 fix) — раньше org_id не передавался вообще:
+// requireEmployeeInOrg на бэкенде сверял employee_id с сетью АКТОРА, и
+// admin, назначая роль сотруднику переключённой сети (чужой), получал 403 —
+// "Сотрудник не принадлежит вашей сети". Тот же класс бага, что уже
+// чинили на «Точках» (stores.ts) и «Заявках на доступ» (access-supervisor).
+export async function setEmployeeRole(
+  headers: Record<string, string>,
+  id: number,
+  role: string,
+  sectorId: string | undefined,
+  orgId: string | null
+): Promise<unknown> {
+  const body: { role: string; sector_id?: string; org_id?: string } = { role };
   if (sectorId) body.sector_id = sectorId;
+  if (orgId) body.org_id = orgId;
   return request(`/employees/${id}/role`, headers, { method: 'PATCH', body });
 }

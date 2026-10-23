@@ -207,7 +207,7 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     const { setEmployeeRole, getEmployees } = setupGlobals({ role: 'manager' });
     const { setRole } = await import('../src/pages/team/index.js');
     await setRole(1, 'manager');
-    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'manager', undefined);
+    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'manager', undefined, null);
     expect(getEmployees).toHaveBeenCalled(); // loadTeam() re-fetch
   });
 
@@ -244,7 +244,7 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     select.value = 'sector-1';
     document.getElementById('sectorPickerSubmit')!.dispatchEvent(new Event('click'));
     await new Promise((r) => setTimeout(r, 0));
-    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'supervisor', 'sector-1');
+    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'supervisor', 'sector-1', null);
   });
 
   it('setRole: role=supervisor, "Пропустить" — вызывает setEmployeeRole(id, role) без сектора', async () => {
@@ -259,7 +259,18 @@ describe('Команда (миграция frontend/js/06-team-bfq.js → src/pa
     await setRole(1, 'supervisor');
     document.getElementById('sectorPickerSkip')!.dispatchEvent(new Event('click'));
     await new Promise((r) => setTimeout(r, 0));
-    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'supervisor', undefined);
+    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'supervisor', undefined, null);
+  });
+
+  // 20.78.0 — admin в переключённой сети (org-switcher, adminViewOrgId) не мог
+  // назначить роль сотруднику ЧУЖОЙ сети: setEmployeeRole не передавал org_id,
+  // requireEmployeeInOrg на бэкенде сверял сотрудника с сетью АКТОРА → 403.
+  it('setRole: admin в переключённой сети — передаёт org_id в setEmployeeRole', async () => {
+    const { setEmployeeRole } = setupGlobals({ role: 'admin' });
+    (globalThis as any).adminViewOrgId = 'other-org';
+    const { setRole } = await import('../src/pages/team/index.js');
+    await setRole(1, 'admin');
+    expect(setEmployeeRole).toHaveBeenCalledWith(expect.anything(), 1, 'admin', undefined, 'other-org');
   });
 
   it('removeEmployee: подтверждено — деактивирует и перезагружает', async () => {

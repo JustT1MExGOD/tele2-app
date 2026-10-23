@@ -1687,5 +1687,14 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Компактный org-switcher на вебе: «таблетка» с индикатором сети рядом с кнопками шапки, по клику — попап с каскадным Дилер→Сектор→Сеть (был блок из 3 полноразмерных select на всю ширину)',
       'tsc --noEmit (backend+frontend), vitest 942/942 (backend, одноразовый Postgres) + 692/692 (frontend), check:route-auth, check:architecture, check:inline-event-handlers, build:frontend, smoke:frontend, compileKotlin (desktopApp/mirandaApp/androidApp) — без регрессий'
     ]
+  },
+  {
+    version: '20.77.1',
+    title: 'Fix: admin не мог назначить роль сотруднику переключённой сети',
+    bullets: [
+      'PATCH /employees/:id/role и POST /admin/employees/:id/role не передавали org_id — admin, назначая роль (в т.ч. admin) сотруднику чужой сети, получал 403 «Сотрудник не принадлежит вашей сети»',
+      'Исправлено в обоих путях: setEmployeeRole (Team page) и adminChangeEmployeeRole (Admin Center → Сотрудники)',
+      'Изоляционный тест покрывает именно этот сценарий — 8/8 roles-sectors, 693/693 frontend, 942/942 backend'
+    ]
   }
 ];

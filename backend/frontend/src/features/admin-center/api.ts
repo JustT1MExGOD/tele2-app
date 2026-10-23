@@ -67,8 +67,12 @@ export async function adminEditEmployee(headers: Record<string, string>, id: num
   return request(`/admin/employees/${id}`, headers, { method: 'PATCH', body });
 }
 
-export async function adminChangeEmployeeRole(headers: Record<string, string>, id: number, body: AdminEmployeeRoleChangeRequest, stepUpToken?: string): Promise<{ employee: AdminEmployeeDetailResponse['employee'] }> {
-  return request(`/admin/employees/${id}/role`, withStepUp(headers, stepUpToken), { method: 'POST', body });
+// org-switcher-aware (20.78.0) — тот же паттерн, что adminEditStore/adminGetStore:
+// без org_id requireEmployeeInOrg сверял сотрудника с СВОЕЙ сетью admin'а,
+// и смена роли (в т.ч. на admin) в переключённой сети падала 403.
+export async function adminChangeEmployeeRole(headers: Record<string, string>, id: number, body: AdminEmployeeRoleChangeRequest, stepUpToken?: string, orgId?: string | null): Promise<{ employee: AdminEmployeeDetailResponse['employee'] }> {
+  const payload = orgId ? { ...body, org_id: orgId } : body;
+  return request(`/admin/employees/${id}/role`, withStepUp(headers, stepUpToken), { method: 'POST', body: payload });
 }
 
 export async function adminDeactivateEmployee(headers: Record<string, string>, id: number): Promise<{ employee: AdminEmployeeDetailResponse['employee'] }> {
