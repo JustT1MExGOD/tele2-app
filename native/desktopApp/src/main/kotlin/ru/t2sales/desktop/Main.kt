@@ -292,6 +292,7 @@ private fun AppRoot(container: AppContainer, initialMe: MeResponse?) {
                 Screen.SvPeople -> SupervisorScreen(container.supervisorApi, container.salesApi, SvTab.People)
                 Screen.SvTrend -> SupervisorScreen(container.supervisorApi, container.salesApi, SvTab.Trend)
                 Screen.Chat -> ChatScreen(container = container, me = me!!)
+                Screen.Leaderboard -> ru.t2sales.desktop.ui.leaderboard.LeaderboardScreen(container = container)
                 Screen.Cash -> CashScreen(container = container)
                 Screen.CommandCenter -> CommandCenterScreen(container = container, me = me!!, onNavigate = { selected = it })
                 Screen.Profile -> ProfileScreen(

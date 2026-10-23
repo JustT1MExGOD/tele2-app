@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
@@ -87,7 +88,8 @@ private val SECTIONS = listOf(
             NavEntry("Задачи", Icons.Outlined.Assignment, Screen.Tasks),
             NavEntry("График", Icons.Outlined.CalendarToday, Screen.Schedule),
             NavEntry("Команда", Icons.Outlined.Group, Screen.Team),
-            NavEntry("Чат", Icons.Outlined.Chat, Screen.Chat)
+            NavEntry("Чат", Icons.Outlined.Chat, Screen.Chat),
+            NavEntry("Топы", Icons.Outlined.EmojiEvents, Screen.Leaderboard)
         )
     ),
     NavSection(

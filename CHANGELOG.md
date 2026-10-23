@@ -6,6 +6,15 @@
 
 > **Версии исходного архива:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Номер в исходниках не подтверждает публикацию или развёртывание.
 
+## 20.77.0 — Перенос точек, native-топы, Miranda cookie-fix, заявки на доступ, компактный switcher
+
+- Перенос точки между сетями/дилерами: `POST /admin/stores/:id/move` существовал на backend с 20.72.0, UI не было нигде — добавлено поле `org_id` сети-получателя и кнопка «Перенести» на вебе (Admin Center → Точки → деталь) и в нативном клиенте, с подтверждением через dangerous-action диалог.
+- Заявки на доступ стали org-switcher-aware: `getAccessRequests`, `approveAccessRequest`, `rejectAccessRequest` не передавали `org_id` — список молча показывал только свою сеть, approve/reject заявки другой сети падали 403 (тот же класс бага, что у «Точек» в 20.76.0).
+- Критический баг Miranda: `FileCookiesStorage` у T2 Sales и Miranda писал в один файл `~/.t2sales/cookies.json` — T2 Sales перезаписывал сессию Miranda при любом своём запросе (разные процессы, last-writer-wins), аккаунт точки «вылетал» при входе в T2 Sales на той же машине; Miranda переведена на отдельный `miranda-cookies.json`.
+- Native: экран «Топы» в сайдбаре (`Screen.Leaderboard`, иконка трофея), `LeaderboardApi` с `org_id`-поддержкой, период-пикер, табы по каталогу метрик, прогресс-бары — паритет с веб-версией 20.75.0.
+- Веб: org-switcher из блока трёх полноразмерных select переделан в компактную «таблетку» рядом с кнопками шапки — по клику открывается попап с каскадным Дилер→Сектор→Сеть, как `NetworkIndicator.kt` в нативном клиенте.
+- tsc --noEmit (backend+frontend), vitest 942/942 (backend, одноразовый Postgres) + 692/692 (frontend), check:route-auth, check:architecture, check:inline-event-handlers (baseline 306→303), check:frontend-architecture, check:frontend-legacy-globals, build:frontend, smoke:frontend, compileKotlin (desktopApp/mirandaApp/androidApp) — без регрессий.
+
 ## 20.76.0 — Нативный клиент всегда соответствует вебу: 3 закрытых пробела
 
 - Фикс: «Точки сети» в Admin Control Center (веб) игнорировали переключённую сеть — список точек уважал org-switcher, а клик по самой точке (detail/редактирование/деактивация/восстановление) нет, 4 из 5 запросов не передавали `org_id`; backend-роут был корректен с самого начала, баг был только во фронтенде.

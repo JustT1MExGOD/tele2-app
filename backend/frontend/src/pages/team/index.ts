@@ -128,6 +128,14 @@ function switcherHierarchy(): Map<string, Map<string, OrgAdminItem[]>> {
   return byDealer;
 }
 
+// 20.77.0 — раньше это были 3 полноразмерных select-блока прямо в шапке,
+// занимавшие огромный кусок экрана на КАЖДОЙ странице. По образцу
+// компактного индикатора сети в нативном клиенте (NetworkIndicator.kt —
+// круглая "таблетка" + клик открывает попап с деталями) — здесь та же
+// идея: "таблетка" с именем текущей сети, по клику открывается попап с
+// тем же каскадным Дилер→Сектор→Сеть выбором, что был раньше. Логика
+// выбора (switcherHierarchy/switchAdminDealer/Sector/Org) не менялась —
+// поменялась только разметка/взаимодействие вокруг неё.
 export async function renderOrgSwitcher(): Promise<void> {
   const sw = document.getElementById('orgSwitcher') as HTMLElement & { dataset: DOMStringMap } | null;
   if (!sw) return;
@@ -135,8 +143,11 @@ export async function renderOrgSwitcher(): Promise<void> {
     sw.style.display = 'none';
     return;
   }
-  sw.style.display = 'block';
-  if (sw.dataset.loaded) return;
+  sw.style.display = 'inline-block';
+  if (sw.dataset.loaded) {
+    updateOrgSwitcherLabel();
+    return;
+  }
   try {
     const orgs: OrgsListResponse = await window.apiClient.getOrgsAdmin(authHeaders());
     switcherOrgsCache = Array.isArray(orgs) ? orgs : [];
@@ -145,15 +156,45 @@ export async function renderOrgSwitcher(): Promise<void> {
     const dealerLabel = currentOrg?.dealer_name || 'Без дилера';
     const sectorId = currentOrg?.sector_id || 'default';
     sw.innerHTML = `
-          <div class="field"><label>Дилер</label><select id="swDealer" onchange="switchAdminDealer(this.value)"></select></div>
-          <div class="field"><label>Сектор</label><select id="swSector" onchange="switchAdminSector(this.value)"></select></div>
-          <div class="field"><label>Сеть</label><select id="swOrg" onchange="switchAdminOrg(this.value)"></select></div>
-        `;
+      <button type="button" class="org-switcher-trigger" id="orgSwitcherTrigger">
+        <span class="org-switcher-dot"></span>
+        <span id="orgSwitcherLabel">${esc(currentOrg?.name || 'Сеть')}</span>
+      </button>
+      <div class="org-switcher-popover" id="orgSwitcherPopover" style="display:none">
+        <div class="field"><label>Дилер</label><select id="swDealer"></select></div>
+        <div class="field"><label>Сектор</label><select id="swSector"></select></div>
+        <div class="field"><label>Сеть</label><select id="swOrg"></select></div>
+      </div>
+    `;
     renderSwitcherDealers(dealerLabel);
     renderSwitcherSectors(dealerLabel, sectorId);
     renderSwitcherOrgs(dealerLabel, sectorId, current);
+
+    document.getElementById('swDealer')?.addEventListener('change', (e) => switchAdminDealer((e.target as HTMLSelectElement).value));
+    document.getElementById('swSector')?.addEventListener('change', (e) => switchAdminSector((e.target as HTMLSelectElement).value));
+    document.getElementById('swOrg')?.addEventListener('change', (e) => switchAdminOrg((e.target as HTMLSelectElement).value));
+
+    document.getElementById('orgSwitcherTrigger')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pop = document.getElementById('orgSwitcherPopover');
+      if (pop) pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+    });
+    document.getElementById('orgSwitcherPopover')?.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => {
+      const pop = document.getElementById('orgSwitcherPopover');
+      if (pop) pop.style.display = 'none';
+    });
+
     sw.dataset.loaded = '1';
   } catch (_) {}
+}
+
+function updateOrgSwitcherLabel(): void {
+  const label = document.getElementById('orgSwitcherLabel');
+  if (!label) return;
+  const current = adminViewOrgId || me?.org_id;
+  const currentOrg = switcherOrgsCache.find((o) => o.id === current);
+  label.textContent = currentOrg?.name || 'Сеть';
 }
 
 function renderSwitcherDealers(selectedDealer: string): void {
@@ -204,6 +245,9 @@ export function switchAdminOrg(orgId: string): void {
   // после смены сети admin продолжил бы видеть точки прошлой сети.
   window.__stores = null;
   stores = [];
+  updateOrgSwitcherLabel();
+  const pop = document.getElementById('orgSwitcherPopover');
+  if (pop) pop.style.display = 'none';
   // 21.x (глобальная админка) — переключатель теперь в персистентной
   // шапке, виден на ЛЮБОМ экране, не только на «Команде»: перезагружаем
   // ТЕКУЩУЮ открытую страницу (window.page), тот же приём, что

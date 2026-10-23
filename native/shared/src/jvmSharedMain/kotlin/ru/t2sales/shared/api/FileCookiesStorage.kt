@@ -21,16 +21,29 @@ private data class StoredCookie(
 )
 
 /**
- * A JVM CookiesStorage backed by a JSON file at ~/.t2sales/cookies.json.
+ * A JVM CookiesStorage backed by a JSON file at ~/.t2sales/<fileName>.
  * A desktop app has no browser-style cookie jar built in, so this is what
  * lets t2_session/t2_csrf survive an app restart (see Milestone 1's
  * verification step 3 — this is the single most important behavior to get
  * right).
+ *
+ * fileName defaults to "cookies.json" (desktopApp's original file, kept
+ * for backward compatibility with already-signed-in installs) — every
+ * OTHER native app sharing this platformConfigDir() (currently mirandaApp)
+ * MUST pass its own distinct fileName. Found as a real, active bug: both
+ * apps used to default to the exact same file, so T2 Sales persisting its
+ * own in-memory cookie snapshot after any request would silently
+ * overwrite/drop whatever t2_point_session cookie Miranda had just
+ * written — the point account would get logged out any time T2 Sales was
+ * also open on the same machine, which is the common case.
  */
-class FileCookiesStorage(private val protector: ru.t2sales.shared.auth.SecretProtector? = ru.t2sales.shared.auth.platformSecretProtector()) : CookiesStorage {
+class FileCookiesStorage(
+    private val protector: ru.t2sales.shared.auth.SecretProtector? = ru.t2sales.shared.auth.platformSecretProtector(),
+    fileName: String = "cookies.json"
+) : CookiesStorage {
     private val mutex = Mutex()
     private val file = File(platformConfigDir()).apply { mkdirs() }
-        .resolve("cookies.json")
+        .resolve(fileName)
     private val json = Json { ignoreUnknownKeys = true }
     private var cookies: MutableList<StoredCookie> = load()
 

@@ -441,18 +441,20 @@ private fun StoresTab(container: AppContainer) {
     val id = selected
     if (id != null) {
         Spacer(Modifier.height(12.dp))
-        StoreDetail(api, id, orgId) { reload++ }
+        StoreDetail(api, id, orgId, onChanged = { reload++ }, onMoved = { selected = null; reload++ })
     }
 }
 
 @Composable
-private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, orgId: String?, onChanged: () -> Unit) {
+private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, orgId: String?, onChanged: () -> Unit, onMoved: () -> Unit) {
     val scope = rememberCoroutineScope()
     var store by remember(id) { mutableStateOf<AcStore?>(null) }
     var failed by remember(id) { mutableStateOf(false) }
     var reload by remember(id) { mutableStateOf(0) }
     var name by remember(id) { mutableStateOf("") }
     var danger by remember { mutableStateOf(false) }
+    var moveTargetOrgId by remember(id) { mutableStateOf("") }
+    var confirmMove by remember { mutableStateOf(false) }
 
     LaunchedEffect(id, orgId, reload) {
         failed = false
@@ -488,8 +490,35 @@ private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, o
                         }
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                Text("Перенести точку в другую сеть (в т.ч. другого дилера)", color = T2Colors.hint, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.weight(1f)) {
+                        Field("", moveTargetOrgId, { moveTargetOrgId = it }, placeholder = "org_id сети-получателя", fill = T2Colors.surface2)
+                    }
+                    MChipButton("Перенести") {
+                        if (moveTargetOrgId.isBlank()) { T2Toast.show("Укажите org_id сети-получателя", true); return@MChipButton }
+                        confirmMove = true
+                    }
+                }
             }
         }
+    }
+    if (confirmMove) {
+        DangerDialog(
+            title = "Перенести точку в другую сеть",
+            description = "Точка переедет в сеть «${moveTargetOrgId.trim()}». Все продажи/график/история останутся с точкой.",
+            onDismiss = { confirmMove = false },
+            onConfirm = {
+                confirmMove = false
+                val target = moveTargetOrgId.trim()
+                scope.launch {
+                    runCatching { api.moveStore(id, target, orgId) }
+                        .onSuccess { T2Toast.show("Точка перенесена"); onMoved() }
+                        .onFailure { T2Toast.show("Не удалось перенести точку", true) }
+                }
+            }
+        )
     }
     if (danger) {
         DangerDialog(

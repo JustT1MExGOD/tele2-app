@@ -10,6 +10,7 @@ import ru.t2sales.shared.api.AlertsApi
 import ru.t2sales.shared.api.AnalyticsApi
 import ru.t2sales.shared.api.InfoApi
 import ru.t2sales.shared.api.AdminCenterApi
+import ru.t2sales.shared.api.LeaderboardApi
 import ru.t2sales.shared.api.AuthApi
 import ru.t2sales.shared.api.CashApi
 import ru.t2sales.shared.api.ChatApi
@@ -61,6 +62,7 @@ class AppContainer {
     val infoApi = InfoApi(httpClient)
     val plansApi = PlansApi(httpClient)
     val adminCenterApi = AdminCenterApi(httpClient)
+    val leaderboardApi = LeaderboardApi(httpClient)
     val mirandaApi = MirandaApi(httpClient)
     val authRepository = AuthRepository(authApi)
 

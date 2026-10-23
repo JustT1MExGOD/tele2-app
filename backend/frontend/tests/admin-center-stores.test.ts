@@ -12,15 +12,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { esc } from '../src/app/core.js';
 
-function setupGlobals(adminViewOrgId: string | null) {
+function setupGlobals(adminViewOrgId: string | null, withModal = false) {
   document.body.innerHTML = `
     <div id="adminStoreList"></div>
     <div id="adminStoreDetail"></div>
+    ${withModal ? '<div id="overlay"></div><div id="modalTitle"></div><div id="modalBody"></div>' : ''}
   `;
   vi.stubGlobal('esc', esc);
   vi.stubGlobal('authHeaders', () => ({}));
   vi.stubGlobal('orgQueryParam', () => (adminViewOrgId ? `&org_id=${encodeURIComponent(adminViewOrgId)}` : ''));
   vi.stubGlobal('toast', vi.fn());
+  vi.stubGlobal('openModal', vi.fn());
+  vi.stubGlobal('closeModal', vi.fn());
   (window as any).adminViewOrgId = adminViewOrgId;
 
   const adminListStores = vi.fn().mockResolvedValue({
@@ -32,9 +35,10 @@ function setupGlobals(adminViewOrgId: string | null) {
   const adminEditStore = vi.fn().mockResolvedValue({ store: { id: 'store-1', name: 'Новое имя', code: '111', org_id: adminViewOrgId, is_active: true } });
   const adminDeactivateStore = vi.fn().mockResolvedValue({ ok: true });
   const adminReactivateStore = vi.fn().mockResolvedValue({ store: { id: 'store-1', name: 'Точка 1', code: '111', org_id: adminViewOrgId, is_active: true } });
-  (window as any).apiClient = { adminListStores, adminGetStore, adminEditStore, adminDeactivateStore, adminReactivateStore };
+  const adminMoveStore = vi.fn().mockResolvedValue({ store: { id: 'store-1', name: 'Точка 1', code: '111', org_id: 'target_org', is_active: true } });
+  (window as any).apiClient = { adminListStores, adminGetStore, adminEditStore, adminDeactivateStore, adminReactivateStore, adminMoveStore };
 
-  return { adminListStores, adminGetStore, adminEditStore, adminDeactivateStore, adminReactivateStore };
+  return { adminListStores, adminGetStore, adminEditStore, adminDeactivateStore, adminReactivateStore, adminMoveStore };
 }
 
 describe('Admin Control Center — Stores (src/pages/admin-center/stores)', () => {
@@ -122,5 +126,53 @@ describe('Admin Control Center — Stores (src/pages/admin-center/stores)', () =
     document.getElementById('storeReactivate')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await Promise.resolve();
     expect(adminReactivateStore).toHaveBeenCalledWith(expect.anything(), 'store-1', 'other_org');
+  });
+
+  // 20.77.0 — перенос точки между сетями; бэкенд существовал с 20.72.0,
+  // фронтенда не было нигде.
+  it('перенос точки: без target org_id — toast err, API не вызывается', async () => {
+    const { adminMoveStore } = setupGlobals(null, true);
+    const { renderStoresTab } = await import('../src/pages/admin-center/stores.js');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    await renderStoresTab(container);
+
+    document.getElementById('adminStoreList')!.innerHTML = '<button data-store-id="store-1"></button>';
+    document.getElementById('adminStoreList')!.querySelector('[data-store-id]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    document.getElementById('storeMove')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    expect(adminMoveStore).not.toHaveBeenCalled();
+    expect((globalThis as any).toast).toHaveBeenCalledWith('Укажите org_id сети-получателя', 'err');
+  });
+
+  it('перенос точки: с target org_id и подтверждением — вызывает adminMoveStore с org_id переключённой сети, очищает панель детали', async () => {
+    const { adminMoveStore, adminListStores } = setupGlobals('other_org', true);
+    const { renderStoresTab } = await import('../src/pages/admin-center/stores.js');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    await renderStoresTab(container);
+
+    document.getElementById('adminStoreList')!.innerHTML = '<button data-store-id="store-1"></button>';
+    document.getElementById('adminStoreList')!.querySelector('[data-store-id]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    (document.getElementById('storeMoveTargetOrgId') as HTMLInputElement).value = 'target_org';
+    document.getElementById('storeMove')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    // confirmDangerousAction рисует textarea с обязательной причиной —
+    // подтверждаем диалог как реальный пользователь.
+    (document.getElementById('dangerActionReason') as HTMLTextAreaElement).value = 'перевод в другую сеть';
+    document.getElementById('dangerActionConfirm')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(adminMoveStore).toHaveBeenCalledWith(expect.anything(), 'store-1', 'target_org', 'other_org');
+    expect(adminListStores).toHaveBeenCalledTimes(2); // первичная загрузка + перезагрузка после переноса
+    expect(document.getElementById('adminStoreDetail')!.innerHTML).toBe('');
   });
 });

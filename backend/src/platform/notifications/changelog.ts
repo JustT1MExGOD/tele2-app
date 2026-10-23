@@ -1675,5 +1675,17 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Нативный клиент (desktopApp): переключатель сети (Дилер→Сектор→Сеть) теперь персистентен на уровне всего Admin Center, не только «Команды»; создание дилера/сектора (раньше только переименование)',
       'tsc --noEmit (backend+frontend), vitest 942/942 (backend) + 687/687 (frontend), check:route-auth, check:architecture, build:frontend, smoke:frontend, compileKotlin (desktopApp/mirandaApp/androidApp) — без регрессий'
     ]
+  },
+  {
+    version: '20.77.0',
+    title: 'Перенос точек, native-топы, Miranda cookie-fix, заявки на доступ, компактный switcher',
+    bullets: [
+      'Перенос точки между сетями/дилерами — POST /admin/stores/:id/move существовал с 20.72.0, UI не было нигде: добавлено поле org_id сети-получателя + кнопка «Перенести» на вебе и в native',
+      'Заявки на доступ стали org-switcher-aware: getAccessRequests/approveAccessRequest/rejectAccessRequest не передавали org_id — approve/reject заявки другой сети падали 403, список показывал только свою сеть',
+      'Критический баг Miranda: T2 Sales и Miranda делили один файл ~/.t2sales/cookies.json — T2 Sales перезаписывал t2_point_session Miranda при любом запросе, аккаунт точки вылетал при входе в T2 Sales; Miranda переведена на отдельный miranda-cookies.json',
+      'Native-топы сотрудников: экран «Топы» в сайдбаре, LeaderboardApi, период-пикер, метрик-табы, прогресс-бары — как на вебе с 20.75.0',
+      'Компактный org-switcher на вебе: «таблетка» с индикатором сети рядом с кнопками шапки, по клику — попап с каскадным Дилер→Сектор→Сеть (был блок из 3 полноразмерных select на всю ширину)',
+      'tsc --noEmit (backend+frontend), vitest 942/942 (backend, одноразовый Postgres) + 692/692 (frontend), check:route-auth, check:architecture, check:inline-event-handlers, build:frontend, smoke:frontend, compileKotlin (desktopApp/mirandaApp/androidApp) — без регрессий'
+    ]
   }
 ];

@@ -123,6 +123,13 @@ export async function adminReactivateStore(headers: Record<string, string>, id: 
   return request(`/admin/stores/${encodeURIComponent(id)}/reactivate`, headers, { method: 'POST', body: orgId ? { org_id: orgId } : undefined });
 }
 
+// 20.77.0 — перенос точки между сетями/дилерами. Бэкенд-роут
+// (POST /admin/stores/:id/move) существовал с 20.72.0, фронтенда не
+// было нигде.
+export async function adminMoveStore(headers: Record<string, string>, id: string, toOrgId: string, orgId: string | null): Promise<AdminStoreDetailResponse> {
+  return request(`/admin/stores/${encodeURIComponent(id)}/move`, headers, { method: 'POST', body: orgId ? { toOrgId, org_id: orgId } : { toOrgId } });
+}
+
 // ---------- Sales correction ----------
 
 export interface AdminSalesSearchParams {

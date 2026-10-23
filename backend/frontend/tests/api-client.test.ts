@@ -12,6 +12,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getAccessDirectory,
+  getAccessRequests,
+  approveAccessRequest,
   rejectAccessRequest
 } from '../src/features/access/api.js';
 import {
@@ -541,12 +543,53 @@ describe('api-client', () => {
     );
   });
 
+  it('getAccessRequests — передаёт org_id переключённой сети', async () => {
+    const fetchMock = fetchOk([]);
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await getAccessRequests(headers, '&org_id=other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${window.location.origin}/access/requests?org_id=other-org`,
+      { headers }
+    );
+  });
+
+  it('approveAccessRequest — добавляет org_id в POST body', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await approveAccessRequest(headers, 7, { role: 'employee' }, 'other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/access/requests/7/approve`, {
+      headers,
+      method: 'POST',
+      body: JSON.stringify({ role: 'employee', org_id: 'other-org' })
+    });
+  });
+
+  it('rejectAccessRequest — добавляет org_id в POST body', async () => {
+    const fetchMock = fetchOk({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { 'X-Telegram-Id': '42' };
+
+    await rejectAccessRequest(headers, 7, 'other-org');
+
+    expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/access/requests/7/reject`, {
+      headers,
+      method: 'POST',
+      body: JSON.stringify({ org_id: 'other-org' })
+    });
+  });
+
   it('rejectAccessRequest — POST с пустым телом', async () => {
     const fetchMock = fetchOk({ ok: true });
     vi.stubGlobal('fetch', fetchMock);
     const headers = { 'X-Telegram-Id': '42' };
 
-    await rejectAccessRequest(headers, 7);
+    await rejectAccessRequest(headers, 7, null);
 
     expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/access/requests/7/reject`, {
       headers, method: 'POST', body: '{}'

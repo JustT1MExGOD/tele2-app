@@ -14,6 +14,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.websocket.readText
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 
 /**
@@ -676,6 +677,16 @@ class AdminCenterApi(private val client: HttpClient) {
         }
     }
 
+    // 20.77.0 — перенос точки между сетями/дилерами; бэкенд существовал с
+    // 20.72.0, нативного клиента не было вообще (как и веба — чинится
+    // одновременно).
+    suspend fun moveStore(id: String, toOrgId: String, orgId: String? = null) {
+        client.post(apiUrl("/admin/stores/$id/move")) {
+            contentType(ContentType.Application.Json)
+            setBody(json("toOrgId" to toOrgId, "org_id" to orgId))
+        }
+    }
+
     private fun json(vararg pairs: Pair<String, Any?>): kotlinx.serialization.json.JsonObject =
         kotlinx.serialization.json.buildJsonObject {
             pairs.forEach { (k, v) ->
@@ -1056,4 +1067,22 @@ class AnalyticsApi(private val client: HttpClient) {
 
     suspend fun applyWhatIf(body: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject =
         client.post(apiUrl("/schedule/what-if/apply")) { contentType(ContentType.Application.Json); setBody(body) }.body()
+}
+
+@Serializable
+data class LeaderboardMetric(val id: String, val label: String, val short_label: String, val unit: String)
+
+@Serializable
+data class LeaderboardItem(val rank: Int, val employee_id: Int, val full_name: String, val value: Double)
+
+@Serializable
+data class LeaderboardResponse(val metric: LeaderboardMetric, val from: String, val to: String, val items: List<LeaderboardItem>)
+
+// Топы сотрудников (20.77.0, "нативный клиент всегда должен
+// соответствовать вебу" — порт backend/frontend/src/pages/leaderboard,
+// на вебе с 20.75.0, в нативном клиенте не было вообще). orgId —
+// org-switcher-aware, тот же паттерн, что AdminCenterApi.stores(orgId).
+class LeaderboardApi(private val client: HttpClient) {
+    suspend fun get(metric: String, from: String, to: String, orgId: String? = null): LeaderboardResponse =
+        client.get(apiUrl("/leaderboard?metric=" + java.net.URLEncoder.encode(metric, "UTF-8") + "&from=$from&to=$to" + (orgId?.let { "&org_id=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""))).body()
 }

@@ -360,7 +360,7 @@ describe('Access gate/Supervisor (миграция frontend/js/08-access-supervi
     expect(document.getElementById('accessList')!.innerHTML).toContain('Пётр');
     (document.getElementById('role_req_9') as HTMLSelectElement).value = 'manager';
     await mod.approveAccess(9);
-    expect(approveAccessRequest).toHaveBeenCalledWith(expect.anything(), 9, { role: 'manager' });
+    expect(approveAccessRequest).toHaveBeenCalledWith(expect.anything(), 9, { role: 'manager' }, undefined);
     expect((globalThis as any).toast).toHaveBeenCalledWith('Доступ открыт', 'ok');
   });
 
@@ -381,7 +381,7 @@ describe('Access gate/Supervisor (миграция frontend/js/08-access-supervi
     const { rejectAccessRequest, getAccessRequests } = setupGlobals({ tgId: null, role: 'admin' });
     const mod = await import('../src/pages/access-supervisor/index.js');
     await mod.rejectAccess(9);
-    expect(rejectAccessRequest).toHaveBeenCalledWith(expect.anything(), 9);
+    expect(rejectAccessRequest).toHaveBeenCalledWith(expect.anything(), 9, undefined);
     expect(getAccessRequests).toHaveBeenCalled();
   });
 

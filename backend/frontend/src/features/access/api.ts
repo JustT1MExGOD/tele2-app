@@ -34,18 +34,25 @@ export async function submitAccessRequest(
   return request('/access/request', headers, { method: 'POST', body });
 }
 
-export async function getAccessRequests(headers: Record<string, string>): Promise<AccessRequestsListResponse> {
-  return request('/access/requests', headers);
+// org-switcher-aware (20.77.0 fix) — раньше ни одна из этих 3 функций не
+// передавала org_id вообще: список заявок молча показывал только свою
+// сеть независимо от переключателя, а approve/reject заявки другой сети
+// падали 403 forbidden (бэкенд сверяет effective_org_id заявки с
+// resolveViewOrgId(), который без override откатывается на СВОЮ сеть
+// админа) — тот же класс бага, что уже чинили на «Точках» (stores.ts).
+export async function getAccessRequests(headers: Record<string, string>, orgQuery: string): Promise<AccessRequestsListResponse> {
+  return request(`/access/requests${orgQuery ? '?' + orgQuery.slice(1) : ''}`, headers);
 }
 
 export async function approveAccessRequest(
   headers: Record<string, string>,
   id: number,
-  body: ApproveAccessRequest
+  body: ApproveAccessRequest,
+  orgId: string | null
 ): Promise<ApproveAccessResponse> {
-  return request(`/access/requests/${id}/approve`, headers, { method: 'POST', body });
+  return request(`/access/requests/${id}/approve`, headers, { method: 'POST', body: orgId ? { ...body, org_id: orgId } : body });
 }
 
-export async function rejectAccessRequest(headers: Record<string, string>, id: number): Promise<unknown> {
-  return request(`/access/requests/${id}/reject`, headers, { method: 'POST', body: {} });
+export async function rejectAccessRequest(headers: Record<string, string>, id: number, orgId: string | null): Promise<unknown> {
+  return request(`/access/requests/${id}/reject`, headers, { method: 'POST', body: orgId ? { org_id: orgId } : {} });
 }

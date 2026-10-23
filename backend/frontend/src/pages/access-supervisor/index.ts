@@ -906,7 +906,7 @@ export async function loadAccessRequests(): Promise<void> {
   }
   box.innerHTML = '<div class="skeleton"></div>';
   try {
-    const list: AccessRequestsListResponse = await window.apiClient.getAccessRequests(authHeaders());
+    const list: AccessRequestsListResponse = await window.apiClient.getAccessRequests(authHeaders(), orgQueryParam());
     if (!list.length) {
       box.innerHTML = '<div class="empty">Нет заявок</div>';
       return;
@@ -936,7 +936,7 @@ export async function approveAccess(id: number): Promise<void> {
   const roleSel = document.getElementById('role_req_' + id) as HTMLSelectElement | null;
   const role = roleSel ? roleSel.value : 'employee';
   try {
-    await window.apiClient.approveAccessRequest(authHeaders(true), id, { role });
+    await window.apiClient.approveAccessRequest(authHeaders(true), id, { role }, window.adminViewOrgId);
   } catch (e) {
     toast('Ошибка', 'err');
     return;
@@ -947,7 +947,7 @@ export async function approveAccess(id: number): Promise<void> {
 
 export async function rejectAccess(id: number): Promise<void> {
   try {
-    await window.apiClient.rejectAccessRequest(authHeaders(true), id);
+    await window.apiClient.rejectAccessRequest(authHeaders(true), id, window.adminViewOrgId);
   } catch (e) {
     toast('Ошибка', 'err');
     return;

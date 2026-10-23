@@ -18,7 +18,13 @@ import ru.t2sales.miranda.session.PointSessionStore
  * this first cut (flagged to the user, not silently dropped).
  */
 class MirandaContainer {
-    private val httpClient = createHttpClient(FileCookiesStorage(), OkHttp.create())
+    // Отдельный файл кук от T2 Sales (desktopApp) — оба приложения делят
+    // один platformConfigDir(), общий cookies.json приводил к тому, что
+    // T2 Sales затирал t2_point_session куку Miranda при любой своей
+    // записи (разные процессы, каждый со своим in-memory снимком и
+    // last-writer-wins перезаписью всего файла) — аккаунт точки
+    // "вылетал" при каждом входе в T2 Sales на той же машине.
+    private val httpClient = createHttpClient(FileCookiesStorage(fileName = "miranda-cookies.json"), OkHttp.create())
 
     val authApi = AuthApi(httpClient)
     val adminCenterApi = AdminCenterApi(httpClient) // only used for issueStepUp() on device approval

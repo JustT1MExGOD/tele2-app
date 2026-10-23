@@ -218,6 +218,7 @@ import {
   adminEditStore,
   adminDeactivateStore,
   adminReactivateStore,
+  adminMoveStore,
   adminSearchSales,
   adminGetSale,
   adminPreviewVoidSale,
@@ -423,6 +424,7 @@ declare global {
       adminEditStore: typeof adminEditStore;
       adminDeactivateStore: typeof adminDeactivateStore;
       adminReactivateStore: typeof adminReactivateStore;
+      adminMoveStore: typeof adminMoveStore;
       adminSearchSales: typeof adminSearchSales;
       adminGetSale: typeof adminGetSale;
       adminPreviewVoidSale: typeof adminPreviewVoidSale;
@@ -628,6 +630,7 @@ window.apiClient = {
   adminEditStore,
   adminDeactivateStore,
   adminReactivateStore,
+  adminMoveStore,
   adminSearchSales,
   adminGetSale,
   adminPreviewVoidSale,

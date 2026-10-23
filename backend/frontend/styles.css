@@ -977,23 +977,58 @@
       color: var(--text);
     }
     .field { margin-bottom: 14px; }
-    /* 21.x (глобальная админка) — переключатель Дилер→Сектор→Сеть теперь
-       в персистентной шапке (раньше жил только на экране «Команда», где
-       .field занимал всю ширину вертикально — тут нужна компактная
-       строка из трёх select'ов). */
+    /* 20.77.0 — компактная "таблетка" вместо трёх полноразмерных select'ов
+       на всю ширину шапки (та версия съедала огромный кусок экрана на
+       КАЖДОЙ странице). По образцу NetworkIndicator.kt в нативном
+       клиенте — круглый индикатор + подпись, клик открывает попап с
+       тем же каскадным Дилер→Сектор→Сеть выбором. */
     #orgSwitcher {
-      display: flex;
-      flex-wrap: wrap;
+      position: relative;
+      display: inline-block;
+    }
+    .org-switcher-trigger {
+      display: inline-flex;
+      align-items: center;
       gap: 8px;
-      align-items: flex-end;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: var(--fw-semi);
+      cursor: pointer;
+      max-width: 220px;
     }
-    #orgSwitcher .field {
-      margin-bottom: 0;
-      flex: 1 1 140px;
-      min-width: 120px;
+    .org-switcher-trigger span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    #orgSwitcher .field label { margin-bottom: 3px; font-size: 10px; }
-    #orgSwitcher .field select { padding: 8px 10px; font-size: 13px; border-radius: 10px; }
+    .org-switcher-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary, #2AABEE);
+      flex: none;
+    }
+    .org-switcher-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 260px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-md);
+      padding: 12px;
+      z-index: 500;
+    }
+    .org-switcher-popover .field { margin-bottom: 10px; }
+    .org-switcher-popover .field:last-child { margin-bottom: 0; }
+    .org-switcher-popover .field label { margin-bottom: 3px; font-size: 10px; }
+    .org-switcher-popover .field select { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px; border-radius: 10px; }
     .field label {
       display: block;
       font-size: 12px;

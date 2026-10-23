@@ -72,7 +72,7 @@ const EXPECTED_KEYS = [
   'adminChangeEmployeeRole', 'adminDeactivateEmployee', 'adminReactivateEmployee',
   'adminRevokeEmployeeSession', 'adminRevokeAllEmployeeSessions',
   'adminResetEmployeeMfa', 'adminInitiatePasswordReset', 'adminListStores',
-  'adminGetStore', 'adminEditStore', 'adminDeactivateStore', 'adminReactivateStore',
+  'adminGetStore', 'adminEditStore', 'adminDeactivateStore', 'adminReactivateStore', 'adminMoveStore',
   'adminSearchSales', 'adminGetSale', 'adminPreviewVoidSale', 'adminVoidSale',
   'adminRestoreSale', 'adminPreviewCorrectStore', 'adminCorrectSaleStore',
   'adminCorrectSaleMetric',
@@ -95,7 +95,7 @@ const EXPECTED_KEYS = [
 describe('api-bridge (window.apiClient contract)', () => {
   it('exposes exactly the expected 195-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 200
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 201
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 
