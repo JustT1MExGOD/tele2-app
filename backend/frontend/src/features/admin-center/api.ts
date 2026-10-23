@@ -347,8 +347,8 @@ export async function adminGetOperationsOverview(headers: Record<string, string>
 
 // ---------- T2 Miranda — устройства/корпоративные аккаунты ----------
 
-export async function adminListMirandaDevices(headers: Record<string, string>): Promise<MirandaPendingBindingsListResponse> {
-  return request('/miranda/devices', headers);
+export async function adminListMirandaDevices(headers: Record<string, string>, orgQuery: string): Promise<MirandaPendingBindingsListResponse> {
+  return request(`/miranda/devices${orgQuery ? '?' + orgQuery.slice(1) : ''}`, headers);
 }
 
 export async function adminApproveMirandaDevice(headers: Record<string, string>, bindingId: number, stepUpToken?: string): Promise<MirandaApproveBindingResponse> {
@@ -359,8 +359,12 @@ export async function adminRevokeMirandaDevice(headers: Record<string, string>, 
   return request(`/miranda/devices/${bindingId}/revoke`, headers, { method: 'POST' });
 }
 
-export async function adminListMirandaCorporateAccounts(headers: Record<string, string>, includeInactive = false): Promise<MirandaCorporateAccountsListResponse> {
-  return request(`/miranda/accounts${includeInactive ? '?include_inactive=1' : ''}`, headers);
+export async function adminListMirandaCorporateAccounts(headers: Record<string, string>, includeInactive = false, orgQuery = ''): Promise<MirandaCorporateAccountsListResponse> {
+  const qs = new URLSearchParams();
+  if (includeInactive) qs.set('include_inactive', '1');
+  if (orgQuery) qs.set('org_id', orgQuery.slice(1));
+  const query = qs.toString();
+  return request(`/miranda/accounts${query ? '?' + query : ''}`, headers);
 }
 
 // §C плана (глобальная админка) — деактивация/восстановление (не

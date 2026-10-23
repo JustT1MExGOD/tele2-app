@@ -1696,5 +1696,15 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Исправлено в обоих путях: setEmployeeRole (Team page) и adminChangeEmployeeRole (Admin Center → Сотрудники)',
       'Изоляционный тест покрывает именно этот сценарий — 8/8 roles-sectors, 693/693 frontend, 942/942 backend'
     ]
+  },
+  {
+    version: '20.78.0',
+    title: 'Miranda: дилерский скоуп Admin Center, авто-approve первого устройства',
+    bullets: [
+      'GET /miranda/accounts и /miranda/devices теперь показывают весь дилер (все сети дилера), а не только свою сеть — аккаунты и устройства соседних сетей дилера больше не скрыты',
+      'Первое устройство личного аккаунта auto-approve: вход в Miranda больше не требует второго админа, профиль появляется сразу после регистрации',
+      'Аккаунты точки/кассы (device_exclusive) и второе+ устройства по-прежнему ждут approve в очереди — защита не ослабла',
+      'tsc --noEmit (backend+frontend), vitest 10/10 (miranda-accounts, одноразовый Postgres) + 693/693 (frontend) — без регрессий'
+    ]
   }
 ];

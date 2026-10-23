@@ -39,6 +39,9 @@ class MirandaApi(private val client: HttpClient) {
 
     // --- admin: device approval queue ---
 
+    // 20.78.0 — backend показывает очередь всего дилера (как /miranda/accounts):
+    // org_id параметр необязателен, без него берётся своя сеть и её дилерская
+    // группа. Админ видит pending-устройства всех сетей дилера, не только своей.
     suspend fun listPendingDevices(): MirandaPendingBindingsListResponse =
         client.get(apiUrl("/miranda/devices")).body()
 

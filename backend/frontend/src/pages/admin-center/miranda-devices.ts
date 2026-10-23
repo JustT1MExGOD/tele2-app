@@ -150,7 +150,7 @@ async function loadPending(): Promise<void> {
   if (!box) return;
   box.innerHTML = '<div class="skeleton"></div>';
   try {
-    const res = await window.apiClient.adminListMirandaDevices(authHeaders());
+    const res = await window.apiClient.adminListMirandaDevices(authHeaders(), orgQueryParam());
     renderPendingList(box, res.items);
   } catch (e) {
     console.error(e);
@@ -245,7 +245,7 @@ async function loadCorporateAccounts(): Promise<void> {
   const includeInactive = (document.getElementById('mirandaShowInactive') as HTMLInputElement | null)?.checked || false;
   if (list) list.innerHTML = '<div class="skeleton"></div>';
   try {
-    const res = await window.apiClient.adminListMirandaCorporateAccounts(authHeaders(), includeInactive);
+    const res = await window.apiClient.adminListMirandaCorporateAccounts(authHeaders(), includeInactive, orgQueryParam());
     // грант на переключение имеет смысл только на активный аккаунт —
     // деактивированные остаются в списке выше для возможной реактивации,
     // но не засоряют выпадающий список здесь.

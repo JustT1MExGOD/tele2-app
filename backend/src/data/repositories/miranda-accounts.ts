@@ -248,11 +248,16 @@ export interface MirandaDeviceBindingRow {
 export async function createBinding(
   deviceId: number,
   corporateAccountId: number,
+  status: 'pending' | 'active' = 'pending',
+  approvedByEmployeeId: number | null = null,
   q: typeof query = query
 ): Promise<MirandaDeviceBindingRow> {
   const res = await q(
-    `INSERT INTO miranda_device_bindings (device_id, corporate_account_id) VALUES ($1, $2) RETURNING *`,
-    [deviceId, corporateAccountId]
+    `INSERT INTO miranda_device_bindings
+       (device_id, corporate_account_id, status, approved_by_employee_id, approved_at)
+     VALUES ($1, $2, $3, $4, CASE WHEN $3 = 'active' THEN now() ELSE NULL END)
+     RETURNING *`,
+    [deviceId, corporateAccountId, status, approvedByEmployeeId]
   );
   return res.rows[0];
 }
@@ -302,8 +307,11 @@ export interface PendingBindingListItem {
   created_at: string;
 }
 
-/** Admin Control Center — "Устройства Miranda", список ожидающих approve. */
-export async function listPendingBindings(): Promise<PendingBindingListItem[]> {
+/** Admin Control Center — "Устройства Miranda", список ожидающих approve.
+ * 20.78.0 — видимость вся дилерская группа (как у /miranda/accounts и
+ * /miranda/contacts/all): без orgIds-фильтра устройства соседних сетей
+ * дилера не были видны нигде. */
+export async function listPendingBindings(orgIds: string[]): Promise<PendingBindingListItem[]> {
   const res = await query(
     `SELECT b.id AS binding_id, b.device_id, d.platform, d.label AS device_label,
             b.corporate_account_id, ca.employee_id, e.full_name AS employee_full_name,
@@ -312,8 +320,9 @@ export async function listPendingBindings(): Promise<PendingBindingListItem[]> {
      JOIN miranda_devices d ON d.id = b.device_id
      JOIN corporate_accounts ca ON ca.id = b.corporate_account_id
      JOIN employees e ON e.id = ca.employee_id
-     WHERE b.status = 'pending'
-     ORDER BY b.created_at ASC`
+     WHERE b.status = 'pending' AND ca.org_id = ANY($1::text[])
+     ORDER BY b.created_at ASC`,
+    [orgIds]
   );
   return res.rows;
 }

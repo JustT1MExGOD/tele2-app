@@ -7,7 +7,8 @@
  */
 import { FastifyInstance } from 'fastify';
 import { Type, Static } from '@sinclair/typebox';
-import { requireActive, requireAdmin, assertStoreInOrg } from '../../../auth/guards.js';
+import { requireActive, requireAdmin, resolveViewOrgId, assertStoreInOrg } from '../../../auth/guards.js';
+import { resolveDealerOrgIds } from '../../../core/orgs/dealers.js';
 import { assertStepUp } from '../../../auth/step-up.js';
 import * as mirandaService from '../../../core/miranda-accounts/service.js';
 import { employeeAwareKeyGenerator } from '../../../security/rate-limit.js';
@@ -85,9 +86,15 @@ export async function registerMirandaDeviceRoutes(app: FastifyInstance) {
     }
   );
 
+  // Очередь подтверждения — весь дилер (как /miranda/accounts и
+  // /miranda/contacts/all): без этого устройства соседних сетей дилера
+  // админ не видел нигде. ?org_id= — какая сеть считается "своей" для
+  // дилерской группы (resolveViewOrgId), по умолчанию собственная.
   app.get('/miranda/devices', async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
-    const items = await mirandaService.listPendingBindings();
+    const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
+    const dealerOrgIds = await resolveDealerOrgIds(orgId);
+    const items = await mirandaService.listPendingBindings(dealerOrgIds);
     return reply.code(200).send({ items });
   });
 

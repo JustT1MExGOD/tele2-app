@@ -113,16 +113,18 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
   // только НЕодобренные устройства, а listAvailableAccountsForAdmin —
   // только то, что уже разрешено запрашивающему админу (замкнутый круг
   // без этого роута, см. обсуждение этапа 3 плана).
-  // Администрирование — глобально, любая сеть любого дилера (как и
-  // остальной Admin Control Center — resolveViewOrgId, см.
-  // auth/guards.ts): единственный админ управляет всем приложением, не
-  // только своим дилером. ?org_id= выбирает, какую сеть смотреть —
-  // своя по умолчанию.
+  // Видимость — весь дилер (как /miranda/contacts/all): корпоративные
+  // аккаунты всех сетей дилера, а не только своей — иначе аккаунты
+  // соседних сетей дилера вообще нигде не видны (mskt* живут в других
+  // org_id того же дилера). org_id-параметр сохранён для обратной
+  // совместимости (он по-прежнему принимается resolveViewOrgId), но
+  // скоуп списка — дилерская группа сети из query/org_id.
   app.get('/miranda/accounts', async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
     const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
     const includeInactive = (request.query as any)?.include_inactive === '1' || (request.query as any)?.include_inactive === 'true';
-    const items = await mirandaService.listAllCorporateAccounts([orgId], includeInactive);
+    const dealerOrgIds = await mirandaService.resolveDealerOrgIds(orgId);
+    const items = await mirandaService.listAllCorporateAccounts(dealerOrgIds, includeInactive);
     return reply.code(200).send({ items });
   });
 

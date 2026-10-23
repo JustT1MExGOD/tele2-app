@@ -113,7 +113,13 @@ export async function registerDevice(
     const account = await mirandaRepo.findOrCreateCorporateAccount(orgId, employeeId, storeId, label, q);
     const secret = mirandaRepo.generateDeviceSecret();
     const device = await mirandaRepo.createDevice(secret, platform, label, q);
-    const binding = await mirandaRepo.createBinding(device.id, account.id, q);
+    // 20.78.0 — авто-approve ПЕРВОГО устройства личного аккаунта: без него
+    // вход в Miranda упирался в pending-байндинг, а подтвердить его мог только
+    // ДРУГОЙ админ — у единственного админа профиль в Miranda не появлялся
+    // вообще. Аккаунты точки/кассы (device_exclusive) и второе+ устройства
+    // по-прежнему ждут approve в очереди.
+    const autoApprove = !account.device_exclusive && !(await mirandaRepo.hasOtherActiveBinding(account.id, device.id, q));
+    const binding = await mirandaRepo.createBinding(device.id, account.id, autoApprove ? 'active' : 'pending', autoApprove ? employeeId : null, q);
     await auditRepo.record(
       {
         orgId,
@@ -122,7 +128,7 @@ export async function registerDevice(
         action: 'MIRANDA_DEVICE_REGISTERED',
         targetType: 'miranda_device',
         targetId: String(device.id),
-        after: { platform, corporateAccountId: account.id, bindingId: binding.id }
+        after: { platform, corporateAccountId: account.id, bindingId: binding.id, autoApproved: autoApprove }
       },
       q
     );
@@ -398,8 +404,8 @@ export async function createPointCorporateAccount(
   });
 }
 
-export async function listPendingBindings() {
-  return mirandaRepo.listPendingBindings();
+export async function listPendingBindings(orgIds: string[]) {
+  return mirandaRepo.listPendingBindings(orgIds);
 }
 
 export async function listAvailableAccountsForAdmin(adminEmployeeId: number, deviceSecret: string | null) {

@@ -35,7 +35,9 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('employee регистрирует устройство (через phone-сессию) — pending, admin видит его в очереди', async () => {
+  // 20.78.0 — первое устройство личного аккаунта авто-approve: вход в Miranda
+  // не должен требовать второго админа, чтобы сам аккаунт вообще появился.
+  it('employee регистрирует первое устройство — auto-active, профиль работает сразу', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Miranda Register Org');
     const emp = await fx.createPhoneEmployee(org, '+79990000001', null, { role: 'employee', fullName: 'Королёв' });
@@ -49,25 +51,27 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     });
     expect(res.statusCode).toBe(200);
     const { deviceId, deviceSecret, status } = res.json();
-    expect(status).toBe('pending');
+    expect(status).toBe('active');
     deviceIds.push(deviceId);
     const regBindingRow = await query(`SELECT corporate_account_id FROM miranda_device_bindings WHERE device_id = $1`, [deviceId]);
-    corporateAccountIds.push(Number(regBindingRow.rows[0].corporate_account_id));
+    const corporateAccountId = Number(regBindingRow.rows[0].corporate_account_id);
+    corporateAccountIds.push(corporateAccountId);
 
-    const admin = await fx.createEmployee(org, { role: 'admin' });
-    const pending = await app.inject({ method: 'GET', url: '/miranda/devices', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
-    expect(pending.statusCode).toBe(200);
-    expect(pending.json().items.some((i: any) => i.device_id === deviceId)).toBe(true);
-
-    // Активация до approve — остаётся pending, ничего не ломает.
+    // Сразу после регистрации activate возвращает active и профиль уже работает.
     const activate = await app.inject({
       method: 'POST',
       url: '/miranda/devices/activate',
       headers: { ...authAsSession(token), 'content-type': 'application/json' },
       payload: { deviceSecret }
     });
-    expect(activate.statusCode).toBe(202);
-    expect(activate.json().status).toBe('pending');
+    expect(activate.statusCode).toBe(200);
+    expect(activate.json().status).toBe('active');
+
+    // Устройства в очереди pending для админа НЕ появляется — уже active.
+    const admin = await fx.createEmployee(org, { role: 'admin' });
+    const pending = await app.inject({ method: 'GET', url: '/miranda/devices', headers: authAs(admin.telegramId, admin.telegramGrantToken) });
+    expect(pending.statusCode).toBe(200);
+    expect(pending.json().items.some((i: any) => i.device_id === deviceId)).toBe(false);
   });
 
   it('другой сотрудник с чужим device_secret не активирует и не видит привязку (изоляция)', async () => {
@@ -99,7 +103,10 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     expect(strangerActivate.json().error).toBe('unknown_device');
   });
 
-  it('полный цикл: approve требует requireAdmin+step-up, активирует сессию, revoke мгновенно блокирует следующий запуск, всё аудируется', async () => {
+  // 20.78.0 — личный аккаунт: привязка сразу active (первое устройство авто-
+  // approve), approve повторно не нужен и на active-байндинге отклоняется;
+  // revoke по-прежнему мгновенно блокирует, всё аудируется.
+  it('полный цикл личного аккаунта: auto-active, revoke мгновенно блокирует следующий запуск, всё аудируется', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Miranda Lifecycle Org');
     const store = await fx.createStore(org, 'Космонавтов 20А');
@@ -114,10 +121,11 @@ describe('T2 Miranda — аккаунты/устройства', () => {
       payload: { platform: 'windows', storeId: store, label: 'ПК у входа' }
     });
     expect(reg.statusCode).toBe(200);
+    expect(reg.json().status).toBe('active');
     const { deviceId, deviceSecret } = reg.json();
     deviceIds.push(deviceId);
 
-    // Непривилегированный сотрудник не может подтвердить привязку.
+    // Непривилегированный сотрудник не видит admin-очередь.
     const pendingList = await app.inject({ method: 'GET', url: '/miranda/devices', headers: authAsSession(empToken) });
     expect(pendingList.statusCode).toBe(403);
 
@@ -126,19 +134,8 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     const corporateAccountId = Number(bindingRow.rows[0].corporate_account_id);
     corporateAccountIds.push(corporateAccountId);
 
-    // requireAdmin без step-up — отказ.
-    const approveNoStepUp = await app.inject({ method: 'POST', url: `/miranda/devices/${bindingId}/approve`, headers: authAs(admin.telegramId, admin.telegramGrantToken) });
-    expect(approveNoStepUp.statusCode).toBe(403);
-    expect(approveNoStepUp.json().error).toBe('step_up_required');
-
-    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
-    const approve = await app.inject({
-      method: 'POST',
-      url: `/miranda/devices/${bindingId}/approve`,
-      headers: { ...authAs(admin.telegramId), ...stepUp }
-    });
-    expect(approve.statusCode).toBe(200);
-
+    // Активация сразу возвращает active и ставит active_corporate_account_id
+    // на сессию — профиль доступен без ожидания админа.
     const activate = await app.inject({
       method: 'POST',
       url: '/miranda/devices/activate',
@@ -151,6 +148,15 @@ describe('T2 Miranda — аккаунты/устройства', () => {
 
     const sessionRow = await query(`SELECT active_corporate_account_id FROM employee_sessions WHERE token_hash = encode(sha256($1::bytea), 'hex')`, [empToken]);
     expect(Number(sessionRow.rows[0].active_corporate_account_id)).toBe(corporateAccountId);
+
+    // Approve на уже active-байндинге — 404 (байндинга в pending нет).
+    const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
+    const approve = await app.inject({
+      method: 'POST',
+      url: `/miranda/devices/${bindingId}/approve`,
+      headers: { ...authAs(admin.telegramId), ...stepUp }
+    });
+    expect(approve.statusCode).toBe(404);
 
     const revoke = await app.inject({
       method: 'POST',
@@ -173,8 +179,60 @@ describe('T2 Miranda — аккаунты/устройства', () => {
       [[String(deviceId), String(bindingId)]]
     );
     expect(auditActions.rows.map((r: any) => r.action)).toEqual(
-      expect.arrayContaining(['MIRANDA_DEVICE_REGISTERED', 'MIRANDA_DEVICE_APPROVED', 'MIRANDA_DEVICE_REVOKED'])
+      expect.arrayContaining(['MIRANDA_DEVICE_REGISTERED', 'MIRANDA_DEVICE_REVOKED'])
     );
+  });
+
+  // 20.78.0 — очередь pending-устройств видит весь дилер, не только свою сеть:
+  // иначе устройство соседней сети дилера не было видно нигде.
+  it('GET /miranda/devices — очередь видит устройства всего дилера, не чужого дилера', async () => {
+    const app = await getApp();
+    const dealer = await fx.createDealer('Miranda Devices Dealer');
+    const sector = await fx.createSector('miranda-devices-sector', dealer);
+    const orgA = await fx.createOrg('Miranda Devices Org A', sector);
+    const orgB = await fx.createOrg('Miranda Devices Org B', sector);
+    const orgForeign = await fx.createOrg('Miranda Devices Foreign Org');
+
+    const adminA = await fx.createEmployee(orgA, { role: 'admin' });
+    const empB = await fx.createPhoneEmployee(orgB, '+79990000014', null, { role: 'employee', fullName: 'Сосед' });
+    const empForeign = await fx.createPhoneEmployee(orgForeign, '+79990000015', null, { role: 'employee', fullName: 'Чужой' });
+    const empBToken = await sessionsRepo.createSession(empB.id, false, 'employee');
+    const empForeignToken = await sessionsRepo.createSession(empForeign.id, false, 'employee');
+
+    // device_exclusive аккаунт в соседней сети дилера — его байндинг pending.
+    const acctB = await query(
+      `INSERT INTO corporate_accounts (org_id, employee_id, device_exclusive) VALUES ($1, $2, true) RETURNING id`,
+      [orgB, empB.id]
+    );
+    const corporateAccountIdB = Number(acctB.rows[0].id);
+    corporateAccountIds.push(corporateAccountIdB);
+    const regB = await app.inject({
+      method: 'POST', url: '/miranda/devices/register',
+      headers: { ...authAsSession(empBToken), 'content-type': 'application/json' },
+      payload: { platform: 'android' }
+    });
+    deviceIds.push(regB.json().deviceId);
+
+    // Аналогичное exclusive-устройство в чужом дилере — не должно попадать
+    // в очередь adminA.
+    const acctF = await query(
+      `INSERT INTO corporate_accounts (org_id, employee_id, device_exclusive) VALUES ($1, $2, true) RETURNING id`,
+      [orgForeign, empForeign.id]
+    );
+    const corporateAccountIdF = Number(acctF.rows[0].id);
+    corporateAccountIds.push(corporateAccountIdF);
+    const regF = await app.inject({
+      method: 'POST', url: '/miranda/devices/register',
+      headers: { ...authAsSession(empForeignToken), 'content-type': 'application/json' },
+      payload: { platform: 'android' }
+    });
+    deviceIds.push(regF.json().deviceId);
+
+    const pending = await app.inject({ method: 'GET', url: '/miranda/devices', headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
+    expect(pending.statusCode).toBe(200);
+    const ids = pending.json().items.map((i: any) => i.device_id);
+    expect(ids).toContain(regB.json().deviceId);
+    expect(ids).not.toContain(regF.json().deviceId);
   });
 
   it('admin не может переключиться на корпоративный аккаунт без явного гранта; с грантом — переключается, всё аудируется', async () => {
@@ -242,6 +300,17 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     const admin = await fx.createEmployee(org, { role: 'admin' });
     const stepUp = await setupTotpAndStepUp(admin.id, authAs(admin.telegramId));
 
+    // Аккаунт точки/кассы создаётся админом как device_exclusive — байндинги
+    // на него ВСЕГДА pending (даже первое устройство), auto-approve не
+    // применяется. Здесь нужен заранее exclusive-аккаунт, иначе первый
+    // device-register уже auto-approve-нулся бы как личный.
+    const acctRes = await query(
+      `INSERT INTO corporate_accounts (org_id, employee_id, store_id, device_exclusive) VALUES ($1, $2, $3, true) RETURNING id`,
+      [org, emp.id, store]
+    );
+    const corporateAccountId = Number(acctRes.rows[0].id);
+    corporateAccountIds.push(corporateAccountId);
+
     const reg1 = await app.inject({
       method: 'POST',
       url: '/miranda/devices/register',
@@ -250,18 +319,9 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     });
     const device1 = reg1.json();
     deviceIds.push(device1.deviceId);
-    const binding1Row = await query(`SELECT id, corporate_account_id FROM miranda_device_bindings WHERE device_id = $1`, [device1.deviceId]);
+    expect(device1.status).toBe('pending');
+    const binding1Row = await query(`SELECT id FROM miranda_device_bindings WHERE device_id = $1`, [device1.deviceId]);
     const binding1Id = binding1Row.rows[0].id;
-    const corporateAccountId = Number(binding1Row.rows[0].corporate_account_id);
-    corporateAccountIds.push(corporateAccountId);
-
-    const markExclusive = await app.inject({
-      method: 'PATCH',
-      url: `/miranda/accounts/${corporateAccountId}/device-exclusive`,
-      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
-      payload: { deviceExclusive: true }
-    });
-    expect(markExclusive.statusCode).toBe(200);
 
     const approve1 = await app.inject({
       method: 'POST',
@@ -281,6 +341,7 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     });
     const device2 = reg2.json();
     deviceIds.push(device2.deviceId);
+    expect(device2.status).toBe('pending');
     const binding2Row = await query(`SELECT id FROM miranda_device_bindings WHERE device_id = $1`, [device2.deviceId]);
     const binding2Id = binding2Row.rows[0].id;
 
@@ -307,25 +368,34 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     expect(approve2Ok.statusCode).toBe(200);
   });
 
-  it('GET /miranda/accounts — requireAdmin, видит только аккаунты своей сети', async () => {
+  // 20.78.0 — скоуп списка дилерская группа, не одна сеть: аккаунт соседней
+  // сети того же дилера виден, аккаунт чужого дилера — нет.
+  it('GET /miranda/accounts — requireAdmin, видит аккаунты всего дилера, не чужого дилера', async () => {
     const app = await getApp();
-    const orgA = await fx.createOrg('Miranda Accounts List Org A');
-    const orgB = await fx.createOrg('Miranda Accounts List Org B');
+    const dealer = await fx.createDealer('Miranda Dealer');
+    const sector = await fx.createSector('miranda-sector', dealer);
+    const orgA = await fx.createOrg('Miranda Accounts List Org A', sector);
+    const orgB = await fx.createOrg('Miranda Accounts List Org B', sector);
+    const orgForeign = await fx.createOrg('Miranda Accounts Foreign Org');
     const empA = await fx.createPhoneEmployee(orgA, '+79990000007', null, { role: 'employee', fullName: 'Сотрудник A' });
     const empB = await fx.createPhoneEmployee(orgB, '+79990000008', null, { role: 'employee', fullName: 'Сотрудник B' });
+    const empForeign = await fx.createPhoneEmployee(orgForeign, '+79990000013', null, { role: 'employee', fullName: 'Чужой' });
     const adminA = await fx.createEmployee(orgA, { role: 'admin' });
 
     const acctA = await query(`INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, $3) RETURNING id`, [orgA, empA.id, 'Аккаунт A']);
     const acctB = await query(`INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, $3) RETURNING id`, [orgB, empB.id, 'Аккаунт B']);
+    const acctForeign = await query(`INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, $3) RETURNING id`, [orgForeign, empForeign.id, 'Чужой аккаунт']);
     const corporateAccountIdA = Number(acctA.rows[0].id);
     const corporateAccountIdB = Number(acctB.rows[0].id);
-    corporateAccountIds.push(corporateAccountIdA, corporateAccountIdB);
+    const corporateAccountIdForeign = Number(acctForeign.rows[0].id);
+    corporateAccountIds.push(corporateAccountIdA, corporateAccountIdB, corporateAccountIdForeign);
 
-    const empActivate = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
-    expect(empActivate.statusCode).toBe(200);
-    const ids = empActivate.json().items.map((i: any) => Number(i.corporate_account_id));
+    const list = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
+    expect(list.statusCode).toBe(200);
+    const ids = list.json().items.map((i: any) => Number(i.corporate_account_id));
     expect(ids).toContain(corporateAccountIdA);
-    expect(ids).not.toContain(corporateAccountIdB);
+    expect(ids).toContain(corporateAccountIdB);
+    expect(ids).not.toContain(corporateAccountIdForeign);
 
     const empSessionToken = await sessionsRepo.createSession(empA.id, false, 'employee');
     const nonAdmin = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAsSession(empSessionToken) });
