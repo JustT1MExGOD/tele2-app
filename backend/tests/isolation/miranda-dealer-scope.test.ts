@@ -200,7 +200,7 @@ describe('T2 Miranda — видимость в рамках дилера', () =>
     expect(direct.json().error).toBe('not_active');
   });
 
-  it('§A — глобальная админка: один админ создаёт/видит/деактивирует точечные аккаунты в ЛЮБОЙ сети, в т.ч. другого дилера; невалидный телефон — 400', async () => {
+  it('§A — глобальная админка: один админ создаёт/видит/деактивирует точечные аккаунты; список без org_id показывает весь текущий дилер', async () => {
     const app = await getApp();
     const dealer = await fx.createDealer();
     const sector = await fx.createSector(undefined, dealer);
@@ -221,12 +221,12 @@ describe('T2 Miranda — видимость в рамках дилера', () =>
     corporateAccountIds.push(pointAccountId);
     expect(createInB.json().item.org_id).toBe(orgB);
 
-    // GET без org_id — по умолчанию своя сеть (orgA), точка из orgB не видна.
+    // GET без org_id показывает всю текущую дилерскую группу — точка из orgB видна.
     const listOwn = await app.inject({ method: 'GET', url: '/miranda/accounts', headers: authAsSession(adminA.sessionToken) });
     expect(listOwn.statusCode).toBe(200);
-    expect(listOwn.json().items.some((i: any) => Number(i.corporate_account_id) === pointAccountId)).toBe(false);
+    expect(listOwn.json().items.some((i: any) => Number(i.corporate_account_id) === pointAccountId)).toBe(true);
 
-    // Явный ?org_id=orgB — та же глобальная админка, видно.
+    // Явный ?org_id=orgB сохраняет тот же дилерский скоуп.
     const listB = await app.inject({ method: 'GET', url: `/miranda/accounts?org_id=${encodeURIComponent(orgB)}`, headers: authAsSession(adminA.sessionToken) });
     expect(listB.statusCode).toBe(200);
     expect(listB.json().items.some((i: any) => Number(i.corporate_account_id) === pointAccountId)).toBe(true);
