@@ -308,6 +308,26 @@ export async function reactivateAccount(corporateAccountId: number, actorEmploye
   });
 }
 
+/** Админское переименование любого корпоративного аккаунта (не только
+ * своего — см. PATCH /miranda/accounts/me выше, который остаётся
+ * самостоятельным сценарием обычного пользователя). displayLabel = null
+ * возвращает показ по умолчанию (имя сотрудника/account_name), тот же
+ * семантический сброс, что у setOwnDisplayLabel. Глобально, любая сеть —
+ * та же гарантия, что деактивация/device_exclusive. */
+export async function renameCorporateAccount(corporateAccountId: number, displayLabel: string | null, actorEmployeeId: number): Promise<boolean> {
+  return withTransaction(async (q) => {
+    const before = await mirandaRepo.getCorporateAccount(corporateAccountId);
+    if (!before) return false;
+    const updated = await mirandaRepo.setDisplayLabel(corporateAccountId, displayLabel, q);
+    if (!updated) return false;
+    await auditRepo.record(
+      { orgId: before.org_id, actorEmployeeId, actorTelegramId: null, action: 'MIRANDA_ACCOUNT_RENAMED', targetType: 'corporate_account', targetId: String(corporateAccountId), before: { display_label: before.display_label }, after: { display_label: updated.display_label } },
+      q
+    );
+    return true;
+  });
+}
+
 /** §G плана — самостоятельное переименование: GET для предзаполнения
  * поля в Settings, PATCH пишет только на свой же corporateAccountId
  * (вызывающий роут берёт id из resolveMirandaPrincipal, не из тела). */

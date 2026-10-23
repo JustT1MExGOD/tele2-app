@@ -239,6 +239,39 @@ describe('T2 Miranda — группы контактов и presence', () => {
     expect(crossOrgDelete.statusCode).toBe(200);
   });
 
+  it('Admin Center читает группы через admin-scoped endpoint без активного Miranda-аккаунта', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Miranda Admin Groups Read Org');
+    const admin = await fx.createEmployee(org, { role: 'admin' });
+    const adminToken = await sessionsRepo.createSession(admin.id, true, 'admin');
+
+    const create = await app.inject({
+      method: 'POST',
+      url: '/miranda/groups',
+      headers: { ...authAsSession(adminToken), 'content-type': 'application/json' },
+      payload: { name: 'Admin Center группа' }
+    });
+    expect(create.statusCode).toBe(201);
+    const groupId = Number(create.json().item.id);
+    groupIds.push(groupId);
+
+    const adminRead = await app.inject({
+      method: 'GET',
+      url: '/miranda/admin/groups',
+      headers: authAsSession(adminToken)
+    });
+    expect(adminRead.statusCode).toBe(200);
+    expect(adminRead.json().items.some((item: any) => Number(item.id) === groupId)).toBe(true);
+
+    // Старый endpoint по-прежнему требует активный Miranda-контекст.
+    const principalRead = await app.inject({
+      method: 'GET',
+      url: '/miranda/groups',
+      headers: authAsSession(adminToken)
+    });
+    expect(principalRead.statusCode).toBe(409);
+  });
+
   it('PATCH /miranda/presence — меняет только свой же статус, виден в /miranda/contacts/all как online', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Miranda Presence Org');

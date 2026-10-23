@@ -44,7 +44,10 @@ import type {
   MirandaAvailableAccountsResponse,
   MirandaGrantAccountResponse,
   MirandaSetDeviceExclusiveResponse,
-  MirandaCreateAccountResponse
+  MirandaCreateAccountResponse,
+  MirandaContactGroupsListResponse,
+  MirandaCreateContactGroupResponse,
+  MirandaContactGroupMutationResponse
 } from '../../../../src/shared/api-types.js';
 import { request } from '../../shared/api/http-client.js';
 
@@ -413,6 +416,66 @@ export async function adminSetMirandaAccountDeviceExclusive(
   deviceExclusive: boolean
 ): Promise<MirandaSetDeviceExclusiveResponse> {
   return request(`/miranda/accounts/${corporateAccountId}/device-exclusive`, headers, { method: 'PATCH', body: { deviceExclusive } });
+}
+
+/** Admin Control Center — переименование любого корпоративного аккаунта
+ * (PATCH /miranda/accounts/:id, 20.78.4): displayLabel=null возвращает
+ * дефолтное имя (сотрудник/account_name). */
+export async function adminRenameMirandaAccount(
+  headers: Record<string, string>,
+  corporateAccountId: number,
+  displayLabel: string | null
+): Promise<{ ok: true }> {
+  return request(`/miranda/accounts/${corporateAccountId}`, headers, { method: 'PATCH', body: { displayLabel } });
+}
+
+// ---------- T2 Miranda — группы контактов (общие для дилера) ----------
+
+export async function adminListMirandaGroups(headers: Record<string, string>, orgQuery = ''): Promise<MirandaContactGroupsListResponse> {
+  return request(`/miranda/admin/groups${orgQuery ? '?' + orgQuery.slice(1) : ''}`, headers);
+}
+
+export async function adminCreateMirandaGroup(
+  headers: Record<string, string>,
+  name: string,
+  orgId: string | null,
+  parentGroupId: number | null = null
+): Promise<MirandaCreateContactGroupResponse> {
+  const body: Record<string, unknown> = { name };
+  if (orgId) body.orgId = orgId;
+  if (parentGroupId != null) body.parentGroupId = parentGroupId;
+  return request('/miranda/groups', headers, { method: 'POST', body });
+}
+
+export async function adminRenameMirandaGroup(
+  headers: Record<string, string>,
+  groupId: number,
+  name: string
+): Promise<MirandaContactGroupMutationResponse> {
+  return request(`/miranda/groups/${groupId}`, headers, { method: 'PATCH', body: { name } });
+}
+
+export async function adminDeleteMirandaGroup(
+  headers: Record<string, string>,
+  groupId: number
+): Promise<MirandaContactGroupMutationResponse> {
+  return request(`/miranda/groups/${groupId}`, headers, { method: 'DELETE' });
+}
+
+export async function adminAddMirandaGroupMember(
+  headers: Record<string, string>,
+  groupId: number,
+  corporateAccountId: number
+): Promise<MirandaContactGroupMutationResponse> {
+  return request(`/miranda/groups/${groupId}/members`, headers, { method: 'POST', body: { corporateAccountId } });
+}
+
+export async function adminRemoveMirandaGroupMember(
+  headers: Record<string, string>,
+  groupId: number,
+  corporateAccountId: number
+): Promise<MirandaContactGroupMutationResponse> {
+  return request(`/miranda/groups/${groupId}/members/${corporateAccountId}`, headers, { method: 'DELETE' });
 }
 
 // ---------- Step-up MFA ticket (ADR-009) ----------

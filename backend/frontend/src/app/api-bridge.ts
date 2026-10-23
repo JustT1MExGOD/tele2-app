@@ -264,6 +264,13 @@ import {
   adminListMirandaAvailableAccounts,
   adminGrantMirandaAccount,
   adminSetMirandaAccountDeviceExclusive,
+  adminRenameMirandaAccount,
+  adminListMirandaGroups,
+  adminCreateMirandaGroup,
+  adminRenameMirandaGroup,
+  adminDeleteMirandaGroup,
+  adminAddMirandaGroupMember,
+  adminRemoveMirandaGroupMember,
   issueStepUpTicket
 } from '../features/admin-center/api.js';
 
@@ -470,6 +477,13 @@ declare global {
       adminListMirandaAvailableAccounts: typeof adminListMirandaAvailableAccounts;
       adminGrantMirandaAccount: typeof adminGrantMirandaAccount;
       adminSetMirandaAccountDeviceExclusive: typeof adminSetMirandaAccountDeviceExclusive;
+      adminRenameMirandaAccount: typeof adminRenameMirandaAccount;
+      adminListMirandaGroups: typeof adminListMirandaGroups;
+      adminCreateMirandaGroup: typeof adminCreateMirandaGroup;
+      adminRenameMirandaGroup: typeof adminRenameMirandaGroup;
+      adminDeleteMirandaGroup: typeof adminDeleteMirandaGroup;
+      adminAddMirandaGroupMember: typeof adminAddMirandaGroupMember;
+      adminRemoveMirandaGroupMember: typeof adminRemoveMirandaGroupMember;
       issueStepUpTicket: typeof issueStepUpTicket;
     };
   }
@@ -676,5 +690,12 @@ window.apiClient = {
   adminListMirandaAvailableAccounts,
   adminGrantMirandaAccount,
   adminSetMirandaAccountDeviceExclusive,
+  adminRenameMirandaAccount,
+  adminListMirandaGroups,
+  adminCreateMirandaGroup,
+  adminRenameMirandaGroup,
+  adminDeleteMirandaGroup,
+  adminAddMirandaGroupMember,
+  adminRemoveMirandaGroupMember,
   issueStepUpTicket
 };

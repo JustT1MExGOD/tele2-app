@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '20.79.0',
+    title: 'Miranda: группы контактов и переименование аккаунтов администратором',
+    bullets: [
+      'В Admin Center добавлено управление общими группами Miranda: создание, переименование, удаление и состав участников',
+      'Администратор может переименовать любой корпоративный аккаунт; displayLabel = null сбрасывает кастомное имя',
+      'Действия переименования аудируются как MIRANDA_ACCOUNT_RENAMED, а группы доступны Admin Center без активного Miranda-сеанса'
+    ]
+  },
+  {
     version: '14.4.0',
     title: 'Порядок перед ИИ-эпохой',
     bullets: [

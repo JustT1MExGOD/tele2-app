@@ -64,6 +64,11 @@ type DeviceExclusiveParams = Static<typeof DeviceExclusiveParams>;
 const DeviceExclusiveBody = Type.Object({ deviceExclusive: Type.Boolean() });
 type DeviceExclusiveBody = Static<typeof DeviceExclusiveBody>;
 
+const RenameAccountBody = Type.Object({
+  displayLabel: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()])
+});
+type RenameAccountBody = Static<typeof RenameAccountBody>;
+
 // §1 плана — ручное переключение своего статуса "в сети"; 'auto' возвращает
 // к автоопределению по живому WS-сокету мессенджера.
 const SetPresenceBody = Type.Object({
@@ -172,6 +177,23 @@ export async function registerMirandaAccountRoutes(app: FastifyInstance) {
         return reply.code(409).send({ error: 'conflict', message: 'Такой корпоративный аккаунт уже существует' });
       }
       return reply.code(201).send({ item: result.account });
+    }
+  );
+
+  // Admin Control Center — переименование любого корпоративного аккаунта
+  // (личный или точка), отображается как имя контакта везде в Miranda.
+  // displayLabel = null возвращает показ по умолчанию (имя сотрудника или
+  // account_name точки) — полезно, чтобы убрать кастомное название.
+  app.patch(
+    '/miranda/accounts/:id',
+    { schema: { params: DeviceExclusiveParams, body: RenameAccountBody } },
+    async (request, reply) => {
+      if (!requireAdmin(request, reply)) return;
+      const { id } = request.params as DeviceExclusiveParams;
+      const { displayLabel } = request.body as RenameAccountBody;
+      const ok = await mirandaService.renameCorporateAccount(Number(id), displayLabel, request.user!.employee_id!);
+      if (!ok) return reply.code(404).send({ error: 'account_not_found' });
+      return reply.code(200).send({ ok: true });
     }
   );
 

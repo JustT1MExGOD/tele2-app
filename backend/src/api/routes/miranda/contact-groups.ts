@@ -42,6 +42,18 @@ function statusForMutationError(error: 'not_found' | 'conflict'): number {
 }
 
 export async function registerMirandaContactGroupRoutes(app: FastifyInstance) {
+  // Admin Center uses the phone/Telegram admin session, which may not have an
+  // active Miranda account selected on the current device. Keep the ordinary
+  // GET principal-scoped, and expose a separate admin-scoped read endpoint so
+  // the management UI does not need to log into Miranda first.
+  app.get('/miranda/admin/groups', async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const orgId = resolveViewOrgId(request.user!, (request.query as any)?.org_id);
+    const dealerOrgIds = await mirandaService.resolveDealerOrgIds(orgId);
+    const items = await mirandaService.listContactGroups(dealerOrgIds);
+    return reply.code(200).send({ items });
+  });
+
   app.get('/miranda/groups', async (request, reply) => {
     const principal = await resolveMirandaPrincipal(request, reply);
     if (!principal) return;

@@ -347,6 +347,60 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     );
   });
 
+  it('PATCH /miranda/accounts/:id — админ переименовывает любой аккаунт, сброс в null, аудит пишется', async () => {
+    const app = await getApp();
+    const org = await fx.createOrg('Miranda Rename Org');
+    const emp = await fx.createPhoneEmployee(org, '+79990000017', null, { role: 'employee', fullName: 'Исходное имя' });
+    const admin = await fx.createEmployee(org, { role: 'admin' });
+
+    const acctRes = await query(
+      `INSERT INTO corporate_accounts (org_id, employee_id, display_label) VALUES ($1, $2, NULL) RETURNING id`,
+      [org, emp.id]
+    );
+    const corporateAccountId = Number(acctRes.rows[0].id);
+    corporateAccountIds.push(corporateAccountId);
+
+    // Обычный сотрудник не может переименовать чужой аккаунт.
+    const empToken = await sessionsRepo.createSession(emp.id, false, 'employee');
+    const forbidden = await app.inject({
+      method: 'PATCH',
+      url: `/miranda/accounts/${corporateAccountId}`,
+      headers: { ...authAsSession(empToken), 'content-type': 'application/json' },
+      payload: { displayLabel: 'Попытка от сотрудника' }
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const rename = await app.inject({
+      method: 'PATCH',
+      url: `/miranda/accounts/${corporateAccountId}`,
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { displayLabel: 'Кастомное имя' }
+    });
+    expect(rename.statusCode).toBe(200);
+    const renamed = await query(`SELECT display_label FROM corporate_accounts WHERE id = $1`, [corporateAccountId]);
+    expect(renamed.rows[0].display_label).toBe('Кастомное имя');
+
+    // null возвращает дефолтное отображение (имя сотрудника).
+    const reset = await app.inject({
+      method: 'PATCH',
+      url: `/miranda/accounts/${corporateAccountId}`,
+      headers: { ...authAs(admin.telegramId, admin.telegramGrantToken), 'content-type': 'application/json' },
+      payload: { displayLabel: null }
+    });
+    expect(reset.statusCode).toBe(200);
+    const resetRow = await query(`SELECT display_label FROM corporate_accounts WHERE id = $1`, [corporateAccountId]);
+    expect(resetRow.rows[0].display_label).toBeNull();
+
+    const audit = await query(
+      `SELECT action, before, after FROM audit_log WHERE action = 'MIRANDA_ACCOUNT_RENAMED' AND target_id = $1 ORDER BY id ASC`,
+      [String(corporateAccountId)]
+    );
+    expect(audit.rows).toHaveLength(2);
+    expect(audit.rows[0].before.display_label).toBeNull();
+    expect(audit.rows[0].after.display_label).toBe('Кастомное имя');
+    expect(audit.rows[1].after.display_label).toBeNull();
+  });
+
   it('device_exclusive аккаунт — второе одновременное устройство не подтверждается, 409; после revoke первого — подтверждается', async () => {
     const app = await getApp();
     const org = await fx.createOrg('Miranda Device Exclusive Org');

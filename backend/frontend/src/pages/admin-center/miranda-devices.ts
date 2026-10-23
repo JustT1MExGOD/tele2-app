@@ -8,12 +8,18 @@
  * вкладка "Сотрудники" (нет и не планируется bulk-листинга сотрудников).
  */
 import { requestStepUpTicket } from './shared/dialogs.js';
-import type { MirandaPendingBindingRow, MirandaCorporateAccountListItem } from '../../../../src/shared/api-types.js';
+import type { MirandaPendingBindingRow, MirandaCorporateAccountListItem, MirandaContactGroup } from '../../../../src/shared/api-types.js';
 
 let grantAdminSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 let selectedGrantAdminId: number | null = null;
 let createAccountSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 let selectedCreateEmployeeId: number | null = null;
+// Аккаунт, выбранный в списке «Корпоративные аккаунты» — целевой для
+// «+»-кнопок в секции «Группы контактов» (членство группы пишется именно
+// на corporateAccountId, не employee_id). Сбрасывается на null при
+// перезагрузке списка аккаунтов, если строки больше нет.
+let selectedGroupAccountId: number | null = null;
+let lastAccountsList: MirandaCorporateAccountListItem[] = [];
 
 export function renderMirandaDevicesTab(container: HTMLElement): void {
   container.innerHTML = `
@@ -62,6 +68,19 @@ export function renderMirandaDevicesTab(container: HTMLElement): void {
         Показывать деактивированные
       </label>
       <div id="mirandaAccountsList"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Группы контактов Miranda</div>
+      <div class="row-sub" style="padding:0 16px 8px">
+        Общие для всего дилера: группировка дерева контактов в приложении Miranda.
+        Членство назначается корпоративному аккаунту (не employee_id напрямую) —
+        выберите аккаунт из списка выше и нажмите «+» рядом с группой.
+      </div>
+      <div style="padding:0 16px 12px;display:flex;gap:8px;flex-wrap:wrap">
+        <input type="text" id="mirandaNewGroupName" placeholder="Название новой группы" style="flex:1;min-width:220px;box-sizing:border-box">
+        <button type="button" class="btn-main" id="mirandaCreateGroupBtn">Создать группу</button>
+      </div>
+      <div id="mirandaGroupsList"></div>
     </div>
     <div class="section">
       <div class="section-title">Переключение аккаунтов — выдача гранта</div>
@@ -132,17 +151,30 @@ export function renderMirandaDevicesTab(container: HTMLElement): void {
   });
 
   document.getElementById('mirandaAccountsList')?.addEventListener('click', (e) => {
-    const btn = (e.target as Element | null)?.closest<HTMLElement>('[data-miranda-deactivate],[data-miranda-reactivate]');
+    const btn = (e.target as Element | null)?.closest<HTMLElement>('[data-miranda-deactivate],[data-miranda-reactivate],[data-miranda-rename],[data-miranda-select]');
     if (!btn) return;
     if (btn.dataset.mirandaDeactivate !== undefined) onDeactivateAccount(Number(btn.dataset.mirandaDeactivate));
     if (btn.dataset.mirandaReactivate !== undefined) onReactivateAccount(Number(btn.dataset.mirandaReactivate));
+    if (btn.dataset.mirandaRename !== undefined) onRenameAccount(Number(btn.dataset.mirandaRename), btn.dataset.mirandaRenameCurrent || null);
+    if (btn.dataset.mirandaSelect !== undefined) onSelectGroupAccount(Number(btn.dataset.mirandaSelect));
   });
 
   document.getElementById('mirandaShowInactive')?.addEventListener('change', () => loadCorporateAccounts());
 
+  document.getElementById('mirandaCreateGroupBtn')?.addEventListener('click', onCreateGroup);
+  document.getElementById('mirandaGroupsList')?.addEventListener('click', (e) => {
+    const btn = (e.target as Element | null)?.closest<HTMLElement>('[data-group-rename],[data-group-delete],[data-group-add-member],[data-group-remove-member]');
+    if (!btn) return;
+    if (btn.dataset.groupRename !== undefined) onRenameGroup(Number(btn.dataset.groupRename), btn.dataset.groupNameCurrent || '');
+    if (btn.dataset.groupDelete !== undefined) onDeleteGroup(Number(btn.dataset.groupDelete), btn.dataset.groupNameCurrent || '');
+    if (btn.dataset.groupAddMember !== undefined) onAddGroupMember(Number(btn.dataset.groupAddMember));
+    if (btn.dataset.groupRemoveMember !== undefined) onRemoveGroupMember(Number(btn.dataset.groupRemoveMember), Number(btn.dataset.memberId));
+  });
+
   loadPending();
   loadCorporateAccounts();
   loadAvailableAccounts();
+  loadContactGroups();
 }
 
 async function loadPending(): Promise<void> {
@@ -246,6 +278,12 @@ async function loadCorporateAccounts(): Promise<void> {
   if (list) list.innerHTML = '<div class="skeleton"></div>';
   try {
     const res = await window.apiClient.adminListMirandaCorporateAccounts(authHeaders(), includeInactive, orgQueryParam());
+    lastAccountsList = res.items;
+    // Сброс выбора, если ранее выбранный аккаунт больше не отображается
+    // (деактивирован и скрыт фильтром "Показывать деактивированные").
+    if (selectedGroupAccountId && !res.items.some((a) => a.corporate_account_id === selectedGroupAccountId)) {
+      selectedGroupAccountId = null;
+    }
     // грант на переключение имеет смысл только на активный аккаунт —
     // деактивированные остаются в списке выше для возможной реактивации,
     // но не засоряют выпадающий список здесь.
@@ -358,6 +396,8 @@ function renderAccountsList(box: HTMLElement, items: MirandaCorporateAccountList
           <input type="checkbox" data-miranda-device-exclusive="${a.corporate_account_id}" ${a.device_exclusive ? 'checked' : ''} ${a.is_active ? '' : 'disabled'}>
           только одно устройство
         </label>
+        <button type="button" class="mchip" data-miranda-select="${a.corporate_account_id}" ${a.corporate_account_id === selectedGroupAccountId ? 'disabled' : ''}>${a.corporate_account_id === selectedGroupAccountId ? 'Выбран для групп' : 'В группу'}</button>
+        <button type="button" class="mchip" data-miranda-rename="${a.corporate_account_id}" data-miranda-rename-current="${esc(a.display_label || '')}">Переименовать</button>
         ${a.is_active
           ? `<button type="button" class="mchip" data-miranda-deactivate="${a.corporate_account_id}">Деактивировать</button>`
           : `<button type="button" class="mchip" data-miranda-reactivate="${a.corporate_account_id}">Восстановить</button>`}
@@ -453,5 +493,147 @@ async function loadAvailableAccounts(): Promise<void> {
   } catch (e) {
     console.error(e);
     box.innerHTML = '<div class="empty">Не удалось загрузить список</div>';
+  }
+}
+
+// ---------- Группы контактов (общие для дилера) ----------
+
+function onSelectGroupAccount(corporateAccountId: number): void {
+  selectedGroupAccountId = selectedGroupAccountId === corporateAccountId ? null : corporateAccountId;
+  const list = document.getElementById('mirandaAccountsList');
+  if (list) renderAccountsList(list, lastAccountsList);
+  renderContactGroups();
+}
+
+async function loadContactGroups(): Promise<void> {
+  const box = document.getElementById('mirandaGroupsList');
+  if (!box) return;
+  box.innerHTML = '<div class="skeleton"></div>';
+  try {
+    const res = await window.apiClient.adminListMirandaGroups(authHeaders(), orgQueryParam());
+    cachedGroups = res.items;
+    renderContactGroups();
+  } catch (e) {
+    console.error(e);
+    cachedGroups = [];
+    box.innerHTML = '<div class="empty">Не удалось загрузить группы</div>';
+  }
+}
+
+let cachedGroups: MirandaContactGroup[] = [];
+
+function renderContactGroups(): void {
+  const box = document.getElementById('mirandaGroupsList');
+  if (!box) return;
+  if (!cachedGroups.length) {
+    box.innerHTML = '<div class="empty">Групп пока нет — создайте первую выше</div>';
+    return;
+  }
+  const accountById = new Map(lastAccountsList.map((a) => [a.corporate_account_id, a]));
+  box.innerHTML = cachedGroups
+    .map((g) => {
+      const members = g.member_corporate_account_ids
+        .map((id) => accountById.get(id))
+        .filter((a): a is MirandaCorporateAccountListItem => !!a);
+      const memberChips = members
+        .map(
+          (a) => `<span class="mchip" style="display:inline-flex;align-items:center;gap:4px">${esc(a.display_label || a.employee_full_name)}
+            <button type="button" class="mchip" data-group-remove-member="${g.id}" data-member-id="${a.corporate_account_id}" title="Убрать из группы">×</button>
+          </span>`
+        )
+        .join(' ');
+      return `
+      <div class="row" style="cursor:default">
+        <div class="row-body">
+          <div class="row-title">${esc(g.name)}${g.parent_group_id ? ' · вложенная' : ''}</div>
+          <div class="row-sub">${esc(g.org_id)} · ${members.length ? members.length + ' контакт(ов)' : 'пустая'}</div>
+          ${memberChips ? `<div style="padding-top:6px;display:flex;flex-wrap:wrap;gap:6px">${memberChips}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="mchip" data-group-add-member="${g.id}" ${selectedGroupAccountId ? '' : 'disabled'} title="${selectedGroupAccountId ? 'Добавить выбранный аккаунт' : 'Сначала выберите аккаунт кнопкой «В группу» выше'}">+ аккаунт</button>
+          <button type="button" class="mchip" data-group-rename="${g.id}" data-group-name-current="${esc(g.name)}">Переименовать</button>
+          <button type="button" class="mchip" data-group-delete="${g.id}" data-group-name-current="${esc(g.name)}">Удалить</button>
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+
+async function onCreateGroup(): Promise<void> {
+  const input = document.getElementById('mirandaNewGroupName') as HTMLInputElement | null;
+  const name = input?.value.trim() || '';
+  if (!name) {
+    toast('Введите название группы', 'err');
+    return;
+  }
+  try {
+    await window.apiClient.adminCreateMirandaGroup(authHeaders(), name, null);
+    toast('Группа создана', 'ok');
+    if (input) input.value = '';
+    loadContactGroups();
+  } catch (e) {
+    const code = (e as { code?: string } | undefined)?.code;
+    toast(code === 'conflict' ? 'Группа с таким названием уже существует' : 'Не удалось создать группу', 'err');
+  }
+}
+
+async function onRenameGroup(groupId: number, currentName: string): Promise<void> {
+  const name = window.prompt('Новое название группы', currentName)?.trim();
+  if (!name || name === currentName) return;
+  try {
+    await window.apiClient.adminRenameMirandaGroup(authHeaders(), groupId, name);
+    toast('Группа переименована', 'ok');
+    loadContactGroups();
+  } catch (e) {
+    const code = (e as { code?: string } | undefined)?.code;
+    toast(code === 'conflict' ? 'Группа с таким названием уже существует' : 'Не удалось переименовать группу', 'err');
+  }
+}
+
+async function onDeleteGroup(groupId: number, groupName: string): Promise<void> {
+  if (!window.confirm(`Удалить группу «${groupName}»? Контакты останутся в списке вне групп.`)) return;
+  try {
+    await window.apiClient.adminDeleteMirandaGroup(authHeaders(), groupId);
+    toast('Группа удалена', 'ok');
+    loadContactGroups();
+  } catch (e) {
+    toast('Не удалось удалить группу', 'err');
+  }
+}
+
+async function onAddGroupMember(groupId: number): Promise<void> {
+  if (!selectedGroupAccountId) {
+    toast('Сначала выберите корпоративный аккаунт кнопкой «В группу» в списке выше', 'err');
+    return;
+  }
+  try {
+    await window.apiClient.adminAddMirandaGroupMember(authHeaders(), groupId, selectedGroupAccountId);
+    toast('Аккаунт добавлен в группу', 'ok');
+    loadContactGroups();
+  } catch (e) {
+    toast('Не удалось добавить аккаунт в группу', 'err');
+  }
+}
+
+async function onRemoveGroupMember(groupId: number, corporateAccountId: number): Promise<void> {
+  try {
+    await window.apiClient.adminRemoveMirandaGroupMember(authHeaders(), groupId, corporateAccountId);
+    toast('Аккаунт убран из группы', 'ok');
+    loadContactGroups();
+  } catch (e) {
+    toast('Не удалось убрать аккаунт из группы', 'err');
+  }
+}
+
+async function onRenameAccount(corporateAccountId: number, currentLabel: string | null): Promise<void> {
+  const input = window.prompt('Новое имя контакта (пустое — вернуть стандартное имя)', currentLabel || '');
+  if (input === null) return;
+  const displayLabel = input.trim() || null;
+  try {
+    await window.apiClient.adminRenameMirandaAccount(authHeaders(), corporateAccountId, displayLabel);
+    toast(displayLabel ? 'Имя контакта обновлено' : 'Возвращено стандартное имя', 'ok');
+    loadCorporateAccounts();
+  } catch (e) {
+    toast('Не удалось переименовать аккаунт', 'err');
   }
 }
