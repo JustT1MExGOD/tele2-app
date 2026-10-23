@@ -42,7 +42,8 @@ enum class Page(val title: String) {
     ReportImg("Отчёт-картинка"), Reports("Отчёты"), Live("Сеть live"), CommandCenter("Command Center"), Tasks("Задачи"),
     Alerts("Алерты"), Cash("Касса"), MonthPlan("Планы и факт за месяц"), NetMonth("Динамика выполнения"), Support("Поддержка"),
     History("История продаж"), StoreProfile("Профиль точки"), AdminCenter("Admin Center"), Orgs("Сети"), Audit("История действий"),
-    Dealers("Дилеры/Секторы"), SvOverview("Обзор"), SvStores("Точки"), SvPeople("Люди"), SvTrend("Тренд")
+    Dealers("Дилеры/Секторы"), SvOverview("Обзор"), SvStores("Точки"), SvPeople("Люди"), SvTrend("Тренд"),
+    Leaderboard("Топы")
 }
 
 /** The stack of open pages: the last one is on top, Back pops it. */
@@ -117,6 +118,7 @@ private fun PageContent(page: Page, container: AppContainer, me: MeResponse) {
             Page.SvStores -> PageScaffold(page.title) { SupervisorScreen(container.supervisorApi, container.salesApi, SvTab.Stores) }
             Page.SvPeople -> PageScaffold(page.title) { SupervisorScreen(container.supervisorApi, container.salesApi, SvTab.People) }
             Page.SvTrend -> PageScaffold(page.title) { SupervisorScreen(container.supervisorApi, container.salesApi, SvTab.Trend) }
+            Page.Leaderboard -> PageScaffold(page.title) { LeaderboardScreen(container) }
             else -> PageScaffold(page.title) {
                 Text("Экран в работе", color = T2Colors.hint, fontSize = 14.sp, modifier = Modifier.padding(24.dp))
             }
@@ -187,6 +189,7 @@ object AppNav {
             Screen.SvStores -> Page.SvStores
             Screen.SvPeople -> Page.SvPeople
             Screen.SvTrend -> Page.SvTrend
+            Screen.Leaderboard -> Page.Leaderboard
             else -> null
         }
         if (page != null) Nav.open(page)

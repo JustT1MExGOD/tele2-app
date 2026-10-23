@@ -100,7 +100,7 @@ internal fun FlagsTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> EmptyText("Не удалось загрузить флаги")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить флаги")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Флагов пока нет")
             else -> list.forEach { f ->
@@ -133,7 +133,7 @@ internal fun OrgSettingsTab(container: AppContainer) {
     PageSection("Сети") {
         val list = orgs
         when {
-            failed -> EmptyText("Не удалось загрузить сети")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить сети")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Сетей нет")
             else -> list.forEach { o -> NavRow(o.brand_name ?: o.name, o.id + if (o.is_active == false) " \u00B7 неактивна" else "") { selected = o.id } }
@@ -199,7 +199,7 @@ internal fun RulesTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> EmptyText("Не удалось загрузить метрики")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить метрики")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Метрик нет")
             else -> list.forEach { m ->
@@ -231,7 +231,7 @@ internal fun OperationsTab(container: AppContainer) {
     val d = data
     PageSection("Открытые алерты по всем сетям") {
         when {
-            failed -> EmptyText("Не удалось загрузить данные")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить данные")
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val bySeverity = (d["alerts_by_severity"] as? JsonObject).orEmpty()

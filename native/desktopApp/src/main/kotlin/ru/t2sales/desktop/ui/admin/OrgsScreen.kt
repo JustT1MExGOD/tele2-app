@@ -79,7 +79,7 @@ fun OrgsScreen(api: AdminApi) {
         }
         val list = orgs
         when {
-            failed -> Text("\uD83C\uDF49 Не получилось загрузить сети", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить сети", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("\uD83C\uDF49 Сетей пока нет", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {

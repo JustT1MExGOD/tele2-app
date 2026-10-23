@@ -104,7 +104,7 @@ fun PlanDayScreen(container: AppContainer) {
     ru.t2sales.desktop.ui.components.PageSection("План дня") {
         val d = data
         when {
-            failed -> Text("Ошибка загрузки", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Ошибка загрузки")
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             d.stores.isEmpty() -> Text("Нет точек", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {

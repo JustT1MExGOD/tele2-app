@@ -217,10 +217,15 @@ flowchart TB
 | `cron_send_log` | claim-защита от повторной отправки авто-отчётов/напоминаний |
 | `ai_audit` | лог AI Copilot: kind (`shift_summary`/`dip_comment`/`forecast_summary`), employee/store, prompt, response, model |
 | `app_settings` | служебные ключ-значение (напр. `last_announced_version`) |
+| `corporate_accounts` | T2 Miranda — аккаунты мессенджера (личные по `employee_id`, точки/кассы по `phone`+`account_name`); `display_label`, `device_exclusive`, `is_active`, `presence_override` |
+| `miranda_devices` + привязки | Привязка устройства к аккаунту: `pending` → `active`/`revoked`, авто-approve первого личного устройства; см. [docs/MIRANDA.md](docs/MIRANDA.md) |
+| `miranda_contact_groups` + `..._members` | Общие для дилера группы контактов, вложенные (`parent_group_id`); состав — по корпоративным аккаунтам |
+| `conversations` + `messages` + `attachments` | Miranda-мессенджер: беседы (direct/group), сообщения по `clientMessageId` (идемпотентно), вложения, `last_read_message_id` |
 
 Критичные UNIQUE: `schedules(employee_id, work_date)`, `store_cash(store_id, cash_date)`,
 `employees.telegram_id`, upsert-ключ `sales`, partial unique на одну открытую
-`shift_sessions` на сотрудника.
+`shift_sessions` на сотрудника, `corporate_accounts(employee_id, store_id)`
+(личный аккаунт не дублируется на одну точку).
 
 ---
 
@@ -274,6 +279,11 @@ initData работает лишь в локальной разработке и
 Нижняя навигация (5 вкладок): Главная · План · График · Профиль · Команда
 (supervisor — отдельные 4: Обзор · Точки · Люди · Тренд). Разбор каждого
 экрана — **[docs/FEATURES.md — навигация](docs/FEATURES.md#навигация)**.
+
+Отдельно от вкладок: внутренний чат сотрудников (`/chat`,
+[docs/CHAT.md](docs/CHAT.md)) и корпоративный мессенджер **T2 Miranda**
+(`/miranda/*` — беседы, группы контактов по дилеру, аккаунты точек/касс и
+управление в Admin Center, [docs/MIRANDA.md](docs/MIRANDA.md)).
 
 ---
 

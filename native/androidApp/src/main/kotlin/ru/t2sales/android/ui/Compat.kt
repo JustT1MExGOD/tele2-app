@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -206,6 +208,23 @@ fun ConfirmDialog(title: String, text: String, confirmLabel: String, onDismiss: 
 @Composable
 fun WideTable(minWidth: androidx.compose.ui.unit.Dp, content: @Composable ColumnScope.() -> Unit) {
     Box(Modifier.androidx_horizontalScroll()) { Column(Modifier.width(minWidth)) { content() } }
+}
+
+/**
+ * Unified "something failed" block: a centred message plus a retry button,
+ * replacing the bare `Text("Не удалось загрузить …")` that left the screen
+ * permanently empty on a dropped connection. Bump [retryKey] to refire the
+ * screen's LaunchedEffect.
+ */
+@Composable
+fun ErrorState(text: String, onRetry: (() -> Unit)? = null) {
+    Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text, color = T2Colors.hint, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (onRetry != null) {
+            Spacer(Modifier.height(12.dp))
+            MChipButton("Повторить", onClick = onRetry)
+        }
+    }
 }
 
 private fun Modifier.androidx_horizontalScroll(): Modifier = composed { this.horizontalScroll(rememberScrollState()) }

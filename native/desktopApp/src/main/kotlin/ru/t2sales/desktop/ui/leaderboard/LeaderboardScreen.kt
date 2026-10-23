@@ -101,7 +101,7 @@ fun LeaderboardScreen(container: AppContainer) {
         }
         when {
             metrics.isEmpty() && !loading -> Text("Каталог метрик пуст", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            failed -> Text("Не удалось загрузить топ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить топ")
             loading && result == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val items = result?.items.orEmpty()

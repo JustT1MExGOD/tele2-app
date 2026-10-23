@@ -124,7 +124,12 @@ tele2-app/
     │   │   ├── admin/          (Admin Center — sales · shifts · schedules · plans (коррекции: причина + предпросмотр + аудит) ·
     │   │   │                    employees · stores · search · overview · feature-flags · operations, все requireAdmin, см. docs/API.md)
     │   │   ├── profiles/       (store.ts · employee.ts — Store/Employee Intelligence, Health Score)
-    │   │   └── chat/           (20.57.0 — messages.ts · attachments.ts · ws.ts, см. docs/CHAT.md)
+    │   │   ├── chat/           (20.57.0 — messages.ts · attachments.ts · ws.ts, см. docs/CHAT.md)
+    │   │   └── miranda/        (20.64.0+ — T2 Miranda, корпоративный мессенджер: accounts.ts (аккаунты,
+    │   │   │                    contacts, presence, rename) · accounts-login.ts (вход точки) ·
+    │   │   │                    contact-groups.ts (общие для дилера группы контактов) · devices.ts
+    │   │   │                    (register/activate/approve/revoke) · messenger.ts (conversations/messages) ·
+    │   │   │                    attachments.ts · ws.ts — см. docs/MIRANDA.md)
     │   │
     │   ├── core/<domain>/                (бизнес-логика — из бывшего services/, теперь сгруппирована по домену)
     │   │   ├── sales/nlp.ts · shifts/pace.ts · plans/service.ts · bfq/service.ts
@@ -133,9 +138,14 @@ tele2-app/
     │   │   ├── reports/       (image.ts — SVG/PNG-рендер; svg-pool.ts — worker-пул)
     │   │   ├── chat/          (20.57.0 — service.ts · realtime-registry.ts · attachment-validation.ts ·
     │   │   │                    storage.ts/StorageAdapter, сейчас PostgresBlobStorageAdapter — см. docs/CHAT.md)
+    │   │   ├── miranda-accounts/ (20.64.0+ — service.ts: principal-резолюция, dealer-scope, auto-approve
+    │   │   │                    первого устройства, device_exclusive, point-session, rename + аудит)
     │   │   ├── admin/         (sales-correction.ts · shift-correction.ts · schedule-correction.ts · plan-correction.ts —
     │   │   │                    каждая: withTransaction, версия-гейт WHERE id=$1 AND version=$2, recordAudit в той же транзакции)
     │   │   └── shared/        (tenant.ts — брендинг/сети; scope-cache.ts — Supervisor Scope Cache; metrics-catalog.ts)
+    │   │
+    │   ├── data/repositories/  (по одному файлу на таблицу/домен, в т.ч. miranda-accounts.ts и
+    │   │                        miranda-contact-groups.ts — см. блок DAL ниже)
     │   │
     │   ├── data/                         (Full Data Access Layer, 19.22.0→20.8.0 — единственное место с прямым SQL)
     │   │   ├── repositories/               (по одному файлу на таблицу/домен; orgId обязательным первым параметром

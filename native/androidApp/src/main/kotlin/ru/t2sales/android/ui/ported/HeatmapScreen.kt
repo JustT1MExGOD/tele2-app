@@ -97,7 +97,7 @@ fun HeatmapScreen(container: AppContainer) {
         }
         val list = cells
         when {
-            failed -> Text("🍉 Пока нечего показать — как только по точке пойдут продажи, здесь появится картина по часам", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ErrorState("🍉 Пока нечего показать — как только по точке пойдут продажи, здесь появится картина по часам")
             list == null -> HeatmapSkeleton()
             else -> {
                 val max = maxOf(1.0, list.maxOf { it.second })

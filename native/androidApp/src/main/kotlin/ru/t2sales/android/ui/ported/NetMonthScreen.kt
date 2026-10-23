@@ -39,11 +39,12 @@ fun NetMonthScreen(container: AppContainer) {
     var stores by remember { mutableStateOf<List<StoreMonthRow>>(emptyList()) }
     var failed by remember { mutableStateOf(false) }
     var metrics by remember { mutableStateOf<List<MetricDef>>(FALLBACK_METRICS) }
+    var reload by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         runCatching { container.salesApi.getMetrics().items }.onSuccess { m -> if (m.isNotEmpty()) metrics = m.map { MetricDef(it.id, it.label ?: it.id, it.short_label, it.unit) } }
     }
-    LaunchedEffect(month) {
+    LaunchedEffect(month, reload) {
         emp = null; failed = false
         runCatching {
             val e = container.plansApi.employeesMonth(month.toString())
@@ -56,7 +57,7 @@ fun NetMonthScreen(container: AppContainer) {
         MonthNav(month) { PlanMonthState.month = it }
         val d = emp
         when {
-            failed -> Text("Не удалось загрузить", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ErrorState("Не удалось загрузить", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val totals = d.totals

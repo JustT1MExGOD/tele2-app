@@ -81,7 +81,7 @@ data class MirandaContactGroup(
 data class MirandaContactGroupsListResponse(val items: List<MirandaContactGroup>)
 
 @Serializable
-data class MirandaCreateContactGroupRequest(val name: String, val parentGroupId: Int? = null)
+data class MirandaCreateContactGroupRequest(val name: String, val parentGroupId: Int? = null, val orgId: String? = null)
 
 @Serializable
 data class MirandaCreateContactGroupResponse(val item: MirandaContactGroup)

@@ -71,7 +71,7 @@ fun BfqScreen(container: AppContainer, me: MeResponse) {
     PageSection("BFQ за месяц") {
         val list = items
         when {
-            failed -> Text("Ошибка BFQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Ошибка BFQ")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("Нет данных BFQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> list.forEachIndexed { i, e ->

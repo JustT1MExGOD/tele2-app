@@ -5,6 +5,7 @@ import ru.t2sales.shared.api.AuthApi
 import ru.t2sales.shared.api.TasksApi
 import ru.t2sales.shared.api.SupervisorApi
 import ru.t2sales.shared.api.InfoApi
+import ru.t2sales.shared.api.MirandaApi
 import ru.t2sales.shared.api.CommandCenterApi
 import ru.t2sales.shared.api.CashApi
 import ru.t2sales.shared.api.AnalyticsApi
@@ -14,6 +15,7 @@ import ru.t2sales.shared.api.AdminApi
 import ru.t2sales.shared.api.ChatApi
 import ru.t2sales.shared.api.FileCookiesStorage
 import ru.t2sales.shared.api.HomeApi
+import ru.t2sales.shared.api.LeaderboardApi
 import ru.t2sales.shared.api.PlansApi
 import ru.t2sales.shared.api.ProfileApi
 import ru.t2sales.shared.api.ReportsApi
@@ -50,6 +52,8 @@ class AppContainer {
     val adminApi = AdminApi(httpClient)
     val teamApi = TeamApi(httpClient)
     val scheduleApi = ScheduleApi(httpClient)
+    val mirandaApi = MirandaApi(httpClient)
+    val leaderboardApi = LeaderboardApi(httpClient)
     val authRepository = AuthRepository(authApi)
     /** Sales entered without a connection wait here (on disk) and are sent when the server answers again. */
     val outbox = ru.t2sales.android.offline.SalesOutbox(

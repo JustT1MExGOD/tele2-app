@@ -1156,6 +1156,12 @@ RUNBOOK-процедуры (`BOT_TOKEN`, `ENCRYPTION_KEKS` — обе тепер
 | Менять сектор/сеть точки | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Переключать сеть просмотра (`org_id` override) | ❌ | ❌ | ❌ (игнорируется) | ❌ | ✅ |
 | Admin Center (`/admin/*` — коррекции продаж/смен/графика/планов, флаги функциональности, операционный центр по всем сетям) | ❌ | ❌ | ❌ | ❌ | ✅ (`requireAdmin`) |
+| Miranda — свой аккаунт: имя, статус (`/miranda/accounts/me`, `/miranda/presence`) | ✅ | ✅ | ✅ | ✅ | ✅ (принципал, не роль) |
+| Miranda — контакты, беседы, сообщения, вложения, WS | ✅ | ✅ | ✅ | ✅ | ✅ (принципал; точка — только через point-session) |
+| Miranda — очередь устройств, деактивация, `device_exclusive`, гранты | ❌ | ❌ | ❌ | ❌ | ✅ (`requireAdmin`, approve — step-up) |
+| Miranda — группы контактов: создание/rename/удаление/состав | ❌ | ❌ | ❌ | ❌ | ✅ (`requireAdmin`, `orgId` любой сети дилера) |
+| Miranda — переименование любого аккаунта (`PATCH /accounts/:id`) | ❌ | ❌ | ❌ | ❌ | ✅ (`requireAdmin`, аудит `MIRANDA_ACCOUNT_RENAMED`) |
+| Miranda — чтение групп без активного аккаунта (`/miranda/admin/groups`) | ❌ | ❌ | ❌ | ❌ | ✅ (`requireAdmin`; у обычного `GET /miranda/groups` — принципал) |
 
 ## Тестовое покрытие
 

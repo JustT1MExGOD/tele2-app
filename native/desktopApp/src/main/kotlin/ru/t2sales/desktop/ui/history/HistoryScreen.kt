@@ -50,7 +50,7 @@ fun HistoryScreen(api: SalesApi, me: MeResponse) {
     PageSection("История продаж") {
         val list = items
         when {
-            failed -> Text("Не удалось загрузить историю", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить историю")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("Нет продаж за период", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> list.forEach { s ->

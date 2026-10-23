@@ -31,9 +31,11 @@ import ru.t2sales.desktop.ui.components.Field
 import ru.t2sales.desktop.ui.components.MChipButton
 import ru.t2sales.desktop.ui.components.MainButton
 import ru.t2sales.desktop.ui.components.PageSection
+import ru.t2sales.desktop.ui.components.SheetDialog
 import ru.t2sales.desktop.ui.components.T2Toast
 import ru.t2sales.shared.api.AcEmployeeHit
 import ru.t2sales.shared.api.MirandaAvailableAccountRow
+import ru.t2sales.shared.api.MirandaContactGroup
 import ru.t2sales.shared.api.MirandaCorporateAccountListItem
 import ru.t2sales.shared.api.MirandaPendingBindingRow
 import ru.t2sales.shared.api.SheetImportPendingRow
@@ -48,8 +50,16 @@ internal fun MirandaDevicesTab(container: AppContainer) {
     var pending by remember { mutableStateOf<List<MirandaPendingBindingRow>?>(null) }
     var accounts by remember { mutableStateOf<List<MirandaCorporateAccountListItem>?>(null) }
     var available by remember { mutableStateOf<List<MirandaAvailableAccountRow>?>(null) }
+    var groups by remember { mutableStateOf<List<MirandaContactGroup>?>(null) }
     var reload by remember { mutableStateOf(0) }
     var stepUpTarget by remember { mutableStateOf<Int?>(null) }
+
+    // groups + rename (web 20.79.x — was missing on desktop, added for parity)
+    var selectedGroupAccountId by remember { mutableStateOf<Int?>(null) }
+    var newGroupName by remember { mutableStateOf("") }
+    var renameGroupTarget by remember { mutableStateOf<MirandaContactGroup?>(null) }
+    var deleteGroupTarget by remember { mutableStateOf<MirandaContactGroup?>(null) }
+    var renameAccountTarget by remember { mutableStateOf<MirandaCorporateAccountListItem?>(null) }
 
     var grantQuery by remember { mutableStateOf("") }
     var grantResults by remember { mutableStateOf<List<AcEmployeeHit>>(emptyList()) }
@@ -71,6 +81,8 @@ internal fun MirandaDevicesTab(container: AppContainer) {
         runCatching { mirandaApi.listPendingDevices().items }.onSuccess { pending = it }.onFailure { pending = emptyList() }
         runCatching { mirandaApi.listAllCorporateAccounts(showInactive).items }.onSuccess { accounts = it }.onFailure { accounts = emptyList() }
         runCatching { mirandaApi.listAvailableAccounts().items }.onSuccess { available = it }.onFailure { available = emptyList() }
+        // admin-scoped read: works even without an active Miranda account on this device (matches web adminListMirandaGroups)
+        runCatching { mirandaApi.adminListContactGroups().items }.onSuccess { groups = it }.onFailure { groups = emptyList() }
     }
     LaunchedEffect(grantQuery) {
         if (grantQuery.trim().length < 2) { grantResults = emptyList(); return@LaunchedEffect }
@@ -222,6 +234,10 @@ internal fun MirandaDevicesTab(container: AppContainer) {
                             }
                         })
                         Text("только одно устройство", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                        MChipButton(if (selectedGroupAccountId == acc.corporate_account_id) "Выбран" else "В группу") {
+                            selectedGroupAccountId = if (selectedGroupAccountId == acc.corporate_account_id) null else acc.corporate_account_id
+                        }
+                        MChipButton("Имя") { renameAccountTarget = acc }
                         if (acc.is_active) {
                             MChipButton("Деактивировать") {
                                 scope.launch {
@@ -239,6 +255,79 @@ internal fun MirandaDevicesTab(container: AppContainer) {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+    // ---------- Группы контактов (общие для дилера) ----------
+    PageSection("Группы контактов Miranda") {
+        Text(
+            "Состав задаётся по корпоративным аккаунтам. Выберите аккаунт кнопкой «В группу» в списке выше, " +
+                "затем нажмите «+ аккаунт» у нужной группы.",
+            color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(300.dp)) {
+                    Field("", newGroupName, { newGroupName = it }, placeholder = "Название новой группы", fill = T2Colors.surface2)
+                }
+                Spacer(Modifier.width(8.dp))
+                MChipButton("Создать группу") {
+                    val name = newGroupName.trim()
+                    if (name.isEmpty()) {
+                        T2Toast.show("Введите название группы", true)
+                    } else {
+                        scope.launch {
+                            runCatching { mirandaApi.createContactGroup(name) }
+                                .onSuccess { T2Toast.show("Группа создана"); newGroupName = ""; reload++ }
+                                .onFailure { err ->
+                                    val conflict = (err as? io.ktor.client.plugins.ResponseException)?.response?.status?.value == 409
+                                    T2Toast.show(if (conflict) "Группа с таким названием уже существует" else "Не удалось создать группу", true)
+                                }
+                        }
+                    }
+                }
+            }
+        }
+        val glist = groups
+        val accountById = accounts.orEmpty().associateBy { it.corporate_account_id }
+        when {
+            glist == null -> LoadingBlock(Modifier.padding(16.dp))
+            glist.isEmpty() -> EmptyText("Групп пока нет — создайте первую выше")
+            else -> glist.forEach { g ->
+                val members = g.member_corporate_account_ids.mapNotNull { accountById[it] }
+                ListRow(
+                    g.name + if (g.parent_group_id != null) " · вложенная" else "",
+                    "${g.org_id} · " + (if (members.isEmpty()) "пустая" else "${members.size} контакт(ов)") +
+                        (if (members.isNotEmpty()) " — " + members.joinToString(", ") { it.display_label ?: it.employee_full_name } else "")
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        members.forEach { m ->
+                            MChipButton("${m.display_label ?: m.employee_full_name}  ×") {
+                                scope.launch {
+                                    runCatching { mirandaApi.removeContactFromGroup(g.id, m.corporate_account_id) }
+                                        .onSuccess { T2Toast.show("Аккаунт убран из группы"); reload++ }
+                                        .onFailure { T2Toast.show("Не удалось убрать аккаунт из группы", true) }
+                                }
+                            }
+                        }
+                        MChipButton("+ аккаунт") {
+                            val sel = selectedGroupAccountId
+                            if (sel == null) {
+                                T2Toast.show("Сначала выберите корпоративный аккаунт кнопкой «В группу» в списке выше", true)
+                            } else {
+                                scope.launch {
+                                    runCatching { mirandaApi.addContactToGroup(g.id, sel) }
+                                        .onSuccess { T2Toast.show("Аккаунт добавлен в группу"); reload++ }
+                                        .onFailure { T2Toast.show("Не удалось добавить аккаунт в группу", true) }
+                                }
+                            }
+                        }
+                        MChipButton("Переименовать") { renameGroupTarget = g }
+                        MChipButton("Удалить", danger = true) { deleteGroupTarget = g }
                     }
                 }
             }
@@ -329,6 +418,73 @@ internal fun MirandaDevicesTab(container: AppContainer) {
                 }
             }
         )
+    }
+
+    renameGroupTarget?.let { g ->
+        TextInputDialog(
+            title = "Переименовать группу",
+            initial = g.name,
+            confirmLabel = "Сохранить",
+            onDismiss = { renameGroupTarget = null },
+            onConfirm = { name ->
+                if (name.isNotBlank() && name != g.name) {
+                    scope.launch {
+                        runCatching { mirandaApi.renameContactGroup(g.id, name.trim()) }
+                            .onSuccess { T2Toast.show("Группа переименована"); reload++ }
+                            .onFailure { err ->
+                                val conflict = (err as? io.ktor.client.plugins.ResponseException)?.response?.status?.value == 409
+                                T2Toast.show(if (conflict) "Группа с таким названием уже существует" else "Не удалось переименовать группу", true)
+                            }
+                    }
+                }
+            }
+        )
+    }
+
+    deleteGroupTarget?.let { g ->
+        SheetDialog("Удалить группу", onDismiss = { deleteGroupTarget = null }) {
+            Text("Удалить группу «${g.name}»? Контакты останутся в списке вне групп.", color = T2Colors.hint, fontSize = 14.sp)
+            Spacer(Modifier.height(16.dp))
+            MainButton("Удалить", enabled = true) {
+                scope.launch {
+                    runCatching { mirandaApi.deleteContactGroup(g.id) }
+                        .onSuccess { T2Toast.show("Группа удалена"); deleteGroupTarget = null; reload++ }
+                        .onFailure { T2Toast.show("Не удалось удалить группу", true); deleteGroupTarget = null }
+                }
+            }
+        }
+    }
+
+    renameAccountTarget?.let { acc ->
+        TextInputDialog(
+            title = "Имя контакта",
+            initial = acc.display_label ?: "",
+            confirmLabel = "Сохранить",
+            hint = "Пустое — вернуть стандартное имя",
+            onDismiss = { renameAccountTarget = null },
+            onConfirm = { name ->
+                scope.launch {
+                    val label = name.trim().ifBlank { null }
+                    runCatching { mirandaApi.renameCorporateAccount(acc.corporate_account_id, label) }
+                        .onSuccess { T2Toast.show(if (label != null) "Имя контакта обновлено" else "Возвращено стандартное имя"); reload++ }
+                        .onFailure { T2Toast.show("Не удалось переименовать аккаунт", true) }
+                }
+            }
+        )
+    }
+}
+
+/** Single text field sheet — used for rename / create where the web shows window.prompt(). */
+@Composable
+private fun TextInputDialog(title: String, initial: String, confirmLabel: String, hint: String? = null, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var value by remember { mutableStateOf(initial) }
+    SheetDialog(title, onDismiss) {
+        if (!hint.isNullOrEmpty()) {
+            Text(hint, color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+        }
+        Field("", value, { value = it }, fill = T2Colors.surface2)
+        Spacer(Modifier.height(16.dp))
+        MainButton(confirmLabel, enabled = true) { onConfirm(value) }
     }
 }
 

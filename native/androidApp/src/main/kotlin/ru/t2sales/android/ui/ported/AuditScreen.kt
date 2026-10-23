@@ -122,7 +122,7 @@ fun AuditScreen(api: AdminApi) {
             }
         }
         when {
-            failed -> Text("\uD83C\uDF49 Не получилось загрузить историю", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ErrorState("\uD83C\uDF49 Не получилось загрузить историю")
             !loaded -> LoadingBlock(Modifier.padding(16.dp))
             items.isEmpty() -> Text("\uD83C\uDF49 Действий пока нет", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {

@@ -170,6 +170,12 @@ npx vitest run tests/adversarial/cross-tenant-write.test.ts
       `backend/src/shared/api-types.ts`, не заново описанные типы.
       `frontend/js/` как директория не существует с 20.30.0 — миграция
       закрыта полностью, писать в неё уже нечего
+- [ ] Каждая JSON-мутация в вебе — с `Content-Type: application/json`:
+      `authHeaders(true)`, не `authHeaders()` (transport сам `JSON.stringify`
+      тело, но заголовок не ставит; без него Fastify читает тело как текст и
+      TypeBox-валидация тела падает `body must be object` — закрыл хотфикс
+      20.79.1). На нативных клиентах — `contentType(Json)` явно на каждом
+      вызове
 - [ ] Версионирование — `MINOR` для эпика/функции, `PATCH` для исправления/рефакторинга, changelog-запись в `src/platform/notifications/changelog.ts`
       только для эпиков, не хотфиксов ([CHANGELOG.md](../CHANGELOG.md) —
       история версий длиннее, чем changelog-анонсы)

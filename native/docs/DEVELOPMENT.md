@@ -18,7 +18,8 @@
 
 | Что | Зачем |
 | --- | --- |
-| JDK 17 | Сборка и запуск; упаковка `jpackage`. Другие версии не проверялись |
+| JDK 17 | Сборка и запуск `desktopApp` (JVM-цель 17); упаковка `jpackage` |
+| JDK 21 | Сборка `androidApp` — AGP/Android Gradle Plugin требует toolchain 21 (`compileDebugKotlin` fails на 17 с «Inconsistent JVM-target»). Одновременно держат две версии в `~/tools/`: `jdk-17.0.20.1+1` и `jdk-21.0.12.1+1`; под каждую задачу передают нужную `JAVA_HOME` |
 | Windows 10/11 x64 | Установщик собирается штатным `csc.exe` из `C:\Windows\Microsoft.NET\Framework64\v4.0.30319` с WPF; отдельного .NET SDK не нужно |
 | Доступ к серверу | Приложение работает с рабочим сервером; тестовой копии в репозитории нет |
 
@@ -29,14 +30,17 @@ Gradle не нужно ставить: есть `gradlew` (Gradle 8.10.2 из `g
 Рабочий каталог — `native/`. В Git Bash перед вызовом Gradle задайте JDK; в PowerShell — `$env:JAVA_HOME` и `$env:Path`.
 
 ```bash
-export JAVA_HOME="/c/Users/<пользователь>/tools/jdk-17.0.20.1+1"   # пример пути
+export JAVA_HOME="/c/Users/<пользователь>/tools/jdk-17.0.20.1+1"   # desktopApp / shared
 export PATH="$JAVA_HOME/bin:$PATH"
+# для androidApp — подставьте jdk-21.0.12.1+1 (или передайте JAVA_HOME в одну команду)
+JAVA_HOME="/c/Users/<пользователь>/tools/jdk-21.0.12.1+1" ./gradlew :androidApp:compileDebugKotlin
 ```
 
 | Задача | Команда |
 | --- | --- |
 | Запустить из исходников | `./gradlew :desktopApp:run` |
 | Проверить, что всё собирается | `./gradlew :desktopApp:compileKotlin` |
+| Проверить сборку Android | `JAVA_HOME=~/tools/jdk-21.0.12.1+1 ./gradlew :androidApp:compileDebugKotlin` |
 | Тесты общего слоя (сериализация ответов) | `./gradlew :shared:jvmTest` |
 | Тесты обновлений | `./gradlew :desktopApp:test` |
 | Собрать установщик | `./gradlew :desktopApp:packageSetup` |

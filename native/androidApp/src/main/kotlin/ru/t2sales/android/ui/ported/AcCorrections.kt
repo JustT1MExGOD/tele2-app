@@ -330,7 +330,7 @@ private fun PlanBlock(container: AppContainer, title: String, kind: String, plac
         val p = plan
         when {
             loading -> LoadingBlock(Modifier.padding(16.dp))
-            failed -> EmptyText("Не удалось загрузить план")
+            failed -> ErrorState("Не удалось загрузить план")
             p != null && planId != null -> FlowRow(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)

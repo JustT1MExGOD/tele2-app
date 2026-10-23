@@ -4,6 +4,23 @@
 
 Версии нативного клиента ведутся отдельно от веба и backend. Здесь — что менялось в каждой версии. Общая история проекта — в [CHANGELOG.md](../CHANGELOG.md) в корне репозитория.
 
+## Без выпуска (следующая версия)
+
+Изменения в основной ветке, ещё не вошедшие в выпуск установщика/APK.
+
+**Паритет Admin Center → Miranda (обе платформы)**
+- Вкладка «Устройства Miranda» на Android (`androidApp/.../ported/AcMiranda.kt`, новый файл) — полный порт: очередь подтверждения, создание личных и точечных аккаунтов, `device_exclusive`, деактивация/восстановление, гранты, группы контактов и переименование любого аккаунта.
+- Те же **группы контактов и переименование аккаунтов добавлены на ПК** (`desktopApp/.../admincenter/AcMiranda.kt`) — в вебе они появились в 20.79.x, на нативном ПК отсутствовали.
+- Вкладка «Импорт графика из Таблиц» (`SheetImportTab`) перенесена на Android — до этого была только на ПК.
+- `AppContainer` на Android получил `mirandaApi` и `leaderboardApi`; в `shared/MirandaApi` добавлены `adminListContactGroups(orgId)`, `renameCorporateAccount(id, label)` и поле `orgId` в `MirandaCreateContactGroupRequest`/`createContactGroup`.
+- В `AdminCenterScreen` (Android) `AcTab` дополнен `SheetImport` и `MirandaDevices`.
+
+**«Топы» на Android**
+- Новый экран `ported/LeaderboardScreen.kt`: период-пикер, табы по метрикам каталога, прогресс-бары — как на ПК и в вебе (20.75.0/20.77.0). Вход — «Инструменты» → «Топы» на Главной (`NavIcons.trophy`); `Page.Leaderboard` и маппинг `AppNav.go(Screen.Leaderboard)` добавлены.
+
+**Единое состояние ошибки (`ErrorState`)**
+- Общий компонент `ErrorState(текст, onRetry)` — на Android в `ui/Compat.kt`, на ПК в `ui/components/Layout.kt`. Заменил голые `Text("Не удалось загрузить …")`/`EmptyText("Ошибка …")` примерно в тридцати экранах на обеих платформах; там, где уже был `reload`-паттерн, у ошибки появилась кнопка «Повторить» (Обзор Admin Center, Топы, История, Алерты, Динамика, Дилеры/Секторы, Сети, Аудит).
+
 ## Android 2.0.0-dev
 
 Первый нативный клиент для Android (модуль `androidApp`, версия ведётся отдельно от клиента для Windows; подробности — [docs/ANDROID.md](docs/ANDROID.md)).

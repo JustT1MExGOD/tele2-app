@@ -115,7 +115,7 @@ fun CashScreen(container: AppContainer) {
         Text("\u0394 = факт \u2212 (1С + 2000)", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         val t = table
         when {
-            failed -> Text("\uD83C\uDF49 Касса сейчас недоступна, зайди чуть позже", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ErrorState("\uD83C\uDF49 Касса сейчас недоступна, зайди чуть позже")
             t == null -> LoadingBlock(Modifier.padding(16.dp))
             t.dates.isEmpty() -> Text("\uD83C\uDF49 Пока нет ни одной записи кассы \u2014 внеси первую строку выше", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {

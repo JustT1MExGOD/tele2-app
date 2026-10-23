@@ -63,7 +63,7 @@ fun LiveScreen(container: AppContainer) {
     PageSection("Сеть сейчас") {
         val d = data
         when {
-            failed -> Text("\uD83C\uDF49 Живая карта сети сейчас недоступна, зайди чуть позже", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("\uD83C\uDF49 Живая карта сети сейчас недоступна, зайди чуть позже")
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val today = LocalDate.now(ZoneId.of("Europe/Moscow")).toString()

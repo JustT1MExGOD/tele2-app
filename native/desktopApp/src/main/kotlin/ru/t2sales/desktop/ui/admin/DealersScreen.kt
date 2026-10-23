@@ -99,7 +99,7 @@ fun DealersScreen(api: AdminApi) {
             }
         }
         when {
-            failed -> Text("Не удалось загрузить дилеров/секторы", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить дилеров/секторы", onRetry = { reload++ })
             t == null -> LoadingBlock(Modifier.padding(16.dp))
             t.dealers.isEmpty() && t.unassigned_sectors.isEmpty() -> Text("Дилеров пока нет — заведите через форму сети", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

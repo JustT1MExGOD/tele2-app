@@ -127,7 +127,7 @@ fun AuditScreen(api: AdminApi) {
             Box(Modifier.weight(1f)) { Field("", to, { to = it }, placeholder = "По дату ГГГГ-ММ-ДД", fill = T2Colors.surface2) }
         }
         when {
-            failed -> Text("\uD83C\uDF49 Не получилось загрузить историю", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить историю", onRetry = { reload++ })
             !loaded -> LoadingBlock(Modifier.padding(16.dp))
             items.isEmpty() -> Text("\uD83C\uDF49 Действий пока нет", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {

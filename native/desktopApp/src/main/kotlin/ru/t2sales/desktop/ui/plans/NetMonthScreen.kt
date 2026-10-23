@@ -63,7 +63,7 @@ fun NetMonthScreen(container: AppContainer) {
         MonthNav(month) { PlanMonthState.month = it }
         val d = emp
         when {
-            failed -> Text("Не удалось загрузить", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить")
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val totals = d.totals

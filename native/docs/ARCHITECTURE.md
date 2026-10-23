@@ -28,7 +28,7 @@ native/
 
 | Слой | Пакет | Что в нём |
 | --- | --- | --- |
-| Общий | `ru.t2sales.shared.api` | `createHttpClient`, `ApiException`, `ApiTypes.kt` (типы ответов), `ReportsApi.kt` (все API-классы: `AuthApi`, `HomeApi`, `TeamApi`, `ScheduleApi`, `SalesApi`, `PlansApi` и др.), `FileCookiesStorage` |
+| Общий | `ru.t2sales.shared.api` | `createHttpClient`, `ApiException`, `ApiTypes.kt` (типы ответов), `ReportsApi.kt` (все API-классы: `AuthApi`, `HomeApi`, `TeamApi`, `ScheduleApi`, `SalesApi`, `PlansApi`, `AdminCenterApi`, `SupervisorApi`, `AnalyticsApi`, `AlertsApi`, `CashApi`, `CommandCenterApi`, `ChatApi`, `InfoApi`, `ProfileApi`, `ReportsApi`, `TasksApi` и др.), `MirandaApi.kt` + `MirandaApiTypes.kt` (T2 Miranda — устройства, аккаунты, контакты, группы, мессенджер; `adminListContactGroups`/`renameCorporateAccount` — admin-роуты), `LeaderboardApi` («Топы»), `FileCookiesStorage` |
 | Общий | `ru.t2sales.shared.auth` | `AuthRepository` (вход, код MFA, проверка сессии), `platformConfigDir()` |
 | Общий | `ru.t2sales.shared.theme` | Токены цвета, радиусов и отступов (`T2Tokens.kt`), тема Compose |
 | Общий | `ru.t2sales.shared.navigation` | `Screen` — закрытый набор всех экранов |
@@ -36,8 +36,9 @@ native/
 | Приложение | `ru.t2sales.desktop.network` | Сеть DIRECT/RELAY |
 | Приложение | `ru.t2sales.desktop.update` | Обновления |
 | Приложение | `ru.t2sales.desktop.ui.*` | Экраны и компоненты |
+| Приложение | `ru.t2sales.android` | Android-клиент (Compose): `AppContainer` (те же API + `mirandaApi` + `leaderboardApi`), `ui/` (вкладки, `ported/` — перенесённые с ПК экраны и `Compat.kt` — общие примитивы `Field`/`PageSection`/`ErrorState`/`MChipButton`) |
 
-`Main.kt` создаёт `AppContainer`, показывает сплэш, затем клиент.
+`Main.kt` создаёт `AppContainer`, показывает сплэш, затем клиент. У Android — `MainActivity` + свой `AppContainer` (`android/AppContainer.kt`).
 
 ## Путь запроса к серверу
 

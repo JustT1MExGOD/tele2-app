@@ -18,7 +18,7 @@
 
 | Параметр | Значение |
 | --- | --- |
-| Версия | `1.2.0` — ведётся отдельно от веба и backend; единственный источник — `appVersion` в [desktopApp/build.gradle.kts](desktopApp/build.gradle.kts) |
+| Версия | ПК — `1.4.0` (`appVersion` в [desktopApp/build.gradle.kts](desktopApp/build.gradle.kts)); Android — `2.0.0` (`versionName` в [androidApp/build.gradle.kts](androidApp/build.gradle.kts)). Обе линии ведутся отдельно от веба и backend |
 | Платформа | Windows 10/11, x64 (клиент для ПК); Android 7+ (отдельный модуль `androidApp`). Общий слой `shared` не привязан к Windows |
 | Стек | Kotlin 2.0.21, Compose Multiplatform 1.7.1, Ktor 2.3.13 (OkHttp), kotlinx.serialization 1.7.3 |
 | Сервер | `https://tele2-app-production.up.railway.app` (см. `ApiConfig` в `shared`) |

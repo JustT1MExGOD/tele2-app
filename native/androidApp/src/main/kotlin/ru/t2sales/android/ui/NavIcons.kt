@@ -163,6 +163,10 @@ object NavIcons {
     }
     /** No web equivalent (Повтор месяца/Admin Center are native-only screens) — a plain, consistent stand-in, not a copy of a web icon. */
     val repeat = icon { d("m17 2 4 4-4 4"); d("M3 11v-1a4 4 0 0 1 4-4h14"); d("m7 22-4-4 4-4"); d("M21 13v1a4 4 0 0 1-4 4H3") }
+    /** «Топы сотрудников» — the web's leaderboard icon (index.html:251, lucide trophy). */
+    val trophy = icon {
+        d("M8 21h8"); d("M12 17v4"); d("M7 4h10v5a5 5 0 0 1-10 0z"); d("M17 4h3a2 2 0 0 1 2 2v1a4 4 0 0 1-4 4"); d("M7 4H4a2 2 0 0 0-2 2v1a4 4 0 0 0 4 4")
+    }
     val settings = icon {
         circle(12f, 12f, 3f)
         d(

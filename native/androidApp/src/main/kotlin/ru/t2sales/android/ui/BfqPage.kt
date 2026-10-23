@@ -57,7 +57,7 @@ fun BfqPage(container: AppContainer, me: MeResponse) {
         Section("BFQ за месяц") {
             val list = items
             when {
-                failed -> Text("Ошибка BFQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+                failed -> ErrorState("Ошибка BFQ")
                 list == null -> LoadingBlock(Modifier.padding(16.dp))
                 list.isEmpty() -> Text("Нет данных BFQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
                 else -> list.forEachIndexed { i, e ->

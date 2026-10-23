@@ -42,6 +42,7 @@
 - [Разработка](DEVELOPMENT.md).
 - [HTTP API](API.md).
 - [Внутренний чат сотрудников](CHAT.md).
+- [T2 Miranda — корпоративный мессенджер](MIRANDA.md).
 - [Прогноз продаж: методология и точность](FORECASTING.md).
 - [Импорт графика из Google Таблиц](SHEET-SCHEDULE-IMPORT.md).
 - [Картинка-отчёт](REPORT_IMAGE.md).

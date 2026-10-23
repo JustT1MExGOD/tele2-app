@@ -44,3 +44,19 @@ fun MChipButton(label: String, danger: Boolean = false, modifier: Modifier = Mod
         modifier = modifier.clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 12.dp)
     )
 }
+
+/**
+ * Unified "something failed" block: a centred message plus a retry button,
+ * replacing the bare `EmptyText("Не удалось загрузить …")` that left the
+ * section permanently empty on a dropped connection.
+ */
+@Composable
+fun ErrorState(text: String, onRetry: (() -> Unit)? = null) {
+    Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+        Text(text, color = T2Colors.hint, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (onRetry != null) {
+            androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.padding(top = 12.dp))
+            MChipButton("Повторить", onClick = onRetry)
+        }
+    }
+}

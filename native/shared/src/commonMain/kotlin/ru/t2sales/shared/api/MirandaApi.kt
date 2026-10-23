@@ -167,15 +167,28 @@ class MirandaApi(private val client: HttpClient) {
         }
     }
 
+    /** Admin Center — переименование любого корпоративного аккаунта (PATCH /miranda/accounts/:id).
+     * displayLabel = null сбрасывает кастомное имя. 404 = account_not_found. */
+    suspend fun renameCorporateAccount(corporateAccountId: Int, displayLabel: String?) {
+        client.patch(apiUrl("/miranda/accounts/$corporateAccountId")) {
+            contentType(ContentType.Application.Json)
+            setBody(MirandaSetDisplayLabelRequest(displayLabel))
+        }
+    }
+
     // --- общие для сети группы контактов, настраивает администратор; вложенные (не групповые чаты — см. MirandaCreateGroupRequest ниже) ---
 
     suspend fun listContactGroups(): MirandaContactGroupsListResponse =
         client.get(apiUrl("/miranda/groups")).body()
 
-    suspend fun createContactGroup(name: String, parentGroupId: Int? = null): MirandaCreateContactGroupResponse =
+    /** Admin Center — список групп без активного Miranda-сеанса (GET /miranda/admin/groups). */
+    suspend fun adminListContactGroups(orgId: String? = null): MirandaContactGroupsListResponse =
+        client.get(apiUrl("/miranda/admin/groups" + (orgId?.let { "?org_id=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""))).body()
+
+    suspend fun createContactGroup(name: String, parentGroupId: Int? = null, orgId: String? = null): MirandaCreateContactGroupResponse =
         client.post(apiUrl("/miranda/groups")) {
             contentType(ContentType.Application.Json)
-            setBody(MirandaCreateContactGroupRequest(name, parentGroupId))
+            setBody(MirandaCreateContactGroupRequest(name, parentGroupId, orgId))
         }.body()
 
     suspend fun renameContactGroup(groupId: Int, name: String) {

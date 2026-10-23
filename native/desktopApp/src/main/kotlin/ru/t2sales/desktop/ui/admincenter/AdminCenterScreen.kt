@@ -144,12 +144,13 @@ fun AdminCenterScreen(container: AppContainer, me: ru.t2sales.shared.api.MeRespo
 private fun OverviewTab(container: AppContainer) {
     var data by remember { mutableStateOf<AcOverview?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { runCatching { container.adminCenterApi.overview() }.onSuccess { data = it }.onFailure { failed = true } }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) { failed = false; runCatching { container.adminCenterApi.overview() }.onSuccess { data = it }.onFailure { failed = true } }
 
     PageSection("Обзор сети") {
         val d = data
         when {
-            failed -> Text("Не удалось загрузить обзор", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить обзор", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val st = d.shifts_today
@@ -432,7 +433,7 @@ private fun StoresTab(container: AppContainer) {
     PageSection("Точки сети") {
         val list = stores
         when {
-            failed -> EmptyText("Не удалось загрузить точки")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить точки")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Нет точек")
             else -> list.forEach { s -> NavRow(s.display_name ?: s.name, s.code + if (s.is_active) "" else " \u00B7 деактивирована") { selected = s.id } }
@@ -564,7 +565,7 @@ private fun AuditTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> EmptyText("Ошибка загрузки")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Ошибка загрузки")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Записей не найдено")
             else -> list.forEach { i ->

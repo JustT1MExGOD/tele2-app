@@ -51,7 +51,8 @@ import ru.t2sales.shared.theme.T2Radius
 private enum class AcTab(val label: String) {
     Overview("Обзор"), Employees("Сотрудники"), Stores("Точки"), Sales("Коррекции продаж"), Shifts("Коррекции смен"),
     Schedules("Коррекции графика"), Plans("Коррекции планов"), Flags("Флаги функциональности"), OrgSettings("Настройки сети"),
-    Rules("Бизнес-правила"), Operations("Операционный центр"), Audit("Аудит")
+    Rules("Бизнес-правила"), Operations("Операционный центр"), SheetImport("Импорт графика из Таблиц"), Audit("Аудит"),
+    MirandaDevices("Устройства Miranda")
 }
 
 private val ROLE_LABELS = mapOf(
@@ -105,6 +106,8 @@ fun AdminCenterScreen(container: AppContainer) {
         AcTab.OrgSettings -> OrgSettingsTab(container)
         AcTab.Rules -> RulesTab(container)
         AcTab.Operations -> OperationsTab(container)
+        AcTab.SheetImport -> SheetImportTab(container)
+        AcTab.MirandaDevices -> MirandaDevicesTab(container)
         else -> PageSection(tab.label) {
             Text(WEB_ONLY, color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
         }
@@ -116,12 +119,13 @@ fun AdminCenterScreen(container: AppContainer) {
 private fun OverviewTab(container: AppContainer) {
     var data by remember { mutableStateOf<AcOverview?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { runCatching { container.adminCenterApi.overview() }.onSuccess { data = it }.onFailure { failed = true } }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) { failed = false; runCatching { container.adminCenterApi.overview() }.onSuccess { data = it }.onFailure { failed = true } }
 
     PageSection("Обзор сети") {
         val d = data
         when {
-            failed -> Text("Не удалось загрузить обзор", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            failed -> ErrorState("Не удалось загрузить обзор", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val st = d.shifts_today
@@ -394,7 +398,7 @@ private fun StoresTab(container: AppContainer) {
     PageSection("Точки сети") {
         val list = stores
         when {
-            failed -> EmptyText("Не удалось загрузить точки")
+            failed -> ErrorState("Не удалось загрузить точки")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Нет точек")
             else -> list.forEach { s -> NavRow(s.display_name ?: s.name, s.code + if (s.is_active) "" else " \u00B7 деактивирована") { selected = s.id } }
@@ -497,7 +501,7 @@ private fun AuditTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> EmptyText("Ошибка загрузки")
+            failed -> ErrorState("Ошибка загрузки")
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Записей не найдено")
             else -> list.forEach { i ->
