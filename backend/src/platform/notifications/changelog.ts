@@ -1698,6 +1698,15 @@ export const CHANGELOG: ChangelogEntry[] = [
     ]
   },
   {
+    version: '20.78.2',
+    title: 'Miranda: корректные числовые ID в JSON-ответах устройств',
+    bullets: [
+      '/miranda/devices/register, /activate и GET /devices теперь отдают deviceId/corporateAccountId/binding_id/device_id/employee_id числами, а не строками PostgreSQL',
+      'Нативный клиент Miranda больше не ломается на разборе успешного ответа активации, профиль открывается после входа',
+      'Изоляционный тест закрепляет JSON number для corporateAccountId'
+    ]
+  },
+  {
     version: '20.78.1',
     title: 'Miranda: активация старых устройств при повторном входе',
     bullets: [

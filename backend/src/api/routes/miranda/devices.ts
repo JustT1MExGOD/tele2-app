@@ -48,7 +48,7 @@ export async function registerMirandaDeviceRoutes(app: FastifyInstance) {
       }
       const result = await mirandaService.registerDevice(orgId, employeeId, storeId, body.platform, body.label || null);
       return reply.code(200).send({
-        deviceId: result.deviceId,
+        deviceId: Number(result.deviceId),
         deviceSecret: result.deviceSecret,
         status: result.bindingStatus
       });
@@ -82,7 +82,7 @@ export async function registerMirandaDeviceRoutes(app: FastifyInstance) {
       if (result.status === 'pending') {
         return reply.code(202).send({ status: 'pending', message: 'Ожидайте подтверждения администратора' });
       }
-      return reply.code(200).send({ status: 'active', corporateAccountId: result.corporateAccountId, displayLabel: result.displayLabel });
+      return reply.code(200).send({ status: 'active', corporateAccountId: Number(result.corporateAccountId), displayLabel: result.displayLabel });
     }
   );
 

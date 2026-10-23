@@ -111,6 +111,7 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     });
     expect(activate.statusCode).toBe(200);
     expect(activate.json().status).toBe('active');
+    expect(typeof activate.json().corporateAccountId).toBe('number');
     expect(Number(activate.json().corporateAccountId)).toBe(corporateAccountId);
 
     const binding = await query(`SELECT status FROM miranda_device_bindings WHERE id = $1`, [bindingId]);
@@ -198,6 +199,7 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     });
     expect(activate.statusCode).toBe(200);
     expect(activate.json().status).toBe('active');
+    expect(typeof activate.json().corporateAccountId).toBe('number');
     expect(Number(activate.json().corporateAccountId)).toBe(corporateAccountId);
 
     const sessionRow = await query(`SELECT active_corporate_account_id FROM employee_sessions WHERE token_hash = encode(sha256($1::bytea), 'hex')`, [empToken]);
@@ -285,8 +287,8 @@ describe('T2 Miranda — аккаунты/устройства', () => {
     const pending = await app.inject({ method: 'GET', url: '/miranda/devices', headers: authAs(adminA.telegramId, adminA.telegramGrantToken) });
     expect(pending.statusCode).toBe(200);
     const ids = pending.json().items.map((i: any) => i.device_id);
-    expect(ids).toContain(regB.json().deviceId);
-    expect(ids).not.toContain(regF.json().deviceId);
+    expect(ids).toContain(Number(regB.json().deviceId));
+    expect(ids).not.toContain(Number(regF.json().deviceId));
   });
 
   it('admin не может переключиться на корпоративный аккаунт без явного гранта; с грантом — переключается, всё аудируется', async () => {

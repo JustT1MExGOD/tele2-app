@@ -338,7 +338,13 @@ export async function listPendingBindings(orgIds: string[]): Promise<PendingBind
      ORDER BY b.created_at ASC`,
     [orgIds]
   );
-  return res.rows;
+  return res.rows.map((row) => ({
+    ...row,
+    binding_id: Number(row.binding_id),
+    device_id: Number(row.device_id),
+    corporate_account_id: Number(row.corporate_account_id),
+    employee_id: Number(row.employee_id)
+  }));
 }
 
 export async function approveBinding(bindingId: number, approvedByEmployeeId: number, q: typeof query = query): Promise<MirandaDeviceBindingRow | null> {
