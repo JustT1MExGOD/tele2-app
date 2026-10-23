@@ -711,7 +711,7 @@ describe('api-client', () => {
     vi.stubGlobal('fetch', fetchMock);
     const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
 
-    await setEmployeeRole(headers, 3, 'manager');
+    await setEmployeeRole(headers, 3, 'manager', undefined, null);
 
     expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/employees/3/role`, {
       headers, method: 'PATCH', body: JSON.stringify({ role: 'manager' })
@@ -723,7 +723,7 @@ describe('api-client', () => {
     vi.stubGlobal('fetch', fetchMock);
     const headers = { 'X-Telegram-Id': '42', 'Content-Type': 'application/json' };
 
-    await setEmployeeRole(headers, 3, 'supervisor', 'sector-1');
+    await setEmployeeRole(headers, 3, 'supervisor', 'sector-1', null);
 
     expect(fetchMock).toHaveBeenCalledWith(`${window.location.origin}/employees/3/role`, {
       headers, method: 'PATCH', body: JSON.stringify({ role: 'supervisor', sector_id: 'sector-1' })
