@@ -16,6 +16,18 @@ const MoveStoreBody = Type.Object({
 });
 type MoveStoreBody = Static<typeof MoveStoreBody>;
 
+// Цвет точки в графике. Остальные поля PATCH по-прежнему не типизированы
+// (additionalProperties), но color подставляется без esc() в inline
+// style="..." на фронтенде (storeColor()), поэтому формат фиксируется на
+// входе — тот же контракт, что в org/stores.ts (hotfix 20.57.1, finding #5).
+const PatchStoreBody = Type.Object(
+  {
+    color: Type.Optional(Type.String({ pattern: '^#[0-9a-fA-F]{6}$' })),
+    org_id: Type.Optional(Type.String({ maxLength: 64 }))
+  },
+  { additionalProperties: true }
+);
+
 function actorFields(request: any) {
   return {
     actorEmployeeId: request.user!.employee_id,
@@ -41,7 +53,7 @@ export async function registerAdminStoresRoutes(app: FastifyInstance) {
     return { store };
   });
 
-  app.patch('/admin/stores/:id', async (request, reply) => {
+  app.patch('/admin/stores/:id', { schema: { body: PatchStoreBody } }, async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
     const { id } = request.params as { id: string };
     const body = request.body as Record<string, any>;

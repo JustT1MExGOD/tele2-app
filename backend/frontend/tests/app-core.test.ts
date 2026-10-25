@@ -156,6 +156,15 @@ describe('app/core (миграция frontend/js/01-core.js)', () => {
     expect(window.storeColor('unknown_store')).toBe('#2aabee');
   });
 
+  it('storeColor: цвет не в формате #rrggbb игнорируется (подставляется в inline style без esc)', async () => {
+    await freshImport();
+    expect(window.storeColor('kosmonavtov', { color: 'red' })).toBe('#6d9eeb');
+    expect(window.storeColor('kosmonavtov', { color: '#fff' })).toBe('#6d9eeb');
+    expect(window.storeColor('unknown_store', { color: '#000;background:url(x)' })).toBe('#2aabee');
+    expect(window.storeColor('unknown_store', { color: '"><img src=x>' })).toBe('#2aabee');
+    expect(window.storeColor('unknown_store', { color: '#FF6D01' })).toBe('#FF6D01');
+  });
+
   it('authHeaders: X-Telegram-Id из tgUser(), Content-Type только с json=true', async () => {
     await freshImport();
     vi.stubGlobal('tgUser', () => ({ id: 777 }));

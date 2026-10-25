@@ -497,8 +497,13 @@ const STORE_COLORS: Record<string, string> = {
   kalinina11: '#ffd966'
 };
 
+// Цвет точки вставляется без esc() в inline style="..." по всему фронтенду,
+// поэтому принимаем только строгий #rrggbb (тот же формат, что валидирует
+// бэкенд); любое другое значение из БД/ответа API — как будто цвета нет.
+const STORE_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
 export function storeColor(storeId: string, store?: { color?: string | null } | null): string {
-  if (store && store.color) return store.color;
+  if (store && store.color && STORE_COLOR_RE.test(store.color)) return store.color;
   return STORE_COLORS[storeId] || '#2aabee';
 }
 
