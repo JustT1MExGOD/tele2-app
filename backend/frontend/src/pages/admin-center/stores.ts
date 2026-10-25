@@ -4,6 +4,16 @@
  */
 import { confirmDangerousAction } from './shared/dialogs.js';
 
+// Цвет точки в графике (stores.color). Формат тот же, что валидирует бэкенд
+// (PATCH /admin/stores/:id); значение подставляется в inline style, поэтому
+// всё, что не #rrggbb, заменяется дефолтом ещё до рендера.
+const STORE_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+const DEFAULT_STORE_COLOR = '#6d9eeb';
+
+function safeStoreColor(value: unknown): string {
+  return typeof value === 'string' && STORE_COLOR_RE.test(value) ? value : DEFAULT_STORE_COLOR;
+}
+
 export async function renderStoresTab(container: HTMLElement): Promise<void> {
   container.innerHTML = `
     <div class="section">
@@ -34,6 +44,7 @@ async function loadStoreList(): Promise<void> {
       .map(
         (s) => `
         <button class="row" type="button" data-store-id="${esc(s.id)}">
+          <span aria-hidden="true" style="width:10px;height:10px;border-radius:50%;flex:none;background:${safeStoreColor(s.color)}"></span>
           <div class="row-body">
             <div class="row-title">${esc(s.display_name || s.name)}</div>
             <div class="row-sub">${esc(s.code)}${s.is_active ? '' : ' · деактивирована'}</div>
@@ -55,6 +66,7 @@ async function renderStoreDetail(storeId: string): Promise<void> {
   try {
     const d = await window.apiClient.adminGetStore(authHeaders(), storeId, orgQueryParam());
     const s = d.store;
+    const color = safeStoreColor(s.color);
     box.innerHTML = `
       <div class="section">
         <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -71,6 +83,14 @@ async function renderStoreDetail(storeId: string): Promise<void> {
           </div>
         </div>
         <div style="padding:0 16px 12px;border-top:1px solid var(--border)">
+          <div class="row-sub" style="padding:10px 0 6px">Цвет точки в графике</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="color" id="storeColorInput" value="${color}" aria-label="Цвет точки" style="width:44px;height:36px;padding:0;border:none;background:none;cursor:pointer">
+            <span id="storeColorPreview" class="mchip" style="cursor:default;background:${color}22;color:${color};border:1px solid ${color}">Пример: 9-21</span>
+            <button type="button" class="btn-ghost" id="storeSaveColor">Сохранить цвет</button>
+          </div>
+        </div>
+        <div style="padding:0 16px 12px;border-top:1px solid var(--border)">
           <div class="row-sub" style="padding:10px 0 6px">Перенести точку в другую сеть (в т.ч. другого дилера)</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input type="text" id="storeMoveTargetOrgId" placeholder="org_id сети-получателя" style="flex:1;min-width:160px;box-sizing:border-box">
@@ -80,6 +100,16 @@ async function renderStoreDetail(storeId: string): Promise<void> {
       </div>
     `;
     document.getElementById('storeSaveName')?.addEventListener('click', () => onSaveStoreName(storeId));
+    document.getElementById('storeColorInput')?.addEventListener('input', (e) => {
+      const picked = safeStoreColor((e.target as HTMLInputElement).value);
+      const preview = document.getElementById('storeColorPreview');
+      if (preview) {
+        preview.style.background = `${picked}22`;
+        preview.style.color = picked;
+        preview.style.borderColor = picked;
+      }
+    });
+    document.getElementById('storeSaveColor')?.addEventListener('click', () => onSaveStoreColor(storeId));
     document.getElementById('storeDeactivate')?.addEventListener('click', () => onDeactivateStore(storeId));
     document.getElementById('storeReactivate')?.addEventListener('click', () => onReactivateStore(storeId));
     document.getElementById('storeMove')?.addEventListener('click', () => onMoveStore(storeId));
@@ -99,6 +129,23 @@ async function onSaveStoreName(storeId: string): Promise<void> {
   try {
     await window.apiClient.adminEditStore(authHeaders(true), storeId, { name }, window.adminViewOrgId);
     toast('Сохранено', 'ok');
+    loadStoreList();
+    renderStoreDetail(storeId);
+  } catch (e) {
+    toast('Ошибка сохранения', 'err');
+  }
+}
+
+async function onSaveStoreColor(storeId: string): Promise<void> {
+  const input = document.getElementById('storeColorInput') as HTMLInputElement | null;
+  const color = (input?.value || '').trim();
+  if (!STORE_COLOR_RE.test(color)) {
+    toast('Выберите цвет', 'err');
+    return;
+  }
+  try {
+    await window.apiClient.adminEditStore(authHeaders(true), storeId, { color }, window.adminViewOrgId);
+    toast('Цвет сохранён', 'ok');
     loadStoreList();
     renderStoreDetail(storeId);
   } catch (e) {

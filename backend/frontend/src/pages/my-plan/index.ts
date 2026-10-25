@@ -105,7 +105,7 @@ export async function loadMyPlan(): Promise<void> {
   const shift = dayData?.shift || null;
   const storeName = shift?.store_name || shift?.store_id || null;
   const storeId = shift?.store_id;
-  const color = storeColor(storeId);
+  const color = storeColor(storeId, shift);
 
   const lkProfile = document.getElementById('lkProfile');
   if (lkProfile) {
@@ -245,7 +245,7 @@ export async function loadMyPlan(): Promise<void> {
               const d = new Date(iso + 'T12:00:00');
               const sch = byDate[iso];
               const isToday = iso === today;
-              const col = sch ? storeColor(sch.store_id) : 'var(--surface-2)';
+              const col = sch ? storeColor(sch.store_id, sch) : 'var(--surface-2)';
               return `
               <div class="lk-day ${isToday ? 'today' : ''} ${sch ? '' : 'off'}">
                 <div class="wd">${wdNames[d.getDay()]}</div>

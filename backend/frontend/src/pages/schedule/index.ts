@@ -244,6 +244,14 @@ function storeNameById(storeId: string): string {
   return s ? s.name : storeId;
 }
 
+/** Цвет точки в графике — тот, что админ выбрал в админ-центре (stores.color,
+ * приходит в списке точек сети); если точки нет в списке или цвет не задан —
+ * прежняя палитра по id (см. storeColor в app/core.ts). */
+function scheduleStoreColor(storeId: string): string {
+  const s = (stores || []).find((st: any) => st.id === storeId);
+  return storeColor(storeId, s);
+}
+
 /** draftByDate — черновик автоматического графика (см. раздел «Автоматический
  * генератор графика» ниже), наложенный поверх сетки на дни без сохранённой
  * смены: визуально отличается (пунктирная граница, светлее заливка), никогда
@@ -272,7 +280,7 @@ function calendarCellsHtml(
       // (hotfix 20.57.1, finding #5).
       const isReplacementPlaceholder = row.store_id === REPLACEMENT_PLACEHOLDER_STORE_ID;
       const short = isReplacementPlaceholder ? 'Зам' : esc((row.store_short || row.store_name || '').slice(0, 4));
-      const col = isReplacementPlaceholder ? '#00c853' : storeColor(row.store_id);
+      const col = isReplacementPlaceholder ? '#00c853' : scheduleStoreColor(row.store_id);
       const title = isReplacementPlaceholder ? `Замена (точка неизвестна) ${row.shift_text || ''}` : `${row.store_name || ''} ${row.shift_text || ''}`;
       cells += `<div class="sch-cell work" ${click} title="${esc(title)}"
             style="background:${col}22;color:${col};border-color:${col}">
@@ -282,7 +290,7 @@ function calendarCellsHtml(
       if (draftItem) {
         const storeName = storeNameById(draftItem.store_id);
         const short = esc((storeName || '').slice(0, 4));
-        const col = storeColor(draftItem.store_id);
+        const col = scheduleStoreColor(draftItem.store_id);
         cells += `<div class="sch-cell draft" ${click} title="${esc(`Черновик: ${storeName} ${draftItem.shift_text}`)}"
               style="background:${col}11;color:${col};border:1px dashed ${col}">
               <div class="d">${d}</div><div class="s">${short}</div></div>`;
@@ -451,7 +459,7 @@ function renderSummarySchedule(list: EmpMonth[], total: number): void {
           // на этой же странице (было: статичный "warning"-жёлтый для всех
           // точек сразу, несостыковка визуала).
           const isReplacementPlaceholder = row.store_id === REPLACEMENT_PLACEHOLDER_STORE_ID;
-          const col = isReplacementPlaceholder ? '#00c853' : storeColor(row.store_id);
+          const col = isReplacementPlaceholder ? '#00c853' : scheduleStoreColor(row.store_id);
           const cellStyle = `style="background:${col}22;color:${col};border-color:${col}"`;
           const storeShort = isReplacementPlaceholder ? 'Замена' : esc((row.store_short || row.store_name || '').slice(0, 6));
           modeCells += `<td class="sum-sch-cell work" ${cellStyle} title="${esc(isReplacementPlaceholder ? 'Замена (точка неизвестна)' : (row.store_name || ''))}">
