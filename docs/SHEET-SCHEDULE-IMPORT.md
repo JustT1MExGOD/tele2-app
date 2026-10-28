@@ -81,6 +81,7 @@
 | `#ff6d01` (оранжевый) | Калинина 2 | `kalinina2` |
 | `#ffd966` (жёлтый) | Калинина 11 | `kalinina11` |
 | `#6d9eeb` (голубой) | Космонавтов 20а | `kosmonavtov` |
+| `#fff2cc` (светло-жёлтый) | Комсомольская пл. 3 | `komsomolskaya3` |
 | `#00ff00` (зелёный) | Замена (без точки) | `__REPLACEMENT__` |
 
 `'__REPLACEMENT__'` — то же самое значение, что и
@@ -132,6 +133,7 @@ const COLOR_TO_STORE = {
   '#ff6d01': 'kalinina2',
   '#ffd966': 'kalinina11',
   '#6d9eeb': 'kosmonavtov',
+  '#fff2cc': 'komsomolskaya3',
   '#00ff00': '__REPLACEMENT__'   // замена
 };
 

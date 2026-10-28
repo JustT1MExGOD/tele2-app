@@ -38,6 +38,7 @@ const STORE_TO_COLOR: Record<string, string> = {
   kalinina2: '#ff6d01',
   kalinina11: '#ffd966',
   kosmonavtov: '#6d9eeb',
+  komsomolskaya3: '#fff2cc',
   [REPLACEMENT_PLACEHOLDER_STORE_ID]: '#00ff00'
 };
 

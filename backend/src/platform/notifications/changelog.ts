@@ -12,6 +12,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '20.80.1',
+    title: 'Hotfix: точка Комсомольская 3 в синхронизации графика',
+    bullets: [
+      'Новая точка «Комсомольская пл. 3» (id `komsomolskaya3`, цвет `#fff2cc`) добавлена в карту STORE_TO_COLOR экспорта графика в Google Таблицы',
+      'Правки смен в приложении теперь записывают корректный цвет фона ячейки для этой точки при пуше в таблицу'
+    ]
+  },
+  {
     version: '20.79.1',
     title: 'Hotfix: JSON-мутации Admin Center Miranda',
     bullets: [
