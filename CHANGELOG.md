@@ -6,6 +6,11 @@
 
 > **Версии исходного архива:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Номер в исходниках не подтверждает публикацию или развёртывание.
 
+## 20.84.0 — UI: вкладка показывает T2 Sales и логотип
+
+- Добавлен `frontend/logo.jpg` (реальный логотип «T2» на синем фоне) и ссылки `rel="icon"`/`apple-touch-icon` в `index.html` — раньше в браузерной вкладке и на PWA-тайле иконки не было вообще.
+- `applyBranding()` больше не переписывает `document.title` в `{brand_name} Sales`: вкладка/PWA-тайл показывает продуктовое имя «T2 Sales», а не бренд дилера («РТТ Бижонов Sales» читалось как чужое приложение). `primary_color` по-прежнему применяется как и раньше.
+
 ## 20.83.0 — Security: CSP без block-level inline-стилей и чистый index.html
 
 - Все 119 inline event handlers в `frontend/index.html` мигрированы на `data-on`/`data-arg`/`data-on-event` делегирование (`frontend/src/app/nav.ts`); codemod `scripts/migrate-inline-handlers.mjs` делает перенос воспроизводимым.

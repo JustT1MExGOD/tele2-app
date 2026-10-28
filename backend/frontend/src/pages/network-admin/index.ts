@@ -33,7 +33,11 @@ export async function applyBranding(): Promise<void> {
   try {
     const b = await window.apiClient.getBranding(authHeaders());
     if (b.primary_color) document.documentElement.style.setProperty('--primary', b.primary_color);
-    if (b.app_title) document.title = b.app_title;
+    // 20.84.0 — do NOT rewrite document.title to the org's `brand_name` +
+    // " Sales": the browser tab/PWA tile shows the PRODUCT identity (T2
+    // Sales), not the dealer's own brand — "РТТ Бижонов Sales" in the tab
+    // reads like the wrong app. Org branding still customizes colors/etc.;
+    // the tab stays the product name so it always matches the icon.
     brand = b;
   } catch (_) {}
 }

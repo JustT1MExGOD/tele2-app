@@ -12,6 +12,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '20.84.0',
+    title: 'UI: вкладка показывает T2 Sales и логотип',
+    bullets: [
+      'Добавлен настоящий favicon/apple-touch-icon — реальный logo.jpg (синий «T2»), раньше в браузере/при добавлении на экран иконки не было вообще',
+      'document.title больше не переписывается брендом сети (раньше вкладка показывала «РТТ Бижонов Sales» и выглядела как чужое приложение) — теперь стабильно «T2 Sales», бренд по-прежнему красит цвет/стиль'
+    ]
+  },
+  {
     version: '20.83.0',
     title: 'Security: CSP без block-level inline-стилей и чистый index.html',
     bullets: [
