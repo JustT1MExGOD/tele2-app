@@ -172,6 +172,10 @@ export class TestFixtures {
       // блокирует удаление employees, если один из tracked-сотрудников
       // (например admin из session-lifecycle.test.ts) выпускал ссылку
       // сброса пароля для другого; employee_id-строки сами уже каскадятся.
+      // supervisor_sectors.supervisor_id → employees(id) — sector
+      // assignments must go before the employees rows they reference
+      // (supervisor-scope-decision.test.ts inserts them via raw SQL).
+      await query(`DELETE FROM supervisor_sectors WHERE supervisor_id = ANY($1)`, [this.employeeIds]);
       await query(`DELETE FROM employee_password_resets WHERE created_by = ANY($1)`, [this.employeeIds]);
       await query(`DELETE FROM employees WHERE id = ANY($1)`, [this.employeeIds]);
     }
