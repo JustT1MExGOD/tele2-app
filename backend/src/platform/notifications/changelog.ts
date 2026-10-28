@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '20.82.0',
+    title: 'Security: полное покрытие distributed rate-limit',
+    bullets: [
+      'Postgres-backed счётчики теперь зеркалят каждый роут с явным `config.rateLimit` — лимиты переживают рестарт/деплой на всей чувствительной поверхности, не только на credential-роутах',
+      'Глобальный preHandler после auth-resolve ключует по аккаунту при известной identity и по IP для анонимных роутов; credential-роуты сохраняют более строгие identity/account-dimensions',
+      'Изоляционный тест фиксирует, что бюджет Postgres совпадает с in-memory и что истощённый до «рестарта» аккаунт получает 429'
+    ]
+  },
+  {
     version: '20.81.0',
     title: 'Security: временная блокировка аккаунта',
     bullets: [

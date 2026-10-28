@@ -205,18 +205,21 @@ Defense-in-depth: ни один отдельный уровень не един�
   соответствует реальному клиенту, что подрывает точность IP-based
   rate-limit выше.
 
-  **Distributed rate-limit layer (20.54.0, §P1-A)** —
+  **Distributed rate-limit layer (20.54.0, §P1-A; 20.82.0 — полный охват)** —
   `security/rate-limit.ts`, Postgres-backed (`security_rate_limit_counters`,
   fixed-window counters), второй слой ПОВЕРХ таблицы выше, не вместо неё:
   переживает рестарт/деплой (in-memory `@fastify/rate-limit` — нет), ключуется
   сразу по нескольким осям (IP + аккаунт/identity-hash), fail-closed на
   сбое хранилища (блокирует только текущий запрос, ничего не пишет —
-  без риска бессрочной блокировки). Применён на `POST /auth/login`,
-  `/auth/reset/:token`, `/auth/login/mfa`, `/auth/mfa/step-up`,
-  `/auth/mfa/telegram/verify`, `/auth/mfa/totp/confirm` — самая
-  brute-force-чувствительная поверхность; остальные роуты из таблицы
-  выше остаются только на in-memory лимите (см. [известные
-  компромиссы](#известные-компромиссы)).
+  без риска бессрочной блокировки). До 20.82.0 покрывал только
+  `POST /auth/login`, `/auth/reset/:token`, `/auth/login/mfa`,
+  `/auth/mfa/step-up`, `/auth/mfa/telegram/verify`, `/auth/mfa/totp/confirm`
+  (сохранены — там отдельные identity/account-dimensions точнее общего).
+  С 20.82.0 глобальный `preHandler` (`security/distributed-route-rate-limit.ts`)
+  зеркалит в Postgres КАЖДЫЙ роут с явным `config.rateLimit` (вся таблица
+  выше) — тот же `max`/окно, ключ по аккаунту при резолвленной identity и по
+  IP для анонимных роутов; credential-роуты исключены из зеркала, чтобы их
+  более строгие dimensions не удваивались.
 
   **CSRF (double-submit cookie + Sec-Fetch-Site/Origin, 20.48.0)** —
   мутирующий запрос с cookie-сессией (`t2_session`) обязан нести
@@ -1142,7 +1145,7 @@ RUNBOOK-процедуры (`BOT_TOKEN`, `ENCRYPTION_KEKS` — обе тепер
 | `GET /access/orgs` + `GET /access/employees-directory` публичны без сессии | Отдают только названия сетей и список имён/id для формы регистрации, не бизнес-данные (продажи/кассу/роли); с 20.50.0 — 30/мин лимит (раньше вообще без лимита) | Нужны гостю ДО того, как у него есть identity — пикер сети и «я из списка» на регистрации; разведка оргструктуры — реальная, но малая цена (см. [THREAT-MODEL.md](./THREAT-MODEL.md)) |
 | `normalizePhone()` (20.48.0) принимает только RU-формы, международные номера отклоняются | `validatePhone()` даёт понятный 400, не тихую порчу данных | Проект целиком русскоязычный (`Europe/Moscow`); `libphonenumber` ради узкой задачи не тянули — расширить при реальной потребности в международных номерах |
 | ~~`POST /metrics`/`DELETE /metrics/:id` — любой manager мутирует ГЛОБАЛЬНЫЙ каталог~~ — РЕШЕНО (adversarial-аудит) | Продуктовое решение принято: только `admin` (`requirePlatformAdmin` — `requireManager()` + явная проверка `role==='admin'`, тот же паттерн, что `org/branding.ts`) может создавать/удалять кастомные метрики — блast radius (ALTER TABLE на 4 таблицах, видно всем сетям) теперь соответствует уровню доступа. Добавлен пожизненный потолок (`MAX_CUSTOM_METRICS=100`) — раньше не было предела числа метрик вообще, только rate-limit по времени | `GET /metrics` остаётся публичным намеренно — каталог метрик (SIM/MNP/combo/...) это общий для платформы словарь, не приватные данные одной сети; это и есть корректное поведение, не утечка. `tests/adversarial/metrics-global-schema-pollution.test.ts` |
-| Distributed (Postgres-backed) rate-limit слой (20.54.0) применён только на credential-verification роутах (login/MFA/reset) | Остальные rate-limited роуты (см. таблицу выше) остаются только на in-memory `@fastify/rate-limit` — переживает не рестарт, а один процесс | Сознательный скоуп прохода — бóльшая ценность на брутфорс-чувствительной поверхности; полный перевод всех роутов отложен, см. `docs/security/20.54-baseline.md` |
+| ~~Distributed (Postgres-backed) rate-limit слой только на credential роутах~~ — РЕШЕНО (20.82.0) | Глобальный `preHandler` зеркалит каждый явный `config.rateLimit` в `security_rate_limit_counters` (аккаунт-ключ при identity, IP для анонимных); credential-роуты остаются на своих более строгих dimensions | Регрессия: `tests/isolation/distributed-route-rate-limit.test.ts` — счётчик совпадает с бюджетом, истощённый до «рестарта» аккаунт получает 429 при чистом in-memory |
 
 ## RBAC — таблица прав по ролям
 

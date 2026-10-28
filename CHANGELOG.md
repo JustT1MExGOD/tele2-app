@@ -6,6 +6,14 @@
 
 > **Версии исходного архива:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Номер в исходниках не подтверждает публикацию или развёртывание.
 
+## 20.82.0 — Security: полное покрытие distributed rate-limit
+
+- Глобальный `preHandler` (`src/security/distributed-route-rate-limit.ts`, регистрируется в `app.ts` после auth-resolve) зеркалит каждый роут с явным `config.rateLimit` в `security_rate_limit_counters` — лимиты из таблицы SECURITY.md теперь переживают рестарт/деплой, а не только сессию одного процесса.
+- Ключ — `route:<METHOD> <path>:acct:<employeeId>` при резолвленной identity и `:ip:<ip>` для анонимных роутов; credential-роуты (login/MFA/reset/miranda login) исключены из зеркала — их более строгие identity/account-dimensions не удваиваются.
+- Известный компромисс «Postgres-слой только на credential-роутах» снят и отмечен решённым в SECURITY.md.
+- Тест `tests/isolation/distributed-route-rate-limit.test.ts`: счётчик Postgres не опережает in-memory бюджет; аккаунт, истощивший бюджет до «рестарта», получает 429 при чистом in-memory.
+- Проверки: `npx tsc --noEmit`, vitest по distributed-route-rate-limit + rate-limit + login-rate-limit + api-abuse-rate-limits + account-lockout.
+
 ## 20.81.0 — Security: временная блокировка аккаунта
 
 - Добавлена отдельная Postgres-backed таблица `security_account_lockouts`, не смешанная с распределёнными rate-limit-счётчиками.

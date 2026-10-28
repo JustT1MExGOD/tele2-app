@@ -24,6 +24,7 @@ import { registerAllRoutes } from './api/routes/index.js';
 import { pool } from './data/db/index.js';
 import { markApplicationReady, isApplicationReady } from './platform/observability/readiness.js';
 import { metricsRegistry, httpRequestsTotal, httpRequestDuration, httpRequestsInFlight } from './platform/observability/metrics.js';
+import { enforceDistributedRouteRateLimit } from './security/distributed-route-rate-limit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -204,6 +205,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Единая точка резолва пользователя (telegram_id проверяется по подписи
   // Telegram initData внутри authPlugin) — вешаем один раз на всё приложение.
   app.addHook('preHandler', authPlugin);
+  // Distributed counterpart of explicit sensitive-route rate limits. It runs
+  // after auth resolution so employee-aware routes share one Postgres budget;
+  // credential-verification routes opt out because their handlers apply
+  // identity/account dimensions with stricter semantics.
+  app.addHook('preHandler', async (request, reply) => {
+    if (!(await enforceDistributedRouteRateLimit(request, reply))) return;
+  });
   // 20.48.0 — CSRF сразу после резолва identity: срабатывает только на
   // мутирующих запросах с cookie-сессией (t2_session), Telegram-путь не
   // затрагивает вообще (см. auth/csrf.ts).
