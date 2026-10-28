@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '20.85.0',
+    title: 'MFA: passkey/WebAuthn регистрация и вход',
+    bullets: [
+      'Passkey можно зарегистрировать как второй фактор с экрана обязательной настройки MFA (кнопка «Зарегистрировать passkey» рядом с TOTP) — реальная браузерная церемония через @simplewebauthn/browser',
+      'На входе с включённым MFA появилась кнопка «Войти с помощью passkey» — использует зарегистрированный ключ вместо кода',
+      'Backend-церемония теперь покрыта полными тестами с настоящим программным аутентификатором (ES256): рабочий register→authenticate и четыре fail-closed сценария; по ходу исправлен реальный баг employee_id bigint, из-за которого любой WebAuthn-логин отваливался'
+    ]
+  },
+  {
     version: '20.84.0',
     title: 'UI: вкладка показывает T2 Sales и логотип',
     bullets: [

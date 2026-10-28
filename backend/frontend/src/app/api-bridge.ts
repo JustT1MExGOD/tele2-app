@@ -51,6 +51,9 @@ import {
   getMfaStatus,
   mfaTotpEnroll,
   mfaTotpConfirm,
+  webauthnLoginOptions,
+  webauthnRegisterOptions,
+  webauthnRegisterVerify,
   mfaRecoveryCodesGenerate,
   mfaTelegramVerify,
   listSessions,
@@ -343,6 +346,9 @@ declare global {
       getMfaStatus: typeof getMfaStatus;
       mfaTotpEnroll: typeof mfaTotpEnroll;
       mfaTotpConfirm: typeof mfaTotpConfirm;
+      webauthnLoginOptions: typeof webauthnLoginOptions;
+      webauthnRegisterOptions: typeof webauthnRegisterOptions;
+      webauthnRegisterVerify: typeof webauthnRegisterVerify;
       mfaRecoveryCodesGenerate: typeof mfaRecoveryCodesGenerate;
       mfaTelegramVerify: typeof mfaTelegramVerify;
       listSessions: typeof listSessions;
@@ -556,6 +562,9 @@ window.apiClient = {
   getMfaStatus,
   mfaTotpEnroll,
   mfaTotpConfirm,
+  webauthnLoginOptions,
+  webauthnRegisterOptions,
+  webauthnRegisterVerify,
   mfaRecoveryCodesGenerate,
   mfaTelegramVerify,
   listSessions,

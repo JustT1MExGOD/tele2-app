@@ -91,10 +91,13 @@ describe('Сети/аналитика-админ (миграция frontend/js/1
     vi.unstubAllGlobals();
   });
 
-  it('applyBranding: применяет цвет и заголовок', async () => {
+  it('applyBranding: применяет цвет, а заголовок остаётся продуктовым именем', async () => {
     setupGlobals();
+    document.title = 'T2 Sales'; // page's own product title, as index.html sets
     const { applyBranding } = await import('../src/pages/network-admin/index.js');
     await applyBranding();
+    // 20.84.0 — title stays the product name "T2 Sales" regardless of the
+    // org's brand_name: the tab/PWA tile should read the app, not the dealer.
     expect(document.title).toBe('T2 Sales');
     expect(document.documentElement.style.getPropertyValue('--primary')).toBe('#2AABEE');
   });

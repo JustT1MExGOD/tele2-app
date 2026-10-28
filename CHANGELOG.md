@@ -6,6 +6,14 @@
 
 > **Версии исходного архива:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Номер в исходниках не подтверждает публикацию или развёртывание.
 
+## 20.85.0 — MFA: passkey/WebAuthn регистрация и вход
+
+- Экран обязательной настройки MFA теперь предлагает зарегистрировать passkey рядом с TOTP — реальная браузерная церемония через `@simplewebauthn/browser` (`enrollWebauthn`, `features/auth/webauthn.ts`).
+- На логин-челлендже при наличии зарегистрированного ключа появляется кнопка «Войти с помощью passkey» (`submitMfaLoginWebauthn`) — отправляет assertion в `/auth/login/mfa` с `method:'webauthn'`.
+- Frontend API-клиент получил `webauthnLoginOptions`/`webauthnRegisterOptions`/`webauthnRegisterVerify`; `loginMfa` принимает `method:'webauthn'` и `response`.
+- Backend-церемония покрыта полными тестами с настоящим программным аутентификатором (ES256): рабочий register→authenticate и четыре fail-closed сценария; по ходу исправлен реальный баг employee_id bigint, из-за которого любой WebAuthn-логин отваливался.
+- Проверки: `npx tsc --noEmit`, `npx vitest run tests/adversarial/webauthn-ceremony.test.ts` (5/5), frontend suite (696), `npx vite build` резолвит динамический импорт.
+
 ## 20.84.0 — UI: вкладка показывает T2 Sales и логотип
 
 - Добавлен `frontend/logo.jpg` (реальный логотип «T2» на синем фоне) и ссылки `rel="icon"`/`apple-touch-icon` в `index.html` — раньше в браузерной вкладке и на PWA-тайле иконки не было вообще.

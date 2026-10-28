@@ -40,7 +40,7 @@ export async function consumePasswordReset(
 // ---------- MFA (20.52.1, Auth Assurance Hardening) ----------
 export async function loginMfa(
   headers: Record<string, string>,
-  body: { mfa_token: string; method: 'totp' | 'recovery_code'; code: string }
+  body: { mfa_token: string; method: 'totp' | 'recovery_code' | 'webauthn'; code?: string; response?: unknown }
 ): Promise<LoginResponse> {
   return request('/auth/login/mfa', headers, { method: 'POST', body });
 }
@@ -55,6 +55,19 @@ export async function mfaTotpEnroll(headers: Record<string, string>): Promise<Mf
 
 export async function mfaTotpConfirm(headers: Record<string, string>, code: string): Promise<{ ok: true }> {
   return request('/auth/mfa/totp/confirm', headers, { method: 'POST', body: { code } });
+}
+
+// ---------- WebAuthn / passkey ceremonies (20.85.0) ----------
+export async function webauthnLoginOptions(headers: Record<string, string>, mfaToken: string): Promise<Record<string, unknown>> {
+  return request('/auth/login/mfa/webauthn/options', headers, { method: 'POST', body: { mfa_token: mfaToken } });
+}
+
+export async function webauthnRegisterOptions(headers: Record<string, string>): Promise<Record<string, unknown>> {
+  return request('/auth/mfa/webauthn/register/options', headers, { method: 'POST', body: {} });
+}
+
+export async function webauthnRegisterVerify(headers: Record<string, string>, body: { response: unknown; device_name?: string }): Promise<{ ok: true }> {
+  return request('/auth/mfa/webauthn/register/verify', headers, { method: 'POST', body });
 }
 
 export async function mfaRecoveryCodesGenerate(headers: Record<string, string>): Promise<{ ok: true; codes: string[] }> {

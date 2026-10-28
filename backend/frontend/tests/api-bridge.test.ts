@@ -48,6 +48,7 @@ const EXPECTED_KEYS = [
   'getAccessDirectory', 'submitAccessRequest', 'getAccessRequests',
   'registerPhone', 'loginPhone', 'logoutPhone', 'consumePasswordReset',
   'loginMfa', 'getMfaStatus', 'mfaTotpEnroll', 'mfaTotpConfirm',
+  'webauthnLoginOptions', 'webauthnRegisterOptions', 'webauthnRegisterVerify',
   'mfaRecoveryCodesGenerate', 'mfaTelegramVerify', 'listSessions',
   'revokeSession', 'revokeOtherSessions', 'approveAccessRequest',
   'rejectAccessRequest', 'getSupportAdminTickets', 'getSupervisorDashboard',
@@ -96,9 +97,9 @@ const EXPECTED_KEYS = [
   'adminRemoveMirandaGroupMember'] as const;
 
 describe('api-bridge (window.apiClient contract)', () => {
-  it('exposes exactly the expected 208-entry public surface, no more, no fewer', () => {
+  it('exposes exactly the expected 211-entry public surface, no more, no fewer', () => {
     const actualKeys = Object.keys(window.apiClient);
-    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 208
+    expect(actualKeys.length).toBe(EXPECTED_KEYS.length); // 211
     expect([...actualKeys].sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 

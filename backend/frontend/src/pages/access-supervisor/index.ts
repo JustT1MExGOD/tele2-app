@@ -486,6 +486,7 @@ export function showMfaLoginChallenge(mfaToken: string, methods: string[]): void
   }
   if (sub) sub.textContent = 'Подтверждение входа';
   const hasRecovery = methods.includes('recovery_code');
+  const hasWebauthn = methods.includes('webauthn');
   body.innerHTML = `
         <div class="gate-card">
           <div class="bind-glow"></div>
@@ -497,6 +498,7 @@ export function showMfaLoginChallenge(mfaToken: string, methods: string[]): void
             <input id="mfaLoginCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="20">
           </div>
           <button id="mfaLoginSubmit" class="btn-main" style="margin-top:8px" onclick="submitMfaLoginCode()">Подтвердить</button>
+          ${hasWebauthn ? '<button id="mfaLoginWebauthn" class="btn-ghost" style="margin-top:10px" onclick="submitMfaLoginWebauthn()">🔑 Войти с помощью passkey</button>' : ''}
         </div>`;
   const input = document.getElementById('mfaLoginCode') as HTMLInputElement | null;
   input?.focus();
@@ -542,6 +544,31 @@ export async function submitMfaLoginCode(): Promise<void> {
   bootApp();
 }
 
+/** 20.85.0 — passkey login path: when the account has a registered
+ * WebAuthn credential, offer it alongside the TOTP/recovery entry. Runs the
+ * browser ceremony (navigator.credentials.get via @simplewebauthn/browser)
+ * and submits the assertion to /auth/login/mfa with method 'webauthn'. */
+export async function submitMfaLoginWebauthn(): Promise<void> {
+  if (!mfaLoginToken) {
+    toast('Сессия входа истекла, начните заново', 'err');
+    showLoginGate('login');
+    return;
+  }
+  const btn = document.getElementById('mfaLoginWebauthn') as HTMLButtonElement | null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Подтвердите на устройстве…'; }
+  try {
+    const { loginWithWebauthn } = await import('../../features/auth/webauthn.js');
+    await loginWithWebauthn(mfaLoginToken);
+  } catch (e: any) {
+    toast(e?.message || 'Passkey не прошёл — попробуйте ещё раз или введите код', 'err');
+    if (btn) { btn.disabled = false; btn.textContent = '🔑 Войти с помощью passkey'; }
+    return;
+  }
+  mfaLoginToken = null;
+  toast('Вход выполнен', 'ok');
+  bootApp();
+}
+
 /** Показывается вместо обычной оболочки, когда GET /me вернул
  * mfa_enrollment_required:true — backend уже физически блокирует все
  * остальные защищённые роуты в этом состоянии (auth/guards.ts), этот
@@ -572,9 +599,30 @@ export function showMfaEnrollmentGate(): void {
             аутентификатором (Google Authenticator, 1Password и т.п.) и
             введите код, чтобы продолжить.
           </div>
-          <button class="btn-main" style="margin-top:8px" onclick="submitMfaTotpEnrollStart()">Начать настройку</button>
+          <button class="btn-main" style="margin-top:8px" onclick="submitMfaWebauthnEnrollStart()">🔑 Зарегистрировать passkey</button>
+          <button class="btn-ghost" style="margin-top:10px" onclick="submitMfaTotpEnrollStart()">Настроить через приложение (TOTP)</button>
           <div class="bind-foot" style="position:relative;margin-top:14px"><a href="javascript:void(0)" onclick="logoutFromMfaGate()">Выйти</a></div>
         </div>`;
+}
+
+/** 20.85.0 — passkey enrollment from the mandatory-MFA gate. Runs the
+ * browser create() ceremony and registers the credential; on success the
+ * account has a real second factor and the gate lifts (requireActive passes). */
+export async function submitMfaWebauthnEnrollStart(): Promise<void> {
+  try {
+    const { enrollWebauthn, webauthnAvailable } = await import('../../features/auth/webauthn.js');
+    if (!(await webauthnAvailable())) {
+      toast('Passkey недоступен на этом устройстве — настройте через приложение (TOTP)', 'err');
+      submitMfaTotpEnrollStart();
+      return;
+    }
+    await enrollWebauthn('Основной ключ');
+  } catch (e: any) {
+    toast(e?.message || 'Passkey не настроился — попробуйте TOTP', 'err');
+    return;
+  }
+  toast('Passkey зарегистрирован', 'ok');
+  bootApp();
 }
 
 export async function submitMfaTotpEnrollStart(): Promise<void> {
@@ -1320,6 +1368,8 @@ declare global {
     submitPhoneRegister: typeof submitPhoneRegister;
     submitPasswordReset: typeof submitPasswordReset;
     submitMfaLoginCode: typeof submitMfaLoginCode;
+    submitMfaLoginWebauthn: typeof submitMfaLoginWebauthn;
+    submitMfaWebauthnEnrollStart: typeof submitMfaWebauthnEnrollStart;
     submitMfaTotpEnrollStart: typeof submitMfaTotpEnrollStart;
     submitMfaTotpConfirmCode: typeof submitMfaTotpConfirmCode;
     ackMfaRecoveryCodesSaved: typeof ackMfaRecoveryCodesSaved;
@@ -1346,6 +1396,8 @@ window.submitPhoneLogin = submitPhoneLogin;
 window.submitPhoneRegister = submitPhoneRegister;
 window.submitPasswordReset = submitPasswordReset;
 window.submitMfaLoginCode = submitMfaLoginCode;
+window.submitMfaLoginWebauthn = submitMfaLoginWebauthn;
+window.submitMfaWebauthnEnrollStart = submitMfaWebauthnEnrollStart;
 window.submitMfaTotpEnrollStart = submitMfaTotpEnrollStart;
 window.submitMfaTotpConfirmCode = submitMfaTotpConfirmCode;
 window.ackMfaRecoveryCodesSaved = ackMfaRecoveryCodesSaved;
