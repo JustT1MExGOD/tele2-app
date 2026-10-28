@@ -163,8 +163,8 @@
       <div class="tut-task" id="tutTask" style="display:none"></div>
       <div class="tut-dots" id="tutDots"></div>
       <div class="tut-actions">
-        <button class="tut-btn-skip" id="tutSkipBtn" type="button" onclick="skipTutorial()">Пропустить</button>
-        <button class="tut-btn-next" id="tutNextBtn" type="button" onclick="nextTutorialStep()">Далее</button>
+        <button class="tut-btn-skip" id="tutSkipBtn" type="button" data-on="skipTutorial" data-on-event="click">Пропустить</button>
+        <button class="tut-btn-next" id="tutNextBtn" type="button" data-on="nextTutorialStep" data-on-event="click">Далее</button>
       </div>
     </div>
   </div>
@@ -182,8 +182,8 @@
       <div class="ts-practice" id="tsPractice" style="display:none"></div>
       <div class="ts-dots" id="tsDots"></div>
       <div class="ts-actions">
-        <button class="tut-btn-skip" id="tsSkipBtn" type="button" onclick="skipTutorial()">Пропустить</button>
-        <button class="tut-btn-next" id="tsNextBtn" type="button" onclick="nextTutorialStep()">Далее</button>
+        <button class="tut-btn-skip" id="tsSkipBtn" type="button" data-on="skipTutorial" data-on-event="click">Пропустить</button>
+        <button class="tut-btn-next" id="tsNextBtn" type="button" data-on="nextTutorialStep" data-on-event="click">Далее</button>
       </div>
     </div>
   </div>
@@ -197,7 +197,7 @@
   <div id="overlay" class="overlay">
     <div class="sheet-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
       <div class="grab"></div>
-      <button type="button" class="modal-close-btn" id="modalCloseBtn" onclick="closeModal()" aria-label="Закрыть">✕</button>
+      <button type="button" class="modal-close-btn" id="modalCloseBtn" data-on="closeModal" data-on-event="click" aria-label="Закрыть">✕</button>
       <div class="modal-title" id="modalTitle">Добавить продажу</div>
       <div id="modalBody"></div>
     </div>
@@ -218,16 +218,16 @@
 
       <div class="sidebar-section" id="sidebarSectionMain">
         <div class="sidebar-title">Обзор</div>
-        <button class="nav-item" data-page="home" onclick="switchPage('home')">
+        <button class="nav-item" data-page="home" data-on="switchPage" data-on-event="click" data-arg="home">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> </svg></span>Главная
         </button>
-        <button class="nav-item" data-page="my" data-tutorial-id="academy-nav-my" onclick="switchPage('my')">
+        <button class="nav-item" data-page="my" data-tutorial-id="academy-nav-my" data-on="switchPage" data-on-event="click" data-arg="my">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /> <circle cx="12" cy="7" r="4" /> </svg></span>Профиль
         </button>
-        <button class="nav-item" data-page="tasks" data-tutorial-id="academy-nav-tasks" onclick="switchPage('tasks')">
+        <button class="nav-item" data-page="tasks" data-tutorial-id="academy-nav-tasks" data-on="switchPage" data-on-event="click" data-arg="tasks">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></span>Задачи
         </button>
-        <button class="nav-item" data-page="schedule" data-tutorial-id="academy-nav-schedule" onclick="switchPage('schedule')">
+        <button class="nav-item" data-page="schedule" data-tutorial-id="academy-nav-schedule" data-on="switchPage" data-on-event="click" data-arg="schedule">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg></span>График
         </button>
         <!-- data-page="team" — на мобильном bottomNavMain (index.html
@@ -237,10 +237,10 @@
              жил здесь же в "Управление" рядом с "Касса" — реальный
              regression 20.39: обычный сотрудник терял вход в "Команда"
              именно на desktop, хотя на mobile он есть всегда. -->
-        <button class="nav-item" data-page="team" onclick="switchPage('team')">
+        <button class="nav-item" data-page="team" data-on="switchPage" data-on-event="click" data-arg="team">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /> </svg></span>Команда
         </button>
-        <button class="nav-item" data-page="chat" data-tutorial-id="academy-nav-chat" onclick="switchPage('chat')">
+        <button class="nav-item" data-page="chat" data-tutorial-id="academy-nav-chat" data-on="switchPage" data-on-event="click" data-arg="chat">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> </svg></span>Чат
         </button>
         <!-- «Топы сотрудников» (20.75.0) — видно всем ролям, та же секция,
@@ -255,43 +255,43 @@
 
       <div class="sidebar-section" id="sidebarSectionAnalytics" style="display:none">
         <div class="sidebar-title">Аналитика</div>
-        <button class="nav-item" data-page="command-center" onclick="switchPage('command-center')">
+        <button class="nav-item" data-page="command-center" data-on="switchPage" data-on-event="click" data-arg="command-center">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" /> </svg></span>Command Center
         </button>
       </div>
 
       <div class="sidebar-section" id="sidebarSectionManage" style="display:none">
         <div class="sidebar-title">Управление</div>
-        <button class="nav-item" data-page="cash" onclick="switchPage('cash')">
+        <button class="nav-item" data-page="cash" data-on="switchPage" data-on-event="click" data-arg="cash">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /> <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /> </svg></span>Касса
         </button>
       </div>
 
       <div class="sidebar-section" id="sidebarSectionSupervisor" style="display:none">
         <div class="sidebar-title">Супервайзер</div>
-        <button class="nav-item" data-page="sv-overview" onclick="switchPage('sv-overview')">
+        <button class="nav-item" data-page="sv-overview" data-on="switchPage" data-on-event="click" data-arg="sv-overview">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9" /> <path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5" /> <circle cx="12" cy="9" r="2" /> <path d="M16.2 4.8c2 2 2.26 5.11.8 7.47" /> <path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1" /> <path d="M9.5 18h5" /> <path d="m8 22 4-11 4 11" /> </svg></span>Обзор
         </button>
-        <button class="nav-item" data-page="sv-stores" onclick="switchPage('sv-stores')">
+        <button class="nav-item" data-page="sv-stores" data-on="switchPage" data-on-event="click" data-arg="sv-stores">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5" /> <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244" /> <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05" /> </svg></span>Точки
         </button>
-        <button class="nav-item" data-page="sv-people" onclick="switchPage('sv-people')">
+        <button class="nav-item" data-page="sv-people" data-on="switchPage" data-on-event="click" data-arg="sv-people">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" /> <path d="M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" /> <path d="M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" /> <path d="M4 22h16" /> <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" /> <path d="M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" /> </svg></span>Люди
         </button>
-        <button class="nav-item" data-page="sv-trend" onclick="switchPage('sv-trend')">
+        <button class="nav-item" data-page="sv-trend" data-on="switchPage" data-on-event="click" data-arg="sv-trend">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 7h6v6" /> <path d="m22 7-8.5 8.5-5-5L2 17" /> </svg></span>Тренд
         </button>
       </div>
 
       <div class="sidebar-section" id="sidebarSectionAdmin" style="display:none">
         <div class="sidebar-title">Администрирование</div>
-        <button class="nav-item" data-page="orgs" onclick="switchPage('orgs')">
+        <button class="nav-item" data-page="orgs" data-on="switchPage" data-on-event="click" data-arg="orgs">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" /> </svg></span>Сети
         </button>
-        <button class="nav-item" data-page="audit" onclick="switchPage('audit')">
+        <button class="nav-item" data-page="audit" data-on="switchPage" data-on-event="click" data-arg="audit">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /> </svg></span>История действий
         </button>
-        <button class="nav-item" data-page="dealers" onclick="switchPage('dealers')">
+        <button class="nav-item" data-page="dealers" data-on="switchPage" data-on-event="click" data-arg="dealers">
           <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 21h18" /> <path d="M5 21V7l8-4v18" /> <path d="M19 21V11l-6-4" /> <path d="M9 9v.01" /> <path d="M9 12v.01" /> <path d="M9 15v.01" /> <path d="M9 18v.01" /> </svg></span>Дилеры/Секторы
         </button>
         <!-- data-page-trigger, not onclick=: app/nav.ts's delegated
@@ -324,8 +324,8 @@
                  renderOrgSwitcher() сам скрывает/показывает по роли, см.
                  team/index.ts. -->
             <div id="orgSwitcher" style="display:none"></div>
-            <button class="icon-btn" onclick="toggleTheme()" title="Тема">◐</button>
-            <button class="icon-btn" onclick="refreshAll()" title="Обновить"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /> </svg></button>
+            <button class="icon-btn" data-on="toggleTheme" data-on-event="click" title="Тема">◐</button>
+            <button class="icon-btn" data-on="refreshAll" data-on-event="click" title="Обновить"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /> </svg></button>
           </div>
         </div>
         <div class="header-pills">
@@ -431,11 +431,11 @@
             <div class="section">
               <div class="section-title">Калькуляторы</div>
               <div style="display:flex;gap:8px;padding:0 16px 8px">
-                <button class="mchip" style="flex:1" onclick="openComboCalc()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Комбо</button>
-                <button class="mchip" style="flex:1" onclick="openSchoolCalc()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /> <path d="M8 10h8" /> <path d="M8 18h8" /> <path d="M8 22v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" /> <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /> </svg> Школа</button>
+                <button class="mchip" style="flex:1" data-on="openComboCalc" data-on-event="click"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Комбо</button>
+                <button class="mchip" style="flex:1" data-on="openSchoolCalc" data-on-event="click"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /> <path d="M8 10h8" /> <path d="M8 18h8" /> <path d="M8 22v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" /> <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /> </svg> Школа</button>
               </div>
               <div style="padding:0 16px 16px">
-                <button class="mchip" style="width:100%" data-tutorial-id="academy-promo-entry" onclick="openPromos()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M13 5v2" /> <path d="M13 17v2" /> <path d="M13 11v2" /> </svg> Промокоды РТК</button>
+                <button class="mchip" style="width:100%" data-tutorial-id="academy-promo-entry" data-on="openPromos" data-on-event="click"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M13 5v2" /> <path d="M13 17v2" /> <path d="M13 11v2" /> </svg> Промокоды РТК</button>
               </div>
             </div>
             <!-- Тот же приём, что "Калькуляторы" выше: статично
@@ -444,7 +444,7 @@
                  запросу — единственное место, где живёт на десктопе. -->
             <div class="section">
               <div class="section-title">Быстрые действия</div>
-              <button class="row" onclick="switchPage('cash')">
+              <button class="row" data-on="switchPage" data-on-event="click" data-arg="cash">
                 <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /> <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /> </svg></div>
                 <div class="row-body">
                   <div class="row-title">Касса</div>
@@ -452,17 +452,17 @@
                 </div>
                 <div class="row-chevron">›</div>
               </button>
-              <button class="row" data-tutorial-id="academy-month-plan-entry" onclick="switchPage('monthplan')">
+              <button class="row" data-tutorial-id="academy-month-plan-entry" data-on="switchPage" data-on-event="click" data-arg="monthplan">
                 <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" /> </svg></div>
                 <div class="row-body"><div class="row-title">Планы и факт за месяц</div><div class="row-sub">видно всей команде</div></div>
                 <div class="row-chevron">›</div>
               </button>
-              <button class="row" onclick="switchPage('netmonth')">
+              <button class="row" data-on="switchPage" data-on-event="click" data-arg="netmonth">
                 <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 7h6v6" /> <path d="m22 7-8.5 8.5-5-5L2 17" /> </svg></div>
                 <div class="row-body"><div class="row-title">Динамика выполнения</div><div class="row-sub">все метрики · сотрудники и точки</div></div>
                 <div class="row-chevron">›</div>
               </button>
-              <button class="row" onclick="switchPage('support')">
+              <button class="row" data-on="switchPage" data-on-event="click" data-arg="support">
                 <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /> </svg></div>
                 <div class="row-body"><div class="row-title">Поддержка</div></div>
                 <div class="row-chevron">›</div>
@@ -484,17 +484,17 @@
       <div class="section" id="homeCalcSection">
         <div class="section-title">Калькуляторы</div>
         <div style="display:flex;gap:8px;padding:0 16px 8px">
-          <button class="mchip" style="flex:1" onclick="openComboCalc()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Комбо</button>
-          <button class="mchip" style="flex:1" onclick="openSchoolCalc()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /> <path d="M8 10h8" /> <path d="M8 18h8" /> <path d="M8 22v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" /> <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /> </svg> Школа</button>
+          <button class="mchip" style="flex:1" data-on="openComboCalc" data-on-event="click"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Комбо</button>
+          <button class="mchip" style="flex:1" data-on="openSchoolCalc" data-on-event="click"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /> <path d="M8 10h8" /> <path d="M8 18h8" /> <path d="M8 22v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" /> <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /> </svg> Школа</button>
         </div>
         <div style="padding:0 16px 16px">
-          <button class="mchip" style="width:100%" data-tutorial-id="academy-promo-entry" onclick="openPromos()"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M13 5v2" /> <path d="M13 17v2" /> <path d="M13 11v2" /> </svg> Промокоды РТК</button>
+          <button class="mchip" style="width:100%" data-tutorial-id="academy-promo-entry" data-on="openPromos" data-on-event="click"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M13 5v2" /> <path d="M13 17v2" /> <path d="M13 11v2" /> </svg> Промокоды РТК</button>
         </div>
       </div>
 
       <div class="section" id="homeQuickSection">
         <div class="section-title">Быстрые действия</div>
-        <button class="row" onclick="switchPage('cash')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="cash">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /> <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Касса</div>
@@ -502,17 +502,17 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" data-tutorial-id="academy-month-plan-entry" onclick="switchPage('monthplan')">
+        <button class="row" data-tutorial-id="academy-month-plan-entry" data-on="switchPage" data-on-event="click" data-arg="monthplan">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" /> </svg></div>
           <div class="row-body"><div class="row-title">Планы и факт за месяц</div><div class="row-sub">видно всей команде</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('netmonth')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="netmonth">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 7h6v6" /> <path d="m22 7-8.5 8.5-5-5L2 17" /> </svg></div>
           <div class="row-body"><div class="row-title">Динамика выполнения</div><div class="row-sub">все метрики · сотрудники и точки</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('support')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="support">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /> </svg></div>
           <div class="row-body"><div class="row-title">Поддержка</div></div>
           <div class="row-chevron">›</div>
@@ -526,7 +526,7 @@
 
       <div class="section" id="homeToolsSection">
         <div class="section-title">Инструменты</div>
-        <button class="row" data-tutorial-id="academy-bfq-entry" onclick="switchPage('bfq')">
+        <button class="row" data-tutorial-id="academy-bfq-entry" data-on="switchPage" data-on-event="click" data-arg="bfq">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" /> <path d="M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" /> <path d="M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" /> <path d="M4 22h16" /> <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" /> <path d="M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" /> </svg></div>
           <div class="row-body">
             <div class="row-title">BFQ</div>
@@ -534,7 +534,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="openComboCalc()">
+        <button class="row" data-on="openComboCalc" data-on-event="click">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Расчёт комбо</div>
@@ -542,7 +542,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="openSchoolCalc()">
+        <button class="row" data-on="openSchoolCalc" data-on-event="click">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /> <path d="M8 10h8" /> <path d="M8 18h8" /> <path d="M8 22v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" /> <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Калькулятор школа</div>
@@ -550,7 +550,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="openPromos()">
+        <button class="row" data-on="openPromos" data-on-event="click">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M13 5v2" /> <path d="M13 17v2" /> <path d="M13 11v2" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Промокоды РТК</div>
@@ -558,7 +558,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('heatmap')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="heatmap">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Heatmap часов</div>
@@ -566,7 +566,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('forecast')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="forecast">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 7h6v6" /> <path d="m22 7-8.5 8.5-5-5L2 17" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Прогноз и what-if</div>
@@ -574,7 +574,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" data-tutorial-id="academy-announce-entry" onclick="switchPage('announce')">
+        <button class="row" data-tutorial-id="academy-announce-entry" data-on="switchPage" data-on-event="click" data-arg="announce">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /> <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /> <path d="M8 6v8" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Объявления</div>
@@ -582,7 +582,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('reportimg')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="reportimg">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Отчёт-картинка</div>
@@ -590,7 +590,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('reports')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="reports">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Отчёты</div>
@@ -599,7 +599,7 @@
           <div class="row-chevron">›</div>
         </button>
 
-        <button class="row" onclick="switchPage('live')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="live">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /> <path d="M15 5.764v15" /> <path d="M9 3.236v15" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Сеть live</div>
@@ -607,7 +607,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('command-center')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="command-center">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Command Center</div>
@@ -615,7 +615,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('tasks')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="tasks">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Задачи</div>
@@ -623,7 +623,7 @@
           </div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('alerts')">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="alerts">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 18v-6a5 5 0 1 1 10 0v6" /> <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z" /> <path d="M21 12h1" /> <path d="M18.5 4.5 18 5" /> <path d="M2 12h1" /> <path d="M12 2v1" /> <path d="m4.929 4.929.707.707" /> <path d="M12 12v6" /> </svg></div>
           <div class="row-body">
             <div class="row-title">Алерты</div>
@@ -634,7 +634,7 @@
         <!-- "Обучение сотрудника"/"Обучение manager" temporarily removed —
              T2 Academy is disabled while the illustrated-story rework is
              iterated on, see frontend/src/app/core.ts's ACADEMY_ENABLED. -->
-        <button class="row" onclick="openAbout()">
+        <button class="row" data-on="openAbout" data-on-event="click">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 16v-4" /> <path d="M12 8h.01" /> </svg></div>
           <div class="row-body">
             <div class="row-title">О приложении</div>
@@ -658,19 +658,19 @@
     <!-- ===== MONTH SCHEDULE ===== -->
     <div id="page-schedule" class="page">
       <div class="month-nav">
-        <button onclick="shiftMonth(-1)">‹</button>
+        <button data-on="shiftMonth" data-on-event="click" data-arg="-1">‹</button>
         <div class="label" id="monthLabel">—</div>
-        <button onclick="shiftMonth(1)">›</button>
+        <button data-on="shiftMonth" data-on-event="click" data-arg="1">›</button>
       </div>
       <div id="summaryScheduleSection"></div>
       <div class="section" id="scheduleDraftSection" style="display:none">
         <div class="section-title">Автоматический расчёт графика</div>
         <div style="padding:0 16px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <select id="scheduleDraftMonthSelect"></select>
-          <button type="button" class="btn-main" onclick="generateScheduleDraft()" id="scheduleDraftGenerateBtn">Составить график автоматически</button>
-          <button type="button" class="btn-main" onclick="applyScheduleDraftAction()" id="scheduleDraftApplyBtn" style="display:none">Применить график</button>
-          <button type="button" class="btn-ghost" onclick="openStaffingEditor()">Требования к покрытию</button>
-          <button type="button" class="btn-ghost" onclick="openAvailabilityEditor()">Недоступность/отпуск</button>
+          <button type="button" class="btn-main" data-on="generateScheduleDraft" data-on-event="click" id="scheduleDraftGenerateBtn">Составить график автоматически</button>
+          <button type="button" class="btn-main" data-on="applyScheduleDraftAction" data-on-event="click" id="scheduleDraftApplyBtn" style="display:none">Применить график</button>
+          <button type="button" class="btn-ghost" data-on="openStaffingEditor" data-on-event="click">Требования к покрытию</button>
+          <button type="button" class="btn-ghost" data-on="openAvailabilityEditor" data-on-event="click">Недоступность/отпуск</button>
         </div>
         <div id="scheduleDraftErrors"></div>
         <div id="scheduleDraftSummary"><div class="empty" style="padding:0 16px 12px">Черновик графика ещё не рассчитан.</div></div>
@@ -705,7 +705,7 @@
             <label>Это я</label>
             <select id="bindEmployee"></select>
           </div>
-          <button class="btn-main" style="margin-top:16px" onclick="bindMe()">Привязать и войти</button>
+          <button class="btn-main" style="margin-top:16px" data-on="bindMe" data-on-event="click">Привязать и войти</button>
           <div class="bind-foot">Данные только для работы сети</div>
         </div>
       </div>
@@ -736,11 +736,11 @@
           <table class="data-table" id="teamTable">
             <thead>
               <tr>
-                <th scope="col" data-sort-key="name" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('name')">ФИО</button></th>
-                <th scope="col" data-sort-key="role" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('role')">Роль</button></th>
-                <th scope="col" data-sort-key="sim" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('sim')">SIM</button></th>
-                <th scope="col" data-sort-key="combo" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('combo')">Комбо</button></th>
-                <th scope="col" data-sort-key="phones" aria-sort="none"><button type="button" class="dt-sort" onclick="sortTeamTable('phones')">Тел</button></th>
+                <th scope="col" data-sort-key="name" aria-sort="none"><button type="button" class="dt-sort" data-on="sortTeamTable" data-on-event="click" data-arg="name">ФИО</button></th>
+                <th scope="col" data-sort-key="role" aria-sort="none"><button type="button" class="dt-sort" data-on="sortTeamTable" data-on-event="click" data-arg="role">Роль</button></th>
+                <th scope="col" data-sort-key="sim" aria-sort="none"><button type="button" class="dt-sort" data-on="sortTeamTable" data-on-event="click" data-arg="sim">SIM</button></th>
+                <th scope="col" data-sort-key="combo" aria-sort="none"><button type="button" class="dt-sort" data-on="sortTeamTable" data-on-event="click" data-arg="combo">Комбо</button></th>
+                <th scope="col" data-sort-key="phones" aria-sort="none"><button type="button" class="dt-sort" data-on="sortTeamTable" data-on-event="click" data-arg="phones">Тел</button></th>
                 <th scope="col">Статус</th>
                 <th scope="col">Действия</th>
               </tr>
@@ -751,72 +751,72 @@
       </div>
       <div class="section" id="managerTools" style="display:none;">
         <div class="section-title">Управление</div>
-        <button class="row" onclick="historyEmployeeFilter=null;switchPage('history')">
+        <button class="row" data-reset-history-filter>
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 17V5a2 2 0 0 0-2-2H4" /> <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" /> </svg></div>
           <div class="row-body"><div class="row-title">История продаж</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" data-tutorial-id="academy-bfq-entry" onclick="switchPage('bfq')">
+        <button class="row" data-tutorial-id="academy-bfq-entry" data-on="switchPage" data-on-event="click" data-arg="bfq">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" /> <path d="M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" /> <path d="M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" /> <path d="M4 22h16" /> <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" /> <path d="M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" /> </svg></div>
           <div class="row-body"><div class="row-title">BFQ</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="exportCSV('sales')">
+        <button class="row" data-on="exportCSV" data-on-event="click" data-arg="sales">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" /> </svg></div>
           <div class="row-body"><div class="row-title">Экспорт продаж CSV</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="exportCSV('bfq')">
+        <button class="row" data-on="exportCSV" data-on-event="click" data-arg="bfq">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" /> </svg></div>
           <div class="row-body"><div class="row-title">Экспорт BFQ CSV</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="exportCSV('schedules')">
+        <button class="row" data-on="exportCSV" data-on-event="click" data-arg="schedules">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" /> </svg></div>
           <div class="row-body"><div class="row-title">Экспорт графика CSV</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="openAddEmployee()">
+        <button class="row" data-on="openAddEmployee" data-on-event="click">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /> </svg></div>
           <div class="row-body"><div class="row-title">Добавить сотрудника</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="openAddStore()">
+        <button class="row" data-on="openAddStore" data-on-event="click">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5" /> <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244" /> <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05" /> </svg></div>
           <div class="row-body"><div class="row-title">Добавить точку</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('orgs')" id="btnNetworks" style="display:none">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="orgs" id="btnNetworks" style="display:none">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" /> </svg></div>
           <div class="row-body"><div class="row-title">Сети</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('audit')" id="btnAudit" style="display:none">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="audit" id="btnAudit" style="display:none">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /> </svg></div>
           <div class="row-body"><div class="row-title">История действий</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('dealers')" id="btnDealers" style="display:none">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="dealers" id="btnDealers" style="display:none">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 21h18" /> <path d="M5 21V7l8-4v18" /> <path d="M19 21V11l-6-4" /> <path d="M9 9v.01" /> <path d="M9 12v.01" /> <path d="M9 15v.01" /> <path d="M9 18v.01" /> </svg></div>
           <div class="row-body"><div class="row-title">Дилеры/Секторы</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="openAddMetric()">
+        <button class="row" data-on="openAddMetric" data-on-event="click">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z" /> </svg></div>
           <div class="row-body"><div class="row-title">Новая метрика плана</div><div class="row-sub">SIM, MNP… + свои пункты</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="loadManagerTickets()" id="btnSupportTickets" style="display:none">
+        <button class="row" data-on="loadManagerTickets" data-on-event="click" id="btnSupportTickets" style="display:none">
           <div class="row-icon">🆘</div>
           <div class="row-body"><div class="row-title">Тикеты поддержки</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="switchPage('access')" id="btnAccessRequests" style="display:none">
+        <button class="row" data-on="switchPage" data-on-event="click" data-arg="access" id="btnAccessRequests" style="display:none">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" /> </svg></div>
           <div class="row-body"><div class="row-title">Заявки на доступ</div></div>
           <div class="row-chevron">›</div>
         </button>
-        <button class="row" onclick="enterSupervisorShell()" id="btnSupervisor" style="display:none">
+        <button class="row" data-on="enterSupervisorShell" data-on-event="click" id="btnSupervisor" style="display:none">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9" /> <path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5" /> <circle cx="12" cy="9" r="2" /> <path d="M16.2 4.8c2 2 2.26 5.11.8 7.47" /> <path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1" /> <path d="M9.5 18h5" /> <path d="m8 22 4-11 4 11" /> </svg></div>
           <div class="row-body"><div class="row-title">Кабинет супервайзера</div></div>
           <div class="row-chevron">›</div>
@@ -837,7 +837,7 @@
     <div id="page-orgs" class="page">
       <div class="section">
         <div class="section-title">Сети</div>
-        <button class="row" onclick="openAddOrg()">
+        <button class="row" data-on="openAddOrg" data-on-event="click">
           <div class="row-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /> </svg></div>
           <div class="row-body"><div class="row-title">Добавить сеть</div></div>
           <div class="row-chevron">›</div>
@@ -857,10 +857,10 @@
       <div class="section">
         <div class="section-title">История действий</div>
         <div class="data-table-toolbar" id="auditFilters" style="flex-wrap:wrap;gap:8px;justify-content:flex-start">
-          <select id="auditFilterAction" onchange="applyAuditFilters()"><option value="">Все действия</option></select>
-          <select id="auditFilterTargetType" onchange="applyAuditFilters()"><option value="">Все объекты</option></select>
-          <input type="date" id="auditFilterFrom" onchange="applyAuditFilters()">
-          <input type="date" id="auditFilterTo" onchange="applyAuditFilters()">
+          <select id="auditFilterAction" data-on="applyAuditFilters" data-on-event="change"><option value="">Все действия</option></select>
+          <select id="auditFilterTargetType" data-on="applyAuditFilters" data-on-event="change"><option value="">Все объекты</option></select>
+          <input type="date" id="auditFilterFrom" data-on="applyAuditFilters" data-on-event="change">
+          <input type="date" id="auditFilterTo" data-on="applyAuditFilters" data-on-event="change">
         </div>
         <div id="auditList"><div class="skeleton"></div></div>
         <div id="auditTableWrap" class="data-table-wrap">
@@ -870,7 +870,7 @@
           </table>
         </div>
         <div style="padding:12px 16px;text-align:center">
-          <button type="button" class="btn-ghost" id="auditLoadMore" onclick="loadMoreAuditLog()" style="display:none">Показать ещё</button>
+          <button type="button" class="btn-ghost" id="auditLoadMore" data-on="loadMoreAuditLog" data-on-event="click" style="display:none">Показать ещё</button>
         </div>
       </div>
     </div>
@@ -910,15 +910,15 @@
       <div class="section">
         <div class="section-title">Планы и факт за месяц</div>
         <div class="month-nav" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 12px 4px">
-          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" onclick="shiftPlanMonth(-1)">‹</button>
+          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" data-on="shiftPlanMonth" data-on-event="click" data-arg="-1">‹</button>
           <div id="planMonthLabel" style="font-weight:700;min-width:120px;text-align:center"></div>
-          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" onclick="shiftPlanMonth(1)">›</button>
+          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" data-on="shiftPlanMonth" data-on-event="click" data-arg="1">›</button>
         </div>
         <div id="monthPlanMeta" class="empty" style="padding:8px 16px;text-align:left"></div>
         <div id="monthPlanList" style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="skeleton"></div></div>
         <div id="monthPlanTableWrap" class="data-table-wrap">
           <div class="data-table-toolbar">
-            <button type="button" class="btn-ghost" onclick="toggleMonthPlanExtraColumns()" id="monthPlanExtraToggle">Показать все метрики</button>
+            <button type="button" class="btn-ghost" data-on="toggleMonthPlanExtraColumns" data-on-event="click" id="monthPlanExtraToggle">Показать все метрики</button>
           </div>
           <table class="data-table" id="monthPlanTable">
             <thead id="monthPlanTableHead"></thead>
@@ -930,8 +930,8 @@
         <div class="section-title">Автоматический расчёт персональных планов</div>
         <div style="padding:0 16px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <select id="planDraftMonthSelect"></select>
-          <button type="button" class="btn-main" onclick="generateEmployeePlanDrafts()" id="planDraftGenerateBtn">Рассчитать планы</button>
-          <button type="button" class="btn-main" onclick="applyEmployeePlanDraft()" id="planDraftApplyBtn" style="display:none">Применить планы</button>
+          <button type="button" class="btn-main" data-on="generateEmployeePlanDrafts" data-on-event="click" id="planDraftGenerateBtn">Рассчитать планы</button>
+          <button type="button" class="btn-main" data-on="applyEmployeePlanDraft" data-on-event="click" id="planDraftApplyBtn" style="display:none">Применить планы</button>
         </div>
         <div id="employeePlanDraftBody"><div class="empty" style="padding:0 16px 12px">Черновик ещё не рассчитан.</div></div>
       </div>
@@ -946,9 +946,9 @@
       <div class="section">
         <div class="section-title">Сеть за месяц</div>
         <div class="month-nav" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 12px 4px">
-          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" onclick="shiftNetMonth(-1)">‹</button>
+          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" data-on="shiftNetMonth" data-on-event="click" data-arg="-1">‹</button>
           <div id="netMonthLabel" style="font-weight:700;min-width:120px;text-align:center"></div>
-          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" onclick="shiftNetMonth(1)">›</button>
+          <button type="button" class="icon-btn" style="background:var(--surface-2);color:var(--text)" data-on="shiftNetMonth" data-on-event="click" data-arg="1">›</button>
         </div>
         <div id="netMonthBody"><div class="skeleton"></div></div>
       </div>
@@ -968,7 +968,7 @@
             <label>Сообщение</label>
             <input id="supportMsg" placeholder="Опишите вопрос или проблему">
           </div>
-          <button class="btn-main" onclick="sendSupport()">Отправить</button>
+          <button class="btn-main" data-on="sendSupport" data-on-event="click">Отправить</button>
           <div id="supportResult" class="empty" style="display:none;padding-top:12px"></div>
         </div>
       </div>
@@ -988,7 +988,7 @@
           <div class="field"><label>Касса (факт)</label><input type="number" id="cashFact" placeholder="0"></div>
           <div class="field"><label>Касса 1С</label><input type="number" id="cash1c" placeholder="0"></div>
           <div class="field"><label>Комментарий</label><input id="cashComment" placeholder="опционально"></div>
-          <button class="btn-main" onclick="saveCash()">Сохранить</button>
+          <button class="btn-main" data-on="saveCash" data-on-event="click">Сохранить</button>
         </div>
       </div>
       <div class="section">
@@ -1007,9 +1007,9 @@
           <div class="topbar-title">Супервайзер</div>
           <div class="topbar-sub">Обзор сектора</div>
         </div>
-        <button class="icon-btn" onclick="loadSupervisorData(true)" title="Обновить"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /> </svg></button>
+        <button class="icon-btn" data-on="loadSupervisorData" data-on-event="click" data-arg="true" title="Обновить"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /> </svg></button>
       </div>
-      <button class="sv-exit-btn" id="svExitBtn" style="display:none" onclick="exitSupervisorShell()">‹ Назад в приложение</button>
+      <button class="sv-exit-btn" id="svExitBtn" style="display:none" data-on="exitSupervisorShell" data-on-event="click">‹ Назад в приложение</button>
       <div id="svOverviewBody"><div class="skeleton" style="margin:16px"></div></div>
     </div>
 
@@ -1042,7 +1042,7 @@
       </div>
       <div class="field" style="margin:12px 16px 0">
         <label>Глубина</label>
-        <select id="svTrendDays" onchange="loadSupervisorData(true)">
+        <select id="svTrendDays" data-on="loadSupervisorData" data-on-event="change" data-arg="true">
           <option value="14">14 дней</option>
           <option value="30">30 дней</option>
           <option value="60">60 дней</option>
@@ -1055,7 +1055,7 @@
       <div class="section">
         <div class="section-title">Heatmap по часам</div>
         <div class="progress-block">
-          <div class="field"><label>Точка</label><select id="hmStore" onchange="loadHeatmap()"></select></div>
+          <div class="field"><label>Точка</label><select id="hmStore" data-on="loadHeatmap" data-on-event="change"></select></div>
         </div>
         <div id="hmMeta" class="empty" style="text-align:left;padding:8px 16px"></div>
         <div id="hmGrid" style="padding:12px"></div>
@@ -1065,7 +1065,7 @@
       <div class="section">
         <div class="section-title">Прогноз 7 дней</div>
         <div class="progress-block">
-          <div class="field"><label>Точка</label><select id="fcStore" onchange="loadForecast()"></select></div>
+          <div class="field"><label>Точка</label><select id="fcStore" data-on="loadForecast" data-on-event="change"></select></div>
         </div>
         <div id="fcList"><div class="skeleton"></div></div>
       </div>
@@ -1081,11 +1081,11 @@
           <div class="field"><label>На точку</label><select id="wiTo"></select></div>
           <div class="field"><label>Дата</label><input id="wiDate" type="date"></div>
           <div style="display:flex;gap:8px">
-            <button type="button" class="btn-ghost" style="flex:1" onclick="addWiMove()">+ Добавить перенос</button>
-            <button type="button" class="btn-ghost" style="flex:1" onclick="clearWiMoves()">Очистить сценарий</button>
+            <button type="button" class="btn-ghost" style="flex:1" data-on="addWiMove" data-on-event="click">+ Добавить перенос</button>
+            <button type="button" class="btn-ghost" style="flex:1" data-on="clearWiMoves" data-on-event="click">Очистить сценарий</button>
           </div>
           <div id="wiMovesList" style="margin-top:8px"></div>
-          <button class="btn-main" style="margin-top:10px" onclick="runWhatIf()">Пересчитать покрытие</button>
+          <button class="btn-main" style="margin-top:10px" data-on="runWhatIf" data-on-event="click">Пересчитать покрытие</button>
           <div id="wiResult" class="empty" style="padding-top:12px"></div>
           <div id="wiCompareBox"></div>
         </div>
@@ -1104,7 +1104,7 @@
           <label style="display:flex;gap:8px;align-items:center;margin:8px 0;font-size:13px">
             <input type="checkbox" id="anReq"> Обязательное
           </label>
-          <button class="btn-main" onclick="createAnnouncement()">Опубликовать</button>
+          <button class="btn-main" data-on="createAnnouncement" data-on-event="click">Опубликовать</button>
         </div>
       </div>
     </div>
@@ -1114,7 +1114,7 @@
         <div class="progress-block">
           <div class="field"><label>Точка</label><select id="riStore"></select></div>
           <div class="field"><label>Дата</label><input type="date" id="riDate"></div>
-          <button class="btn-main" onclick="loadReportSvg()">Сгенерировать</button>
+          <button class="btn-main" data-on="loadReportSvg" data-on-event="click">Сгенерировать</button>
         </div>
         <div id="riPreview" style="padding:12px;overflow:auto"></div>
       </div>
@@ -1139,7 +1139,7 @@
     </div>
 
     <div id="page-store-profile" class="page">
-      <button class="icon-btn" style="margin:16px 0 0 16px;background:var(--surface-2);color:var(--text)" onclick="goBack()" title="Назад">‹</button>
+      <button class="icon-btn" style="margin:16px 0 0 16px;background:var(--surface-2);color:var(--text)" data-on="goBack" data-on-event="click" title="Назад">‹</button>
       <div id="storeProfileBody"><div class="skeleton"></div></div>
     </div>
 
@@ -1148,7 +1148,7 @@
     </div>
 
     <div id="page-employee-profile" class="page">
-      <button class="icon-btn" style="margin:16px 0 0 16px;background:var(--surface-2);color:var(--text)" onclick="goBack()" title="Назад">‹</button>
+      <button class="icon-btn" style="margin:16px 0 0 16px;background:var(--surface-2);color:var(--text)" data-on="goBack" data-on-event="click" title="Назад">‹</button>
       <div id="employeeProfileBody"><div class="skeleton"></div></div>
     </div>
 
@@ -1160,29 +1160,29 @@
       <div class="chat-scroll-box" id="chatScrollBox">
         <div class="chat-feed" id="chatFeed"><div class="skeleton"></div></div>
       </div>
-      <button class="chat-new-messages" id="chatNewMessagesIndicator" style="display:none" onclick="jumpToChatBottom()">
+      <button class="chat-new-messages" id="chatNewMessagesIndicator" style="display:none" data-on="jumpToChatBottom" data-on-event="click">
         Новые сообщения ↓
       </button>
       <div class="chat-composer">
         <div class="chat-composer-files" id="chatComposerFiles" style="display:none"></div>
         <div class="chat-composer-row">
-          <button class="icon-btn chat-attach-btn" title="Прикрепить файл" onclick="document.getElementById('chatFileInput').click()">
+          <button class="icon-btn chat-attach-btn" title="Прикрепить файл" data-click-el="chatFileInput">
             <svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
           </button>
-          <input type="file" id="chatFileInput" style="display:none" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,.doc,.docx,.xls,.xlsx" onchange="onChatAttachmentPicked(this)">
+          <input type="file" id="chatFileInput" style="display:none" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,.doc,.docx,.xls,.xlsx" data-on="onChatAttachmentPicked" data-on-event="change">
           <textarea
             id="chatComposerInput"
             class="chat-composer-input"
             placeholder="Написать сообщение…"
             rows="1"
-            oninput="onChatComposerInput()"
-            onkeydown="onChatComposerKeydown(event)"
-            oncompositionstart="onChatComposerCompositionStart()"
-            oncompositionend="onChatComposerCompositionEnd()"
-            onfocus="onChatComposerFocus()"
-            onblur="onChatComposerBlur()"
+            data-on="onChatComposerInput" data-on-event="input"
+            data-kd="onChatComposerKeydown"
+            data-cs="onChatComposerCompositionStart"
+            data-ce="onChatComposerCompositionEnd"
+            data-fo="onChatComposerFocus"
+            data-bl="onChatComposerBlur"
           ></textarea>
-          <button class="chat-send-btn" id="chatSendBtn" disabled onclick="sendChatMessage()" aria-label="Отправить">
+          <button class="chat-send-btn" id="chatSendBtn" disabled data-on="sendChatMessage" data-on-event="click" aria-label="Отправить">
             <svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 3 9-3 9 19-9Z"/><path d="M6 12h16"/></svg>
           </button>
         </div>
@@ -1206,26 +1206,26 @@
     </div>
   </div>
 
-  <button class="fab" data-tutorial-id="academy-add-sale-fab" onclick="openAddSale()" aria-label="Добавить">+</button>
+  <button class="fab" data-tutorial-id="academy-add-sale-fab" data-on="openAddSale" data-on-event="click" aria-label="Добавить">+</button>
     </div>
 
 <nav class="bottom-nav" id="bottomNavMain">
-    <button class="nav-item active" data-page="home" onclick="switchPage('home')">
+    <button class="nav-item active" data-page="home" data-on="switchPage" data-on-event="click" data-arg="home">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> </svg></span>Главная
     </button>
-    <button class="nav-item" data-page="plan" onclick="switchPage('plan')">
+    <button class="nav-item" data-page="plan" data-on="switchPage" data-on-event="click" data-arg="plan">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /> </svg></span>План
     </button>
-    <button class="nav-item" data-page="schedule" data-tutorial-id="academy-nav-schedule" onclick="switchPage('schedule')">
+    <button class="nav-item" data-page="schedule" data-tutorial-id="academy-nav-schedule" data-on="switchPage" data-on-event="click" data-arg="schedule">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /> </svg></span>График
     </button>
-    <button class="nav-item" data-page="my" data-tutorial-id="academy-nav-my" onclick="switchPage('my')">
+    <button class="nav-item" data-page="my" data-tutorial-id="academy-nav-my" data-on="switchPage" data-on-event="click" data-arg="my">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /> <circle cx="12" cy="7" r="4" /> </svg></span>Профиль
     </button>
-    <button class="nav-item" data-page="team" onclick="switchPage('team')">
+    <button class="nav-item" data-page="team" data-on="switchPage" data-on-event="click" data-arg="team">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /> </svg></span>Команда
     </button>
-    <button class="nav-item" data-page="chat" data-tutorial-id="academy-nav-chat" onclick="switchPage('chat')">
+    <button class="nav-item" data-page="chat" data-tutorial-id="academy-nav-chat" data-on="switchPage" data-on-event="click" data-arg="chat">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> </svg></span>Чат
     </button>
     <button class="nav-item" data-page="leaderboard" data-page-trigger="leaderboard">
@@ -1237,16 +1237,16 @@
        обычных 5 вкладок. Видна только когда включён режим супервайзера
        (enterSupervisorShell()), у самого supervisor'а это единственный nav. -->
   <nav class="bottom-nav" id="bottomNavSupervisor" style="display:none">
-    <button class="nav-item active" data-page="sv-overview" onclick="switchPage('sv-overview')">
+    <button class="nav-item active" data-page="sv-overview" data-on="switchPage" data-on-event="click" data-arg="sv-overview">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9" /> <path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5" /> <circle cx="12" cy="9" r="2" /> <path d="M16.2 4.8c2 2 2.26 5.11.8 7.47" /> <path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1" /> <path d="M9.5 18h5" /> <path d="m8 22 4-11 4 11" /> </svg></span>Обзор
     </button>
-    <button class="nav-item" data-page="sv-stores" onclick="switchPage('sv-stores')">
+    <button class="nav-item" data-page="sv-stores" data-on="switchPage" data-on-event="click" data-arg="sv-stores">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5" /> <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244" /> <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05" /> </svg></span>Точки
     </button>
-    <button class="nav-item" data-page="sv-people" onclick="switchPage('sv-people')">
+    <button class="nav-item" data-page="sv-people" data-on="switchPage" data-on-event="click" data-arg="sv-people">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" /> <path d="M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" /> <path d="M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" /> <path d="M4 22h16" /> <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" /> <path d="M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" /> </svg></span>Люди
     </button>
-    <button class="nav-item" data-page="sv-trend" onclick="switchPage('sv-trend')">
+    <button class="nav-item" data-page="sv-trend" data-on="switchPage" data-on-event="click" data-arg="sv-trend">
       <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 7h6v6" /> <path d="m22 7-8.5 8.5-5-5L2 17" /> </svg></span>Тренд
     </button>
   </nav>

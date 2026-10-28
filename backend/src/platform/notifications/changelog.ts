@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '20.83.0',
+    title: 'Security: CSP без block-level inline-стилей и чистый index.html',
+    bullets: [
+      'index.html очищен от всех 119 inline event handlers — перенесены на data-on/data-arg делегирование в nav.ts, включая составные случаи (composer keydown/composition/focus/blur)',
+      'Единственный runtime-инъектированный <style> (confetti keyframe на странице смены) перенесён в статический styles.css — block-level style-src теперь без unsafe-inline',
+      'Inline-handler ratchet опущен 303 → 184 (остаток — только page-бандлы); CSP-регресс-тест фиксирует style-src и сохранение Telegram frame-ancestors'
+    ]
+  },
+  {
     version: '20.82.0',
     title: 'Security: полное покрытие distributed rate-limit',
     bullets: [

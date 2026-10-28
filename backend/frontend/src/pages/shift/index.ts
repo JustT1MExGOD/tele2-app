@@ -495,15 +495,9 @@ export function confettiBurst(): void {
     setTimeout(() => el.remove(), 2000);
   }
 }
-
-// CSS fall
-(function () {
-  if (document.getElementById('t2-v13-style')) return;
-  const s = document.createElement('style');
-  s.id = 't2-v13-style';
-  s.textContent = '@keyframes t2fall{to{transform:translateY(100vh) rotate(360deg);opacity:0}}';
-  document.head.appendChild(s);
-})();
+// The @keyframes t2fall rule now lives statically in styles.css (20.83.0) —
+// this file used to inject a <style> element at module load, which was the
+// only consumer forcing CSP's block-level style-src 'unsafe-inline'.
 
 declare global {
   interface Window {

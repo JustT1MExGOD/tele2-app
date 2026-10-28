@@ -104,14 +104,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(websocket);
 
   // Заголовки безопасности. CSP собрана под реальную структуру фронтенда
-  // (без CSP-соответствующей автоматической проверки один раз в начале):
-  // 6400+ строк JS рендерят разметку через innerHTML с onclick="" / style=""
-  // прямо в атрибутах (74 onclick в index.html, 284 style-атрибута в js/*.js) —
-  // это отдельная, более крупная переделка (см. заметку в чате), не тут.
-  // Поэтому script-src-attr/style-src-attr разрешены как 'unsafe-inline' —
-  // без этого перестанут работать вообще все клики в приложении. Инлайновых
-  // <script>/<style> БЛОКОВ (не атрибутов) в разметке нет — тем script-src/
-  // style-src самих себя 'unsafe-inline' не нужен.
+  // (без CSP-соответствующей автоматической проверки один раз в начале).
+  // 20.83.0 — index.html больше не содержит НИ ОДНОГО inline event handler:
+  // все onclick/onchange/oninput перенесены на data-on/data-arg делегирование
+  // (frontend/src/app/nav.ts), а единственный runtime-инъектированный
+  // <style> (confetti keyframe, shift/index.ts) перенесён в статический
+  // styles.css — поэтому block-level style-src теперь БЕЗ 'unsafe-inline'.
+  // script-src-attr/style-src-attr пока остаются 'unsafe-inline': оставшиеся
+  // ~184 handler-атрибута живут в page-бандлах (не в index.html — ratchet
+  // scripts/check-inline-event-handlers.mjs их считает отдельно), а inline
+  // style-атрибуты на динамических элементах (confetti-частицы, прогресс-
+  // бары) — это style-src-attr, не block-level style-src.
   // frame-ancestors вместо xFrameOptions: Telegram Web открывает Mini App
   // в iframe с web.telegram.org — X-Frame-Options: SAMEORIGIN это бы сломал;
   // современные браузеры отдают приоритет CSP frame-ancestors, поэтому сам
@@ -129,7 +132,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", 'https://telegram.org'],
         scriptSrcAttr: ["'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'"],
         styleSrcAttr: ["'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'blob:'],
         fontSrc: ["'self'", 'data:'],

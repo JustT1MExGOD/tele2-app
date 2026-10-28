@@ -3729,3 +3729,7 @@ body.chat-keyboard-open .chat-page.active {
   .academy-contextual-prompt { left: auto; right: var(--sp-6); bottom: var(--sp-6); width: 380px; }
 }
 
+
+/* 20.83.0 — shift-page confetti fall, moved from a runtime-injected
+   <style> (was the sole consumer forcing style-src 'unsafe-inline'). */
+@keyframes t2fall{to{transform:translateY(100vh) rotate(360deg);opacity:0}}

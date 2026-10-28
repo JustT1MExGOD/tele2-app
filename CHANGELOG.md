@@ -6,6 +6,14 @@
 
 > **Версии исходного архива:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Номер в исходниках не подтверждает публикацию или развёртывание.
 
+## 20.83.0 — Security: CSP без block-level inline-стилей и чистый index.html
+
+- Все 119 inline event handlers в `frontend/index.html` мигрированы на `data-on`/`data-arg`/`data-on-event` делегирование (`frontend/src/app/nav.ts`); codemod `scripts/migrate-inline-handlers.mjs` делает перенос воспроизводимым.
+- Составные случаи (chat-composer `onkeydown`/`oncompositionstart/end`/`onfocus`/`onblur`, `document.getElementById().click()`, `historyEmployeeFilter=null;switchPage`) покрыты именованными data-алиасами и явными ветками делегатора — без eval.
+- Единственный runtime-инъектированный `<style>` (confetti `@keyframes t2fall`, `pages/shift/index.ts`) перенесён в статический `styles.css`; block-level `style-src` теперь только `'self'` — `unsafe-inline` снят.
+- `script-src-attr`/`style-src-attr` остаются (остаток ~184 handler-атрибутов в page-бандлах + inline `style=` на динамических элементах); ratchet `check-inline-event-handlers` опущен 303 → 184.
+- Тест `tests/isolation/security-headers.test.ts` фиксирует `style-src` без unsafe-inline, сохранение Telegram `frame-ancestors` и `script-src` self+telegram.org; frontend smoke и весь frontend-сьют зелёные.
+
 ## 20.82.0 — Security: полное покрытие distributed rate-limit
 
 - Глобальный `preHandler` (`src/security/distributed-route-rate-limit.ts`, регистрируется в `app.ts` после auth-resolve) зеркалит каждый роут с явным `config.rateLimit` в `security_rate_limit_counters` — лимиты из таблицы SECURITY.md теперь переживают рестарт/деплой, а не только сессию одного процесса.

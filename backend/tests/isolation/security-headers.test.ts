@@ -34,6 +34,34 @@ describe('Security headers — X-Content-Type-Options / Referrer-Policy / Cache-
     expect(policy).toContain('payment=()');
   });
 
+  // 20.83.0 — index.html's 119 inline handlers moved to data-on/data-arg
+  // delegation (frontend/src/app/nav.ts) and the sole runtime-injected
+  // <style> (shift confetti keyframe) moved into static styles.css. Locks
+  // the block-level style-src tightening so a future edit can't silently
+  // re-widening it, and confirms the Telegram iframe ancestors stayed put.
+  it('CSP: block-level style-src has no unsafe-inline; attribute-level stays permissive; frame-ancestors keep Telegram', async () => {
+    const app = await getApp();
+    const res = await app.inject({ method: 'GET', url: '/healthz' });
+    const csp = res.headers['content-security-policy'] as string;
+    expect(csp).toBeTruthy();
+    // block-level style-src must NOT carry unsafe-inline (was the only
+    // consumer: the runtime-injected confetti keyframe, now static CSS).
+    const styleSrc = /style-src ([^;]+)/.exec(csp)![1];
+    expect(styleSrc).not.toContain('unsafe-inline');
+    // Attribute-level directives still needed by ~184 handlers in page
+    // bundles (not index.html) + inline style= on dynamic elements.
+    expect(csp).toContain("script-src-attr 'unsafe-inline'");
+    expect(csp).toContain("style-src-attr 'unsafe-inline'");
+    // Telegram Mini App iframe must keep working.
+    const frameAncestors = /frame-ancestors ([^;]+)/.exec(csp)![1];
+    expect(frameAncestors).toContain('https://web.telegram.org');
+    expect(frameAncestors).toContain('https://*.telegram.org');
+    // script-src still pins to self + the one allowed external host.
+    const scriptSrc = /script-src ([^;]+)/.exec(csp)![1];
+    expect(scriptSrc).toContain("'self'");
+    expect(scriptSrc).toContain('https://telegram.org');
+  });
+
   it('GET /avatars/:id с реальными данными — сохраняет свой Cache-Control, не перезаписан в no-store', async () => {
     const fx = new TestFixtures();
     try {

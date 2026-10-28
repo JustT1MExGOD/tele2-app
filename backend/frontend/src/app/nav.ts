@@ -525,6 +525,73 @@ document.addEventListener('click', (e) => {
   if (el?.dataset.pageTrigger) switchPage(el.dataset.pageTrigger);
 });
 
+// CSP hardening (20.83.0) — generic delegation for index.html's former
+// inline handlers. `data-on="fn"` invokes window[fn](element) on click/
+// change/input; `data-arg` supplies a literal argument when the call used to
+// carry one (switchPage('cash') → data-on="switchPage" data-arg="cash").
+// Two compound cases get explicit attributes instead of eval'd strings:
+//   data-click-el="id"           — click that element (file-input proxy)
+//   data-reset-history-filter    — clear the support page's employee filter,
+//                                  then navigate to it (was two statements)
+// Ratchet's BASELINE drops below in this same commit — don't re-add
+// onclick/onchange/oninput/onsubmit attributes; add another data-on or a
+// delegated case here.
+document.addEventListener('click', (e) => {
+  const target = e.target as Element | null;
+  const el = target?.closest<HTMLElement>('[data-on],[data-click-el],[data-reset-history-filter]');
+  if (!el) return;
+  // Elements that declared a change/input handler must not ALSO fire on
+  // click — select/date inputs would run the callback twice per change.
+  if (el.dataset.onEvent && el.dataset.onEvent !== 'click') return;
+  const proxyId = el.dataset.clickEl;
+  if (proxyId) {
+    document.getElementById(proxyId)?.click();
+    return;
+  }
+  if (el.hasAttribute('data-reset-history-filter')) {
+    window.historyEmployeeFilter = null;
+    switchPage('history');
+    return;
+  }
+  const fn = el.dataset.on ? (window as any)[el.dataset.on] : null;
+  if (typeof fn !== 'function') return;
+  if (el.dataset.arg !== undefined) fn(el.dataset.arg);
+  else fn(el);
+});
+// One element may carry several event hooks (the chat composer: input +
+// keydown + compositionstart/end + focus/blur). Named aliases let one
+// element declare them all without eval'd strings:
+//   data-on / data-on-event — the primary hook (with optional data-arg)
+//   data-kd / data-cs / data-ce / data-fo / data-bl — extra hooks that always
+//     receive the Event object (old `fn(event)` signature), never `el`.
+const EVENT_ALIAS: Record<string, string> = {
+  keydown: 'kd',
+  compositionstart: 'cs',
+  compositionend: 'ce',
+  focus: 'fo',
+  blur: 'bl'
+};
+for (const evt of ['change', 'input', 'keydown', 'focus', 'blur', 'compositionstart', 'compositionend'] as const) {
+  document.addEventListener(evt, (e) => {
+    const el = (e.target as Element | null)?.closest<HTMLElement>(
+      `[data-on],[data-${EVENT_ALIAS[evt] || evt}]`
+    );
+    if (!el) return;
+    // Aliased extra hook first — it always takes the Event object.
+    const alias = EVENT_ALIAS[evt] ? el.dataset[EVENT_ALIAS[evt]] : undefined;
+    if (alias) {
+      const afn = (window as any)[alias];
+      if (typeof afn === 'function') afn(e);
+      return;
+    }
+    if (el.dataset.onEvent !== evt) return;
+    const fn = (window as any)[el.dataset.on!];
+    if (typeof fn !== 'function') return;
+    if (el.dataset.arg !== undefined) fn(el.dataset.arg);
+    else fn(el);
+  });
+}
+
 declare global {
   interface Window {
     applyAvatarImg: typeof applyAvatarImg;
