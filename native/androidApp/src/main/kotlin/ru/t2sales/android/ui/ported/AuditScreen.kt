@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -70,6 +72,7 @@ private fun ruDateTime(iso: String): String = runCatching {
 private fun pretty(el: JsonElement?): String = if (el == null || el is JsonNull) "\u2014" else PRETTY.encodeToString(JsonElement.serializer(), el)
 
 /** Port of the «История действий» page: filters, sortable table, load-more, diff dialog. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AuditScreen(api: AdminApi) {
     val scope = rememberCoroutineScope()
@@ -136,22 +139,57 @@ fun AuditScreen(api: AdminApi) {
                     if (asc) c else -c
                 }
                 fun sortBy(k: AuditSort) { if (sort == k) asc = !asc else { sort = k; asc = true } }
-                WideTable(640.dp) {
-                Row(modifier = Modifier.fillMaxWidth().background(T2Colors.surface2).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Header("Дата", AuditSort.Date, sort, asc, Modifier.weight(2f), ::sortBy)
-                    Header("Действие", AuditSort.Action, sort, asc, Modifier.weight(2.5f), ::sortBy)
-                    Header("Актор", AuditSort.Actor, sort, asc, Modifier.weight(2f), ::sortBy)
-                    Header("Объект", AuditSort.Target, sort, asc, Modifier.weight(2f), ::sortBy)
+                // Card layout on phone — sort chips above, one card per row (was a
+                // 640dp-wide WideTable with horizontal scroll, awkward on small screens).
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        AuditSort.Date to "Дата",
+                        AuditSort.Action to "Действие",
+                        AuditSort.Actor to "Актор",
+                        AuditSort.Target to "Объект"
+                    ).forEach { (k, label) ->
+                        val active = sort == k
+                        val shape = RoundedCornerShape(99.dp)
+                        Text(
+                            "$label${if (active) (if (asc) " ↑" else " ↓") else ""}",
+                            color = if (active) T2Colors.primary else T2Colors.hint,
+                            fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                            modifier = Modifier.clip(shape)
+                                .background(if (active) T2Colors.primarySoft else T2Colors.surface2)
+                                .border(1.dp, if (active) T2Colors.primary else T2Colors.border, shape)
+                                .clickable { sortBy(k) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
                 sorted.forEach { i ->
-                    Row(modifier = Modifier.fillMaxWidth().clickable { opened = i }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(ruDateTime(i.created_at), fontSize = 13.sp, modifier = Modifier.weight(2f))
-                        Text(ACTION_LABEL[i.action] ?: i.action, fontSize = 13.sp, modifier = Modifier.weight(2.5f))
-                        Text(i.actor_name ?: "Система", fontSize = 13.sp, modifier = Modifier.weight(2f))
-                        Text((TARGET_LABEL[i.target_type] ?: i.target_type) + (i.target_id?.let { " #$it" } ?: ""), fontSize = 13.sp, modifier = Modifier.weight(2f))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { opened = i }
+                            .padding(horizontal = 16.dp, vertical = 13.dp)
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                ACTION_LABEL[i.action] ?: i.action,
+                                fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(ruDateTime(i.created_at), fontSize = 12.sp, color = T2Colors.hint)
+                        }
+                        Text(
+                            (i.actor_name ?: "Система") + " · " +
+                                (TARGET_LABEL[i.target_type] ?: i.target_type) +
+                                (i.target_id?.let { " #$it" } ?: ""),
+                            fontSize = 12.sp, color = T2Colors.hint,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(T2Colors.border))
-                }
                 }
             }
         }
@@ -187,10 +225,4 @@ private fun DiffBox(text: String) {
         text, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(T2Colors.surface2).padding(10.dp)
     )
-}
-
-@Composable
-private fun Header(label: String, key: AuditSort, cur: AuditSort, asc: Boolean, modifier: Modifier, onSort: (AuditSort) -> Unit) {
-    val arrow = if (key == cur) (if (asc) "\u2191" else "\u2193") else "\u21C5"
-    Text("$label $arrow", color = if (key == cur) T2Colors.primary else T2Colors.hint, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = modifier.clickable { onSort(key) })
 }

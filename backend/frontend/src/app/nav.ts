@@ -233,6 +233,9 @@ export function loadPage(name: string): void {
   if (name === 'plan') {
     loadPlanDay();
   }
+  // 'today' — зарегистрированный, но не user-facing маршрут: ни один nav-item
+  // на него не ссылается (проверено 20.81.0). loadTodaySchedule() покрыт
+  // тестами и оставлен как потенциальный shortcut/sub-page экран.
   if (name === 'today') {
     loadTodaySchedule();
   }

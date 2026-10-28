@@ -4,6 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +42,7 @@ import ru.t2sales.shared.theme.T2Radius
 private enum class OrgSort { Name, Dealer, Sector, Status }
 
 /** Port of the «Сети» page (index.html #page-orgs, network-admin): add-network row + sortable networks table, edit form. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OrgsScreen(api: AdminApi) {
     val scope = rememberCoroutineScope()
@@ -84,27 +88,54 @@ fun OrgsScreen(api: AdminApi) {
                     if (asc) c else -c
                 }
                 fun sortBy(k: OrgSort) { if (sort == k) asc = !asc else { sort = k; asc = true } }
-                WideTable(620.dp) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(T2Colors.surface2).padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    HeaderCell("Название", OrgSort.Name, sort, asc, Modifier.weight(2f), ::sortBy)
-                    Text("ID", color = T2Colors.hint, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1.5f))
-                    HeaderCell("Дилер", OrgSort.Dealer, sort, asc, Modifier.weight(2f), ::sortBy)
-                    HeaderCell("Сектор", OrgSort.Sector, sort, asc, Modifier.weight(1.5f), ::sortBy)
-                    HeaderCell("Статус", OrgSort.Status, sort, asc, Modifier.weight(1f), ::sortBy)
+                    listOf(
+                        OrgSort.Name to "Название",
+                        OrgSort.Dealer to "Дилер",
+                        OrgSort.Sector to "Сектор",
+                        OrgSort.Status to "Статус"
+                    ).forEach { (k, label) ->
+                        val active = sort == k
+                        val shape = RoundedCornerShape(99.dp)
+                        Text(
+                            "$label${if (active) (if (asc) " ↑" else " ↓") else ""}",
+                            color = if (active) T2Colors.primary else T2Colors.hint,
+                            fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                            modifier = Modifier.clip(shape)
+                                .background(if (active) T2Colors.primarySoft else T2Colors.surface2)
+                                .border(1.dp, if (active) T2Colors.primary else T2Colors.border, shape)
+                                .clickable { sortBy(k) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
                 sorted.forEach { o ->
-                    Row(modifier = Modifier.fillMaxWidth().clickable { editing = o }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(o.name, fontSize = 13.sp, modifier = Modifier.weight(2f))
-                        Text(o.id, fontSize = 13.sp, modifier = Modifier.weight(1.5f))
-                        Text(o.dealer_name ?: "\u2014", fontSize = 13.sp, modifier = Modifier.weight(2f))
-                        Text(o.sector_id ?: "default", fontSize = 13.sp, modifier = Modifier.weight(1.5f))
-                        Text(if (o.is_active == false) "выключена" else "активна", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { editing = o }.padding(horizontal = 16.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(o.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                o.id +
+                                    (o.dealer_name?.let { " · дилер $it" } ?: "") +
+                                    (o.sector_id?.let { " · сектор $it" } ?: ""),
+                                fontSize = 12.sp, color = T2Colors.hint,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                        Text(
+                            if (o.is_active == false) "выкл." else "активна",
+                            fontSize = 12.sp,
+                            color = if (o.is_active == false) T2Colors.danger else T2Colors.success,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(T2Colors.border))
-                }
                 }
             }
         }
@@ -123,12 +154,6 @@ fun OrgsScreen(api: AdminApi) {
             }
         )
     }
-}
-
-@Composable
-private fun HeaderCell(label: String, key: OrgSort, cur: OrgSort, asc: Boolean, modifier: Modifier, onSort: (OrgSort) -> Unit) {
-    val arrow = if (key == cur) (if (asc) "\u2191" else "\u2193") else "\u21C5"
-    Text("$label $arrow", color = if (key == cur) T2Colors.primary else T2Colors.hint, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = modifier.clickable { onSort(key) })
 }
 
 @Composable

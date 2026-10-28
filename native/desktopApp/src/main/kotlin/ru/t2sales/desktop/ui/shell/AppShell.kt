@@ -101,20 +101,27 @@ fun AppShell(
                     ) { key(reload) { content(selected) } }
                 }
             } else {
-                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    AppHeader(selected, myDay, teamApi, myEmployeeId, container.network, container.outbox, onRefresh = { reload++ })
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                        Column(
-                            modifier = Modifier
-                                .widthIn(max = 1400.dp)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                                .background(T2Colors.bg)
-                                .padding(T2Spacing.sp4)
-                        ) {
-                            ScreenEnter(selected) { key(reload, AddSaleState.refreshTick) { content(selected) } }
+                val scrollState = rememberScrollState()
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
+                        AppHeader(selected, myDay, teamApi, myEmployeeId, container.network, container.outbox, onRefresh = { reload++ })
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                            Column(
+                                modifier = Modifier
+                                    .widthIn(max = 1400.dp)
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                                    .background(T2Colors.bg)
+                                    .padding(T2Spacing.sp4)
+                            ) {
+                                ScreenEnter(selected) { key(reload, AddSaleState.refreshTick) { content(selected) } }
+                            }
                         }
                     }
+                    androidx.compose.foundation.VerticalScrollbar(
+                        adapter = androidx.compose.foundation.rememberScrollbarAdapter(scrollState),
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    )
                 }
             }
             if (selected != Screen.Chat) Fab(Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 24.dp)) { AddSaleState.open() }
