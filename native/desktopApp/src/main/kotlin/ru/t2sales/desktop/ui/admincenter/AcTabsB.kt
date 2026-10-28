@@ -1,4 +1,4 @@
-package ru.t2sales.desktop.ui.admincenter
+﻿package ru.t2sales.desktop.ui.admincenter
 
 import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
@@ -100,7 +100,7 @@ internal fun FlagsTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить флаги")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить флаги", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Флагов пока нет")
             else -> list.forEach { f ->
@@ -133,7 +133,7 @@ internal fun OrgSettingsTab(container: AppContainer) {
     PageSection("Сети") {
         val list = orgs
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить сети")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить сети", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Сетей нет")
             else -> list.forEach { o -> NavRow(o.brand_name ?: o.name, o.id + if (o.is_active == false) " \u00B7 неактивна" else "") { selected = o.id } }
@@ -199,7 +199,7 @@ internal fun RulesTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить метрики")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить метрики", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Метрик нет")
             else -> list.forEach { m ->
@@ -223,7 +223,8 @@ internal fun RulesTab(container: AppContainer) {
 internal fun OperationsTab(container: AppContainer) {
     var data by remember { mutableStateOf<JsonObject?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { runCatching { container.adminCenterApi.operations() }.onSuccess { data = it }.onFailure { failed = true } }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) { runCatching { container.adminCenterApi.operations() }.onSuccess { data = it }.onFailure { failed = true } }
 
     fun str(o: kotlinx.serialization.json.JsonElement?, vararg keys: String): String =
         keys.firstNotNullOfOrNull { k -> ((o as? JsonObject)?.get(k) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotEmpty() } } ?: ""
@@ -231,7 +232,7 @@ internal fun OperationsTab(container: AppContainer) {
     val d = data
     PageSection("Открытые алерты по всем сетям") {
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить данные")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить данные", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val bySeverity = (d["alerts_by_severity"] as? JsonObject).orEmpty()

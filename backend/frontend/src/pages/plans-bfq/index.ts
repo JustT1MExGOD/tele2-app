@@ -8,6 +8,7 @@
  * store name with quotes through an onclick attribute string).
  */
 import { maybeShowContextualLesson } from '../../shared/contextual-lesson.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import type {
   MonthSummaryTableResponse,
   StoreMonthSummaryTableResponse,
@@ -94,8 +95,9 @@ export async function loadBFQ(): Promise<void> {
         `
       )
       .join('');
-  } catch {
-    box.innerHTML = '<div class="empty">Ошибка BFQ</div>';
+  } catch (e) {
+    console.error(e);
+    renderLoadError(box, 'Ошибка BFQ', () => loadBFQ());
   }
 }
 
@@ -251,7 +253,7 @@ export async function loadMonthPlans(): Promise<void> {
     if (typeof loadStoreDailyPlans === 'function') loadStoreDailyPlans();
   } catch (e) {
     console.error(e);
-    if (box) box.innerHTML = '<div class="empty">Планы месяца недоступны</div>';
+    if (box) renderLoadError(box, 'Планы месяца недоступны', () => loadMonthPlans());
   }
 }
 
@@ -401,7 +403,7 @@ export async function loadNetMonth(): Promise<void> {
     box.innerHTML = html;
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить</div>';
+    renderLoadError(box, 'Не удалось загрузить', () => loadNetMonth());
   }
 }
 

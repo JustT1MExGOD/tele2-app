@@ -1,8 +1,9 @@
-/**
+﻿/**
  * Admin Control Center (20.59.0) — Stores tab: list (org-scoped) +
  * detail with edit / activate / deactivate.
  */
 import { confirmDangerousAction } from './shared/dialogs.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 // Цвет точки в графике (stores.color). Формат тот же, что валидирует бэкенд
 // (PATCH /admin/stores/:id); значение подставляется в inline style, поэтому
@@ -55,7 +56,7 @@ async function loadStoreList(): Promise<void> {
       .join('');
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить точки</div>';
+    renderLoadError(box, 'Не удалось загрузить точки', () => loadStoreList());
   }
 }
 
@@ -115,7 +116,7 @@ async function renderStoreDetail(storeId: string): Promise<void> {
     document.getElementById('storeMove')?.addEventListener('click', () => onMoveStore(storeId));
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить точку</div>';
+    renderLoadError(box, 'Не удалось загрузить точку', () => renderStoreDetail(storeId));
   }
 }
 

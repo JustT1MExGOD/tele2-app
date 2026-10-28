@@ -103,7 +103,7 @@ fun HeatmapScreen(container: AppContainer) {
         }
         val list = cells
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("🍉 Пока нечего показать — как только по точке пойдут продажи, здесь появится картина по часам")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("🍉 Heatmap временно недоступна — обновится автоматически")
             list == null -> HeatmapSkeleton()
             else -> {
                 val max = maxOf(1.0, list.maxOf { it.second })

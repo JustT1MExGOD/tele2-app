@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Admin Control Center, Phase 4+ (Area B2) — Org Settings/Branding.
  * Surfaces the existing branding routes (GET /orgs, PUT /admin/org/:id) —
  * no new backend, reuses features/admin/api.ts's getOrgsAdmin/saveOrg,
  * already exposed on window.apiClient (see app/api-bridge.ts).
  */
 import type { OrgAdminItem } from '../../../../src/shared/api-types.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 let lastOrgs: OrgAdminItem[] = [];
 
@@ -49,7 +50,7 @@ async function loadOrgs(): Promise<void> {
       .join('');
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить сети</div>';
+    renderLoadError(box, 'Не удалось загрузить сети', () => loadOrgs());
   }
 }
 

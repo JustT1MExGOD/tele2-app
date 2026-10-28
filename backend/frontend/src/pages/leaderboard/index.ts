@@ -9,6 +9,7 @@
  * Метрики — window.METRICS (тот же каталог, что GET /metrics уже грузит
  * в bootApp() через loadMetricsCatalog()), без отдельного запроса здесь.
  */
+import { renderLoadError } from '../../shared/load-error.js';
 import type { LeaderboardResponse } from '../../../../src/shared/api-types.js';
 
 let currentMetric: string | null = null;
@@ -62,7 +63,7 @@ export async function loadLeaderboard(): Promise<void> {
     renderList(body, res);
   } catch (e) {
     console.error(e);
-    body.innerHTML = '<div class="empty">Не удалось загрузить топ</div>';
+    renderLoadError(body, 'Не удалось загрузить топ', () => loadLeaderboard());
   }
 }
 

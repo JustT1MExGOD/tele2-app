@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Admin Control Center, Phase 4+ (Area B1) — Feature Flags. Plain
  * admin-CRUD, no reason/version/step-up (see api/routes/admin/
  * feature-flags.ts's header comment). One row per (key, org_id): a
@@ -7,6 +7,7 @@
  * core/shared/feature-flags.ts's findEffective().
  */
 import type { FeatureFlagRow } from '../../../../src/shared/api-types.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 export function renderFeatureFlagsTab(container: HTMLElement): void {
   container.innerHTML = `
@@ -45,7 +46,7 @@ async function loadFlags(): Promise<void> {
     renderFlagsTable(box, res.items);
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить флаги</div>';
+    renderLoadError(box, 'Не удалось загрузить флаги', () => loadFlags());
   }
 }
 

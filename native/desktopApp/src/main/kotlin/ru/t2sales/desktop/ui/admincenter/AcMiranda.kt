@@ -51,6 +51,10 @@ internal fun MirandaDevicesTab(container: AppContainer) {
     var accounts by remember { mutableStateOf<List<MirandaCorporateAccountListItem>?>(null) }
     var available by remember { mutableStateOf<List<MirandaAvailableAccountRow>?>(null) }
     var groups by remember { mutableStateOf<List<MirandaContactGroup>?>(null) }
+    var pendingFailed by remember { mutableStateOf(false) }
+    var accountsFailed by remember { mutableStateOf(false) }
+    var availableFailed by remember { mutableStateOf(false) }
+    var groupsFailed by remember { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
     var stepUpTarget by remember { mutableStateOf<Int?>(null) }
 
@@ -78,11 +82,19 @@ internal fun MirandaDevicesTab(container: AppContainer) {
     var showInactive by remember { mutableStateOf(false) }
 
     LaunchedEffect(reload, showInactive) {
-        runCatching { mirandaApi.listPendingDevices().items }.onSuccess { pending = it }.onFailure { pending = emptyList() }
-        runCatching { mirandaApi.listAllCorporateAccounts(showInactive).items }.onSuccess { accounts = it }.onFailure { accounts = emptyList() }
-        runCatching { mirandaApi.listAvailableAccounts().items }.onSuccess { available = it }.onFailure { available = emptyList() }
+        runCatching { mirandaApi.listPendingDevices().items }
+            .onSuccess { pending = it; pendingFailed = false }
+            .onFailure { pending = null; pendingFailed = true }
+        runCatching { mirandaApi.listAllCorporateAccounts(showInactive).items }
+            .onSuccess { accounts = it; accountsFailed = false }
+            .onFailure { accounts = null; accountsFailed = true }
+        runCatching { mirandaApi.listAvailableAccounts().items }
+            .onSuccess { available = it; availableFailed = false }
+            .onFailure { available = null; availableFailed = true }
         // admin-scoped read: works even without an active Miranda account on this device (matches web adminListMirandaGroups)
-        runCatching { mirandaApi.adminListContactGroups().items }.onSuccess { groups = it }.onFailure { groups = emptyList() }
+        runCatching { mirandaApi.adminListContactGroups().items }
+            .onSuccess { groups = it; groupsFailed = false }
+            .onFailure { groups = null; groupsFailed = true }
     }
     LaunchedEffect(grantQuery) {
         if (grantQuery.trim().length < 2) { grantResults = emptyList(); return@LaunchedEffect }
@@ -98,6 +110,7 @@ internal fun MirandaDevicesTab(container: AppContainer) {
     PageSection("Устройства Miranda — очередь подтверждения") {
         val list = pending
         when {
+            pendingFailed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить очередь устройств", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Нет устройств, ожидающих подтверждения")
             else -> list.forEach { row ->
@@ -218,6 +231,7 @@ internal fun MirandaDevicesTab(container: AppContainer) {
         }
         val list = accounts
         when {
+            accountsFailed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить корпоративные аккаунты", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Корпоративных аккаунтов пока нет")
             else -> list.forEach { acc ->
@@ -295,6 +309,7 @@ internal fun MirandaDevicesTab(container: AppContainer) {
         val glist = groups
         val accountById = accounts.orEmpty().associateBy { it.corporate_account_id }
         when {
+            groupsFailed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить группы Miranda", onRetry = { reload++ })
             glist == null -> LoadingBlock(Modifier.padding(16.dp))
             glist.isEmpty() -> EmptyText("Групп пока нет — создайте первую выше")
             else -> glist.forEach { g ->
@@ -389,6 +404,7 @@ internal fun MirandaDevicesTab(container: AppContainer) {
         )
         val avail = available
         when {
+            availableFailed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить доступные аккаунты", onRetry = { reload++ })
             avail == null -> LoadingBlock(Modifier.padding(16.dp))
             avail.isEmpty() -> EmptyText("Вам не выдано ни одного гранта на переключение")
             else -> avail.forEach { acc ->

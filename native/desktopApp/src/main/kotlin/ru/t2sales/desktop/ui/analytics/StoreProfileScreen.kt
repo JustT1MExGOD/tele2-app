@@ -81,7 +81,7 @@ fun StoreProfileScreen(container: AppContainer, me: MeResponse, onNavigate: (Scr
     val d = data
     when {
         storeId == null -> Text("Точка не выбрана", color = T2Colors.hint, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-        failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить профиль точки")
+        failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить профиль точки", onRetry = { reload++ })
         d == null -> LoadingBlock()
         else -> {
             val store = d["store"].obj()

@@ -1,3 +1,7 @@
+﻿/** Admin Control Center (20.59.0) — Overview tab: real counts only. */
+
+
+import { renderLoadError } from '../../shared/load-error.js';
 /** Admin Control Center (20.59.0) — Overview tab: real counts only. */
 export async function renderOverviewTab(container: HTMLElement): Promise<void> {
   container.innerHTML = '<div class="skeleton"></div>';
@@ -18,7 +22,7 @@ export async function renderOverviewTab(container: HTMLElement): Promise<void> {
     `;
   } catch (e) {
     console.error(e);
-    container.innerHTML = '<div class="empty">Не удалось загрузить обзор</div>';
+    renderLoadError(container, 'Не удалось загрузить обзор', () => renderOverviewTab(container));
   }
 }
 

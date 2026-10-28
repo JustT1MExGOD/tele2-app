@@ -100,7 +100,7 @@ fun MonthPlanScreen(container: AppContainer, me: MeResponse) {
         MonthNav(month) { PlanMonthState.month = it }
         val d = data
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Планы месяца недоступны")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Планы месяца недоступны", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 Text("Сотрудников: ${d.rows.size} \u00B7 ост. дней: ${d.remaining_days ?: "\u2014"}", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))

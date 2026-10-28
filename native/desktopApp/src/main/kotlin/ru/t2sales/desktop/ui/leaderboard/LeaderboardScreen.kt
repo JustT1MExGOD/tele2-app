@@ -58,6 +58,7 @@ fun LeaderboardScreen(container: AppContainer) {
     var result by remember { mutableStateOf<LeaderboardResponse?>(null) }
     var failed by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
+    var reload by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         runCatching { container.salesApi.getMetrics().items }
@@ -65,7 +66,7 @@ fun LeaderboardScreen(container: AppContainer) {
             .onFailure { }
     }
 
-    LaunchedEffect(metric, from, to) {
+    LaunchedEffect(metric, from, to, reload) {
         val m = metric ?: return@LaunchedEffect
         loading = true
         failed = false
@@ -101,7 +102,7 @@ fun LeaderboardScreen(container: AppContainer) {
         }
         when {
             metrics.isEmpty() && !loading -> Text("Каталог метрик пуст", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить топ")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить топ", onRetry = { reload++ })
             loading && result == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val items = result?.items.orEmpty()

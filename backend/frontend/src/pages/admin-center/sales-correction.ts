@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Admin Control Center (20.59.0) — Sales Corrections tab.
  *
  * "Sale" here is one (employee, store, date) daily aggregate row, not a
@@ -9,6 +9,7 @@
  * crossOrg flag and the step-up requirement below).
  */
 import { confirmDangerousAction, requestStepUpTicket, promptMetricCorrection } from './shared/dialogs.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import { fetchOrgStores } from '../../app/core.js';
 import type { AdminSaleRow } from '../../../../src/shared/api-types.js';
 
@@ -114,7 +115,7 @@ async function renderSaleDetail(saleId: string): Promise<void> {
     }
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить строку</div>';
+    renderLoadError(box, 'Не удалось загрузить строку', () => renderSaleDetail(saleId));
   }
 }
 

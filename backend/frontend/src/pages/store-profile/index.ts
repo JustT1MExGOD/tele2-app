@@ -25,6 +25,7 @@
  * src/api/routes/profiles/store.ts), not worked around here.
  */
 import { registerPage, renderPage } from '../../app/router.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 let currentStoreProfileId: string | null = null;
 let currentStoreDisplayName = '';
@@ -152,7 +153,7 @@ export async function renderStoreProfilePage(): Promise<void> {
     `;
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить профиль точки</div>';
+    renderLoadError(box, 'Не удалось загрузить профиль точки', () => renderStoreProfilePage());
   }
 }
 

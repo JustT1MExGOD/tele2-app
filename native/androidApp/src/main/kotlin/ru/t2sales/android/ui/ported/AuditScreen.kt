@@ -1,4 +1,4 @@
-package ru.t2sales.android.ui
+﻿package ru.t2sales.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -122,7 +122,7 @@ fun AuditScreen(api: AdminApi) {
             }
         }
         when {
-            failed -> ErrorState("\uD83C\uDF49 Не получилось загрузить историю")
+            failed -> ErrorState("\uD83C\uDF49 Не получилось загрузить историю", onRetry = { reload++ })
             !loaded -> LoadingBlock(Modifier.padding(16.dp))
             items.isEmpty() -> Text("\uD83C\uDF49 Действий пока нет", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {

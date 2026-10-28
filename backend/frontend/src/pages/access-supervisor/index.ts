@@ -13,6 +13,7 @@
  * (module-level side effect), matching the classic script's own trailing
  * `bootApp();` call.
  */
+import { renderLoadError } from '../../shared/load-error.js';
 import type {
   AccessStatusResponse,
   AccessOrgsResponse,
@@ -927,8 +928,9 @@ export async function loadAccessRequests(): Promise<void> {
           </div>`
       )
       .join('');
-  } catch {
-    box.innerHTML = '<div class="empty">Ошибка загрузки</div>';
+  } catch (e) {
+    console.error(e);
+    renderLoadError(box, 'Ошибка загрузки', () => loadAccessRequests());
   }
 }
 

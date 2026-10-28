@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Admin Control Center (Phase 4+) — Shift Corrections tab. Same
  * search → detail → action structure as sales-correction.ts. Void is
  * only offered for closed/auto_closed sessions — open shifts cannot be
  * voided (see core/admin/shift-correction.ts's VOIDABLE_STATUSES).
  */
 import { confirmDangerousAction, requestStepUpTicket, promptFieldCorrection } from './shared/dialogs.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import { fetchOrgStores } from '../../app/core.js';
 import type { AdminShiftRow } from '../../../../src/shared/api-types.js';
 
@@ -94,7 +95,7 @@ async function renderShiftDetail(shiftId: number): Promise<void> {
     document.getElementById('shiftCorrectBtn')?.addEventListener('click', () => onCorrectShift(row));
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить смену</div>';
+    renderLoadError(box, 'Не удалось загрузить смену', () => renderShiftDetail(shiftId));
   }
 }
 

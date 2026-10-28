@@ -1,4 +1,4 @@
-package ru.t2sales.desktop.ui.cash
+﻿package ru.t2sales.desktop.ui.cash
 
 import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
@@ -120,7 +120,7 @@ fun CashScreen(container: AppContainer) {
         Text("\u0394 = факт \u2212 (1С + 2000)", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         val t = table
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("\uD83C\uDF49 Касса сейчас недоступна, зайди чуть позже")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("\uD83C\uDF49 Касса сейчас недоступна, зайди чуть позже", onRetry = { reload++ })
             t == null -> LoadingBlock(Modifier.padding(16.dp))
             t.dates.isEmpty() -> Text("\uD83C\uDF49 Пока нет ни одной записи кассы \u2014 внеси первую строку выше", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {

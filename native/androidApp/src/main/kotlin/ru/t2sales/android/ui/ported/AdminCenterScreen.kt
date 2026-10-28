@@ -398,7 +398,7 @@ private fun StoresTab(container: AppContainer) {
     PageSection("Точки сети") {
         val list = stores
         when {
-            failed -> ErrorState("Не удалось загрузить точки")
+            failed -> ErrorState("Не удалось загрузить точки", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Нет точек")
             else -> list.forEach { s -> NavRow(s.display_name ?: s.name, s.code + if (s.is_active) "" else " \u00B7 деактивирована") { selected = s.id } }
@@ -426,7 +426,7 @@ private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, o
     }
     val s = store
     when {
-        failed -> PageSection(null) { EmptyText("Не удалось загрузить точку") }
+        failed -> PageSection(null) { ErrorState("Не удалось загрузить точку", onRetry = { reload++ }) }
         s == null -> LoadingBlock()
         else -> PageSection(null) {
             Row(
@@ -501,7 +501,7 @@ private fun AuditTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> ErrorState("Ошибка загрузки")
+            failed -> ErrorState("Ошибка загрузки", onRetry = { query++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Записей не найдено")
             else -> list.forEach { i ->

@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Admin Control Center — «Импорт графика из Таблиц»: очередь строк, для
  * которых сопоставление имени из Google Таблицы с сотрудником оказалось
  * неточным (см. core/integrations/sheet-schedule-import.ts). Точные
  * совпадения сюда не попадают — подтверждаются автоматически.
  */
 import type { SheetImportPendingRow } from '../../../../src/shared/api-types.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../../../src/shared/replacement.js';
 
 // id сотрудника, найденного через поиск (data-si-search), для строк без готового кандидата — ключ по id pending-строки.
@@ -48,7 +49,7 @@ async function loadPending(): Promise<void> {
     renderList(box, res.items);
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить очередь</div>';
+    renderLoadError(box, 'Не удалось загрузить очередь', () => loadPending());
   }
 }
 

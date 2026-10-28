@@ -23,6 +23,7 @@ import type {
   MyTicketsResponse,
   SalesHistoryResponse
 } from '../../../../src/shared/api-types.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 declare global {
   interface Window {
@@ -87,8 +88,9 @@ export async function loadSupport(): Promise<void> {
           )
           .join('');
       }
-    } catch {
-      box.innerHTML = '<div class="empty">Не удалось загрузить FAQ</div>';
+    } catch (e) {
+      console.error(e);
+      renderLoadError(box, 'Не удалось загрузить FAQ', () => loadSupport());
     }
   }
 
@@ -212,8 +214,9 @@ export async function loadManagerTickets(): Promise<void> {
             .join('')
         : '<div class="empty">Нет открытых</div>') +
       '</div>';
-  } catch {
-    box.innerHTML = '<div class="empty">Не удалось загрузить тикеты</div>';
+  } catch (e) {
+    console.error(e);
+    renderLoadError(box, 'Не удалось загрузить тикеты', () => loadManagerTickets());
   }
 }
 

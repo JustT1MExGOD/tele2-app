@@ -21,6 +21,7 @@ import type {
   SchedulePreferenceRow
 } from '../../../../src/shared/api-types.js';
 import { REPLACEMENT_PLACEHOLDER_STORE_ID } from '../../../../src/shared/replacement.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 const scheduleEntries = new Map<string, ScheduleRow>();
 
@@ -141,7 +142,7 @@ export async function loadPlanDay(): Promise<void> {
       .join('');
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Ошибка загрузки</div>';
+    renderLoadError(box, 'Ошибка загрузки', () => loadPlanDay());
   }
 }
 
@@ -199,7 +200,8 @@ export async function loadTodaySchedule(): Promise<void> {
         })
         .join('') || '<div class="section"><div class="empty">Пусто</div></div>';
   } catch (e) {
-    box.innerHTML = '<div class="empty">Ошибка</div>';
+    console.error(e);
+    renderLoadError(box, 'Ошибка загрузки графика', () => loadTodaySchedule());
   }
 }
 
@@ -330,7 +332,7 @@ export async function loadMonthSchedule(): Promise<void> {
     data = await window.apiClient.getScheduleMonth(authHeaders(), scheduleMonth, orgParam);
   } catch (e) {
     console.error('[schedule] SCHEDULE_MONTH_FETCH_FAILED', e);
-    box.innerHTML = '<div class="empty">Ошибка загрузки графика — не удалось получить смены</div>';
+    renderLoadError(box, 'Ошибка загрузки графика — не удалось получить смены', () => loadMonthSchedule());
     return;
   }
   const items = data.items || [];
@@ -343,7 +345,7 @@ export async function loadMonthSchedule(): Promise<void> {
     }
   } catch (e) {
     console.error('[schedule] SCHEDULE_STORES_FETCH_FAILED', e);
-    box.innerHTML = '<div class="empty">Ошибка загрузки графика — не удалось получить точки</div>';
+    renderLoadError(box, 'Ошибка загрузки графика — не удалось получить точки', () => loadMonthSchedule());
     return;
   }
 
@@ -356,7 +358,7 @@ export async function loadMonthSchedule(): Promise<void> {
     emps = await window.apiClient.getEmployees(authHeaders(), empParam);
   } catch (e) {
     console.error('[schedule] SCHEDULE_EMPLOYEES_FETCH_FAILED', e);
-    box.innerHTML = '<div class="empty">Ошибка загрузки графика — не удалось получить сотрудников</div>';
+    renderLoadError(box, 'Ошибка загрузки графика — не удалось получить сотрудников', () => loadMonthSchedule());
     return;
   }
 
@@ -800,8 +802,9 @@ export async function loadStaffingEditorRows(): Promise<void> {
   try {
     const data = await window.apiClient.getStaffingRequirements(authHeaders(), storeId, orgQueryParam());
     rows = data.rows || [];
-  } catch {
-    box.innerHTML = '<div class="empty">Ошибка загрузки</div>';
+  } catch (e) {
+    console.error(e);
+    renderLoadError(box, 'Ошибка загрузки', () => loadStaffingEditorRows());
     return;
   }
   const byWeekday: Record<number, StaffingRequirementRow | undefined> = {};

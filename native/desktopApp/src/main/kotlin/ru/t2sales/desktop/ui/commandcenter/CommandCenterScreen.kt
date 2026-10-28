@@ -87,7 +87,10 @@ fun CommandCenterScreen(container: AppContainer, me: MeResponse, onNavigate: (Sc
 
     val d = data
     when {
-        failed -> ru.t2sales.desktop.ui.components.ErrorState("Command Center сейчас недоступен, зайди чуть позже")
+        failed -> ru.t2sales.desktop.ui.components.ErrorState(
+            "Command Center сейчас недоступен, зайди чуть позже",
+            onRetry = { reload++ }
+        )
         d == null -> LoadingBlock()
         else -> {
             val n = d.network

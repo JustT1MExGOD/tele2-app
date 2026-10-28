@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Admin Control Center, Phase 4+ (Area B3) — Business Rules (BFQ/metrics
  * catalog). Surfaces the existing GET/POST/DELETE /metrics routes — no
  * new backend, reuses features/cash-metrics/api.ts's getMetrics/
  * createMetric/deleteMetric, already exposed on window.apiClient.
  */
 import type { MetricDef } from '../../../../src/shared/api-types.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 export function renderBusinessRulesTab(container: HTMLElement): void {
   container.innerHTML = `
@@ -41,7 +42,7 @@ async function loadMetrics(): Promise<void> {
     renderMetricsList(box, res.items);
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить метрики</div>';
+    renderLoadError(box, 'Не удалось загрузить метрики', () => loadMetrics());
   }
 }
 

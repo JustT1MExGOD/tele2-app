@@ -10,6 +10,7 @@
  * property — written here (cache-invalidation on org switch / new store),
  * read AND written by frontend/js/13-v14.js, still legacy/unmigrated.
  */
+import { renderLoadError } from '../../shared/load-error.js';
 import type { OrgAdminItem, OrgsListResponse, EmployeeListItem, SaleRow, ScheduleRow, CreateStoreRequest, DealersTreeResponse } from '../../../../src/shared/api-types.js';
 
 declare global {
@@ -326,8 +327,9 @@ export async function loadTeam(): Promise<void> {
     lastTeamList = list;
     lastTeamMap = map;
     renderTeamTable(lastTeamList, lastTeamMap);
-  } catch {
-    box.innerHTML = '<div class="empty">🍉 Не получилось загрузить команду, зайди чуть позже</div>';
+  } catch (e) {
+    console.error(e);
+    renderLoadError(box, '🍉 Не получилось загрузить команду, зайди чуть позже', () => loadTeam());
   }
 }
 

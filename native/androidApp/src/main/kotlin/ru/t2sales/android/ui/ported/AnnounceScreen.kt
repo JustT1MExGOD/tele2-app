@@ -47,12 +47,15 @@ fun AnnounceScreen(container: AppContainer, me: MeResponse) {
     var body by remember { mutableStateOf("") }
     var required by remember { mutableStateOf(false) }
 
-    LaunchedEffect(reload) { runCatching { api.announcements() }.onSuccess { items = it }.onFailure { failed = true } }
+    LaunchedEffect(reload) {
+        failed = false
+        runCatching { api.announcements() }.onSuccess { items = it }.onFailure { failed = true }
+    }
 
     PageSection("Объявления сети") {
         val list = items
         when {
-            failed -> ErrorState("\uD83C\uDF49 Не удалось загрузить объявления")
+            failed -> ErrorState("\uD83C\uDF49 Не удалось загрузить объявления", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("\uD83C\uDF49 Нет объявлений", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> list.forEach { a ->

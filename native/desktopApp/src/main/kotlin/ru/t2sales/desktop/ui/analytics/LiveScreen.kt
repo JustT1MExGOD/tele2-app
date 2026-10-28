@@ -1,4 +1,4 @@
-package ru.t2sales.desktop.ui.analytics
+﻿package ru.t2sales.desktop.ui.analytics
 
 import ru.t2sales.desktop.ui.components.LoadingBlock
 import ru.t2sales.desktop.ui.components.reveal
@@ -58,12 +58,13 @@ internal fun colorOf(hex: String?): Color? = hex?.takeIf { it.isNotEmpty() }?.le
 fun LiveScreen(container: AppContainer) {
     var data by remember { mutableStateOf<JsonObject?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { runCatching { container.analyticsApi.live() }.onSuccess { data = it }.onFailure { failed = true } }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) { runCatching { container.analyticsApi.live() }.onSuccess { data = it }.onFailure { failed = true } }
 
     PageSection("Сеть сейчас") {
         val d = data
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("\uD83C\uDF49 Живая карта сети сейчас недоступна, зайди чуть позже")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("\uD83C\uDF49 Живая карта сети сейчас недоступна, зайди чуть позже", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val today = LocalDate.now(ZoneId.of("Europe/Moscow")).toString()

@@ -1,4 +1,4 @@
-package ru.t2sales.desktop.ui.plans
+﻿package ru.t2sales.desktop.ui.plans
 
 import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.layout.Arrangement
@@ -45,12 +45,13 @@ fun NetMonthScreen(container: AppContainer) {
     var emp by remember { mutableStateOf<MonthSummaryResponse?>(null) }
     var stores by remember { mutableStateOf<List<StoreMonthRow>>(emptyList()) }
     var failed by remember { mutableStateOf(false) }
+    var reload by remember { mutableStateOf(0) }
     var metrics by remember { mutableStateOf<List<MetricDef>>(FALLBACK_METRICS) }
 
     LaunchedEffect(Unit) {
         runCatching { container.salesApi.getMetrics().items }.onSuccess { m -> if (m.isNotEmpty()) metrics = m.map { MetricDef(it.id, it.label ?: it.id, it.short_label, it.unit) } }
     }
-    LaunchedEffect(month) {
+    LaunchedEffect(month, reload) {
         emp = null; failed = false
         runCatching {
             val e = container.plansApi.employeesMonth(month.toString())
@@ -63,7 +64,7 @@ fun NetMonthScreen(container: AppContainer) {
         MonthNav(month) { PlanMonthState.month = it }
         val d = emp
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val totals = d.totals

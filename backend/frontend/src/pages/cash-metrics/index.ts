@@ -12,6 +12,7 @@
  */
 import type { CashTableResponse, MetricDef } from '../../../../src/shared/api-types.js';
 import { maybeShowContextualLesson } from '../../shared/contextual-lesson.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 function deltaTone(d: number): string {
   if (d < -100) return 'background:#ff3b3033;color:#ff453a;font-weight:800';
@@ -91,7 +92,7 @@ export async function loadCash(): Promise<void> {
         : '');
   } catch (e) {
     console.error(e);
-    if (box) box.innerHTML = '<div class="empty">🍉 Касса сейчас недоступна, зайди чуть позже</div>';
+    if (box) renderLoadError(box, '🍉 Касса сейчас недоступна, зайди чуть позже', () => loadCash());
   }
 }
 

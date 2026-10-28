@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Admin Control Center (Phase 4+) — Schedule Corrections tab. Same
  * search → detail → action structure as sales-correction.ts. "Void"
  * here is a hard delete (no restore) — see
  * core/admin/schedule-correction.ts's header comment.
  */
 import { confirmDangerousAction, promptFieldCorrection } from './shared/dialogs.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import { fetchOrgStores } from '../../app/core.js';
 import type { AdminScheduleRow } from '../../../../src/shared/api-types.js';
 
@@ -160,7 +161,7 @@ async function renderScheduleDetail(scheduleId: number): Promise<void> {
     document.getElementById('scheduleCorrectBtn')?.addEventListener('click', () => onCorrectSchedule(row));
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить строку графика</div>';
+    renderLoadError(box, 'Не удалось загрузить строку графика', () => renderScheduleDetail(scheduleId));
   }
 }
 

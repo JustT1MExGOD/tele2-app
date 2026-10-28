@@ -14,6 +14,7 @@
  * private helper.
  */
 import { registerPage, renderPage } from '../../app/router.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import type { AlertItem } from '../../../../src/shared/api-types.js';
 
 let alertsFilter = 'open';
@@ -75,7 +76,7 @@ export async function loadAlertsPage(): Promise<void> {
       </div>`;
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить алерты</div>';
+    renderLoadError(box, 'Не удалось загрузить алерты', () => loadAlertsPage());
   }
 }
 
@@ -132,7 +133,7 @@ async function renderAlertDetail(id: number): Promise<void> {
       </div>
     `;
   } catch (e) {
-    box.innerHTML = '<div class="empty">Не удалось загрузить алерт</div>';
+    renderLoadError(box, 'Не удалось загрузить алерт', () => renderAlertDetail(id));
   }
 }
 

@@ -8,6 +8,7 @@
  * .sv-store/.sv-store-head/.progress-block классы (Supervisor/Command
  * Center), новой CSS для этого экрана не потребовалось.
  */
+import { renderLoadError } from '../../shared/load-error.js';
 import type { DealersTreeResponse, SectorNode } from '../../../../src/shared/api-types.js';
 
 /**
@@ -86,7 +87,7 @@ export async function loadDealersAdmin(): Promise<void> {
     tree.innerHTML = (dealerBlocks + unassignedSectorsBlock) || '<div class="empty">Дилеров пока нет — заведите через форму сети</div>';
   } catch (e) {
     console.error(e);
-    tree.innerHTML = '<div class="empty">Не удалось загрузить дилеров/секторы</div>';
+    renderLoadError(tree, 'Не удалось загрузить дилеров/секторы', () => loadDealersAdmin());
   }
 }
 

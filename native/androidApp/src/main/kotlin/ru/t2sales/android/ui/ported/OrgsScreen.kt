@@ -1,4 +1,4 @@
-package ru.t2sales.android.ui
+﻿package ru.t2sales.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -70,7 +70,7 @@ fun OrgsScreen(api: AdminApi) {
         }
         val list = orgs
         when {
-            failed -> ErrorState("\uD83C\uDF49 Не получилось загрузить сети")
+            failed -> ErrorState("\uD83C\uDF49 Не получилось загрузить сети", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("\uD83C\uDF49 Сетей пока нет", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> {

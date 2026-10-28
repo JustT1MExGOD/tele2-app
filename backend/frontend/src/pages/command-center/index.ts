@@ -6,6 +6,7 @@
  * read it, replaced with a private module variable, same precedent as
  * __storeProfileDisplayName (20.27.0).
  */
+import { renderLoadError } from '../../shared/load-error.js';
 import type { CommandCenterAction, CommandCenterResponse, EmployeeListItem } from '../../../../src/shared/api-types.js';
 
 let taskClientId = '';
@@ -99,7 +100,7 @@ export async function loadCommandCenterPage(): Promise<void> {
     `;
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Command Center сейчас недоступен, зайди чуть позже</div>';
+    renderLoadError(box, 'Command Center сейчас недоступен', () => loadCommandCenterPage());
   }
 }
 

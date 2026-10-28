@@ -108,7 +108,7 @@ fun PlanDayScreen(container: AppContainer) {
         Text("План дня", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 12.dp))
         val d = data
         when {
-            failed -> ErrorState("Ошибка загрузки")
+            failed -> ErrorState("Ошибка загрузки", onRetry = { AppState.refreshTick++ })
             d == null -> LoadingBlock(Modifier.padding(vertical = 16.dp), lines = 5)
             d.stores.isEmpty() -> Text("Нет точек", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { d.stores.forEach { StoreDayCard(it, d) } }

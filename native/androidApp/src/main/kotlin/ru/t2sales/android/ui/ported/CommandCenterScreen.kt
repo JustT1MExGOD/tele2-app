@@ -78,7 +78,10 @@ fun CommandCenterScreen(container: AppContainer, me: MeResponse, onNavigate: (Sc
 
     val d = data
     when {
-        failed -> ErrorState("Command Center сейчас недоступен, зайди чуть позже")
+        failed -> ErrorState(
+            "Command Center сейчас недоступен, зайди чуть позже",
+            onRetry = { reload++ }
+        )
         d == null -> LoadingBlock()
         else -> {
             val n = d.network

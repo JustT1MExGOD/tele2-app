@@ -1,9 +1,10 @@
-/**
+﻿/**
  * Admin Control Center (20.59.0) — Audit tab. Thin wrapper around the
  * already-existing GET /audit route/features/admin/api.ts's
  * getAuditLog — no new backend surface needed here.
  */
 import { getAuditLog } from '../../features/admin/api.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 export async function renderAuditTab(container: HTMLElement): Promise<void> {
   container.innerHTML = `
@@ -51,6 +52,6 @@ async function runAuditSearch(): Promise<void> {
       .join('');
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Ошибка загрузки</div>';
+    renderLoadError(box, 'Ошибка загрузки', () => runAuditSearch());
   }
 }

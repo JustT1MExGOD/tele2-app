@@ -93,7 +93,7 @@ internal fun FlagsTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> ErrorState("Не удалось загрузить флаги")
+            failed -> ErrorState("Не удалось загрузить флаги", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Флагов пока нет")
             else -> list.forEach { f ->
@@ -126,7 +126,7 @@ internal fun OrgSettingsTab(container: AppContainer) {
     PageSection("Сети") {
         val list = orgs
         when {
-            failed -> ErrorState("Не удалось загрузить сети")
+            failed -> ErrorState("Не удалось загрузить сети", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Сетей нет")
             else -> list.forEach { o -> NavRow(o.brand_name ?: o.name, o.id + if (o.is_active == false) " \u00B7 неактивна" else "") { selected = o.id } }
@@ -192,7 +192,7 @@ internal fun RulesTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> ErrorState("Не удалось загрузить метрики")
+            failed -> ErrorState("Не удалось загрузить метрики", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Метрик нет")
             else -> list.forEach { m ->
@@ -224,7 +224,7 @@ internal fun OperationsTab(container: AppContainer) {
     val d = data
     PageSection("Открытые алерты по всем сетям") {
         when {
-            failed -> ErrorState("Не удалось загрузить данные")
+            failed -> ErrorState("Не удалось загрузить данные", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val bySeverity = (d["alerts_by_severity"] as? JsonObject).orEmpty()

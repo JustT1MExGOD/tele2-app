@@ -15,6 +15,7 @@
  * from inside this module.
  */
 import { registerPage, renderPage } from '../../app/router.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import type { TaskItem, TaskComment } from '../../../../src/shared/api-types.js';
 
 let tasksFilter = 'active';
@@ -87,7 +88,7 @@ export async function loadTasksPage(): Promise<void> {
       </div>`;
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить задачи</div>';
+    renderLoadError(box, 'Не удалось загрузить задачи', () => loadTasksPage());
   }
 }
 
@@ -147,7 +148,7 @@ async function renderTaskDetail(id: number): Promise<void> {
       <button class="btn-main" onclick="submitTaskComment(${t.id}, this)">Добавить комментарий</button>
     `;
   } catch (e) {
-    box.innerHTML = '<div class="empty">Не удалось загрузить задачу</div>';
+    renderLoadError(box, 'Не удалось загрузить задачу', () => renderTaskDetail(id));
   }
 }
 

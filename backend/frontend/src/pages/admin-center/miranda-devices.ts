@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Admin Control Center — "Устройства Miranda" (Этап A плана, §3/§8 Stage 3).
  * Две независимые секции: (1) очередь подтверждения устройств
  * (approve требует свежего step-up, revoke — нет, см. api/routes/miranda/
@@ -8,6 +8,7 @@
  * вкладка "Сотрудники" (нет и не планируется bulk-листинга сотрудников).
  */
 import { requestStepUpTicket } from './shared/dialogs.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import type { MirandaPendingBindingRow, MirandaCorporateAccountListItem, MirandaContactGroup } from '../../../../src/shared/api-types.js';
 
 let grantAdminSearchDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -186,7 +187,7 @@ async function loadPending(): Promise<void> {
     renderPendingList(box, res.items);
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить очередь устройств</div>';
+    renderLoadError(box, 'Не удалось загрузить очередь устройств', () => loadPending());
   }
 }
 
@@ -292,7 +293,7 @@ async function loadCorporateAccounts(): Promise<void> {
   } catch (e) {
     console.error(e);
     if (select) select.innerHTML = '<option value="">Не удалось загрузить аккаунты</option>';
-    if (list) list.innerHTML = '<div class="empty">Не удалось загрузить аккаунты</div>';
+    if (list) renderLoadError(list, 'Не удалось загрузить аккаунты', () => loadCorporateAccounts());
   }
 }
 
@@ -492,7 +493,7 @@ async function loadAvailableAccounts(): Promise<void> {
       .join('');
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить список</div>';
+    renderLoadError(box, 'Не удалось загрузить список', () => loadAvailableAccounts());
   }
 }
 
@@ -516,7 +517,7 @@ async function loadContactGroups(): Promise<void> {
   } catch (e) {
     console.error(e);
     cachedGroups = [];
-    box.innerHTML = '<div class="empty">Не удалось загрузить группы</div>';
+    renderLoadError(box, 'Не удалось загрузить группы', () => loadContactGroups());
   }
 }
 

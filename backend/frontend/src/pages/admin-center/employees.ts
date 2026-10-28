@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Admin Control Center (20.59.0) — Employees tab: search-driven (no
  * bulk list route exists server-side, only GET /admin/search and
  * GET /admin/employees/:id — see src/api/routes/admin/search.ts) +
  * detail panel with safe actions.
  */
 import { confirmDangerousAction, requestStepUpTicket, showOneTimeLink } from './shared/dialogs.js';
+import { renderLoadError } from '../../shared/load-error.js';
 import { describeUserAgent } from '../../shared/device-label.js';
 
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -134,7 +135,7 @@ async function renderEmployeeDetail(employeeId: number): Promise<void> {
     });
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить сотрудника</div>';
+    renderLoadError(box, 'Не удалось загрузить сотрудника', () => renderEmployeeDetail(employeeId));
   }
 }
 

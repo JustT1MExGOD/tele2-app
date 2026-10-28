@@ -39,8 +39,9 @@ fun HistoryScreen(api: SalesApi, me: MeResponse) {
     val filter = HistoryFilter.employeeId
     var items by remember(filter) { mutableStateOf<List<HistorySale>?>(null) }
     var failed by remember(filter) { mutableStateOf(false) }
+    var reload by remember(filter) { mutableStateOf(0) }
 
-    LaunchedEffect(filter) {
+    LaunchedEffect(filter, reload) {
         val today = LocalDate.now(ZoneId.of("Europe/Moscow"))
         runCatching { api.getHistory(today.withDayOfMonth(1).toString(), today.toString(), filter) }
             .onSuccess { items = it.items }
@@ -50,7 +51,7 @@ fun HistoryScreen(api: SalesApi, me: MeResponse) {
     PageSection("История продаж") {
         val list = items
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить историю")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить историю", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> Text("Нет продаж за период", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> list.forEach { s ->

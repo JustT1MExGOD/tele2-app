@@ -10,6 +10,7 @@
  * stays a real window property (already ambient, shared with src/pages/team
  * which also reads/writes it as the org-switch stores-cache invalidation).
  */
+import { renderLoadError } from '../../shared/load-error.js';
 import type {
   BrandingResponse,
   HeatmapPreciseResponse,
@@ -192,8 +193,9 @@ export async function loadForecast(): Promise<void> {
       })
       .join('');
     box.innerHTML = cards ? note + trendBars + aiBlock + cards : '<div class="empty">🍉 Пока нет истории для прогноза по этой точке</div>';
-  } catch {
-    box.innerHTML = '<div class="empty">🍉 Прогноз сейчас недоступен, зайди чуть позже</div>';
+  } catch (e) {
+    console.error(e);
+    renderLoadError(box, '🍉 Прогноз сейчас недоступен, зайди чуть позже', () => loadForecast());
   }
 }
 
@@ -482,8 +484,9 @@ export async function loadAnnouncements(): Promise<void> {
         </div>`
       )
       .join('');
-  } catch {
-    box.innerHTML = '<div class="empty">🍉 Не удалось загрузить объявления</div>';
+  } catch (e) {
+    console.error(e);
+    renderLoadError(box, '🍉 Не удалось загрузить объявления', () => loadAnnouncements());
   }
 }
 
@@ -607,8 +610,9 @@ export async function loadOrgsAdmin(): Promise<void> {
           </button>`
         )
         .join('') || '<div class="empty">🍉 Сетей пока нет</div>';
-  } catch {
-    box.innerHTML = '<div class="empty">🍉 Не получилось загрузить сети</div>';
+  } catch (e) {
+    console.error(e);
+    renderLoadError(box, '🍉 Не получилось загрузить сети', () => loadOrgsAdmin());
   }
   renderOrgsTable();
 }
@@ -761,9 +765,10 @@ async function fetchAuditPage(append: boolean): Promise<void> {
     if (loadMoreBtn) (loadMoreBtn as HTMLElement).style.display = items.length === AUDIT_LIMIT ? '' : 'none';
     renderAuditList();
     renderAuditTable();
-  } catch {
-    if (box && !append) box.innerHTML = '<div class="empty">🍉 Не получилось загрузить историю</div>';
-    toast('Не получилось загрузить историю', 'err');
+  } catch (e) {
+    console.error(e);
+    if (box && !append) renderLoadError(box, '🍉 Не получилось загрузить историю', () => loadAuditLog());
+    else toast('Не получилось загрузить историю', 'err');
   }
 }
 

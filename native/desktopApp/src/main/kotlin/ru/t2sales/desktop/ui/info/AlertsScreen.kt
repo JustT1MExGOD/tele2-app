@@ -81,7 +81,7 @@ fun AlertsScreen(container: AppContainer, onNavigate: (Screen) -> Unit) {
 
     val list = items
     when {
-        failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить алерты")
+        failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить алерты", onRetry = { reload++ })
         list == null -> LoadingBlock()
         list.isEmpty() -> Text("Нет алертов", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
         else -> Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {

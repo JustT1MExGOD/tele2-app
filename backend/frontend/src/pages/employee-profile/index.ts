@@ -21,6 +21,7 @@
  * rather than fighting it with narrower types nothing else needs.
  */
 import { registerPage, renderPage } from '../../app/router.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 let currentEmployeeProfileId: number | string | null = null;
 
@@ -136,7 +137,7 @@ export async function renderEmployeeProfilePage(): Promise<void> {
     `;
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить профиль сотрудника</div>';
+    renderLoadError(box, 'Не удалось загрузить профиль сотрудника', () => renderEmployeeProfilePage());
   }
 }
 

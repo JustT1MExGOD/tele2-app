@@ -71,7 +71,8 @@ private class DayData(
 fun PlanDayScreen(container: AppContainer) {
     var data by remember { mutableStateOf<DayData?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) {
         runCatching {
             val date = LocalDate.now(ZoneId.of("Europe/Moscow")).toString()
             val storesEl: JsonElement = container.plansApi.orgStoresRaw()
@@ -104,7 +105,7 @@ fun PlanDayScreen(container: AppContainer) {
     ru.t2sales.desktop.ui.components.PageSection("План дня") {
         val d = data
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Ошибка загрузки")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Ошибка загрузки", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             d.stores.isEmpty() -> Text("Нет точек", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
             else -> BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {

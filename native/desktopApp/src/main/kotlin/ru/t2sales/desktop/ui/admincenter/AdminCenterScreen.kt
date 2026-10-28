@@ -1,4 +1,4 @@
-package ru.t2sales.desktop.ui.admincenter
+﻿package ru.t2sales.desktop.ui.admincenter
 
 import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
@@ -433,7 +433,7 @@ private fun StoresTab(container: AppContainer) {
     PageSection("Точки сети") {
         val list = stores
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить точки")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить точки", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Нет точек")
             else -> list.forEach { s -> NavRow(s.display_name ?: s.name, s.code + if (s.is_active) "" else " \u00B7 деактивирована") { selected = s.id } }
@@ -463,7 +463,7 @@ private fun StoreDetail(api: ru.t2sales.shared.api.AdminCenterApi, id: String, o
     }
     val s = store
     when {
-        failed -> PageSection(null) { EmptyText("Не удалось загрузить точку") }
+        failed -> PageSection(null) { ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить точку", onRetry = { reload++ }) }
         s == null -> LoadingBlock()
         else -> PageSection(null) {
             Row(
@@ -565,7 +565,7 @@ private fun AuditTab(container: AppContainer) {
         }
         val list = items
         when {
-            failed -> ru.t2sales.desktop.ui.components.ErrorState("Ошибка загрузки")
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Ошибка загрузки", onRetry = { query++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
             list.isEmpty() -> EmptyText("Записей не найдено")
             else -> list.forEach { i ->

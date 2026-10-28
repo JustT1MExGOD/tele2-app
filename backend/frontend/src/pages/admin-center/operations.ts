@@ -1,10 +1,12 @@
-/**
+﻿/**
  * Admin Control Center, Phase 4+ (Area B4) — Operations Center. System
  * health across ALL orgs (open alerts + pending access requests) — read
  * only, no ack/approve actions here (see api/routes/admin/operations.ts's
  * header comment). Deliberately distinct from Command Center, which is
  * manager-facing and org-scoped.
  */
+
+import { renderLoadError } from '../../shared/load-error.js';
 export function renderOperationsTab(container: HTMLElement): void {
   container.innerHTML = `
     <div class="section">
@@ -65,7 +67,7 @@ async function loadOperations(): Promise<void> {
       : '<div class="empty">Заявок на доступ нет</div>';
   } catch (e) {
     console.error(e);
-    alertsBox.innerHTML = '<div class="empty">Не удалось загрузить данные</div>';
+    renderLoadError(alertsBox, 'Не удалось загрузить данные', () => loadOperations());
     accessBox.innerHTML = '';
   }
 }

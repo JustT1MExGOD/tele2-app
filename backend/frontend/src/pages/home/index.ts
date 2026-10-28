@@ -9,6 +9,7 @@
  * stay as-is (still accurate, now backed by this module instead of the
  * classic script), same precedent as openModal/closeModal.
  */
+import { renderLoadError } from '../../shared/load-error.js';
 import type { MeDayResponse, TaskItem, SupervisorHealthResponse, StatsDailyRow, DashboardResponse, SafeStoreInfo } from '../../../../src/shared/api-types.js';
 
 // Пишет в оба места разом — id элемента и его Desktop-версию (20.40,
@@ -128,7 +129,18 @@ export async function loadMyDay(): Promise<void> {
           ${myTasksHTML(d.tasks)}`;
     setBothHTML('myDayBody', 'myDayBodyDesktop', bodyHtml);
   } catch (e) {
-    setBothHTML('myDayBody', 'myDayBodyDesktop', '<div class="empty">Не удалось загрузить «Мой день»</div>');
+    console.error(e);
+    setBothHTML(
+      'myDayBody',
+      'myDayBodyDesktop',
+      '<div class="empty" id="myDayLoadError"></div>'
+    );
+    ['myDayBody', 'myDayBodyDesktop'].forEach((id) => {
+      const errorBox = document.getElementById(id);
+      if (errorBox) {
+        renderLoadError(errorBox, 'Не удалось загрузить «Мой день»', () => loadMyDay());
+      }
+    });
   }
   (document.getElementById('homeTodaySwipe') as any)?._swipeRefreshHeight?.();
 }

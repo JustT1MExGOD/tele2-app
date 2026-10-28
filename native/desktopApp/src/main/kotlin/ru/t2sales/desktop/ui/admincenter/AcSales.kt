@@ -113,7 +113,12 @@ internal fun SalesTab(container: AppContainer) {
         Spacer(Modifier.height(12.dp))
         val d = detail
         when {
-            detailFailed -> PageSection(null) { EmptyText("Не удалось загрузить строку") }
+            detailFailed -> PageSection(null) {
+                ru.t2sales.desktop.ui.components.ErrorState(
+                    "Не удалось загрузить строку",
+                    onRetry = { reloadDetail++ }
+                )
+            }
             d == null || d.row.id != selectedId -> LoadingBlock()
             else -> {
                 val row = d.row

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Admin Control Center (Phase 4+) — Plan Corrections tab. No void, no
  * step-up (see core/admin/plan-correction.ts's header comment) — just
  * single-metric correct for employee/store month plans. No search route
@@ -6,6 +6,7 @@
  * same load → metric-chips structure as sales-correction.ts's detail view.
  */
 import { promptMetricCorrection } from './shared/dialogs.js';
+import { renderLoadError } from '../../shared/load-error.js';
 
 export function renderPlanCorrectionTab(container: HTMLElement): void {
   container.innerHTML = `
@@ -48,7 +49,7 @@ async function renderEmployeePlanDetail(planId: number): Promise<void> {
     );
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить план</div>';
+    renderLoadError(box, 'Не удалось загрузить план', () => renderEmployeePlanDetail(planId));
   }
 }
 
@@ -63,7 +64,7 @@ async function renderStorePlanDetail(planId: number): Promise<void> {
     );
   } catch (e) {
     console.error(e);
-    box.innerHTML = '<div class="empty">Не удалось загрузить план</div>';
+    renderLoadError(box, 'Не удалось загрузить план', () => renderStorePlanDetail(planId));
   }
 }
 
