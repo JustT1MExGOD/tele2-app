@@ -6,7 +6,12 @@
 
 > **Версии исходного архива:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Номер в исходниках не подтверждает публикацию или развёртывание.
 
-## 20.80.1 — Hotfix: точка Комсомольская 3 в синхронизации графика
+## 20.80.2 — Security: regression-тест отозванных сессий
+
+- Добавлен именной adversarial-тест `tests/adversarial/revoked-session-reuse.test.ts`: повторный запрос с токеном сразу после `DELETE /auth/sessions/:id` отклоняется с `401`.
+- Тест также покрывает logout, `revoke-others`, сохранение текущей сессии и отсутствие «оживания» удалённой строки при повторных запросах.
+- Проверки: `npx tsc --noEmit`, `npx vitest run tests/adversarial/revoked-session-reuse.test.ts` (5/5).
+
 
 - Добавлена новая точка «Комсомольская пл. 3» (id `komsomolskaya3`, цвет `#fff2cc`) в карту `STORE_TO_COLOR` экспорта графика в Google Таблицы (`backend/src/core/integrations/sheet-schedule-export.ts`) — правки смен в приложении теперь записывают корректный цвет фона ячейки при пуше в таблицу.
 - Документация `docs/SHEET-SCHEDULE-IMPORT.md` обновлена: цвет `#fff2cc` → `komsomolskaya3` в таблице точек и в примере `COLOR_TO_STORE` Apps Script (требует ручной правки константы на стороне таблицы для направления таблица → приложение).

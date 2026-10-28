@@ -1207,7 +1207,7 @@ Layer (20.48.0-20.50.0), уже закрыта и убрана отсюда в �
 
 | Направление | Сейчас | Целевое состояние |
 |---|---|---|
-| Reuse отозванной сессии | Механизм есть (удалённая строка → `resolveSession()` не находит её), но нет именного adversarial-теста, явно проверяющего запрос СРАЗУ ПОСЛЕ `DELETE /auth/sessions/:id`/logout | Именной regression-тест — обязательный gate перед тем, как считать это закрытым классом |
+| Reuse отозванной сессии | ✅ РЕАЛИЗОВАНО — `resolveSession()` не находит удалённую строку; именной adversarial-regression `tests/adversarial/revoked-session-reuse.test.ts` проверяет запрос СРАЗУ ПОСЛЕ `DELETE /auth/sessions/:id`, logout и revoke-others (5 сценариев) | — |
 | Отдельная временная блокировка аккаунта после N неудачных попыток входа | Нет — только rate-limit по времени (10/мин, хешированный телефон, см. [threat-model](./THREAT-MODEL.md)) | Порог + временная блокировка на `/auth/*`, отдельно от общего rate-limit |
 | Полноценная WebAuthn-церемония в тестах | Покрыты только граничные проверки (malformed input, чужой credential id, "не настроено", UV-опции) — реальный authenticator response не симулируется | Виртуальный/software authenticator в test suite |
 | Frontend UI для WebAuthn (enrollment/login) | TOTP-путь реализован (login-challenge, mandatory enrollment, recovery codes once — 20.52.1); WebAuthn browser-ceremony UI сознательно отложен — TOTP уже закрывает mandatory-политику без риска лишить доступа | Экраны WebAuthn register/authenticate в `frontend/src/**` |

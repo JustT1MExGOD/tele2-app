@@ -12,6 +12,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '20.80.2',
+    title: 'Security: regression-тест отозванных сессий',
+    bullets: [
+      'Добавлен именной adversarial-тест немедленного отклонения повторного запроса после DELETE /auth/sessions/:id, logout и revoke-others',
+      'Тест отдельно фиксирует, что текущая сессия остаётся рабочей при отзыве другой, а отозванный токен не оживает при повторных запросах'
+    ]
+  },
+  {
     version: '20.80.1',
     title: 'Hotfix: точка Комсомольская 3 в синхронизации графика',
     bullets: [
