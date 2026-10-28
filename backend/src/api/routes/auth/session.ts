@@ -34,6 +34,7 @@ import { hasConfirmedMfaFactor } from '../../../auth/mfa/index.js';
 import { isTotpConfirmed } from '../../../auth/mfa/totp.js';
 import { assertStepUp } from '../../../auth/step-up.js';
 import { consume, ipDimension, identityDimension } from '../../../security/rate-limit.js';
+import { clearAccountLockout, getAccountLockout, recordFailedLogin } from '../../../security/account-lockout.js';
 import type {
   RegisterPhoneRequest,
   RegisterPhoneResponse,
@@ -249,8 +250,24 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         return reply.code(429).send({ error: 'rate_limited', message: 'Слишком много попыток входа — попробуйте позже' });
       }
 
-      // 20.48.0 — identities, не employeesRepo.findByPhone напрямую.
       const employeeId = phone ? await identitiesRepo.findEmployeeId('phone', phone) : null;
+
+      // 20.81.0 — account lockout is a separate per-account control from the
+      // IP/identity rate-limit above. Check it before scrypt so a locked
+      // account cannot keep consuming password-verification CPU.
+      if (employeeId) {
+        const lockout = await getAccountLockout(employeeId, request.log);
+        if (lockout.locked || lockout.storageFailure) {
+          return reply.code(lockout.storageFailure ? 503 : 423).send({
+            error: lockout.storageFailure ? 'temporarily_unavailable' : 'account_locked',
+            message: lockout.storageFailure
+              ? 'Вход временно недоступен — попробуйте позже'
+              : 'Аккаунт временно заблокирован — попробуйте позже'
+          });
+        }
+      }
+
+      // 20.48.0 — identities, не employeesRepo.findByPhone напрямую.
       const e = employeeId ? await employeesRepo.findByIdWithPassword(employeeId) : null;
       // Одинаковый 401 для "нет такого телефона" и "неверный пароль" — И по
       // ответу, И по времени (security audit hotfix): раньше `!e ||`
@@ -264,6 +281,17 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       // не парсится ни под какой реальный пароль (см. auth/password.ts).
       const passwordOk = await verifyPassword(b.password, e?.password_hash || DUMMY_PASSWORD_HASH);
       if (!e || !e.password_hash || !passwordOk) {
+        // 20.81.0 — record the failure separately from the request rate-limit.
+        // The account key is only created for a resolved employee; unknown
+        // phone numbers remain indistinguishable and do not create account
+        // enumeration state.
+        const lockout = e ? await recordFailedLogin(e.id, request.log) : null;
+        if (lockout?.storageFailure) {
+          return reply.code(503).send({ error: 'temporarily_unavailable', message: 'Вход временно недоступен — попробуйте позже' });
+        }
+        if (lockout?.locked) {
+          return reply.code(423).send({ error: 'account_locked', message: 'Аккаунт временно заблокирован — попробуйте позже' });
+        }
         // Audit trail gap (security audit) — login failure previously left
         // no trace at all; RUNBOOK.md's compromise-response procedure
         // already queries audit_log by target_id to reconstruct what
@@ -288,6 +316,10 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       }
       if (e.is_active === false || e.access_status !== 'active') {
         return reply.code(403).send({ error: 'not_active', message: 'Доступ ещё не подтверждён' });
+      }
+
+      if (!(await clearAccountLockout(e.id, request.log))) {
+        return reply.code(503).send({ error: 'temporarily_unavailable', message: 'Вход временно недоступен — попробуйте позже' });
       }
 
       // 20.52.0 (MFA) — если у сотрудника есть подтверждённый второй
