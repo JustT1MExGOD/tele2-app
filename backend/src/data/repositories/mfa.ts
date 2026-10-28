@@ -149,9 +149,16 @@ export async function createWebAuthnCredential(data: {
   );
 }
 
+// employee_id is bigint in Postgres — node-pg returns it as a string, not a
+// number, which broke `stored.employee_id === employeeId` checks downstream
+// (auth/mfa/webauthn.ts) and made every WebAuthn authenticate fail closed.
+// Cast to int in the SELECT so callers get a real number — same idiom as
+// dealers.ts / sessions.ts (`e.id::int`).
+const WEBAUTHN_CRED_COLS = `id::int, employee_id::int as employee_id, credential_id, public_key, counter, device_type, backed_up, device_name, created_at, last_used_at, revoked_at`;
+
 export async function listActiveWebAuthnCredentials(employeeId: number): Promise<WebAuthnCredentialRow[]> {
   const res = await query(
-    `SELECT * FROM employee_webauthn_credentials WHERE employee_id = $1 AND revoked_at IS NULL ORDER BY created_at ASC`,
+    `SELECT ${WEBAUTHN_CRED_COLS} FROM employee_webauthn_credentials WHERE employee_id = $1 AND revoked_at IS NULL ORDER BY created_at ASC`,
     [employeeId]
   );
   return res.rows;
@@ -159,7 +166,7 @@ export async function listActiveWebAuthnCredentials(employeeId: number): Promise
 
 export async function findWebAuthnCredentialById(credentialId: string): Promise<WebAuthnCredentialRow | null> {
   const res = await query(
-    `SELECT * FROM employee_webauthn_credentials WHERE credential_id = $1 AND revoked_at IS NULL`,
+    `SELECT ${WEBAUTHN_CRED_COLS} FROM employee_webauthn_credentials WHERE credential_id = $1 AND revoked_at IS NULL`,
     [credentialId]
   );
   return res.rows[0] || null;
