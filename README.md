@@ -76,7 +76,7 @@ T2 Sales — одна рабочая среда, доступная через *
 | **Веб / Telegram Mini App** | `frontend/index.html`, SPA поверх того же API | Основной интерфейс: продажи, смены, планы, касса, чат, алерты, обучение — тот же код, что показан на скриншотах выше | `docs/screenshots/*` |
 | **Сайт + PWA** | Та же `frontend/`, браузер без Telegram | Полный интерфейс в обычном браузере (телефон+пароль) и как иконка PWA на домашнем экране | `docs/screenshots/web-*.png` |
 | **Windows-десктоп (Electron)** | `desktop/` — Electron-обёртка веб-фронтенда | Стационарный ПК-клиент сети: то же окно, что и браузер, плюс управление соединением (DIRECT/RELAY), диагностика и авто-обновления | `docs/screenshots/t2-desktop-icon.png` |
-| **Android (Capacitor / RuStore)** | `android/` — WebView-shell того же веб-приложения | Продакшн-приложение в RuStore, тот же интерфейс и функционал, что и веб | `docs/screenshots/t2-android-icon.png` |
+| **Android (Capacitor / RuStore)** | `android/` — WebView-shell того же веб-приложения | Продакшн-приложение в RuStore, тот же интерфейс и функционал, что и веб, в мобильной раскладке с нижней навигацией | `docs/screenshots/android-*.png` |
 | **Нативные клиенты (Windows + Android)** | `native/` — Kotlin Multiplatform + Compose | Полноценный отдельный клиент (не веб-обёртка): свои Compose-экраны под Windows и Android, управление соединением (DIRECT/RELAY), та же серверная БД и API; см. `native/README.md` | `docs/screenshots/desktop-*.png` |
 | **T2 Miranda** | `/miranda/*` — модуль backend + клиенты | Корпоративный мессенджер внутри дилерской группы: адресные беседы, группы контактов, аккаунты точек/касс, очередь устройств в Admin Center; см. `docs/MIRANDA.md` | `docs/screenshots/miranda-*.png` |
 
@@ -108,6 +108,20 @@ T2 Sales — одна рабочая среда, доступная через *
 Скриншоты сняты на живом окружении одной и той же сети — видно, что
 нативный клиент повторяет веб-интерфейс экран в экран, плюс добавляет
 свой индикатор транспорта («Прямое»/Relay) в шапке.
+
+### Android (Capacitor / RuStore)
+
+| Главная: день сети | План дня по точкам |
+| --- | --- |
+| ![Android: главная](docs/screenshots/android-home.png) | ![Android: план дня](docs/screenshots/android-plan.png) |
+
+| Профиль: смена и прогресс | График команды на месяц |
+| --- | --- |
+| ![Android: профиль](docs/screenshots/android-profile.png) | ![Android: график](docs/screenshots/android-schedule.png) |
+
+Та же кодовая база веб-интерфейса в WebView-shell: на узком экране
+боковая навигация сворачивается в нижнюю панель, сетки перестраиваются
+в одну колонку, график прокручивается горизонтально.
 
 ### T2 Miranda (корпоративный мессенджер)
 
