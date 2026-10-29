@@ -87,7 +87,7 @@ T2 Sales — одна рабочая среда, доступная через *
 
 | Electron (ПК) | Android (Capacitor) | Нативный клиент | T2 Miranda |
 | --- | --- | --- | --- |
-| ![T2 Sales для Windows](docs/screenshots/t2-desktop-icon.png) | ![T2 Sales для Android](docs/screenshots/t2-android-icon.png) | ![T2 Sales Native](docs/screenshots/t2-native-icon.png) | ![T2 Miranda](docs/screenshots/miranda-icon.png) |
+| <img src="docs/screenshots/t2-desktop-icon.png" width="200" alt="T2 Sales для Windows"> | <img src="docs/screenshots/t2-android-icon.png" width="200" alt="T2 Sales для Android"> | <img src="docs/screenshots/t2-native-icon.png" width="200" alt="T2 Sales Native"> | <img src="docs/screenshots/miranda-icon.png" width="200" alt="T2 Miranda"> |
 
 > Значки — реальные иконки приложений из исходников. Живые скриншоты экранов
 > каждого клиента можно положить в `docs/screenshots/` по аналогии с
