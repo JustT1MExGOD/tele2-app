@@ -63,7 +63,7 @@
 
 ## Нативные приложения (Windows и Android, Kotlin)
 
-Два клиента на общем коде Kotlin Multiplatform / Compose Multiplatform в каталоге `native/` — для Windows и для Android; версия ведётся отдельно от веба, Electron-приложения и Capacitor-приложения для Android. Ни один из них ничего не заменяет: Electron и Capacitor остаются в проде, нативные клиенты работают параллельно с тем же сервером.
+Два клиента на общем коде Kotlin Multiplatform / Compose Multiplatform в каталоге `native/` — для Windows и для Android; версия ведётся отдельно от веба и Capacitor-приложения для Android. Нативный клиент для Windows — основной ПК-клиент: Electron-приложение снято с поддержки и заменено им (историческая документация — [DESKTOP.md](DESKTOP.md)). Нативный Android-клиент развивается параллельно Capacitor-обёртке и не заменяет её.
 
 - [Нативные приложения: обзор и быстрый старт](../native/README.md).
 - [Возможности клиента для Windows: экраны, код, отличия от веба](../native/docs/FEATURES.md).
