@@ -9,13 +9,15 @@
  * browsers, some WebViews) doesn't crash at import time — webauthnAvailable()
  * is the gate; callers show the TOTP/recovery fallback when it's false.
  */
-import { authHeaders } from '../../shared/api/http-headers.js';
 import {
   webauthnLoginOptions,
   webauthnRegisterOptions,
   webauthnRegisterVerify,
   loginMfa
 } from './api.js';
+// authHeaders is a global on window (set by app/core.ts — same source every
+// page bundle already calls through window.apiClient); declared globally in
+// shared/legacy-globals.d.ts.
 
 type SwbModule = typeof import('@simplewebauthn/browser');
 let swbPromise: Promise<SwbModule | null> | null = null;
@@ -32,7 +34,7 @@ function swb(): Promise<SwbModule | null> {
 export async function webauthnAvailable(): Promise<boolean> {
   if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) return false;
   const mod = await swb();
-  return !!mod?.browserWebauthnSupport?.();
+  return !!mod?.browserSupportsWebAuthn?.();
 }
 
 /**
