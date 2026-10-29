@@ -74,10 +74,10 @@ T2 Sales — одна рабочая среда, доступная через *
 | Канал | Технология | Что это | Скрин |
 |------|------------|---------|-------|
 | **Веб / Telegram Mini App** | `frontend/index.html`, SPA поверх того же API | Основной интерфейс: продажи, смены, планы, касса, чат, алерты, обучение — тот же код, что показан на скриншотах выше | `docs/screenshots/*` |
-| **Сайт + PWA** | Та же `frontend/`, браузер без Telegram | Полный интерфейс в обычном браузере (телефон+пароль) и как иконка PWA на домашнем экране | — |
+| **Сайт + PWA** | Та же `frontend/`, браузер без Telegram | Полный интерфейс в обычном браузере (телефон+пароль) и как иконка PWA на домашнем экране | `docs/screenshots/web-*.png` |
 | **Windows-десктоп (Electron)** | `desktop/` — Electron-обёртка веб-фронтенда | Стационарный ПК-клиент сети: то же окно, что и браузер, плюс управление соединением (DIRECT/RELAY), диагностика и авто-обновления | `docs/screenshots/t2-desktop-icon.png` |
 | **Android (Capacitor / RuStore)** | `android/` — WebView-shell того же веб-приложения | Продакшн-приложение в RuStore, тот же интерфейс и функционал, что и веб | `docs/screenshots/t2-android-icon.png` |
-| **Нативные клиенты (Windows + Android)** | `native/` — Kotlin Multiplatform + Compose | Полноценный отдельный клиент (не веб-обёртка): свои Compose-экраны под Windows и Android, та же серверная БД и API; см. `native/README.md` | `docs/screenshots/t2-native-icon.png` |
+| **Нативные клиенты (Windows + Android)** | `native/` — Kotlin Multiplatform + Compose | Полноценный отдельный клиент (не веб-обёртка): свои Compose-экраны под Windows и Android, управление соединением (DIRECT/RELAY), та же серверная БД и API; см. `native/README.md` | `docs/screenshots/desktop-*.png` |
 | **T2 Miranda** | `/miranda/*` — модуль backend + клиенты | Корпоративный мессенджер внутри дилерской группы: адресные беседы, группы контактов, аккаунты точек/касс, очередь устройств в Admin Center; см. `docs/MIRANDA.md` | `docs/screenshots/miranda-icon.png` |
 
 Каждый канал проходит один и тот же шов авторизации — `auth/principal.ts`
@@ -85,13 +85,37 @@ T2 Sales — одна рабочая среда, доступная через *
 применяются сервером одинаково, поэтому сотрудник получает одни и те же
 права и данные независимо от того, откуда вошёл.
 
+### Сайт (браузер, телефон + пароль)
+
+| Главная: день сети | Профиль: смена и прогресс месяца |
+| --- | --- |
+| ![Сайт: главная](docs/screenshots/web-home.png) | ![Сайт: профиль](docs/screenshots/web-profile.png) |
+
+| График команды на месяц | Супервайзер: сектор под контролем |
+| --- | --- |
+| ![Сайт: график](docs/screenshots/web-schedule.png) | ![Сайт: обзор сектора](docs/screenshots/web-supervisor.png) |
+
+### Нативный клиент (Windows, Kotlin + Compose)
+
+| Главная: день сети | Профиль: смена и прогресс месяца |
+| --- | --- |
+| ![Нативный клиент: главная](docs/screenshots/desktop-home.png) | ![Нативный клиент: профиль](docs/screenshots/desktop-profile.png) |
+
+| График команды на месяц | Супервайзер: сектор под контролем |
+| --- | --- |
+| ![Нативный клиент: график](docs/screenshots/desktop-schedule.png) | ![Нативный клиент: обзор сектора](docs/screenshots/desktop-supervisor.png) |
+
+Скриншоты сняты на живом окружении одной и той же сети — видно, что
+нативный клиент повторяет веб-интерфейс экран в экран, плюс добавляет
+свой индикатор транспорта («Прямое»/Relay) в шапке.
+
+### Значки приложений
+
 | Electron (ПК) | Android (Capacitor) | Нативный клиент | T2 Miranda |
 | --- | --- | --- | --- |
 | <img src="docs/screenshots/t2-desktop-icon.png" width="200" alt="T2 Sales для Windows"> | <img src="docs/screenshots/t2-android-icon.png" width="200" alt="T2 Sales для Android"> | <img src="docs/screenshots/t2-native-icon.png" width="200" alt="T2 Sales Native"> | <img src="docs/screenshots/miranda-icon.png" width="200" alt="T2 Miranda"> |
 
-> Значки — реальные иконки приложений из исходников. Живые скриншоты экранов
-> каждого клиента можно положить в `docs/screenshots/` по аналогии с
-> телеграм-примерами выше (тот же демо-режим, синтетические данные).
+> Значки — реальные иконки приложений из исходников.
 
 ---
 
