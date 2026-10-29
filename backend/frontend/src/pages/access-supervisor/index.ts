@@ -498,7 +498,7 @@ export function showMfaLoginChallenge(mfaToken: string, methods: string[]): void
             <input id="mfaLoginCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="20">
           </div>
           <button id="mfaLoginSubmit" class="btn-main" style="margin-top:8px" onclick="submitMfaLoginCode()">Подтвердить</button>
-          ${hasWebauthn ? '<button id="mfaLoginWebauthn" class="btn-ghost" style="margin-top:10px" onclick="submitMfaLoginWebauthn()">🔑 Войти с помощью passkey</button>' : ''}
+          ${hasWebauthn ? '<button id="mfaLoginWebauthn" class="btn-ghost" style="margin-top:10px" data-on="submitMfaLoginWebauthn">🔑 Войти с помощью passkey</button>' : ''}
         </div>`;
   const input = document.getElementById('mfaLoginCode') as HTMLInputElement | null;
   input?.focus();
@@ -599,7 +599,7 @@ export function showMfaEnrollmentGate(): void {
             аутентификатором (Google Authenticator, 1Password и т.п.) и
             введите код, чтобы продолжить.
           </div>
-          <button class="btn-main" style="margin-top:8px" onclick="submitMfaWebauthnEnrollStart()">🔑 Зарегистрировать passkey</button>
+          <button class="btn-main" style="margin-top:8px" data-on="submitMfaWebauthnEnrollStart">🔑 Зарегистрировать passkey</button>
           <button class="btn-ghost" style="margin-top:10px" onclick="submitMfaTotpEnrollStart()">Настроить через приложение (TOTP)</button>
           <div class="bind-foot" style="position:relative;margin-top:14px"><a href="javascript:void(0)" onclick="logoutFromMfaGate()">Выйти</a></div>
         </div>`;
