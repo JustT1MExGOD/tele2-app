@@ -1,536 +1,151 @@
-# T2 Sales
+<div align="center">
 
-[Каталог документации](docs/README.md) · [Быстрый старт](docs/DEVELOPMENT.md) · [История изменений](CHANGELOG.md)
+<img src="./assets/t2-sales-main-hero.png" width="100%" alt="T2 Sales — цифровая операционная платформа">
 
-Операционная система розничных продаж сети T2
-**Telegram Mini App · Браузер/PWA · Fastify · PostgreSQL · Grammy · Railway**
+<br>
 
-[![version](https://img.shields.io/badge/version-20.85.0-2AABEE?style=flat-square)](#21-история-версий)
-[![ci](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
-![node](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)
-![typescript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)
-![fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)
-![postgres](https://img.shields.io/badge/PostgreSQL-Railway-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+[![Website](https://img.shields.io/badge/WEBSITE-t2sales.ru-1877F2?style=for-the-badge)](https://t2sales.ru)
+[![CI](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml/badge.svg)](https://github.com/JustT1MExGOD/tele2-app/actions/workflows/ci.yml)
+![Node.js](https://img.shields.io/badge/Node.js-22.x-0B2346?style=for-the-badge&logo=node.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.7-1677EA?style=for-the-badge&logo=typescript&logoColor=white)
 
-> Рабочая среда розничной команды: план, факт, график, касса, BFQ, live-сеть, обучение, роли, отчёты и AI Copilot — в одном касании.
+### ONE ECOSYSTEM. ONE WORKSPACE.
 
-[📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [📚 Все документы](docs/README.md)
+**ПРОДАЖИ · КОМАНДА · РЕЗУЛЬТАТ**
+
+Цифровая операционная платформа для управления
+розничными продажами, сотрудниками и аналитикой.
+
+[🌐 Открыть сайт](https://t2sales.ru) ·
+[📚 Документация](docs/README.md) ·
+[⚡ Быстрый старт](docs/DEVELOPMENT.md)
+
+---
+
+### BUILT FOR PERFORMANCE.
+
+Telegram Mini App · Web / PWA · Android · Windows
+
+</div>
+
+## 00 / T2 SALES В ДЕЙСТВИИ
+
+**Одна экосистема. Все процессы под контролем.**
+
+T2 Sales объединяет продажи, планы, рабочие смены,
+кассу, команду, обучение, отчёты и AI Copilot
+в единой рабочей среде.
+
+### РЕАЛЬНЫЕ ЭКРАНЫ ПРИЛОЖЕНИЯ
+
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="docs/screenshots/home-command-center.png" width="100%" alt="Командный центр">
+<br><b>КОМАНДНЫЙ ЦЕНТР</b>
+</td>
+<td width="50%" align="center">
+<img src="docs/screenshots/plan-day.png" width="100%" alt="План продаж">
+<br><b>ПЛАН ПРОДАЖ</b>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="docs/screenshots/profile-shift-live.png" width="100%" alt="Рабочая смена">
+<br><b>РАБОЧАЯ СМЕНА</b>
+</td>
+<td align="center">
+<img src="docs/screenshots/schedule-month.png" width="100%" alt="График команды">
+<br><b>ГРАФИК КОМАНДЫ</b>
+</td>
+</tr>
+</table>
+
+> Скриншоты взяты из локального демо-окружения
+> с синтетическими тестовыми данными.
+
+---
+
+## 01 / ВОЗМОЖНОСТИ
+
+| 📊 Аналитика | 🎯 Планирование | 👥 Команда |
+| :--- | :--- | :--- |
+| Результаты и показатели | План, факт и цели | Роли и процессы |
+
+| 🕒 Рабочие смены | 💬 Коммуникации | ✨ AI Copilot |
+| :--- | :--- | :--- |
+| Смены и расписание | Чаты и уведомления | Интеллектуальные инструменты |
+
+---
+
+## 02 / ЕДИНАЯ ЭКОСИСТЕМА
+
+| Платформа | Назначение |
+| :--- | :--- |
+| Telegram Mini App | Работа внутри Telegram |
+| Web / PWA | Доступ через браузер |
+| Android | Мобильное приложение |
+| Windows | Нативный десктоп-клиент |
+| T2 Miranda | Корпоративные коммуникации |
 
 <details>
-<summary>Содержание: выбрать версию</summary>
+<summary><b>📱 Посмотреть дополнительные экраны</b></summary>
 
-- [Интерфейс в демо-окружении](#интерфейс-в-демо-окружении)
-- [Клиенты: веб, десктоп, Android, нативные и T2 Miranda](#клиенты-веб-десктоп-android-нативные-и-t2-miranda)
-- [Проект за минуту](#проект-за-минуту)
-- [1. Зачем это существует](#1-зачем-это-существует)
-- [2. Кому и что даёт](#2-кому-и-что-даёт)
-- [3. Стек и инфраструктура](#3-стек-и-инфраструктура)
-- [4. Архитектура](#4-архитектура)
-- [5. Структура репозитория](#5-структура-репозитория)
-- [6. Модель данных](#6-модель-данных)
-- [7. Роли и доступ](#7-роли-и-доступ)
-- [8. Функциональность по модулям](#8-функциональность-по-модулям)
-- [9. Метрики продаж](#9-метрики-продаж)
-- [10. Планирование](#10-планирование)
-- [11. Касса](#11-касса)
-- [12. Telegram-бот и отчёты](#12-telegram-бот-и-отчёты)
-- [13. Обучение](#13-обучение)
-- [14. HTTP API](#14-http-api)
-- [15. Переменные окружения](#15-переменные-окружения)
-- [16. Локальный запуск](#16-локальный-запуск)
-- [17. Деплой на Railway](#17-деплой-на-railway)
-- [18. Миграции SQL](#18-миграции-sql)
-- [19. Mini App в BotFather](#19-mini-app-в-botfather)
-- [20. Типовые сбои](#20-типовые-сбои)
-- [21. История версий](#21-история-версий)
-- [22. Дорожная карта](#22-дорожная-карта)
-- [23. Соглашения по разработке](#23-соглашения-по-разработке)
-- [24. Безопасность](#24-безопасность)
-- [25. Чеклист запуска с нуля](#25-чеклист-запуска-с-нуля)
+### WEB / PWA
+
+| Главная | Супервайзер |
+| :---: | :---: |
+| <img src="docs/screenshots/web-home.png" width="100%"> | <img src="docs/screenshots/web-supervisor.png" width="100%"> |
+
+### ANDROID
+
+| Главная | План |
+| :---: | :---: |
+| <img src="docs/screenshots/android-home.png" width="100%"> | <img src="docs/screenshots/android-plan.png" width="100%"> |
+
+### WINDOWS
+
+| Главная | Профиль |
+| :---: | :---: |
+| <img src="docs/screenshots/desktop-home.png" width="100%"> | <img src="docs/screenshots/desktop-profile.png" width="100%"> |
 
 </details>
 
-## Интерфейс в демо-окружении
+---
 
-| Главная: состояние сети | Профиль: текущая смена |
-| --- | --- |
-| ![Сводка состояния сети](docs/screenshots/home-command-center.png) | ![План и факт открытой смены](docs/screenshots/profile-shift-live.png) |
+## 03 / ТЕХНОЛОГИИ
 
-| План дня | График команды |
-| --- | --- |
-| ![План дня по метрикам](docs/screenshots/plan-day.png) | ![Месячный график команды](docs/screenshots/schedule-month.png) |
+<div align="center">
 
-Скриншоты сняты в изолированном локальном демо-окружении на синтетических тестовых данных (вымышленные имена и цифры) — не с прода.
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Fastify](https://img.shields.io/badge/Fastify-5-000000?style=for-the-badge&logo=fastify)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![Railway](https://img.shields.io/badge/Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)
+
+</div>
 
 ---
 
-## Клиенты: веб, десктоп, Android, нативные и T2 Miranda
+## 04 / ДОКУМЕНТАЦИЯ
 
-T2 Sales — одна рабочая среда, доступная через **пять каналов** с тем же
-бэкендом, той же БД и той же моделью доступа. Один и тот же экран
-(смена, план, график, касса, чат) открывается и в браузере, и в окне
-настольного приложения, и на телефоне — сотрудник выбирает, что удобно.
-
-| Канал | Технология | Что это | Скрин |
-|------|------------|---------|-------|
-| **Веб / Telegram Mini App** | `frontend/index.html`, SPA поверх того же API | Основной интерфейс: продажи, смены, планы, касса, чат, алерты, обучение — тот же код, что показан на скриншотах выше | `docs/screenshots/*` |
-| **Сайт + PWA** | Та же `frontend/`, браузер без Telegram | Полный интерфейс в обычном браузере (телефон+пароль) и как иконка PWA на домашнем экране | `docs/screenshots/web-*.png` |
-| **Windows-десктоп (Electron, legacy)** | `desktop/` — Electron-обёртка веб-фронтенда | Бывший стационарный ПК-клиент сети: то же окно, что и браузер, плюс управление соединением (DIRECT/RELAY), диагностика и авто-обновления. **Больше не поддерживается и не обновляется** — на Windows ставьте нативный клиент | `docs/screenshots/t2-desktop-icon.png` |
-| **Android (Capacitor / RuStore)** | `android/` — WebView-shell того же веб-приложения | Продакшн-приложение в RuStore, тот же интерфейс и функционал, что и веб, в мобильной раскладке с нижней навигацией | `docs/screenshots/android-*.png` |
-| **Нативные клиенты (Windows + Android)** | `native/` — Kotlin Multiplatform + Compose | Полноценный отдельный клиент (не веб-обёртка): свои Compose-экраны под Windows и Android, управление соединением (DIRECT/RELAY), та же серверная БД и API; см. `native/README.md` | `docs/screenshots/desktop-*.png` |
-| **T2 Miranda** | `/miranda/*` — модуль backend + клиенты | Корпоративный мессенджер внутри дилерской группы: адресные беседы, группы контактов, аккаунты точек/касс, очередь устройств в Admin Center; см. `docs/MIRANDA.md` | `docs/screenshots/miranda-*.png` |
-
-Каждый канал проходит один и тот же шов авторизации — `auth/principal.ts`
-резолвит identity (Telegram initData или cookie-сессия), org-scope и роли
-применяются сервером одинаково, поэтому сотрудник получает одни и те же
-права и данные независимо от того, откуда вошёл.
-
-### Сайт (браузер, телефон + пароль)
-
-| Главная: день сети | Профиль: смена и прогресс месяца |
-| --- | --- |
-| ![Сайт: главная](docs/screenshots/web-home.png) | ![Сайт: профиль](docs/screenshots/web-profile.png) |
-
-| График команды на месяц | Супервайзер: сектор под контролем |
-| --- | --- |
-| ![Сайт: график](docs/screenshots/web-schedule.png) | ![Сайт: обзор сектора](docs/screenshots/web-supervisor.png) |
-
-### Нативный клиент (Windows, Kotlin + Compose)
-
-| Главная: день сети | Профиль: смена и прогресс месяца |
-| --- | --- |
-| ![Нативный клиент: главная](docs/screenshots/desktop-home.png) | ![Нативный клиент: профиль](docs/screenshots/desktop-profile.png) |
-
-| График команды на месяц | Супервайзер: сектор под контролем |
-| --- | --- |
-| ![Нативный клиент: график](docs/screenshots/desktop-schedule.png) | ![Нативный клиент: обзор сектора](docs/screenshots/desktop-supervisor.png) |
-
-Скриншоты сняты на живом окружении одной и той же сети — видно, что
-нативный клиент повторяет веб-интерфейс экран в экран, плюс добавляет
-свой индикатор транспорта («Прямое»/Relay) в шапке.
-
-### Android (Capacitor / RuStore)
-
-| Главная: день сети | План дня по точкам |
-| --- | --- |
-| ![Android: главная](docs/screenshots/android-home.png) | ![Android: план дня](docs/screenshots/android-plan.png) |
-
-| Профиль: смена и прогресс | График команды на месяц |
-| --- | --- |
-| ![Android: профиль](docs/screenshots/android-profile.png) | ![Android: график](docs/screenshots/android-schedule.png) |
-
-Та же кодовая база веб-интерфейса в WebView-shell: на узком экране
-боковая навигация сворачивается в нижнюю панель, сетки перестраиваются
-в одну колонку, график прокручивается горизонтально.
-
-### T2 Miranda (корпоративный мессенджер)
-
-| Диалог с точкой | Контакты: группа «Мск-Точки» |
-| --- | --- |
-| ![T2 Miranda: диалог с точкой](docs/screenshots/miranda-chat.png) | ![T2 Miranda: список контактов](docs/screenshots/miranda-contacts.png) |
-
-### Значки приложений
-
-| Electron (ПК, legacy) | Android (Capacitor) | Нативный клиент | T2 Miranda |
-| --- | --- | --- | --- |
-| <img src="docs/screenshots/t2-desktop-icon.png" width="200" alt="T2 Sales для Windows"> | <img src="docs/screenshots/t2-android-icon.png" width="200" alt="T2 Sales для Android"> | <img src="docs/screenshots/t2-native-icon.png" width="200" alt="T2 Sales Native"> | <img src="docs/screenshots/miranda-icon.png" width="200" alt="T2 Miranda"> |
-
-> Значки — реальные иконки приложений из исходников.
+| Раздел | Ссылка |
+| :--- | :--- |
+| Архитектура | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| API | [API.md](docs/API.md) |
+| Безопасность | [SECURITY.md](docs/SECURITY.md) |
+| Разработка | [DEVELOPMENT.md](docs/DEVELOPMENT.md) |
+| Возможности | [FEATURES.md](docs/FEATURES.md) |
+| История версий | [CHANGELOG.md](CHANGELOG.md) |
 
 ---
 
-## Проект за минуту
+<div align="center">
 
-- **Что это** — веб-приложение внутри Telegram (Mini App), с 20.35.0-20.47.0 также доступное как обычный сайт (телефон+пароль) и как standalone PWA/иконка на экране iPhone — тот же интерфейс и API, три канала входа. Сотрудники магазинов пользуются им вместо блокнота, Google Sheets и переписки в чате.
-- **Кто пользуется** — продавец на точке (внёс продажу, открыл смену), управляющий сетью (видит всё, раздаёт задачи), супервайзер нескольких сетей, админ.
-- **Как это устроено** — Telegram передаёт подписанную личность пользователя, либо браузер несёт cookie-сессию (телефон+пароль) → сервер на Fastify проверяет identity и права через общий шов (`auth/principal.ts`) → PostgreSQL хранит единственную версию правды → бот сам присылает отчёты в чат.
-- **Почему это не просто CRUD** — офлайн-очередь продаж, живая карта сети, AI-объяснение просадок, геймификация обучения, аудит каждого чувствительного действия.
+### T2 SALES
 
-**Версии в исходном архиве:** backend `20.57.5`, desktop `20.56.7`, relay `20.56.1`. Статус рабочей среды отдельно не проверялся. **Часовой пояс бизнес-дат:** `Europe/Moscow`. [Отчёт об исправлениях](IMPLEMENTATION-20.57.5.md).
+**TECHNOLOGY. PEOPLE. PERFORMANCE.**
 
----
+[![Explore](https://img.shields.io/badge/EXPLORE_T2_SALES-t2sales.ru-1877F2?style=for-the-badge)](https://t2sales.ru)
 
-## 1. Зачем это существует
-
-Google Sheets + переписка в Telegram живут на одной точке и трёх людях. На сети точек:
-
-| Боль | Почему Sheets не тянет |
-|------|------------------------|
-| Разные «истины» | копии файла, формулы, ручной ввод |
-| Нет ролей | все правят всё или не видят ничего |
-| Нет офлайна | продажа потерялась без Wi‑Fi |
-| Нет сессии смены | непонятно, кто реально на точке |
-| Отчёты вручную | копипаста, ошибки, задержки |
-| Онбординг | «почитай чат за месяц» |
-
-**T2 Sales** — источник истины: сотрудник работает в Mini App, бот уведомляет, PostgreSQL хранит факт, Railway держит API.
-
----
-
-## 2. Кому и что даёт
-
-### Сотрудник (`employee`, `trainee`, `senior`)
-
-- Профиль: смена, дневной/месячный план, BFQ, геймификация (XP/уровень/стрик), история смен
-- Продажи только за себя, мульти-метрики, дельты
-- Быстрый ввод текстом: «две симки и одно mnp» (NLP-разбор)
-- Смена-сессия: open/close + гео + план/факт живьём, пока смена открыта, заметка-передача следующему на этой точке
-- Свои задачи (назначает manager) — принять в работу / закрыть
-- График, план точек (дневной план — теперь считается от месячного плана точки, не от долей сотрудников), промокоды РТК, калькуляторы (комбо/школа)
-- Кастомная аватарка (видна и в «Команде»)
-- Офлайн-очередь продаж (без сети — уходит при появлении Wi‑Fi)
-- Обязательное обучение с персонажем-маскотом (без skip в первый раз)
-- Поддержка / FAQ
-
-### Старший продавец (`senior`)
-
-- Всё сотрудника + касса, BFQ, заявки на доступ, CSV-экспорты, кастомные названия точек
-- **Без** Command Center и кабинета супервайзера (видимость аналитики — отдельный флаг от операционных прав)
-- **Без** продаж/дельт за ДРУГОГО сотрудника — только за себя, как обычный сотрудник (`canWriteSalesForOthers()`, 20.13.0)
-
-### Управляющий (`manager`)
-
-- Всё senior +, а не «операционно то же самое» — именно на этой границе
-- **Command Center** — единый экран «что происходит / где проблема / что делать» вместо трёх разрозненных мест
-- **Задачи** — создать/назначить с контекстом прямо из просадки или алерта, тред комментариев
-- **Профиль точки** / **Профиль сотрудника** — план/факт/прогноз/тренд/Health Score на одном экране
-- **Алерты 2.0** — полный жизненный цикл (open→in_progress→acked/dismissed), включая аномалии (z-score против прогноза, не только план)
-- График (bulk, сводная таблица месяца по всей команде), месячные планы сотрудников и точек
-- Чужие продажи и дельты (в своей сети), Live-карта сети
-- Отдельный курс обучения manager
-
-<a id="admin"></a>
-
-### Администратор
-
-- Всё manager + тикеты поддержки (эскалация к разработчику), назначение ролей (только строго ниже своей), переключатель сети в UI, кабинет супервайзера в режиме просмотра, заведение новых сетей без SQL
-
-<a id="supervisor"></a>
-
-### Супервайзер
-
-- Свой сектор целиком (несколько сетей сразу) — отдельный визуал, 4 своих вкладки (Обзор/Точки/Люди/Тренд), выполнение и прогноз месячного плана по сектору
-
-### Сеть
-
-- Единые микро/итог отчёты в чат (расписание — по точке, не глобальное), автоанонс версий в отдельный Telegram-канал
-- Еженедельная/месячная сводка по сети (страница «Отчёты»), экспорт / BI
-- Новые сети и точки без единой строчки SQL — через UI
-
----
-
-## 3. Стек и инфраструктура
-
-| Слой | Технология | Зачем |
-|------|------------|-------|
-| Клиент (веб/Telegram) | Telegram WebApp, `index.html` | UI, offline-queue, tutorial; тот же код открывается и как обычный мобильный веб |
-| Клиент (Windows, Electron) | `desktop/` — Electron-обёртка того же веб-фронтенда | Legacy: снят с поддержки, заменён нативным клиентом |
-| Клиент (Android, Capacitor) | `android/` — Capacitor-обёртка того же веб-фронтенда | Продакшн-приложение, опубликовано в RuStore |
-| Клиент (iOS, Capacitor) | `android/ios/` — та же Capacitor-обёртка, iOS-цель | Разработка отложена: собирается в CI (симулятор), не опубликовано, брендинг не доведён — см. [docs/IOS.md](docs/IOS.md) |
-| Нативные клиенты (Windows и Android) | `native/` — Kotlin Multiplatform + Compose, отдельная кодовая база | Основной ПК-клиент на Windows; развивается параллельно вебу/Capacitor; см. [native/README.md](native/README.md) |
-| API | Node.js 22, Fastify 5, TypeScript | REST + static |
-| БД | PostgreSQL (Railway) | источник истины |
-| Бот | Grammy | отчёты, напоминания, notify |
-| Cron | setInterval, логика МСК | микро/итог, алерты |
-| AI | Groq API (`llama-3.3-70b-versatile`) | итог смены + гипотеза при просадке — бесплатно, без vendor lock-in |
-| Хостинг | Railway / Nixpacks | API + фронт |
-
-Клиент **не** ходит в БД: Mini App → подписанная `X-Telegram-Init-Data` → API → Postgres.
-
----
-
-## 4. Архитектура
-
-```mermaid
-flowchart TB
-    C["Telegram Mini App · веб/PWA · Android Capacitor · нативный Kotlin (ПК) · T2 Miranda"] --> A["Подтверждение личности и прав"]
-    A --> H["HTTP API"]
-    H --> B["Бизнес-правила"]
-    B --> D["Репозитории данных"]
-    D --> P[("PostgreSQL")]
-```
-
-Клиент **не** ходит в БД напрямую — только через API. Полный разбор слоёв
-и живой справочник структуры — **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
-
----
-
-## 5. Структура репозитория
-
-Полное дерево `backend/src/` (layered-структура: `api/`, `core/`, `data/`,
-`platform/`, `integrations/`, `auth/`, `cron/`, `workers/`, `shared/`,
-`utils/`) — **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
-
----
-
-## 6. Модель данных
-
-| Таблица | Смысл |
-|--------|--------|
-| `organizations` | сеть точек — branding, `sector_id`, `chat_id`/`sales_thread_id`/`reports_thread_id` |
-| `sectors` | группа сетей, назначается супервайзеру целиком; `dealer_id` (21.0) — кто владеет |
-| `dealers` | компания-владелец сектора (ООО/ИП, 21.0) — только ownership-запись, без входа/роли |
-| `stores` | точки: code, color, `org_id`, `display_name` (кастомное название, 19.7.0), micro-report расписание |
-| `employees` | ФИО; поля `telegram_id` (уникальное), `role`, `access_status`, `org_id`, `avatar_data`/`avatar_mime` (19.7.0) |
-| `schedules` | смена на день (UNIQUE employee+date) |
-| `sales` | факт метрик (аддитивная запись, единая точка входа — `applySaleUpsert()`) |
-| `sales_audit` | аудит правок метрик (кто/когда/сколько) |
-| `sales_events` | сырые события продаж — источник точного heatmap по часу |
-| `employee_month_plans` | месячный план человека |
-| `store_month_plans` | месячный план точки — независимый ручной ввод (не доля от планов сотрудников, с 15.13.0) |
-| `store_plans` | материализованный дневной снапшот плана точки (кэш для BFQ/live/отчётов, крон 6:00 МСК) |
-| `store_forecasts` | кэш прогноза (SES + сезонность по дню недели) |
-| `store_cash` | факт / 1С |
-| `shift_sessions` | open/close смены, handover_note, гео |
-| `tasks` / `task_comments` | задачи из просадки/алерта, тред комментариев |
-| `smart_alerts` | Alerts 2.0 — полный жизненный цикл, включая `anomaly_vs_forecast` |
-| `rtk_promocodes` | пул промокодов, org-scoped |
-| `announcements` / `announcement_reads` | объявления сети + кто прочитал |
-| `channels` / `channel_messages` | внутренние каналы сети |
-| `access_requests` | заявки на доступ (org-scoped по выбору при регистрации) |
-| `support_*` | тикеты, FAQ, вложения, шаблоны (эскалация к разработчику, admin-only) |
-| `offline_sync_log` | идемпотентность офлайн-очереди по `client_id` |
-| `cron_send_log` | claim-защита от повторной отправки авто-отчётов/напоминаний |
-| `ai_audit` | лог AI Copilot: kind (`shift_summary`/`dip_comment`/`forecast_summary`), employee/store, prompt, response, model |
-| `app_settings` | служебные ключ-значение (напр. `last_announced_version`) |
-| `corporate_accounts` | T2 Miranda — аккаунты мессенджера (личные по `employee_id`, точки/кассы по `phone`+`account_name`); `display_label`, `device_exclusive`, `is_active`, `presence_override` |
-| `miranda_devices` + привязки | Привязка устройства к аккаунту: `pending` → `active`/`revoked`, авто-approve первого личного устройства; см. [docs/MIRANDA.md](docs/MIRANDA.md) |
-| `miranda_contact_groups` + `..._members` | Общие для дилера группы контактов, вложенные (`parent_group_id`); состав — по корпоративным аккаунтам |
-| `conversations` + `messages` + `attachments` | Miranda-мессенджер: беседы (direct/group), сообщения по `clientMessageId` (идемпотентно), вложения, `last_read_message_id` |
-
-Критичные UNIQUE: `schedules(employee_id, work_date)`, `store_cash(store_id, cash_date)`,
-`employees.telegram_id`, upsert-ключ `sales`, partial unique на одну открытую
-`shift_sessions` на сотрудника, `corporate_accounts(employee_id, store_id)`
-(личный аккаунт не дублируется на одну точку).
-
----
-
-## 7. Роли и доступ
-
-Полная лестница (с 15.9.0): `trainee < employee < senior < manager < supervisor < admin`
-(`ROLE_LEVEL` в `auth/principal.ts`, см. [ARCHITECTURE.md](docs/ARCHITECTURE.md)).
-Назначить можно только роль строго ниже своей (`canAssignRole()`) — admin
-без ограничений.
-
-| role | Права |
-|------|--------|
-| `trainee` | стажёр — минимум прав, растёт до `employee` |
-| `employee` | свои продажи, свой план, смена-сессия |
-| `senior` | операционно как `manager` (сотрудники/точки/график/касса/экспорты), но **без** продаж за другого сотрудника (`canWriteSalesForOthers()`, 20.13.0) и намеренно **без** Command Center и кабинета супервайзера — разделены «операционные права» и «видимость аналитики» |
-| `manager` | всё senior + продажи за другого сотрудника, Command Center, Store/Employee Profile, алерты, задачи |
-| `admin` | всё manager + поддержка (эскалация), назначение ролей, переключатель сети, кабинет супервайзера |
-| `supervisor` | свой сектор (несколько сетей) целиком — отдельный визуал, отдельные 4 вкладки, не пересекается с обычными 5 |
-
-| access_status | UI |
-|---------------|-----|
-| `none` | регистрация (пикер сети → форма заявки) |
-| `pending` | ожидание одобрения |
-| `rejected` / `blocked` | отказ |
-| `active` | полный доступ по своей роли |
-
-**Auth — два подтверждённых канала**: подписанная Telegram initData
-(HMAC на сервере) или браузерная cookie-сессия (телефон+пароль, с
-20.35.0), никогда через голый заголовок (см. §24). Оба резолвятся в
-identity через общий `identities`-слой (20.48.0). `X-Telegram-Id` без
-initData работает лишь в локальной разработке или при явном
-`ALLOW_INSECURE_AUTH=true`.
-
-Мультитенантность: `organizations` (= «сеть точек», с `sector_id`/`chat_id`/
-`sales_thread_id`/`reports_thread_id`) группируются в `sectors` — их видит
-целиком `supervisor` через `supervisor_sectors`. Почти все read/write роуты
-скоуплены по `org_id` через `resolveViewOrgId()`/`assertStoreInOrg()`/
-`assertEmployeeInOrg()`; admin может явно переключить сеть просмотра
-переключателем в UI (`?org_id=`/`body.org_id`), остальные роли — только
-своя сеть, с одним исключением: собственная запись (продажа/смена) видна
-всегда, даже если сегодня сотрудник работает на точке чужой сети внутри
-той же организации («подмена»).
-
-Восстановление доступа admin при инциденте (SQL, не рутинная операция) —
-**[docs/RUNBOOK.md](docs/RUNBOOK.md#восстановление-доступа-admin)**.
-
----
-
-## 8. Функциональность по модулям
-
-Нижняя навигация (5 вкладок): Главная · План · График · Профиль · Команда
-(supervisor — отдельные 4: Обзор · Точки · Люди · Тренд). Разбор каждого
-экрана — **[docs/FEATURES.md — навигация](docs/FEATURES.md#навигация)**.
-
-Отдельно от вкладок: внутренний чат сотрудников (`/chat`,
-[docs/CHAT.md](docs/CHAT.md)) и корпоративный мессенджер **T2 Miranda**
-(`/miranda/*` — беседы, группы контактов по дилеру, аккаунты точек/касс и
-управление в Admin Center, [docs/MIRANDA.md](docs/MIRANDA.md)).
-
----
-
-## 9. Метрики продаж
-
-Полный список метрик и формулы расчёта (комбо/школа) —
-**[docs/FEATURES.md — метрики продаж](docs/FEATURES.md#метрики-продаж)**.
-
----
-
-## 10. Планирование
-
-Формулы дневного плана сотрудника/точки, материализация снапшота —
-**[docs/FEATURES.md — планирование](docs/FEATURES.md#планирование)**.
-
----
-
-## 11. Касса
-
-```text
-Δ = cash_fact − (cash_1c + 2000)
-```
-
----
-
-## 12. Telegram-бот и отчёты
-
-Расписание по точке, itog-альбом из 3 картинок, AI Copilot в отчёте,
-защита от задвоенной отправки — **[docs/FEATURES.md — бот и отчёты](docs/FEATURES.md#telegram-бот-и-отчёты)**.
-Пайплайн рендера — **[docs/REPORT_IMAGE.md](docs/REPORT_IMAGE.md)**.
-
----
-
-## 13. Обучение
-
-Персонаж-маскот «Арбузыч», два трека (employee/manager), dry-run практика —
-**[docs/FEATURES.md — обучение](docs/FEATURES.md#обучение)**.
-
----
-
-## 14. HTTP API
-
-Полная таблица эндпоинтов по группам, с указанием файла-обработчика —
-**[docs/API.md](docs/API.md)**. Auth: `X-Telegram-Init-Data`
-(подписанный, прод) — см. §24. Каждый роут, отдающий чужие/сетевые
-данные, гейтится `requireAuth`/`requireActive`/`requireManager`/
-`requireSupervisor` + org-scope — см. §7, §24.
-
----
-
-## 15. Переменные окружения
-
-Полная таблица — **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
-
----
-
-## 16. Локальный запуск
-
-Установка, запуск, прогон тестов на одноразовом Postgres —
-**[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**. В CI
-(`.github/workflows/ci.yml`) то же самое происходит автоматически на
-каждый push.
-
----
-
-## 17. Деплой на Railway
-
-1. Root Directory = **`backend`**
-2. Variables: БД, токен, chat ids
-3. Build: `npm ci && npm run build`
-4. Start: `npm start`
-5. Health: `/health`
-6. **Replicas = 1**
-7. **Деплой ждёт зелёный CI** (с 17.3.0) — `checkSuites: true` на deployment trigger сервиса (Railway GraphQL API, `deploymentTriggerUpdate`, настройки нет в `railway.json` — только через API/дашборд). Красный `.github/workflows/ci.yml` теперь блокирует деплой, а не просто сигнализирует постфактум
-
-Лог успеха: серия `✅ ... routes registered` (по одной на каждый модуль
-`routes-*.ts`), `📦 Применены миграции: ...` (если были новые), `🚀 Сервер на 0.0.0.0:…`, `🤖 Bot polling started`.
-
----
-
-## 18. Миграции SQL
-
-С 17.5.0 — система миграций (`backend/src/db/migrate.ts`), не ad hoc SQL
-руками на Railway. Пронумерованные файлы в `backend/migrations/`, трекинг —
-таблица `schema_migrations` (`name`, `applied_at`). **Важно**: именно
-`backend/migrations/`, не `sql/` на корне репозитория — Root Directory
-сервиса на Railway = `backend`, всё, что снаружи, в контейнер не попадает.
-
-**Новое изменение схемы**: создать `backend/migrations/00NN_описание.sql` со
-следующим номером — и всё, применяется само:
-
-- **На проде** — автоматически при следующем деплое, до открытия порта
-  (`index.ts`, до `app.listen()`). Если миграция падает — сервер не
-  стартует (лучше не поднимаемся, чем поднимаемся с неверной схемой);
-  `railway.json` → `restartPolicyType: ON_FAILURE` в этом случае будет
-  ретраить старт, так что упавшую миграцию нужно чинить новым коммитом,
-  а не полагаться на ретраи.
-- **В CI** (`.github/workflows/ci.yml`) — `npm run migrate` на чистом
-  Postgres на каждый push, тем самым же кодом, что и на проде.
-- **Локально** — `cd backend && npm run migrate` (нужен `DATABASE_URL` в
-  окружении).
-
-Файл уже применённой миграции задним числом не редактируется — новое
-изменение, даже мелкое, всегда новый номер.
-
-`backend/migrations/0001_baseline.sql` — снапшот схемы на момент введения
-системы (17.5.0), на самом проде НЕ исполнялся — `schema_migrations` там
-сразу засеяна записью об этом файле, чтобы не пытаться заново создать уже
-существующие таблицы. Исполняется только на чистой БД (CI, локальный тест).
-
----
-
-## 19. Mini App в BotFather
-
-Menu Button → URL `https://<service>.up.railway.app/`
-Открывать из Telegram. После деплоя — полное закрытие WebApp (кэш).
-
----
-
-## 20. Типовые сбои
-
-Полная таблица симптом → причина/действие —
-**[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**. Операционные
-процедуры (ротация `BOT_TOKEN`, восстановление доступа, откат миграции) —
-**[docs/RUNBOOK.md](docs/RUNBOOK.md)**.
-
----
-
-## 21. История версий
-
-Полная история сохранена в [CHANGELOG.md](CHANGELOG.md) и справочниках по эпохам. Backend, desktop и relay имеют независимые версии.
-
-## 22. Дорожная карта
-
-Подробные планы прошлых эпох и отметки их выполнения перенесены в [историческую дорожную карту](docs/archive/ROADMAP-HISTORY.md). Невыполненные рекомендации прохода 20.57.5 перечислены в [отчёте об исправлениях](IMPLEMENTATION-20.57.5.md). Предложения не следует считать уже реализованными возможностями.
-
-## 23. Соглашения по разработке
-
-Полный список — **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
-Коротко: роуты группируются по домену в `src/api/routes/` (см. §5), даты
-только МСК, схема БД только через `backend/migrations/`, `npm run
-check:no-direct-sql` держит Data Access Layer, версионирование — `MINOR` для функций и эпиков, `PATCH` для исправлений и рефакторинга. Анонсы добавляются для эпиков согласно [рабочему соглашению](CLAUDE.md).
-
----
-
-## 24. Безопасность
-
-Полный разбор (initData/HMAC, CORS, rate-limit/CSP, TypeBox-валидация,
-доступ к данным, журнал аудита, конкурентные изменения, область
-супервайзера, аутентификация и криптографическая защита) — **[docs/SECURITY.md](docs/SECURITY.md)**. Какие данные
-зашифрованы и почему — **[docs/DATA-SECURITY-ARCHITECTURE.md](docs/DATA-SECURITY-ARCHITECTURE.md)**.
-Архитектурные решения с альтернативами и причинами —
-**[docs/ADR/](docs/ADR/)**.
-
----
-
-## 25. Чеклист запуска с нуля
-
-1. Postgres — схема накатывается сама миграциями при первом старте (§18), руками ничего не создавать
-2. Настройки: `DATABASE_URL`, `BOT_TOKEN`, HTTPS `MINI_APP_URL`, `ADMIN_TELEGRAM_ID`, идентификаторы чата и темы сети; остальные условия — в [руководстве разработчика](docs/DEVELOPMENT.md)
-3. Deploy backend, 1 реплика, деплой ждёт зелёный CI (§17)
-4. BotFather Menu Button → URL сервиса
-5. Admin: `access_status='active'` + свой `telegram_id` (§7)
-6. Завести сеть (если не default) прямо в приложении — «Команда» → «Управление» → «Сети», без SQL
-7. Точки, сотрудники, график, месячные планы сотрудников и точек — дневной снапшот материализуется сам (§10)
-8. Mini App → обучение → тестовая продажа
-
----
-
-**T2 Sales** — смена, цифры, сеть и AI Copilot в одном приложении.
-
-[📐 Архитектура](docs/ARCHITECTURE.md) · [🔒 Безопасность](docs/SECURITY.md) · [🔌 API](docs/API.md) · [🛠 Разработка](docs/DEVELOPMENT.md) · [⬆ Наверх](#t2-sales)
-
-*Документация переработана по предоставленному архиву в сентябре 2026 года. Версии компонентов указаны в начале документа.*
+</div>
