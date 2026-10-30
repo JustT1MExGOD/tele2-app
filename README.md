@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/t2-sales-main-hero.png" width="100%" alt="T2 Sales — цифровая операционная платформа">
+<img src="./docs/screenshots/t2-sales-main-hero.png" width="100%" alt="T2 Sales — цифровая операционная платформа">
 
 <br>
 
