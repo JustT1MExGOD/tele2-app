@@ -83,7 +83,7 @@ private fun ComboCalc(onDismiss: () -> Unit) {
     var discount by remember { mutableStateOf("0") }
     var result by remember { mutableStateOf<Pair<String, String>?>(null) }
     SheetDialog("Расчёт комбо", onDismiss) {
-        Text("Формула T2:\nцена \u2212 скидка% + 28% от цены + 1950", color = T2Colors.hint, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
+        Text("Формула T2:\nцена \u2212 скидка% + 28% от цены + 2400", color = T2Colors.hint, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
         Field("Цена телефона, \u20BD", price, { v -> price = v.filter { it.isDigit() || it == '.' } }, placeholder = "29990", fill = T2Colors.surface2)
         Spacer(Modifier.height(14.dp))
         Field("Скидка, %", discount, { v -> discount = v.filter { it.isDigit() || it == '.' } }, fill = T2Colors.surface2)
@@ -93,8 +93,8 @@ private fun ComboCalc(onDismiss: () -> Unit) {
             val d = discount.toDoubleOrNull() ?: 0.0
             if (p <= 0) { T2Toast.show("Укажи цену", true); return@MainButton }
             val after = p * (1 - d / 100)
-            val total = (after + p * 0.28 + 1950).roundToLong()
-            result = "${rub(total)} \u20BD" to "${rub(p.roundToLong())} \u2212 ${d.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }}% = ${rub(after.roundToLong())}\n+ 28% (${rub((p * 0.28).roundToLong())}) + 1 950"
+            val total = (after + p * 0.28 + 2400).roundToLong()
+            result = "${rub(total)} \u20BD" to "${rub(p.roundToLong())} \u2212 ${d.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }}% = ${rub(after.roundToLong())}\n+ 28% (${rub((p * 0.28).roundToLong())}) + 2 400"
         }
         result?.let { (big, hint) -> ResultCard(big, hint) }
     }

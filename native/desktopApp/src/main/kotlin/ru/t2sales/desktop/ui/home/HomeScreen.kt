@@ -621,7 +621,7 @@ private fun QuickActionsSection(onNavigate: (Screen) -> Unit) {
 private fun ToolsSection(onNavigate: (Screen) -> Unit, onAbout: () -> Unit) {
     Section("Инструменты") {
         ListRow(Icons.Outlined.EmojiEvents, null, "BFQ", "Рейтинг качества за месяц") { onNavigate(Screen.Bfq) }
-        ListRow(Icons.Outlined.Calculate, null, "Расчёт комбо", "Телефон − скидка + 28% + 1950") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("combo") }
+        ListRow(Icons.Outlined.Calculate, null, "Расчёт комбо", "Телефон − скидка + 28% + 2400") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("combo") }
         ListRow(Icons.Outlined.School, null, "Калькулятор школа", "Телефон − 70% + 30% + 3600 + 3490") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("school") }
         ListRow(Icons.Outlined.LocalOffer, null, "Промокоды РТК", "Общий пул · скрытый список") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("promos") }
         ListRow(Icons.Outlined.GridView, null, "Heatmap часов", "Когда ставить сильного") { onNavigate(Screen.Heatmap) }

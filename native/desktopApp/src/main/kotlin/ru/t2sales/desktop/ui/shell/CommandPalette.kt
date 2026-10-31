@@ -91,7 +91,7 @@ fun CommandPaletteHost(container: AppContainer, role: String, isManager: Boolean
             tool("Динамика выполнения", "Все метрики", Screen.NetMonth)
             tool("История продаж", "Продажи по дням", Screen.History)
             tool("Поддержка", "Обращения", Screen.Support)
-            add(Cmd("Расчёт комбо", "Телефон − скидка + 28% + 1950", "Инструмент", "калькулятор") { ToolDialogs.open("combo") })
+            add(Cmd("Расчёт комбо", "Телефон − скидка + 28% + 2400", "Инструмент", "калькулятор") { ToolDialogs.open("combo") })
             add(Cmd("Калькулятор школа", "Телефон − 70% + 30% + 3600 + 3490", "Инструмент") { ToolDialogs.open("school") })
             add(Cmd("Промокоды РТК", "Общий пул", "Инструмент") { ToolDialogs.open("promos") })
             add(Cmd("Внести продажу", "Ctrl+N", "Действие", "добавить новая") { AddSaleState.open() })

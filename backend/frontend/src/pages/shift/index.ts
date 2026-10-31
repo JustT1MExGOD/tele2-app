@@ -39,7 +39,7 @@ export function openComboCalc(): void {
   if (modalBody) {
     modalBody.innerHTML = `
         <div class="empty" style="text-align:left;padding:0 0 12px;line-height:1.45">
-          Формула T2:<br><b>цена − скидка% + 28% от цены + 1950</b>
+          Формула T2:<br><b>цена − скидка% + 28% от цены + 2400</b>
         </div>
         <div class="field">
           <label>Цена телефона, ₽</label>
@@ -71,7 +71,7 @@ export function runComboCalc(): void {
     return;
   }
   const afterDisc = price * (1 - disc / 100);
-  const total = Math.round(afterDisc + price * 0.28 + 1950);
+  const total = Math.round(afterDisc + price * 0.28 + 2400);
   const el = document.getElementById('comboOut');
   if (!el) return;
   el.style.display = 'block';

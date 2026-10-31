@@ -80,11 +80,11 @@ private fun ComboCalc(onDismiss: () -> Unit) {
             val d = discount.toDoubleOrNull() ?: 0.0
             if (p <= 0) { Toaster.show("Укажи цену", true); return@MainButton }
             val after = p * (1 - d / 100)
-            val total = (after + p * 0.28 + 1950).roundToLong()
-            result = "${rub(total)} ₽" to "${rub(p.roundToLong())} − ${d.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }}% = ${rub(after.roundToLong())}\n+ 28% (${rub((p * 0.28).roundToLong())}) + 1 950"
+            val total = (after + p * 0.28 + 2400).roundToLong()
+            result = "${rub(total)} ₽" to "${rub(p.roundToLong())} − ${d.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }}% = ${rub(after.roundToLong())}\n+ 28% (${rub((p * 0.28).roundToLong())}) + 2 400"
         }
     }) {
-        Text("Формула T2:\nцена − скидка% + 28% от цены + 1950", color = T2Colors.hint, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
+        Text("Формула T2:\nцена − скидка% + 28% от цены + 2400", color = T2Colors.hint, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
         Field("Цена телефона, ₽", price, { v -> price = v.filter { it.isDigit() || it == '.' } }, keyboard = KeyboardType.Decimal)
         Spacer(Modifier.height(14.dp))
         Field("Скидка, %", discount, { v -> discount = v.filter { it.isDigit() || it == '.' } }, keyboard = KeyboardType.Decimal)

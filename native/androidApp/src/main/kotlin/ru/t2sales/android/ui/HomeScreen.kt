@@ -506,7 +506,7 @@ private fun ToolsSection(onAbout: () -> Unit) {
     Section("Инструменты") {
         ListRow(NavIcons.bfq, "BFQ", "Рейтинг качества за месяц") { Nav.open(Page.Bfq) }
         ListRow(NavIcons.trophy, "Топы", "Лучшие по каждой метрике за период") { Nav.open(Page.Leaderboard) }
-        ListRow(NavIcons.comboCalc, "Расчёт комбо", "Телефон − скидка + 28% + 1950") { ToolUi.open("combo") }
+        ListRow(NavIcons.comboCalc, "Расчёт комбо", "Телефон − скидка + 28% + 2400") { ToolUi.open("combo") }
         ListRow(NavIcons.schoolCalc, "Калькулятор школа", "Телефон − 70% + 30% + 3600 + 3490") { ToolUi.open("school") }
         ListRow(NavIcons.promos, "Промокоды РТК", "Общий пул · скрытый список") { ToolUi.open("promos") }
         ListRow(NavIcons.heatmap, "Heatmap часов", "Когда ставить сильного") { Nav.open(Page.Heatmap) }

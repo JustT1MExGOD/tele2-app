@@ -68,8 +68,8 @@ describe('Смена/live/калькуляторы (миграция frontend/js
     document.body.innerHTML += '<input id="comboPrice" value="10000"><input id="comboDiscount" value="10"><div id="comboOut" style="display:none"></div>';
     const { runComboCalc } = await import('../src/pages/shift/index.js');
     runComboCalc();
-    // 10000*0.9 + 10000*0.28 + 1950 = 9000+2800+1950 = 13750
-    expect(document.getElementById('comboOut')!.textContent).toContain('13 750');
+    // 10000*0.9 + 10000*0.28 + 2400 = 9000+2800+2400 = 14200
+    expect(document.getElementById('comboOut')!.textContent).toContain('14 200');
   });
 
   it('runSchoolCalc: считает по формуле школы', async () => {

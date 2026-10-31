@@ -150,7 +150,7 @@ const TUTORIAL_EMPLOYEE: TutorialStep[] = [
     chapter: 5,
     page: 'home',
     title: 'Комбо на пальцах',
-    text: 'На главной есть инструменты: BFQ, расчёт комбо, касса, live-сеть, промокоды. Комбо считается прямо на телефоне: цена минус скидка, плюс 28%, плюс 1950.',
+    text: 'На главной есть инструменты: BFQ, расчёт комбо, касса, live-сеть, промокоды. Комбо считается прямо на телефоне: цена минус скидка, плюс 28%, плюс 2400.',
     practice: [{ id: 'combo', label: '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> Открыть расчёт комбо' }]
   },
   {

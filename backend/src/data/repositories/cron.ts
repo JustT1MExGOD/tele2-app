@@ -39,9 +39,18 @@ export async function listStoresForReportSchedule(): Promise<{
   open_time_weekday: string | null; open_time_sunday: string | null;
 }[]> {
   const res = await query(
+    // Skip inactive stores (a closed point must stop spamming reports) and
+    // any test-fixture rows — TestFixtures stamps ids/codes with a `t17_`
+    // prefix, and while such a fixture is alive during a test run the prod
+    // cron would otherwise schedule real micro/final reports for it (the
+    // "Store in sector A/B · t17_…" reports that leaked into the chat).
     `SELECT id, name, code, org_id, micro_report_times, skip_sunday_micro_times,
             close_time_weekday, close_time_sunday, open_time_weekday, open_time_sunday
-     FROM stores ORDER BY name`
+     FROM stores
+     WHERE COALESCE(is_active, true) = true
+       AND code NOT LIKE 't17\\_%' ESCAPE '\\'
+       AND id NOT LIKE 't17\\_%' ESCAPE '\\'
+     ORDER BY name`
   );
   return res.rows;
 }
