@@ -207,9 +207,14 @@ export async function loadTodaySchedule(): Promise<void> {
 
 // ===== MONTH SCHEDULE =====
 export function shiftMonth(delta: number): void {
+  // data-on/data-arg always hands the delta over as a string ("1"/"-1");
+  // `m - 1 + "1"` would concat to "91" → Date.UTC(y, 91) → Aug 2033 instead
+  // of next month. Coerce to number so the math stays arithmetic.
+  const d = Number(delta);
+  if (!Number.isFinite(d) || d === 0) return;
   const [y, m] = scheduleMonth.split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-  scheduleMonth = d.toISOString().slice(0, 7);
+  const dt = new Date(Date.UTC(y, m - 1 + d, 1));
+  scheduleMonth = dt.toISOString().slice(0, 7);
   loadMonthSchedule();
 }
 

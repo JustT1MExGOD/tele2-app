@@ -339,9 +339,13 @@ export function toggleMonthPlanExtraColumns(): void {
 }
 
 export function shiftPlanMonth(delta: number): void {
+  // data-arg arrives as a string ("1"/"-1"); coerce so `m - 1 + delta`
+  // stays arithmetic, not concatenation ("91" → year 2033).
+  const d = Number(delta);
+  if (!Number.isFinite(d) || d === 0) return;
   const [y, m] = planMonth.split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-  planMonth = d.toISOString().slice(0, 7);
+  const dt = new Date(Date.UTC(y, m - 1 + d, 1));
+  planMonth = dt.toISOString().slice(0, 7);
   loadMonthPlans();
 }
 
@@ -352,9 +356,11 @@ export function shiftPlanMonth(delta: number): void {
 // за месяц» (GET /plans/employees/month, data.totals) — просто отдельная
 // быстрая вкладка без разбивки по сотрудникам.
 export function shiftNetMonth(delta: number): void {
+  const d = Number(delta);
+  if (!Number.isFinite(d) || d === 0) return;
   const [y, m] = planMonth.split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-  planMonth = d.toISOString().slice(0, 7);
+  const dt = new Date(Date.UTC(y, m - 1 + d, 1));
+  planMonth = dt.toISOString().slice(0, 7);
   loadNetMonth();
 }
 
