@@ -539,7 +539,7 @@ function renderContactGroups(): void {
       const memberChips = members
         .map(
           (a) => `<span class="mchip" style="display:inline-flex;align-items:center;gap:4px">${esc(a.display_label || a.employee_full_name)}
-            <button type="button" class="mchip" data-group-remove-member="${g.id}" data-member-id="${a.corporate_account_id}" title="Убрать из группы">×</button>
+            <button type="button" class="mchip" data-group-remove-member="${g.id}" data-member-id="${a.corporate_account_id}" title="Убрать из группы" aria-label="Убрать из группы">×</button>
           </span>`
         )
         .join(' ');

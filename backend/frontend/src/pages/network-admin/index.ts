@@ -281,7 +281,7 @@ function renderWiMovesList(): void {
       (m, i) => `
         <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border-radius:10px;margin-bottom:6px;font-size:12px">
           <div style="flex:1">#${m.employee_id}: ${m.from_store || 'авто'} → ${m.to_store}</div>
-          <button type="button" style="background:none;border:none;color:var(--danger,#ff3b30);font-size:16px;line-height:1;cursor:pointer" onclick="removeWiMove(${i})">×</button>
+          <button type="button" style="background:none;border:none;color:var(--danger,#ff3b30);font-size:16px;line-height:1;cursor:pointer" onclick="removeWiMove(${i})" aria-label="Удалить">×</button>
         </div>`
     )
     .join('');
