@@ -287,7 +287,7 @@ fun ChatScreen(container: AppContainer, me: MeResponse) {
                                 .align(Alignment.BottomCenter)
                                 .padding(bottom = 16.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF106FA3))
+                                .background(T2Colors.primaryTextBg)
                                 .clickable {
                                     newBelow = false
                                     scope.launch { listState.animateScrollToItem((messages.size + pending.size - 1).coerceAtLeast(0)) }

@@ -37,10 +37,10 @@ import ru.t2sales.desktop.network.RelayReachability
 import ru.t2sales.shared.theme.T2Colors
 
 private fun outcomeColor(o: Outcome?): Color = when (o) {
-    Outcome.OK -> Color(0xFF2E7D32)
-    Outcome.TIMEOUT -> Color(0xFFEF6C00)
-    Outcome.DNS_FAILURE, Outcome.TCP_FAILURE, Outcome.TLS_FAILURE, Outcome.HTTP_FAILURE, Outcome.OFFLINE -> Color(0xFFC62828)
-    else -> Color(0xFF757575)
+    Outcome.OK -> T2Colors.success
+    Outcome.TIMEOUT -> T2Colors.warning
+    Outcome.DNS_FAILURE, Outcome.TCP_FAILURE, Outcome.TLS_FAILURE, Outcome.HTTP_FAILURE, Outcome.OFFLINE -> T2Colors.danger
+    else -> T2Colors.hint
 }
 
 /**
@@ -84,11 +84,11 @@ fun NetworkIndicator(net: NetworkManager) {
                     PanelRow(name, o?.name ?: "—", outcomeColor(o ?: Outcome.UNKNOWN), bold = true)
                 }
                 val (relayText, relayColor) = when (st.lastRelayReachability) {
-                    RelayReachability.NotConfigured -> "not configured" to Color(0xFF757575)
-                    RelayReachability.NotChecked -> "not checked" to Color(0xFF757575)
-                    RelayReachability.Checking -> "checking…" to Color(0xFFEF6C00)
-                    RelayReachability.Reachable -> "reachable" to Color(0xFF2E7D32)
-                    RelayReachability.Unreachable -> "unreachable" to Color(0xFFC62828)
+                    RelayReachability.NotConfigured -> "not configured" to T2Colors.hint
+                    RelayReachability.NotChecked -> "not checked" to T2Colors.hint
+                    RelayReachability.Checking -> "checking…" to T2Colors.warning
+                    RelayReachability.Reachable -> "reachable" to T2Colors.success
+                    RelayReachability.Unreachable -> "unreachable" to T2Colors.danger
                 }
                 PanelRow("Relay", relayText, relayColor, bold = true)
                 st.relayHost?.let { PanelRow("Relay host", it, T2Colors.text, bold = false, dim = true) }

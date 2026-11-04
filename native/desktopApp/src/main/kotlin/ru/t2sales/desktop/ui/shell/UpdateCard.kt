@@ -25,7 +25,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,7 +67,7 @@ fun UpdateCard(updates: UpdateManager, modifier: Modifier = Modifier) {
         when (st.state) {
             UpdateState.UpdateAvailable -> {
                 val m = st.availableManifest ?: return@Column
-                if (m.mandatory) Text("ВАЖНОЕ ОБНОВЛЕНИЕ", color = Color(0xFFEF6C00), fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(bottom = 4.dp))
+                if (m.mandatory) Text("ВАЖНОЕ ОБНОВЛЕНИЕ", color = T2Colors.warning, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(bottom = 4.dp))
                 Text("Доступна версия ${m.version}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Text("Размер: ${formatBytes(m.size)}", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 m.releaseNotes?.takeIf { it.isNotBlank() }?.let {
@@ -95,7 +94,7 @@ fun UpdateCard(updates: UpdateManager, modifier: Modifier = Modifier) {
             )
             UpdateState.ReadyToInstall -> {
                 Text("Обновление готово к установке", fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(bottom = 4.dp))
-                st.signatureWarning?.let { Text(it, color = Color(0xFFEF6C00), fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
+                st.signatureWarning?.let { Text(it, color = T2Colors.warning, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
                 Buttons("Позже", { dismissedFor = st.state }, "Установить сейчас") {
                     scope.launch {
                         // the ONLY call site of installUpdate(): always a direct result of this click - never automatic, never on a timer
@@ -105,7 +104,7 @@ fun UpdateCard(updates: UpdateManager, modifier: Modifier = Modifier) {
                 }
             }
             UpdateState.Error -> {
-                Text("Ошибка обновления", color = Color(0xFFC62828), fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(bottom = 4.dp))
+                Text("Ошибка обновления", color = T2Colors.danger, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(bottom = 4.dp))
                 Text(st.errorMessage ?: "Неизвестная ошибка", color = T2Colors.textSecondary, fontSize = 12.sp)
                 Buttons("Скрыть", { dismissedFor = st.state }, null) {}
             }

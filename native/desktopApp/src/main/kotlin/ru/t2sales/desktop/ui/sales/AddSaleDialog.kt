@@ -189,7 +189,7 @@ fun AddSaleDialog(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(shape)
-                                    .background(if (on) Color(0xFF106FA3) else T2Colors.surface2)
+                                    .background(if (on) T2Colors.primaryTextBg else T2Colors.surface2)
                                     .border(1.dp, if (on) T2Colors.primary else T2Colors.border, shape)
                                     .clickable { if (on) selection.remove(m.id) else selection[m.id] = "1" }
                                     .padding(vertical = 12.dp, horizontal = 6.dp),
