@@ -125,7 +125,7 @@ fun ContactsTreeScreen(
     if (loaded == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (loadError != null) {
-                Text(loadError!!, color = T2Colors.text, fontSize = 12.sp)
+                Text(loadError!!, color = T2Colors.danger, fontSize = 12.sp)
             } else {
                 CircularProgressIndicator()
             }
@@ -200,7 +200,10 @@ fun ContactsTreeScreen(
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = T2Colors.primary,
-                    modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { showCreateRootGroupDialog = true }) }
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .pointerInput(Unit) { detectTapGestures(onTap = { showCreateRootGroupDialog = true }) }
+                        .padding(4.dp)
                 )
             }
         }
@@ -353,16 +356,22 @@ private fun GroupHeaderRow(
                 color = T2Colors.primary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.pointerInput(name, depth) { detectTapGestures(onTap = { onAddSubgroup() }) }
+                modifier = Modifier
+                    .padding(4.dp)
+                    .pointerInput(name, depth) { detectTapGestures(onTap = { onAddSubgroup() }) }
+                    .padding(4.dp)
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(8.dp))
         }
         if (manageable) {
             Text(
                 "⋯",
                 color = T2Colors.hint,
                 fontSize = 14.sp,
-                modifier = Modifier.pointerInput(name, depth) { detectTapGestures(onTap = { onManage() }) }
+                modifier = Modifier
+                    .padding(4.dp)
+                    .pointerInput(name, depth) { detectTapGestures(onTap = { onManage() }) }
+                    .padding(4.dp)
             )
         }
     }
@@ -401,7 +410,10 @@ private fun ContactLeafRow(
                 "⋯",
                 color = T2Colors.hint,
                 fontSize = 14.sp,
-                modifier = Modifier.pointerInput(contact.corporate_account_id) { detectTapGestures(onTap = { onManage() }) }
+                modifier = Modifier
+                    .padding(4.dp)
+                    .pointerInput(contact.corporate_account_id) { detectTapGestures(onTap = { onManage() }) }
+                    .padding(4.dp)
             )
         }
     }

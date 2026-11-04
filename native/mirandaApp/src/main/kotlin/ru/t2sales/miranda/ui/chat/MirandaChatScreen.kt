@@ -227,7 +227,7 @@ fun MirandaChatScreen(api: MirandaApi, conversationId: Int, myCorporateAccountId
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
-                failed -> Text("Не удалось загрузить переписку", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.align(Alignment.Center).padding(24.dp))
+                failed -> Text("Не удалось загрузить переписку", color = T2Colors.textSecondary, fontSize = 13.sp, modifier = Modifier.align(Alignment.Center).padding(24.dp))
                 !loaded -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 else -> BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                     val bubbleMax = minOf(maxWidth * 0.78f, 640.dp)
@@ -257,7 +257,7 @@ fun MirandaChatScreen(api: MirandaApi, conversationId: Int, myCorporateAccountId
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(f.name, fontSize = 11.sp)
-                            Text("  ×", color = T2Colors.hint, fontSize = 14.sp, modifier = Modifier.clickable { composerFiles.removeAt(i) })
+                            Text("×", color = T2Colors.hint, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp).clickable { composerFiles.removeAt(i) }.padding(horizontal = 2.dp))
                         }
                     }
                 }
@@ -306,7 +306,7 @@ fun MirandaChatScreen(api: MirandaApi, conversationId: Int, myCorporateAccountId
                 Box(
                     modifier = Modifier.size(44.dp).clip(CircleShape).background(if (canSend) T2Colors.primary else T2Colors.surface3).clickable(enabled = canSend) { send() },
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Outlined.Send, contentDescription = "Отправить", tint = if (canSend) Color.White else T2Colors.hint, modifier = Modifier.size(20.dp)) }
+                ) { Icon(Icons.Outlined.Send, contentDescription = "Отправить", tint = if (canSend) Color.White else T2Colors.textSecondary, modifier = Modifier.size(20.dp)) }
             }
         }
     }
@@ -348,7 +348,7 @@ private fun MessageRow(m: MirandaMessage, mine: Boolean, bubbleMax: androidx.com
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(a.originalFilename, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-                            Text(size(a.sizeBytes), color = T2Colors.hint, fontSize = 12.sp)
+                            Text(size(a.sizeBytes), color = T2Colors.textSecondary, fontSize = 12.sp)
                         }
                     }
                 }
@@ -366,7 +366,7 @@ private fun PendingRow(p: Pending, bubbleMax: androidx.compose.ui.unit.Dp, onRet
             p.files.forEach { Text(it.name, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp)) }
             Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val label = if (p.status == PendingStatus.Sending) "Отправка…" else "Не отправлено"
-                Text(label, fontSize = 10.sp, color = if (p.status == PendingStatus.Failed) T2Colors.danger else T2Colors.hint)
+                Text(label, fontSize = 10.sp, color = if (p.status == PendingStatus.Failed) T2Colors.danger else T2Colors.textSecondary)
                 if (p.status != PendingStatus.Sending) Text("Повторить", fontSize = 10.sp, color = T2Colors.primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onRetry))
             }
         }

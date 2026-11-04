@@ -316,7 +316,7 @@ private fun MirandaMessengerShell(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("✕", fontSize = 16.sp, color = T2Colors.text, modifier = Modifier.clickable { openConversation = null }.padding(end = 12.dp))
+                                Text("✕", fontSize = 16.sp, color = T2Colors.text, modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp).clickable { openConversation = null }.padding(end = 12.dp))
                                 Text(open.second, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = T2Colors.text)
                             }
                             Box(Modifier.fillMaxSize()) {

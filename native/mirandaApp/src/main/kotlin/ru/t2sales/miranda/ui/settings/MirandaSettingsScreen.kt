@@ -134,7 +134,7 @@ fun MirandaSettingsScreen(api: MirandaApi, onLogout: () -> Unit) {
         }
         if (presenceError != null) {
             Spacer(Modifier.height(8.dp))
-            Text(presenceError!!, color = T2Colors.text, fontSize = 12.sp)
+            Text(presenceError!!, color = T2Colors.danger, fontSize = 12.sp)
         }
 
         Spacer(Modifier.height(32.dp))
@@ -149,7 +149,7 @@ fun MirandaSettingsScreen(api: MirandaApi, onLogout: () -> Unit) {
         }
         if (displayNameError != null) {
             Spacer(Modifier.height(8.dp))
-            Text(displayNameError!!, color = T2Colors.text, fontSize = 12.sp)
+            Text(displayNameError!!, color = T2Colors.danger, fontSize = 12.sp)
         }
 
         Spacer(Modifier.height(32.dp))
