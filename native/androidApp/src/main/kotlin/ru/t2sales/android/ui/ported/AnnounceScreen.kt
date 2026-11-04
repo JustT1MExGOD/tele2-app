@@ -57,7 +57,7 @@ fun AnnounceScreen(container: AppContainer, me: MeResponse) {
         when {
             failed -> ErrorState("\uD83C\uDF49 Не удалось загрузить объявления", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
-            list.isEmpty() -> Text("\uD83C\uDF49 Нет объявлений", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            list.isEmpty() -> EmptyText("\uD83C\uDF49 Нет объявлений")
             else -> list.forEach { a ->
                 val shape = RoundedCornerShape(16.dp)
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(14.dp)) {

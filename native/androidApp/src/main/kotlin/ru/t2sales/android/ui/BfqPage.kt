@@ -59,7 +59,7 @@ fun BfqPage(container: AppContainer, me: MeResponse) {
             when {
                 failed -> ErrorState("Ошибка BFQ", onRetry = { reload++ })
                 list == null -> LoadingBlock(Modifier.padding(16.dp))
-                list.isEmpty() -> Text("Нет данных BFQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+                list.isEmpty() -> EmptyText("Нет данных BFQ")
                 else -> list.forEachIndexed { i, e ->
                     Row(Modifier.fillMaxWidth().clickable { opened = e.employee_id }.padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
                         val shape = RoundedCornerShape(T2Radius.sm)

@@ -52,7 +52,7 @@ fun HistoryScreen(api: SalesApi, me: MeResponse) {
         when {
             failed -> ErrorState("Не удалось загрузить историю", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
-            list.isEmpty() -> Text("Нет продаж за период", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            list.isEmpty() -> EmptyText("Нет продаж за период")
             else -> list.forEach { s ->
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)) {
                     Text(if (filter != null) s.store_name ?: "" else s.full_name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)

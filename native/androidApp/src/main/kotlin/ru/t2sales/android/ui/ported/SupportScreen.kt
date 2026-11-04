@@ -59,8 +59,8 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
         val list = faq
         when {
             list == null -> LoadingBlock(Modifier.padding(16.dp))
-            faqFailed -> Text("Не удалось загрузить FAQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
-            list.isEmpty() -> Text("FAQ пока пуст", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            faqFailed -> ErrorState("Не удалось загрузить FAQ", onRetry = { reload++ })
+            list.isEmpty() -> EmptyText("FAQ пока пуст")
             else -> list.forEach { f ->
                 Row(modifier = Modifier.fillMaxWidth().clickable { expanded = if (expanded == f.id) null else f.id }.padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(f.question, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -105,7 +105,7 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
             val list = all
             when {
                 list == null -> LoadingBlock(Modifier.padding(16.dp))
-                list.isEmpty() -> Text("Нет тикетов", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+                list.isEmpty() -> EmptyText("Нет тикетов")
                 else -> list.forEach { t ->
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)) {
                         Text("#${t.id} ${t.full_name ?: ""}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)

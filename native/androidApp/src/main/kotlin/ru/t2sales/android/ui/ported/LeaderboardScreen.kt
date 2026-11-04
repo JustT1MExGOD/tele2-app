@@ -97,7 +97,7 @@ fun LeaderboardScreen(container: AppContainer) {
             }
         }
         when {
-            metrics.isEmpty() && !loading -> Text("Каталог метрик пуст", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            metrics.isEmpty() && !loading -> EmptyText("Каталог метрик пуст")
             failed -> ErrorState("Не удалось загрузить топ", onRetry = { reload++ })
             loading && result == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {

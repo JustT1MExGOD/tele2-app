@@ -216,7 +216,8 @@ internal fun RulesTab(container: AppContainer) {
 internal fun OperationsTab(container: AppContainer) {
     var data by remember { mutableStateOf<JsonObject?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { runCatching { container.adminCenterApi.operations() }.onSuccess { data = it }.onFailure { failed = true } }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) { runCatching { container.adminCenterApi.operations() }.onSuccess { data = it }.onFailure { failed = true } }
 
     fun str(o: kotlinx.serialization.json.JsonElement?, vararg keys: String): String =
         keys.firstNotNullOfOrNull { k -> ((o as? JsonObject)?.get(k) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotEmpty() } } ?: ""

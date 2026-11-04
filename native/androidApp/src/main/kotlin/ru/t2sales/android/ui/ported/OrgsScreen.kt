@@ -1,8 +1,9 @@
-﻿package ru.t2sales.android.ui
+package ru.t2sales.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -76,7 +77,7 @@ fun OrgsScreen(api: AdminApi) {
         when {
             failed -> ErrorState("\uD83C\uDF49 Не получилось загрузить сети", onRetry = { reload++ })
             list == null -> LoadingBlock(Modifier.padding(16.dp))
-            list.isEmpty() -> Text("\uD83C\uDF49 Сетей пока нет", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            list.isEmpty() -> EmptyText("\uD83C\uDF49 Сетей пока нет")
             else -> {
                 val sorted = list.sortedWith { a, b ->
                     val c = when (sort) {

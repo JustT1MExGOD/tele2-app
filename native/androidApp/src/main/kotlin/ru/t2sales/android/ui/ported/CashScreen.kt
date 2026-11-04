@@ -1,4 +1,4 @@
-﻿package ru.t2sales.android.ui
+package ru.t2sales.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -117,7 +117,7 @@ fun CashScreen(container: AppContainer) {
         when {
             failed -> ErrorState("\uD83C\uDF49 Касса сейчас недоступна, зайди чуть позже", onRetry = { reload++ })
             t == null -> LoadingBlock(Modifier.padding(16.dp))
-            t.dates.isEmpty() -> Text("\uD83C\uDF49 Пока нет ни одной записи кассы \u2014 внеси первую строку выше", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            t.dates.isEmpty() -> EmptyText("\uD83C\uDF49 Пока нет ни одной записи кассы \u2014 внеси первую строку выше")
             else -> {
                 val list = if (t.stores.isNotEmpty()) t.stores else stores
                 val recent = t.dates.takeLast(2)

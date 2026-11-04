@@ -265,7 +265,7 @@ fun ChatScreen(container: AppContainer, me: MeResponse) {
                     if (newBelow && !nearBottom) {
                         Text(
                             "Новые сообщения ↓", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).clip(CircleShape).background(Color(0xFF106FA3))
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).clip(CircleShape).background(T2Colors.primaryTextBg)
                                 .clickable { newBelow = false; scope.launch { listState.animateScrollToItem((messages.size + pending.size - 1).coerceAtLeast(0)) } }
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         )

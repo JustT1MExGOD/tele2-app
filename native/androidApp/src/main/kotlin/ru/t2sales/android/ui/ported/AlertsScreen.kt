@@ -78,7 +78,7 @@ fun AlertsScreen(container: AppContainer, onNavigate: (Screen) -> Unit) {
     when {
         failed -> ErrorState("Не удалось загрузить алерты", onRetry = { reload++ })
         list == null -> LoadingBlock()
-        list.isEmpty() -> Text("Нет алертов", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+        list.isEmpty() -> EmptyText("Нет алертов")
         else -> Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             list.forEachIndexed { idx, a ->
                 Row(

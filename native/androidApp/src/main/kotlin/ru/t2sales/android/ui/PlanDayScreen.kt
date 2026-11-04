@@ -110,7 +110,7 @@ fun PlanDayScreen(container: AppContainer) {
         when {
             failed -> ErrorState("Ошибка загрузки", onRetry = { AppState.refreshTick++ })
             d == null -> LoadingBlock(Modifier.padding(vertical = 16.dp), lines = 5)
-            d.stores.isEmpty() -> Text("Нет точек", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            d.stores.isEmpty() -> EmptyText("Нет точек")
             else -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { d.stores.forEach { StoreDayCard(it, d) } }
         }
         Spacer(Modifier.height(96.dp))

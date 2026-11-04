@@ -170,7 +170,7 @@ fun MonthPlanScreen(container: AppContainer, me: MeResponse) {
         val list = stores
         when {
             list == null -> LoadingBlock(Modifier.padding(16.dp))
-            list.isEmpty() -> Text("Нет данных", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            list.isEmpty() -> EmptyText("Нет данных")
             else -> list.forEach { st ->
                 val color = st.color?.let { runCatching { Color(("FF" + it.removePrefix("#")).toLong(16)) }.getOrNull() } ?: T2Colors.blue
                 val shape = RoundedCornerShape(T2Radius.default)

@@ -231,11 +231,11 @@ private fun Overview(d: JsonObject) {
         }
         Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Row {
-                Text("Темп: ", color = Color(0xFFA1A1AA), fontSize = 12.sp)
+                Text("Темп: ", color = T2Colors.textSecondary, fontSize = 12.sp)
                 Text((if (pace >= 0) "+$pace" else "$pace") + "% к темпу дня", color = if (pace >= 0) GREEN else RED, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Row {
-                Text("Просадки: ", color = Color(0xFFA1A1AA), fontSize = 12.sp)
+                Text("Просадки: ", color = T2Colors.textSecondary, fontSize = 12.sp)
                 Text(net["drops_count"].d().roundToInt().toString(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }

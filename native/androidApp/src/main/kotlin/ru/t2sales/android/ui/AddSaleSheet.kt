@@ -196,7 +196,7 @@ private fun SaleFormBody(
                 val on = selection.containsKey(m.id)
                 val shape = RoundedCornerShape(12.dp)
                 Box(
-                    Modifier.weight(1f).clip(shape).background(if (on) Color(0xFF106FA3) else T2Colors.surface2)
+                    Modifier.weight(1f).clip(shape).background(if (on) T2Colors.primaryTextBg else T2Colors.surface2)
                         .border(1.dp, if (on) T2Colors.primary else T2Colors.border, shape)
                         .clickable { if (on) selection.remove(m.id) else selection[m.id] = "1" }.padding(vertical = 12.dp, horizontal = 6.dp),
                     contentAlignment = Alignment.Center
