@@ -82,7 +82,7 @@ fun LiveScreen(container: AppContainer) {
 @Composable
 private fun StoreLive(st: JsonObject) {
     val status = st["status"].str()
-    val statusColor = when (status) { "critical" -> Color(0xFFE74C3C); "warn" -> Color(0xFFF39C12); else -> Color(0xFF2ECC71) }
+    val statusColor = when (status) { "critical" -> T2Colors.danger; "warn" -> T2Colors.warning; else -> T2Colors.success }
     val bar = colorOf(st["color"].str()) ?: statusColor
     val staff = st["staff"].arr().joinToString(", ") { s -> s.obj().let { it["short_name"].str().ifEmpty { it["full_name"].str().ifEmpty { it["employee_id"].str() } } } }.ifEmpty { "никого" }
     val fact = st["fact"].obj()

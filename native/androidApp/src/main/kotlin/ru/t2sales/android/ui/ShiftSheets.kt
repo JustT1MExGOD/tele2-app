@@ -102,7 +102,7 @@ private fun CloseSheet(container: AppContainer, scope: CoroutineScope) {
     var handover by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     BottomSheet("Закрыть смену", busy, onDismiss = { ShiftUi.closing = false }, footer = {
-        MainButton(if (busy) "Закрываем…" else "Закрыть смену", !busy, container = Color(0xFFE74C3C), content = Color.White) {
+        MainButton(if (busy) "Закрываем…" else "Закрыть смену", !busy, container = T2Colors.danger, content = Color.White) {
             busy = true
             val m = (mood.toIntOrNull() ?: 4).coerceIn(1, 5)
             scope.launch {
@@ -154,7 +154,7 @@ private fun ChangeStoreSheet(container: AppContainer, scope: CoroutineScope) {
         Field("Код точки", code, { v -> code = v.filter { it.isDigit() }; store = null; error = null }, keyboard = KeyboardType.Number)
         Spacer(Modifier.height(10.dp))
         status?.let { Text(it, fontSize = 13.sp, color = T2Colors.hint) }
-        error?.let { Text(it, fontSize = 13.sp, color = Color(0xFFE74C3C)) }
+        error?.let { Text(it, fontSize = 13.sp, color = T2Colors.danger) }
         store?.let { st ->
             Text("${st["code"].s()} — ${st["display_name"].s().ifEmpty { st["name"].s() }}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             st["address"].s().takeIf { it.isNotEmpty() }?.let { Text(it, color = T2Colors.hint, fontSize = 12.sp) }

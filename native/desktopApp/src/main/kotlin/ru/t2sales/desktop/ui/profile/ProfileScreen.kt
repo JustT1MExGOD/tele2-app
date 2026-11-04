@@ -229,7 +229,7 @@ fun ProfileScreen(me: MeResponse, container: AppContainer, onNavigate: (Screen) 
                     ProgressRow(METRIC_LABELS[m] ?: m, shift?.fact?.get(m) ?: 0.0, shift?.day_plan?.get(m) ?: 0.0)
                 }
                 Spacer(Modifier.height(10.dp))
-                MainButton("Закрыть смену", enabled = true, container = Color(0xFFE74C3C), content = Color.White) { ru.t2sales.desktop.ui.shift.ShiftUi.closing = true }
+                MainButton("Закрыть смену", enabled = true, container = T2Colors.danger, content = Color.White) { ru.t2sales.desktop.ui.shift.ShiftUi.closing = true }
             } else {
                 CardTitle("Смена")
                 Text("Открой смену на точке — зафиксируем время и гео", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp))
@@ -250,7 +250,7 @@ fun ProfileScreen(me: MeResponse, container: AppContainer, onNavigate: (Screen) 
                 val onTrack = i.on_track == true
                 Text(
                     "При текущем темпе к концу дня: ~${projected.roundToInt()} (план ${(i.plan_total ?: 0.0).roundToInt()})" + if (onTrack) "" else " — вероятно, не хватит",
-                    color = if (onTrack) T2Colors.hint else Color(0xFFE74C3C),
+                    color = if (onTrack) T2Colors.hint else T2Colors.danger,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 10.dp)
                 )

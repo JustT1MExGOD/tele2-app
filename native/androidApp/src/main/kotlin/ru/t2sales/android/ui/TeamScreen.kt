@@ -236,7 +236,7 @@ fun TeamScreen(container: AppContainer, me: MeResponse) {
 
     confirmRemove?.let { rem ->
         BottomSheet("Деактивировать сотрудника?", onDismiss = { confirmRemove = null }, footer = {
-            MainButton("Деактивировать", container = Color(0xFFE74C3C), content = Color.White) {
+            MainButton("Деактивировать", container = T2Colors.danger, content = Color.White) {
                 confirmRemove = null
                 scope.launch {
                     runCatching { teamApi.deactivate(rem.id) }

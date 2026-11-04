@@ -81,7 +81,7 @@ fun UpdateCard(updates: UpdateManager, modifier: Modifier = Modifier) {
                 val pct = if (p != null && p.totalBytes > 0) (p.receivedBytes * 100 / p.totalBytes).toInt() else 0
                 Text("Загрузка обновления…", fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
                 Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(99.dp)).background(T2Colors.surface3)) {
-                    Box(Modifier.fillMaxWidth(pct / 100f).height(6.dp).background(Color(0xFF2AABEE)))
+                    Box(Modifier.fillMaxWidth(pct / 100f).height(6.dp).background(T2Colors.blue))
                 }
                 Text(p?.let { "${formatBytes(it.receivedBytes)} / ${formatBytes(it.totalBytes)}" } ?: "", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             }

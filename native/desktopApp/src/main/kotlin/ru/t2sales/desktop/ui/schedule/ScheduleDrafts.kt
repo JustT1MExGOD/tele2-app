@@ -57,7 +57,7 @@ private val DRAFT_MONTHS = listOf(
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
 )
 private val DRAFT_WEEKDAYS = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
-private val DRAFT_ERROR = Color(0xFFE5484D)
+private val DRAFT_ERROR = T2Colors.danger
 
 private fun monthTitle(ym: YearMonth) = "${DRAFT_MONTHS[ym.monthValue - 1]} ${ym.year}"
 

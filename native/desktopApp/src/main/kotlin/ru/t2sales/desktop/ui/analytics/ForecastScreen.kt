@@ -156,7 +156,7 @@ fun ForecastScreen(container: AppContainer, me: MeResponse) {
                 if (list.isEmpty()) Text("\uD83C\uDF49 На неделю вперёд перекосов не видно \u2014 график и прогноз сходятся", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
                 list.forEach { h ->
                     val warn = h["severity"].str() != "critical"
-                    val c = if (warn) Color(0xFFFF9F0A) else Color(0xFFFF453A)
+                    val c = if (warn) T2Colors.warning else T2Colors.danger
                     val shape = RoundedCornerShape(16.dp)
                     Row(
                         modifier = Modifier.fillMaxWidth().clip(shape).background(Brush.linearGradient(listOf(c.copy(alpha = 0.12f), c.copy(alpha = 0.04f)))).border(1.dp, c.copy(alpha = 0.28f), shape).padding(horizontal = 14.dp, vertical = 12.dp),
@@ -296,15 +296,15 @@ private fun Scenario(r: WiResult, canManage: Boolean, onApply: () -> Unit, onSav
     val canApply = canManage && applied.any { (it.obj()["skipped"] as? JsonPrimitive)?.content != "true" }
     Column(modifier = Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Дата ${data["date"].str().ifEmpty { r.date }} \u00B7 ${applied.count { (it.obj()["skipped"] as? JsonPrimitive)?.content != "true" }} перенос(ов) применено", color = T2Colors.hint, fontSize = 12.sp)
-        sum["stores_gained"].arr().takeIf { it.isNotEmpty() }?.let { Text("\u2191 " + it.joinToString(", ") { g -> g.str() }, color = Color(0xFF34C759), fontSize = 13.sp) }
-        sum["stores_lost"].arr().takeIf { it.isNotEmpty() }?.let { Text("\u2193 " + it.joinToString(", ") { g -> g.str() }, color = Color(0xFFFF3B30), fontSize = 13.sp) }
+        sum["stores_gained"].arr().takeIf { it.isNotEmpty() }?.let { Text("\u2191 " + it.joinToString(", ") { g -> g.str() }, color = T2Colors.success, fontSize = 13.sp) }
+        sum["stores_lost"].arr().takeIf { it.isNotEmpty() }?.let { Text("\u2193 " + it.joinToString(", ") { g -> g.str() }, color = T2Colors.danger, fontSize = 13.sp) }
         val stores = data["stores"].arr()
         if (stores.isEmpty()) Text("Нет точек", color = T2Colors.hint, fontSize = 13.sp)
         stores.forEach { el ->
             val s = el.obj()
             val d = s["delta_sim"].dbl()
-            val col = if (d > 0) Color(0xFF34C759) else if (d < 0) Color(0xFFFF3B30) else T2Colors.hint
-            val bar = colorOf(s["color"].str()) ?: Color(0xFF2AABEE)
+            val col = if (d > 0) T2Colors.success else if (d < 0) T2Colors.danger else T2Colors.hint
+            val bar = colorOf(s["color"].str()) ?: T2Colors.blue
             val shape = RoundedCornerShape(12.dp)
             Row(modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface2)) {
                 Box(Modifier.width(4.dp).height(74.dp).background(bar))
@@ -339,7 +339,7 @@ private fun Compare(a: WiResult, b: WiResult, onClear: () -> Unit) {
             listOf(Triple("Сценарий A", a, aw), Triple("Сценарий B (текущий)", b, bw)).forEach { (title, r, w) ->
                 val isBetter = (title.endsWith("A") && better == "A") || (title.startsWith("Сценарий B") && better == "B")
                 val shape = RoundedCornerShape(12.dp)
-                Column(modifier = Modifier.weight(1f).clip(shape).background(T2Colors.surface2).then(if (isBetter) Modifier.border(1.dp, Color(0xFF34C759), shape) else Modifier).padding(12.dp)) {
+                Column(modifier = Modifier.weight(1f).clip(shape).background(T2Colors.surface2).then(if (isBetter) Modifier.border(1.dp, T2Colors.success, shape) else Modifier).padding(12.dp)) {
                     Text(title, fontWeight = FontWeight.Bold)
                     Text("${r.moves.size} перенос(ов)", color = T2Colors.hint, fontSize = 12.sp)
                     Text((if (w > 0) "+" else "") + fmtN(w), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 6.dp))

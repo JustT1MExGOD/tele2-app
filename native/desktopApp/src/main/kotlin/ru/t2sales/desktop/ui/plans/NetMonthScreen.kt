@@ -35,7 +35,7 @@ import ru.t2sales.shared.api.MonthSummaryResponse
 import ru.t2sales.shared.api.StoreMonthRow
 import ru.t2sales.shared.theme.T2Colors
 
-private val BLUE = Color(0xFF2AABEE)
+private val BLUE = T2Colors.blue
 private val ROLES = mapOf("trainee" to "Стажёр", "employee" to "Продавец", "senior" to "Старший продавец", "manager" to "Руководитель", "supervisor" to "Супервайзер", "admin" to "Администратор")
 
 /** Port of #page-netmonth («Динамика выполнения»): network totals, then per-employee and per-store bar cards. */

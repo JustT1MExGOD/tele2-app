@@ -66,9 +66,9 @@ enum class SvTab { Overview, Stores, People, Trend }
 
 private val PURPLE = Color(0xFF8B5CF6)
 private val PURPLE_TEXT = Color(0xFFA78BFA)
-private val GREEN = Color(0xFF30D158)
-private val ORANGE = Color(0xFFFF9F0A)
-private val RED = Color(0xFFFF453A)
+private val GREEN = T2Colors.success
+private val ORANGE = T2Colors.warning
+private val RED = T2Colors.danger
 
 private val FALLBACK = listOf(
     "sim" to "SIM", "mnp" to "MNP", "pa" to "ПА", "combo" to "Комбо", "phones" to "Телефоны", "accessories" to "Аксессуары",

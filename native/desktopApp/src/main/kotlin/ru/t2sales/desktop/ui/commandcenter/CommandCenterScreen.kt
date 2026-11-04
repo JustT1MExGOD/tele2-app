@@ -95,9 +95,9 @@ fun CommandCenterScreen(container: AppContainer, me: MeResponse, onNavigate: (Sc
         else -> {
             val n = d.network
             val tone = when {
-                n.health >= 75 -> Color(0xFF30D158)
-                n.health >= 45 -> Color(0xFFFF9F0A)
-                else -> Color(0xFFFF453A)
+                n.health >= 75 -> T2Colors.success
+                n.health >= 45 -> T2Colors.warning
+                else -> T2Colors.danger
             }
             val pace = n.pace_delta.roundToInt()
 
@@ -210,7 +210,7 @@ private fun <T> Grid(items: List<T>, item: @Composable (T) -> Unit) {
 
 @Composable
 private fun StoreBlock(st: CcStore) {
-    val color = st.color?.let { runCatching { Color(("FF" + it.removePrefix("#")).toLong(16)) }.getOrNull() } ?: Color(0xFF2AABEE)
+    val color = st.color?.let { runCatching { Color(("FF" + it.removePrefix("#")).toLong(16)) }.getOrNull() } ?: T2Colors.blue
     val t = st.today
     Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
         Box(Modifier.width(4.dp).height(56.dp).background(color))
@@ -231,7 +231,7 @@ private fun StoreBlock(st: CcStore) {
 @Composable
 private fun ProblemCard(p: CcProblem, onAction: (CcAction) -> Unit, onAck: (Int) -> Unit) {
     val warn = p.severity != "critical"
-    val c = if (warn) Color(0xFFFF9F0A) else Color(0xFFFF453A)
+    val c = if (warn) T2Colors.warning else T2Colors.danger
     val shape = RoundedCornerShape(16.dp)
     Row(
         modifier = Modifier

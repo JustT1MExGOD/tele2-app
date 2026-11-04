@@ -78,7 +78,7 @@ fun StoreProfileScreen(container: AppContainer, me: MeResponse, onNavigate: (Scr
             val store = d["store"].obj()
             val health = d["health"].obj()
             val score = health["score"].dbl()
-            val tone = when { score >= 75 -> Color(0xFF30D158); score >= 45 -> Color(0xFFFF9F0A); else -> Color(0xFFFF453A) }
+            val tone = when { score >= 75 -> T2Colors.success; score >= 45 -> T2Colors.warning; else -> T2Colors.danger }
             val comps = health["components"].obj()
             val staff = store["staff"].arr().map { it.obj().let { s -> s["name"].str().ifEmpty { s["full_name"].str() } } }.filter { it.isNotEmpty() }.joinToString(", ")
 
@@ -153,7 +153,7 @@ fun StoreProfileScreen(container: AppContainer, me: MeResponse, onNavigate: (Scr
                 PageSection("Алерты") {
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         alerts.forEach { a ->
-                            val c = Color(0xFFFF9F0A)
+                            val c = T2Colors.warning
                             val shape = RoundedCornerShape(16.dp)
                             Row(
                                 modifier = Modifier.fillMaxWidth().clip(shape).background(Brush.linearGradient(listOf(c.copy(alpha = 0.12f), c.copy(alpha = 0.04f)))).border(1.dp, c.copy(alpha = 0.3f), shape).padding(horizontal = 14.dp, vertical = 12.dp),

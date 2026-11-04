@@ -38,8 +38,8 @@ import ru.t2sales.shared.api.MetricDef
 import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Radius
 
-private val PLAN_ERROR = Color(0xFFE5484D)
-private val PLAN_WARNING = Color(0xFFC77700)
+private val PLAN_ERROR = T2Colors.danger
+private val PLAN_WARNING = T2Colors.warning
 
 private class PlanDraft(val id: Int, val month: String, val status: String, val blocking: List<String>, val items: List<JsonObject>)
 

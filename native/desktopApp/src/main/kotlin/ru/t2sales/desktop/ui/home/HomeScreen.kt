@@ -248,7 +248,7 @@ private fun Greeting(firstName: String, role: String?, shiftOpen: Boolean?, days
         }
         if (shiftOpen != null) {
             val open = shiftOpen
-            val fg = if (open) Color(0xFF34C759) else Color(0xBFFFFFFF)
+            val fg = if (open) T2Colors.success else Color(0xBFFFFFFF)
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -258,7 +258,7 @@ private fun Greeting(firstName: String, role: String?, shiftOpen: Boolean?, days
                     .padding(start = 8.dp, end = 10.dp, top = 5.dp, bottom = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.size(7.dp).clip(CircleShape).background(if (open) Color(0xFF34C759) else Color(0x59FFFFFF)))
+                Box(Modifier.size(7.dp).clip(CircleShape).background(if (open) T2Colors.success else Color(0x59FFFFFF)))
                 Spacer(Modifier.width(6.dp))
                 Text(if (open) "Смена открыта" else "Смена закрыта", color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
@@ -519,9 +519,9 @@ private fun CommandCenterSection(health: SupervisorHealthResponse?, onOpen: () -
         }
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
             val tone = when {
-                health.health >= 75 -> Color(0xFF30D158)
-                health.health >= 45 -> Color(0xFFFF9F0A)
-                else -> Color(0xFFFF453A)
+                health.health >= 75 -> T2Colors.success
+                health.health >= 45 -> T2Colors.warning
+                else -> T2Colors.danger
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Box(
@@ -540,7 +540,7 @@ private fun CommandCenterSection(health: SupervisorHealthResponse?, onOpen: () -
             } else {
                 health.drops.take(3).forEach { d ->
                     val warn = d.severity != "critical"
-                    val c = if (warn) Color(0xFFFF9F0A) else Color(0xFFFF453A)
+                    val c = if (warn) T2Colors.warning else T2Colors.danger
                     val shape = RoundedCornerShape(16.dp)
                     Row(
                         modifier = Modifier

@@ -172,7 +172,7 @@ private fun HeatCell(hour: Int, value: Double, max: Double, isBest: Boolean, isN
             .reveal(order, 30)
             .graphicsLayer { scaleX = lift; scaleY = lift }
             .clip(shape)
-            .background(if (isBest) T2Colors.successSoft else Color(0xFF2AABEE).copy(alpha = (0.12f + intensity * 0.75f).coerceIn(0f, 1f)))
+            .background(if (isBest) T2Colors.successSoft else T2Colors.blue.copy(alpha = (0.12f + intensity * 0.75f).coerceIn(0f, 1f)))
             .then(if (isBest) Modifier.border(2.dp, T2Colors.success.copy(alpha = pulse), shape) else Modifier)
             .hoverable(source)
             .padding(horizontal = 6.dp, vertical = 10.dp),

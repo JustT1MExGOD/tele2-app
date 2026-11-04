@@ -91,7 +91,7 @@ private val STORE_COLORS = mapOf(
     "kalinina2" to "#ff6d01",
     "kalinina11" to "#ffd966"
 )
-private val DEFAULT_STORE_COLOR = Color(0xFF2AABEE)
+private val DEFAULT_STORE_COLOR = T2Colors.blue
 
 private fun parseHex(hex: String): Color? = runCatching {
     val h = hex.removePrefix("#")

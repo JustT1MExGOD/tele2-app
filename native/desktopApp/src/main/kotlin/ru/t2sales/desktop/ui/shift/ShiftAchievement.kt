@@ -197,7 +197,7 @@ private fun StreakPill(days: Int) {
     val pulse by rememberInfiniteTransition().animateFloat(1f, 1.22f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse))
     Row(Modifier.clip(RoundedCornerShape(99.dp)).background(Color(0x22FF9F0A)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("🔥", fontSize = 14.sp, modifier = Modifier.graphicsLayer { scaleX = pulse; scaleY = pulse })
-        Text("  $days ${dayWord(days)} подряд", color = Color(0xFFFF9F0A), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("  $days ${dayWord(days)} подряд", color = T2Colors.warning, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -211,6 +211,6 @@ private fun LevelUp(level: Int) {
     Text(
         "🎉 Новый уровень: $level", color = Color(0xFF1B1B1F), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
         modifier = Modifier.padding(top = 12.dp).graphicsLayer { scaleX = s.value; scaleY = s.value; alpha = s.value.coerceIn(0f, 1f) }
-            .clip(RoundedCornerShape(12.dp)).background(Brush.horizontalGradient(listOf(Color(0xFFFFD60A), Color(0xFFFF9F0A)))).padding(horizontal = 14.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(12.dp)).background(Brush.horizontalGradient(listOf(Color(0xFFFFD60A), T2Colors.warning))).padding(horizontal = 14.dp, vertical = 8.dp)
     )
 }

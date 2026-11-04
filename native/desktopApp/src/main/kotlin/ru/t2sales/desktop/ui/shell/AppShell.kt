@@ -212,7 +212,7 @@ private fun Fab(modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
             .size(58.dp)
-            .shadow(14.dp, CircleShape, ambientColor = Color(0xFF2AABEE), spotColor = Color(0xFF2AABEE))
+            .shadow(14.dp, CircleShape, ambientColor = T2Colors.blue, spotColor = T2Colors.blue)
             .clip(CircleShape)
             .background(Brush.linearGradient(listOf(T2Colors.primary, T2Colors.blueDeep)))
             .clickable(onClick = onClick),

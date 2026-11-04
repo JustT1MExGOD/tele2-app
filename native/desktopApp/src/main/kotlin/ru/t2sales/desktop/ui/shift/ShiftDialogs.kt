@@ -119,7 +119,7 @@ private fun CloseDialog(container: AppContainer, scope: CoroutineScope) {
         Spacer(Modifier.height(14.dp))
         Field("Заметка для следующей смены (необязательно)", handover, { handover = it }, placeholder = "Что важно знать тому, кто откроет смену следующим на этой точке\u2026", fill = T2Colors.surface2)
         Spacer(Modifier.height(16.dp))
-        MainButton(if (busy) "Закрываем\u2026" else "Закрыть смену", enabled = !busy, container = Color(0xFFE74C3C), content = Color.White) {
+        MainButton(if (busy) "Закрываем\u2026" else "Закрыть смену", enabled = !busy, container = T2Colors.danger, content = Color.White) {
             busy = true
             val m = (mood.toIntOrNull() ?: 4).coerceIn(1, 5)
             scope.launch {
@@ -143,7 +143,7 @@ private fun ChangeStoreDialog(container: AppContainer, scope: CoroutineScope) {
         Field("Код точки", code, { v -> code = v.filter { it.isDigit() }; store = null; error = null }, placeholder = "888967", fill = T2Colors.surface2)
         Spacer(Modifier.height(10.dp))
         status?.let { Text(it, fontSize = 13.sp, color = T2Colors.hint) }
-        error?.let { Text(it, fontSize = 13.sp, color = Color(0xFFE74C3C)) }
+        error?.let { Text(it, fontSize = 13.sp, color = T2Colors.danger) }
         store?.let { st ->
             Text("${st["code"].s()} \u2014 ${st["display_name"].s().ifEmpty { st["name"].s() }}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             st["address"].s().takeIf { it.isNotEmpty() }?.let { Text(it, color = T2Colors.hint, fontSize = 12.sp) }

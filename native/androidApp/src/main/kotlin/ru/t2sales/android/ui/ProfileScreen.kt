@@ -191,7 +191,7 @@ fun ProfileScreen(container: AppContainer, me: MeResponse, onOpenSchedule: () ->
                     Text("${sess.store_name ?: sess.store_id ?: ""} · с ${moscowTime(sess.opened_at)} МСК", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp))
                     listOf("sim", "mnp", "pa", "combo").forEach { m -> ProgressRow(METRIC_LABELS[m] ?: m, shift?.fact?.get(m) ?: 0.0, shift?.day_plan?.get(m) ?: 0.0) }
                     Spacer(Modifier.height(10.dp))
-                    MainButton("Закрыть смену", container = Color(0xFFE74C3C), content = Color.White) { ShiftUi.closing = true }
+                    MainButton("Закрыть смену", container = T2Colors.danger, content = Color.White) { ShiftUi.closing = true }
                 } else {
                     CardTitle("Смена")
                     Text("Открой смену на точке — зафиксируем время", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp))
@@ -211,7 +211,7 @@ fun ProfileScreen(container: AppContainer, me: MeResponse, onOpenSchedule: () ->
                     val onTrack = i.on_track == true
                     Text(
                         "При текущем темпе к концу дня: ~${projected.roundToInt()} (план ${(i.plan_total ?: 0.0).roundToInt()})" + if (onTrack) "" else " — вероятно, не хватит",
-                        color = if (onTrack) T2Colors.hint else Color(0xFFE74C3C), fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp)
+                        color = if (onTrack) T2Colors.hint else T2Colors.danger, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp)
                     )
                 }
             }
