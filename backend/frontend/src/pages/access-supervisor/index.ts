@@ -957,7 +957,11 @@ export async function loadAccessRequests(): Promise<void> {
   try {
     const list: AccessRequestsListResponse = await window.apiClient.getAccessRequests(authHeaders(), orgQueryParam());
     if (!list.length) {
-      box.innerHTML = '<div class="empty">Нет заявок</div>';
+      box.innerHTML = `<div class="empty-state">
+        <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 2 2 4-4"/></svg></div>
+        <div class="es-title">Нет заявок</div>
+        <div class="es-sub">Новые заявки на доступ появятся здесь</div>
+      </div>`;
       return;
     }
     const myAssignable = assignableRoles(me?.role || '');
@@ -1243,7 +1247,11 @@ function renderSvStores(d: any): void {
           ${alerts}
         </div>`;
       })
-      .join('') || '<div class="empty">Нет точек — сектор не назначен</div>';
+      .join('') || `<div class="empty-state">
+        <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4"/></svg></div>
+        <div class="es-title">Нет точек</div>
+        <div class="es-sub">Сектор не назначен — точки появятся после привязки</div>
+      </div>`;
 }
 
 function renderSvPeople(d: any): void {

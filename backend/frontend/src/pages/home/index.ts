@@ -246,7 +246,11 @@ export async function loadCommandCenter(): Promise<void> {
               </div>`
                   )
                   .join('')
-              : '<div class="empty" style="padding:10px 0 0">Критических просадок нет — сеть в ритме</div>'
+              : `<div class="empty-state" style="padding:14px 0 0">
+                  <div class="es-icon" style="background:var(--success-soft);color:var(--success)"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
+                  <div class="es-title">Сеть в ритме</div>
+                  <div class="es-sub">Критических просадок нет — все точки идут по плану</div>
+                </div>`
           }`;
     box.innerHTML = ccHtml;
     if (boxDesktop) boxDesktop.innerHTML = ccHtml;

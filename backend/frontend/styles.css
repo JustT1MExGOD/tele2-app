@@ -857,6 +857,45 @@
       font-size: var(--fs-sm);
       line-height: var(--lh-relaxed);
     }
+    /* 21.0 (UI/UX 3.0) — structured empty-state: a soft icon well + a short
+       headline + supporting line. Used by pages that previously dropped a
+       lone line of hint text (inconsistent with the card language). Optional
+       enhancement over bare .empty — content still centers identically. */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: var(--sp-8) var(--sp-4);
+      color: var(--hint);
+      font-size: var(--fs-sm);
+      line-height: var(--lh-relaxed);
+      gap: var(--sp-2);
+    }
+    .empty-state .es-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: var(--radius-full);
+      background: var(--surface-2);
+      color: var(--hint);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--sp-2);
+    }
+    .empty-state .es-icon svg {
+      width: 26px;
+      height: 26px;
+    }
+    .empty-state .es-title {
+      color: var(--text);
+      font-size: var(--fs-md);
+      font-weight: var(--fw-bold);
+      letter-spacing: -0.01em;
+    }
+    .empty-state .es-sub {
+      max-width: 34ch;
+    }
     .skeleton {
       background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3, var(--border)) 50%, var(--surface-2) 75%);
       background-size: 200% 100%;

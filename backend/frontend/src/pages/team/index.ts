@@ -322,7 +322,11 @@ export async function loadTeam(): Promise<void> {
               ${adminBtns}
             </div>`;
         })
-        .join('') || '<div class="empty">🍉 В команде пока никого нет</div>';
+        .join('') || `<div class="empty-state">
+            <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+            <div class="es-title">В команде пока никого нет</div>
+            <div class="es-sub">Сотрудники появятся после привязки аккаунтов сети</div>
+          </div>`;
     list.forEach((e) => applyAvatarImg('ta-' + e.id, e.id));
     lastTeamList = list;
     lastTeamMap = map;
