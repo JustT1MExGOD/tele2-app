@@ -31,6 +31,9 @@ object T2Colors {
 
     val primary get() = pick(blue, Color(0xFF3BB8F5))
     val primarySoft get() = pick(Color(0x242AABEE), Color(0x2E3BB8F5))
+
+    /** styles.css --primary-text-bg: AA-safe blue for white text on it (same value in both themes). */
+    val primaryTextBg = Color(0xFF106FA3)
     val success get() = pick(Color(0xFF22C55E), Color(0xFF30D158))
     val danger get() = pick(Color(0xFFEF4444), Color(0xFFFF453A))
     val warning get() = pick(Color(0xFFF59E0B), Color(0xFFFF9F0A))
