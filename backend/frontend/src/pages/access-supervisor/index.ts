@@ -971,7 +971,7 @@ export async function loadAccessRequests(): Promise<void> {
             <select id="role_req_${r.id}" style="margin-top:8px;width:100%">${roleOptions}</select>
             <div style="display:flex;gap:8px;margin-top:12px">
               <button class="btn-main" style="flex:1" onclick="approveAccess(${r.id})">Подтвердить</button>
-              <button class="btn-main" style="flex:1;background:#ff3b30" onclick="rejectAccess(${r.id})">Отклонить</button>
+              <button class="btn-main" style="flex:1;background:var(--danger)" onclick="rejectAccess(${r.id})">Отклонить</button>
             </div>
           </div>`
       )

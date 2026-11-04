@@ -551,7 +551,7 @@ export async function checkChangeStoreCode(): Promise<void> {
   try {
     const res = await window.apiClient.resolveStore(authHeaders(true), { code });
     if (!res.allowed || !res.store || !res.mode) {
-      resultEl.innerHTML = `<div style="color:#e74c3c">${esc(res.message || 'Точка недоступна')}</div>`;
+      resultEl.innerHTML = `<div style="color:var(--danger)">${esc(res.message || 'Точка недоступна')}</div>`;
       pendingReplacementStore = null;
       pendingReplacementMode = null;
       return;
@@ -565,7 +565,7 @@ export async function checkChangeStoreCode(): Promise<void> {
     resultEl.innerHTML = `${storeLine}${confirmLine}
         <button type="button" class="btn-main" style="margin-top:8px" onclick="confirmChangeStoreAndOpenShift()">Продолжить</button>`;
   } catch (e: any) {
-    resultEl.innerHTML = `<div style="color:#e74c3c">${esc(e?.message || 'Ошибка проверки')}</div>`;
+    resultEl.innerHTML = `<div style="color:var(--danger)">${esc(e?.message || 'Ошибка проверки')}</div>`;
   }
 }
 
@@ -584,7 +584,7 @@ export async function confirmChangeStoreAndOpenShift(): Promise<void> {
     await loadMyDay();
     await loadGreetShiftAndDaysOff();
   } catch (e: any) {
-    if (resultEl) resultEl.innerHTML = `<div style="color:#e74c3c">${esc(e?.message || 'Не удалось открыть смену')}</div>`;
+    if (resultEl) resultEl.innerHTML = `<div style="color:var(--danger)">${esc(e?.message || 'Не удалось открыть смену')}</div>`;
   }
 }
 

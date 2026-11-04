@@ -507,7 +507,7 @@ export async function editDay(employeeId: number, dateStr: string, currentStoreI
         <div class="field">
           <label>Точка</label>
           <select id="schStore">
-            <option value="${REPLACEMENT_PLACEHOLDER_STORE_ID}" style="background:#00c853;color:#fff;font-weight:700" ${currentStoreId === REPLACEMENT_PLACEHOLDER_STORE_ID ? 'selected' : ''}>Замена (точка неизвестна)</option>
+            <option value="${REPLACEMENT_PLACEHOLDER_STORE_ID}" style="background:var(--success);color:#fff;font-weight:700" ${currentStoreId === REPLACEMENT_PLACEHOLDER_STORE_ID ? 'selected' : ''}>Замена (точка неизвестна)</option>
             ${(stores || []).map((s) => `<option value="${esc(s.id)}" ${s.id === currentStoreId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
           </select>
         </div>
@@ -621,12 +621,12 @@ async function renderScheduleDraftSummary(): Promise<void> {
   const blocking = scheduleDraft.blocking_errors || [];
   if (blocking.length) {
     errBox.innerHTML =
-      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:#e5484d"><b>Есть блокирующие ошибки — применить график нельзя, пока они не устранены:</b><ul style="margin:6px 0 0 18px;padding:0">' +
+      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:var(--danger)"><b>Есть блокирующие ошибки — применить график нельзя, пока они не устранены:</b><ul style="margin:6px 0 0 18px;padding:0">' +
       blocking.map((be) => `<li>${esc(be.message)}</li>`).join('') +
       '</ul></div>';
   } else if (scheduleDraft.status === 'stale') {
     errBox.innerHTML =
-      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:#e5484d">Черновик устарел: график или настройки покрытия/доступности изменились после расчёта. Пересчитайте график заново.</div>';
+      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:var(--danger)">Черновик устарел: график или настройки покрытия/доступности изменились после расчёта. Пересчитайте график заново.</div>';
   } else {
     errBox.innerHTML = '';
   }
@@ -669,7 +669,7 @@ async function renderScheduleDraftSummary(): Promise<void> {
               </div>
             </div>
             <div class="empty" style="text-align:left;padding:6px 0 0">${esc(storeBreakdown)}</div>
-            <div class="empty" style="text-align:left;padding:0 0 6px;color:#888">${esc(tierTxt)}</div>
+            <div class="empty" style="text-align:left;padding:0 0 6px;color:var(--hint)">${esc(tierTxt)}</div>
           </div>`;
         })
         .join('') +

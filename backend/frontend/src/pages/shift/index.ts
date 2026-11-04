@@ -207,7 +207,7 @@ export async function closeShiftSession(): Promise<void> {
           <input type="number" id="closeMood" min="1" max="5" value="4"></div>
         <div class="field"><label>Заметка для следующей смены (необязательно)</label>
           <textarea id="closeHandover" rows="2" placeholder="Что важно знать тому, кто откроет смену следующим на этой точке…"></textarea></div>
-        <button type="button" class="btn-main" style="background:#e74c3c" onclick="confirmCloseShift()">Закрыть смену</button>
+        <button type="button" class="btn-main" style="background:var(--danger)" onclick="confirmCloseShift()">Закрыть смену</button>
       `;
   }
   openModal();
@@ -321,7 +321,7 @@ export async function loadShiftAndInsight(empId: number): Promise<void> {
                   ${esc((sess as any).store_name || (sess as any).store_id || '')} · с ${timeMoscow((sess as any).opened_at) || '—'} МСК
                 </div>
                 ${['sim', 'mnp', 'pa', 'combo'].map((m) => progressHTML(metricLabel(m), liveFact[m], livePlan[m])).join('')}
-                <button class="btn-main" style="background:#e74c3c;margin-top:10px" onclick="closeShiftSession()">Закрыть смену</button>
+                <button class="btn-main" style="background:var(--danger);margin-top:10px" onclick="closeShiftSession()">Закрыть смену</button>
               </div>`;
       } else {
         shiftEl.innerHTML = `

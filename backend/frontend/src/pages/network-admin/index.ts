@@ -338,8 +338,8 @@ function renderWiScenario(data: WhatIfResponse, date: string): { worstDelta: num
     worstDelta,
     lostCount,
     html: `<div style="font-size:12px;color:var(--hint);margin-bottom:8px">Дата ${data.date || date} · ${(data.moves_applied || []).filter((m) => !m.skipped).length} перенос(ов) применено</div>
-          ${sum.stores_gained?.length ? `<div style="color:#34c759;font-size:13px;margin-bottom:6px">↑ ${sum.stores_gained.join(', ')}</div>` : ''}
-          ${sum.stores_lost?.length ? `<div style="color:#ff3b30;font-size:13px;margin-bottom:6px">↓ ${sum.stores_lost.join(', ')}</div>` : ''}
+          ${sum.stores_gained?.length ? `<div style="color:var(--success);font-size:13px;margin-bottom:6px">↑ ${sum.stores_gained.join(', ')}</div>` : ''}
+          ${sum.stores_lost?.length ? `<div style="color:var(--danger);font-size:13px;margin-bottom:6px">↓ ${sum.stores_lost.join(', ')}</div>` : ''}
           ${rows || '<div class="empty">Нет точек</div>'}
           <div style="display:flex;gap:8px;margin-top:12px">
             ${canApply ? `<button class="btn-main" style="flex:1" onclick="applyWhatIf()">Записать в график</button>` : ''}
@@ -419,13 +419,13 @@ export function compareWiScenarios(): void {
   box.innerHTML = `
         <div class="section-title" style="margin-top:16px">Сравнение сценариев</div>
         <div style="display:flex;gap:10px">
-          <div class="progress-block" style="flex:1;${better === 'A' ? 'border:1px solid #34c759' : ''}">
+          <div class="progress-block" style="flex:1;${better === 'A' ? 'border:1px solid var(--success)' : ''}">
             <div style="font-weight:700">Сценарий A</div>
             <div style="font-size:12px;color:var(--hint)">${a.moves?.length} перенос(ов)</div>
             <div style="font-size:20px;font-weight:800;margin-top:6px">${aWorst > 0 ? '+' : ''}${aWorst}</div>
             <div style="font-size:11px;color:var(--hint)">худшая точка (Δ SIM) · ${aLost} в минусе</div>
           </div>
-          <div class="progress-block" style="flex:1;${better === 'B' ? 'border:1px solid #34c759' : ''}">
+          <div class="progress-block" style="flex:1;${better === 'B' ? 'border:1px solid var(--success)' : ''}">
             <div style="font-weight:700">Сценарий B (текущий)</div>
             <div style="font-size:12px;color:var(--hint)">${b.moves?.length} перенос(ов)</div>
             <div style="font-size:20px;font-weight:800;margin-top:6px">${bWorst > 0 ? '+' : ''}${bWorst}</div>

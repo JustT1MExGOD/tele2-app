@@ -15,9 +15,11 @@ import { maybeShowContextualLesson } from '../../shared/contextual-lesson.js';
 import { renderLoadError } from '../../shared/load-error.js';
 
 function deltaTone(d: number): string {
-  if (d < -100) return 'background:#ff3b3033;color:#ff453a;font-weight:800';
-  if (d > 100) return 'background:#34c75933;color:#34c759;font-weight:800';
-  return 'background:#ffd96644;color:#c9a000;font-weight:700';
+  // Semantic tokens so the delta chip follows light/dark theme like every
+  // other metric surface; the soft variant supplies the translucent wash.
+  if (d < -100) return 'background:var(--danger-soft);color:var(--danger);font-weight:800';
+  if (d > 100) return 'background:var(--success-soft);color:var(--success);font-weight:800';
+  return 'background:var(--warning-soft);color:var(--warning);font-weight:700';
 }
 
 // ===== CASH =====

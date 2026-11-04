@@ -1640,7 +1640,10 @@
 
     .btn-ghost {
       width: 100%;
-      padding: 13px var(--sp-4);
+      /* 15px vertical padding matches .btn-main — these stack on the same
+         screens (MFA gates: "Подтвердить" / "Войти с помощью passkey") and
+         a 2px height delta showed as an uneven edge between siblings. */
+      padding: 15px var(--sp-4);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-md);
       background: var(--surface-2);

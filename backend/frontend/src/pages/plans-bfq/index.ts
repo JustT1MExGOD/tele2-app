@@ -568,12 +568,12 @@ async function renderEmployeePlanDraft(): Promise<void> {
 
   if (planDraft.status === 'stale') {
     html +=
-      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:#e5484d">Черновик устарел: расписание или план точки изменились после расчёта. Пересчитайте план заново.</div>';
+      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:var(--danger)">Черновик устарел: расписание или план точки изменились после расчёта. Пересчитайте план заново.</div>';
   }
 
   if (blocking.length) {
     html +=
-      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:#e5484d"><b>Есть блокирующие ошибки — применить план нельзя, пока они не устранены:</b><ul style="margin:6px 0 0 18px;padding:0">' +
+      '<div class="empty" style="text-align:left;padding:0 16px 12px;color:var(--danger)"><b>Есть блокирующие ошибки — применить план нельзя, пока они не устранены:</b><ul style="margin:6px 0 0 18px;padding:0">' +
       blocking.map((be) => `<li>${esc(be.store_name)}: ${esc(be.message)}</li>`).join('') +
       '</ul></div>';
   }
@@ -591,7 +591,7 @@ async function renderEmployeePlanDraft(): Promise<void> {
           }).join('');
           const warningsHtml =
             item.warnings && item.warnings.length
-              ? `<div class="empty" style="text-align:left;padding:6px 0;color:#c77700">${item.warnings.map((w) => esc(String(w))).join('<br>')}</div>`
+              ? `<div class="empty" style="text-align:left;padding:6px 0;color:var(--warning)">${item.warnings.map((w) => esc(String(w))).join('<br>')}</div>`
               : '';
           return `<div class="mt-card">
             <div class="mt-card-head">
