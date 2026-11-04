@@ -111,7 +111,11 @@ export async function renderStoreProfilePage(): Promise<void> {
             )
             .join('')}
         </div>`
-            : '<div class="empty">Нет продаж за период</div>'
+            : `<div class="empty-state">
+              <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div>
+              <div class="es-title">Нет продаж за период</div>
+              <div class="es-sub">Данные появятся после первых продаж в этом периоде</div>
+            </div>`
         }
       </div>`
           : ''

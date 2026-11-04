@@ -53,7 +53,11 @@ export async function loadLeaderboard(): Promise<void> {
   }
 
   if (!currentMetric) {
-    body.innerHTML = '<div class="empty">Каталог метрик пуст</div>';
+    body.innerHTML = `<div class="empty-state">
+      <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div>
+      <div class="es-title">Каталог метрик пуст</div>
+      <div class="es-sub">Настройте метрики плана, чтобы увидеть топ</div>
+    </div>`;
     return;
   }
 
@@ -69,7 +73,11 @@ export async function loadLeaderboard(): Promise<void> {
 
 function renderList(body: HTMLElement, res: LeaderboardResponse): void {
   if (!res.items.length) {
-    body.innerHTML = '<div class="empty">Пока нет продаж за выбранный период</div>';
+    body.innerHTML = `<div class="empty-state">
+      <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div>
+      <div class="es-title">Пока нет продаж за выбранный период</div>
+      <div class="es-sub">Данные появятся после первых продаж</div>
+    </div>`;
     return;
   }
   const max = res.items[0].value || 1;

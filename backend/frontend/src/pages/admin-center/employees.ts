@@ -46,7 +46,11 @@ async function runEmployeeSearch(term: string): Promise<void> {
   try {
     const res = await window.apiClient.adminSearch(authHeaders(), trimmed, orgQueryParam());
     if (!res.employees.length) {
-      box.innerHTML = '<div class="empty">Ничего не найдено</div>';
+      box.innerHTML = `<div class="empty-state">
+        <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+        <div class="es-title">Ничего не найдено</div>
+        <div class="es-sub">Попробуйте другое имя</div>
+      </div>`;
       return;
     }
     box.innerHTML = res.employees
@@ -112,7 +116,11 @@ async function renderEmployeeDetail(employeeId: number): Promise<void> {
           </div>`;
               })
               .join('')
-          : '<div class="empty">Нет активных сессий</div>'}
+          : `<div class="empty-state">
+              <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg></div>
+              <div class="es-title">Нет активных сессий</div>
+              <div class="es-sub">Сессии появятся после входа сотрудника</div>
+            </div>`}
         ${d.sessions.length ? '<div style="padding:8px 16px"><button type="button" class="btn-ghost" id="empRevokeAll">Отозвать все сессии</button></div>' : ''}
       </div>
       <div class="section">

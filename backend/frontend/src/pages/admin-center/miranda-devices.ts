@@ -193,7 +193,11 @@ async function loadPending(): Promise<void> {
 
 function renderPendingList(box: HTMLElement, items: MirandaPendingBindingRow[]): void {
   if (!items.length) {
-    box.innerHTML = '<div class="empty">Нет устройств, ожидающих подтверждения</div>';
+    box.innerHTML = `<div class="empty-state">
+        <div class="es-icon" style="background:var(--success-soft);color:var(--success)"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg></div>
+        <div class="es-title">Нет устройств, ожидающих подтверждения</div>
+        <div class="es-sub">Новые запросы на привязку появятся здесь</div>
+      </div>`;
     return;
   }
   box.innerHTML = items
@@ -381,7 +385,11 @@ async function onCreateAccount(): Promise<void> {
 
 function renderAccountsList(box: HTMLElement, items: MirandaCorporateAccountListItem[]): void {
   if (!items.length) {
-    box.innerHTML = '<div class="empty">Корпоративных аккаунтов пока нет</div>';
+    box.innerHTML = `<div class="empty-state">
+        <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div class="es-title">Корпоративных аккаунтов пока нет</div>
+        <div class="es-sub">Создайте первый аккаунт в форме выше</div>
+      </div>`;
     return;
   }
   box.innerHTML = items
@@ -477,7 +485,11 @@ async function loadAvailableAccounts(): Promise<void> {
   try {
     const res = await window.apiClient.adminListMirandaAvailableAccounts(authHeaders());
     if (!res.items.length) {
-      box.innerHTML = '<div class="empty">Вам не выдано ни одного гранта на переключение</div>';
+      box.innerHTML = `<div class="empty-state">
+        <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 2 2 4-4"/></svg></div>
+        <div class="es-title">Вам не выдано ни одного гранта</div>
+        <div class="es-sub">Гранты на переключение появятся здесь</div>
+      </div>`;
       return;
     }
     box.innerHTML = res.items
@@ -527,7 +539,11 @@ function renderContactGroups(): void {
   const box = document.getElementById('mirandaGroupsList');
   if (!box) return;
   if (!cachedGroups.length) {
-    box.innerHTML = '<div class="empty">Групп пока нет — создайте первую выше</div>';
+    box.innerHTML = `<div class="empty-state">
+        <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div class="es-title">Групп пока нет</div>
+        <div class="es-sub">Создайте первую группу выше</div>
+      </div>`;
     return;
   }
   const accountById = new Map(lastAccountsList.map((a) => [a.corporate_account_id, a]));

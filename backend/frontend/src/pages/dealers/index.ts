@@ -72,7 +72,11 @@ export async function loadDealersAdmin(): Promise<void> {
             <span>${esc(d.name)}</span>
             <button class="mchip" onclick="${esc(`openRenameDealerModal(${d.id},'${jsEsc(d.name)}')`)}">Переименовать</button>
           </div>
-          ${d.sectors.length ? `<div class="workspace-grid" style="padding:0 16px 16px">${d.sectors.map(sectorCardHTML).join('')}</div>` : '<div class="empty">Секторов пока нет</div>'}
+          ${d.sectors.length ? `<div class="workspace-grid" style="padding:0 16px 16px">${d.sectors.map(sectorCardHTML).join('')}</div>` : `<div class="empty-state">
+            <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4"/></svg></div>
+            <div class="es-title">Секторов пока нет</div>
+            <div class="es-sub">Создайте первый сектор</div>
+          </div>`}
         </div>`
       )
       .join('');
@@ -84,7 +88,11 @@ export async function loadDealersAdmin(): Promise<void> {
         </div>`
       : '';
 
-    tree.innerHTML = (dealerBlocks + unassignedSectorsBlock) || '<div class="empty">Дилеров пока нет — заведите через форму сети</div>';
+    tree.innerHTML = (dealerBlocks + unassignedSectorsBlock) || `<div class="empty-state">
+      <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4"/></svg></div>
+      <div class="es-title">Дилеров пока нет</div>
+      <div class="es-sub">Заведите через форму сети</div>
+    </div>`;
   } catch (e) {
     console.error(e);
     renderLoadError(tree, 'Не удалось загрузить дилеров/секторы', () => loadDealersAdmin());

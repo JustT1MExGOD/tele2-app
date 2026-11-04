@@ -50,7 +50,11 @@ export async function loadCommandCenterPage(): Promise<void> {
               </div>
             </div>`
               )
-              .join('') || '<div class="empty">Нет точек в сети</div>'
+              .join('') || `<div class="empty-state">
+              <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4"/></svg></div>
+              <div class="es-title">Нет точек в сети</div>
+              <div class="es-sub">Точки появятся после привязки к сети</div>
+            </div>`
           }
         </div>
       </div>
@@ -77,7 +81,11 @@ export async function loadCommandCenterPage(): Promise<void> {
             </div>`
                   )
                   .join('')
-              : '<div class="empty" style="padding:10px 0 0">Проблем нет — сеть в ритме</div>'
+              : `<div class="empty-state" style="padding:10px 0 0">
+                <div class="es-icon" style="background:var(--success-soft);color:var(--success)"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
+                <div class="es-title">Проблем нет</div>
+                <div class="es-sub">Сеть в ритме</div>
+              </div>`
           }
         </div>
       </div>

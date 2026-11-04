@@ -50,7 +50,11 @@ export async function loadCash(): Promise<void> {
 
     if (!box) return;
     if (!dates.length) {
-      box.innerHTML = '<div class="empty">🍉 Пока нет ни одной записи кассы — внеси первую строку ниже</div>';
+      box.innerHTML = `<div class="empty-state">
+        <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg></div>
+        <div class="es-title">Пока нет ни одной записи кассы</div>
+        <div class="es-sub">Внеси первую строку ниже</div>
+      </div>`;
       return;
     }
 

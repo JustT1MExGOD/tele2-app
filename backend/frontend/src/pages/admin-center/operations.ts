@@ -50,7 +50,11 @@ async function loadOperations(): Promise<void> {
             </div>`
           )
           .join('')
-      : '<div class="empty">Открытых алертов нет</div>';
+      : `<div class="empty-state">
+          <div class="es-icon" style="background:var(--success-soft);color:var(--success)"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <div class="es-title">Открытых алертов нет</div>
+          <div class="es-sub">Все сети работают в штатном режиме</div>
+        </div>`;
 
     accessBox.innerHTML = d.pending_access_requests.length
       ? d.pending_access_requests
@@ -64,7 +68,11 @@ async function loadOperations(): Promise<void> {
             </div>`
           )
           .join('')
-      : '<div class="empty">Заявок на доступ нет</div>';
+      : `<div class="empty-state">
+          <div class="es-icon"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 2 2 4-4"/></svg></div>
+          <div class="es-title">Заявок на доступ нет</div>
+          <div class="es-sub">Новые заявки появятся здесь</div>
+        </div>`;
   } catch (e) {
     console.error(e);
     renderLoadError(alertsBox, 'Не удалось загрузить данные', () => loadOperations());
