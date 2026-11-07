@@ -251,7 +251,13 @@ fun ChatScreen(container: AppContainer, me: MeResponse) {
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Text("Чат", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp))
+        if (T2Colors.uiBeta) {
+            // Beta UI 3.0 «Ночная смена»: the big iOS title replaces the small header; bubbles and the composer already
+            // pick the beta palette up through T2Colors, so only the header changes.
+            Column(Modifier.padding(horizontal = 16.dp)) { U3LargeTitle("Чат") }
+        } else {
+            Text("Чат", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp))
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 failed -> Text("Не удалось загрузить чат", color = T2Colors.textSecondary, fontSize = 13.sp, modifier = Modifier.align(Alignment.Center).padding(24.dp))

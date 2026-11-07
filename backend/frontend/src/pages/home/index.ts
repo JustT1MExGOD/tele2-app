@@ -24,6 +24,272 @@ function setBothHTML(mobileId: string, desktopId: string, html: string): void {
   if (b) b.innerHTML = html;
 }
 
+// ===== Beta UI 3.0 «Ночная смена» — разметка главной =====
+// Блоки .u3h рендерятся всегда, но с атрибутом hidden: в старом UI их не
+// видно, ui3/home.css показывает их только при body[data-ui="beta"], а
+// старые блоки (.u3-legacy) там же прячет — переключатель работает без
+// перерисовки. Данные те же, что уже пришли (/me/day, /stats/daily);
+// новый запрос только один — лента продаж (GET /sales за сегодня и вчера),
+// и только когда бета включена.
+const U3_PATHS: Record<string, string> = {
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  sim: '<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><rect x="9" y="11" width="6" height="6" rx="1"/>',
+  swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  bag: '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+  chart: '<path d="M4 20h16"/><path d="M5 16l4-5 4 3 6-8"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>',
+  cash: '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 9.5v5M17 9.5v5"/>',
+  calc: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 6h6M9 11h.01M12 11h.01M15 11h.01M9 15h.01M12 15h.01M15 15h.01M9 18h6"/>',
+  play: '<circle cx="12" cy="12" r="9"/><path d="m10 8.5 5 3.5-5 3.5z"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',
+  pin: '<path d="M20 10c0 5-8 12-8 12s-8-7-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'
+};
+const U3_METRIC_ICON: Record<string, string> = {
+  sim: 'sim', mnp: 'swap', pa: 'target', combo: 'plus', phones: 'phone',
+  accessories: 'bag', wink: 'play', insurance: 'shield', esim: 'sim'
+};
+function u3Ic(name: string): string {
+  return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${U3_PATHS[name] || U3_PATHS.chart}</svg>`;
+}
+function u3IsMoney(id: string): boolean {
+  const m = (window.METRICS || []).find((x: { id: string }) => x.id === id) as { unit?: string } | undefined;
+  return m?.unit === '₽' || m?.unit === 'money';
+}
+function u3Num(n: number): string {
+  return Math.round(n).toLocaleString('ru-RU');
+}
+function u3Dec1(n: number): string {
+  return (Math.round(n * 10) / 10).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+}
+function u3Plural(n: number, a: string, b: string, c: string): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c;
+}
+/** Минуты от полуночи по Москве. */
+function u3NowMin(): number {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+  const [h, m] = parts.split(':').map(Number);
+  return (h % 24) * 60 + (m || 0);
+}
+/** «10-21», «10:00–21:30» → минуты начала/конца смены. */
+function u3ShiftWindow(text: string | null | undefined): { start: number; end: number } | null {
+  const m = /(\d{1,2})(?::(\d{2}))?\s*[-–—]\s*(\d{1,2})(?::(\d{2}))?/.exec(String(text || ''));
+  if (!m) return null;
+  const start = Number(m[1]) * 60 + Number(m[2] || 0);
+  const end = Number(m[3]) * 60 + Number(m[4] || 0);
+  return end > start ? { start, end } : null;
+}
+function u3Hm(min: number): string {
+  return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
+}
+function u3Pie(p: number, tone: string, label: string): string {
+  return `<span class="u3h-pie ${tone}" style="--p:${Math.max(0, Math.min(1, p)).toFixed(3)}" role="img" aria-label="${esc(label)}"></span>`;
+}
+
+/** Hero «Продажи сегодня X из Y» + темп смены + прогноз к концу смены. */
+function u3HeroHTML(d: MeDayResponse): string {
+  const pr = d.progress || {};
+  let fact = 0;
+  let plan = 0;
+  Object.keys(pr).forEach((k) => {
+    if (u3IsMoney(k) || !(pr[k]?.plan > 0)) return;
+    fact += Number(pr[k].fact) || 0;
+    plan += Number(pr[k].plan) || 0;
+  });
+  const win = d.shift ? u3ShiftWindow(d.shift.shift_text) : null;
+  const now = u3NowMin();
+  const e = win ? Math.max(0, Math.min(1, (now - win.start) / (win.end - win.start))) : 1;
+  const forecast = win && e > 0.05 && e < 1 ? Math.round(fact / e) : null;
+  const behind = plan > 0 && e > 0 && fact < plan * e * 0.9;
+  const left = Math.max(0, plan - fact);
+  const minsLeft = win ? Math.max(0, win.end - now) : 0;
+  let sub: string;
+  if (!d.shift) sub = 'Сегодня выходной, продажи всё равно считаются';
+  else if (plan <= 0) sub = 'На сегодня план не задан';
+  else if (left === 0) sub = 'План дня закрыт';
+  else sub = `Ещё ${u3Num(left)} до плана`;
+  // Темп — подписью под линией (начало смены слева, остаток справа); прогноз — только в чипе.
+  const hLeft = Math.floor(minsLeft / 60);
+  const ended = !!win && e >= 1;
+  const leftTxt = !win ? '' : ended ? `смена закончилась, итог ${u3Num(fact)}` : e === 0 ? `смена с ${u3Hm(win.start)}` : `осталось ${hLeft ? hLeft + ' ч ' : ''}${minsLeft % 60} мин`;
+  const axis = win && plan > 0 ? `<div class="u3h-axis"><span>${u3Hm(win.start)}</span><span>${leftTxt}</span><span>${u3Hm(win.end)}</span></div>` : '';
+  // Линия темпа: план — пунктир 0→план через всю смену, факт — сплошная до «сейчас», прогноз — точки.
+  const W = 320;
+  const H = 44;
+  const top = Math.max(plan, forecast || 0, fact, 1);
+  const y = (v: number): number => H - 4 - (v / top) * (H - 10);
+  const xNow = e * W;
+  const chart = plan > 0
+    ? `<svg class="u3h-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+        <line class="pp" x1="0" y1="${y(0).toFixed(1)}" x2="${W}" y2="${y(plan).toFixed(1)}"/>
+        ${forecast !== null ? `<line class="pf" x1="${xNow.toFixed(1)}" y1="${y(fact).toFixed(1)}" x2="${W}" y2="${y(forecast).toFixed(1)}"/>` : ''}
+        <path class="l" d="M0,${y(0).toFixed(1)} L${xNow.toFixed(1)},${y(fact).toFixed(1)}"/>
+        <circle class="dot" cx="${Math.min(W - 3, Math.max(3, xNow)).toFixed(1)}" cy="${y(fact).toFixed(1)}" r="3.5"/>
+      </svg>`
+    : '';
+  const chip = forecast !== null && win
+    ? `<span class="u3h-chip${forecast < plan ? ' warn' : ''}">прогноз ${u3Num(forecast)} к ${u3Hm(win.end)}</span>`
+    : d.total?.pct ? `<span class="u3h-chip">${d.total.pct}% плана</span>` : '';
+  return `<section class="u3h-hero${behind ? ' behind' : ''}" aria-label="Продажи сегодня">
+      <div class="u3h-hero-row"><span class="u3h-h-label">Продажи сегодня</span>${chip}</div>
+      <p class="u3h-h-num">${u3Num(fact)}${plan > 0 ? ` <small>из ${u3Num(plan)}</small>` : ''}</p>
+      <p class="u3h-h-sub">${esc(sub)}</p>
+      ${chart}${axis}
+    </section>`;
+}
+
+/** «План дня» — Apple grouped строки с пирогом темпа на каждую метрику. */
+function u3DayRowsHTML(d: MeDayResponse): string {
+  const pr = d.progress || {};
+  const mp = (d.month_plan || {}) as Record<string, unknown>;
+  const mf = d.month_fact || {};
+  const shiftsLeft = Math.max(1, Number(d.remaining_shifts) || 1);
+  const win = d.shift ? u3ShiftWindow(d.shift.shift_text) : null;
+  const e = win ? Math.max(0, Math.min(1, (u3NowMin() - win.start) / (win.end - win.start))) : 1;
+  const rows = Object.keys(pr)
+    .filter((k) => (pr[k]?.plan || 0) > 0)
+    .map((k) => {
+      const f = Number(pr[k].fact) || 0;
+      const p = Number(pr[k].plan) || 0;
+      const r = f / p;
+      const money = u3IsMoney(k);
+      const done = r >= 1;
+      // Отставание от темпа смены: до 15% — мягкое (жёлтый), больше — красный.
+      const lag = !done && e > 0 ? 1 - r / e : 0;
+      const behind = lag > 0.15;
+      const mild = !behind && lag > 0.05;
+      const tone = done ? 'done' : behind ? 'bad' : mild ? 'warn' : 'ok';
+      const state = done ? 'план дня закрыт' : behind ? 'отстаёт от темпа' : mild ? 'чуть ниже темпа' : 'в темпе';
+      const mPlan = Number(mp[k]) || 0;
+      const mFact = Number(mf[k]) || 0;
+      const need = mPlan > 0 ? Math.max(0, (mPlan - mFact) / shiftsLeft) : 0;
+      const rub = (v: number): string => (v >= 10000 ? `${u3Dec1(v / 1000)} тыс ₽` : `${u3Num(v)} ₽`);
+      const needTxt = mPlan > 0 && need > 0 ? (money ? `нужно ${rub(need)} в день` : `нужно ${u3Dec1(need)} в день`) + ', ' : '';
+      const unit = money ? ' ₽' : '';
+      return `<div class="u3h-cell${behind ? ' behind' : ''}${mild ? ' mild' : ''}">
+          ${u3Pie(r, tone, `${Math.round(r * 100)}%, ${state}`)}
+          <span class="u3h-c-main"><span class="u3h-c-t">${esc(metricShort(k))}</span><span class="u3h-c-s">${needTxt}${state}</span></span>
+          <span class="u3h-c-r">${u3Num(f)}${unit}<span class="u3h-c-s">из ${u3Num(p)}${unit}</span></span>
+        </div>`;
+    })
+    .join('');
+  return rows
+    ? `<div class="u3h-g-head"><span>План дня</span><button type="button" class="u3h-link" data-on="switchPage" data-on-event="click" data-arg="monthplan">Месяц</button></div>
+       <div class="u3h-group">${rows}</div>`
+    : '';
+}
+
+// Лента продаж: строка продажи — одна запись на сотрудника/точку/день с
+// суммами по метрикам, отдельных чеков в модели нет. Поэтому каждая
+// ненулевая метрика своей записи = строка ленты.
+function u3FeedRows(rows: any[]): { html: string; count: number } {
+  let count = 0;
+  const html = rows
+    .map((s) => {
+      const t = timeMoscow(s.updated_at);
+      return (window.METRICS || [])
+        .map((m: { id: string; label: string }) => {
+          const v = Number(s[m.id]) || 0;
+          if (v <= 0) return '';
+          count++;
+          const money = u3IsMoney(m.id);
+          return `<div class="u3h-cell">
+              <span class="u3h-tile">${u3Ic(U3_METRIC_ICON[m.id] || 'chart')}</span>
+              <span class="u3h-c-main"><span class="u3h-c-t">${esc(m.label)}</span><span class="u3h-c-s">${[t, s.store_name].filter(Boolean).map((x) => esc(String(x))).join(', ')}</span></span>
+              <span class="u3h-c-r">${money ? u3Num(v) + ' ₽' : '+' + u3Num(v) + ' шт'}</span>
+            </div>`;
+        })
+        .join('');
+    })
+    .join('');
+  return { html, count };
+}
+
+let u3FeedSeq = 0;
+async function u3LoadFeed(): Promise<void> {
+  const boxes = document.querySelectorAll<HTMLElement>('.u3h-feed');
+  if (!boxes.length || !isBetaUi()) return;
+  const seq = ++u3FeedSeq;
+  const empId = String(me?.employee_id || '');
+  const today = todayMoscow();
+  const yd = new Date(today + 'T12:00:00');
+  yd.setDate(yd.getDate() - 1);
+  const yday = yd.toISOString().slice(0, 10);
+  const [a, b] = await Promise.all([
+    window.apiClient.getSales(authHeaders(), today, orgQueryParam()).catch(() => null),
+    window.apiClient.getSales(authHeaders(), yday, orgQueryParam()).catch(() => null)
+  ]);
+  if (seq !== u3FeedSeq) return;
+  const mine = (list: any): any[] => (Array.isArray(list) ? list : []).filter((s) => String(s.employee_id) === empId && !s.voided_at);
+  const t = u3FeedRows(mine(a));
+  const y = u3FeedRows(mine(b));
+  let html: string;
+  if (a === null && b === null) {
+    html = `<div class="u3h-g-head"><span>Сегодня</span></div><div class="u3h-group"><div class="u3h-empty">Не удалось загрузить продажи</div></div>`;
+  } else {
+    html =
+      `<div class="u3h-g-head"><span>Сегодня</span><span class="u3h-meta">${t.count ? `${t.count} ${u3Plural(t.count, 'позиция', 'позиции', 'позиций')}` : ''}</span></div>` +
+      `<div class="u3h-group has-tile">${t.html || '<div class="u3h-empty">Сегодня продаж ещё нет. Первая — кнопкой «Продажа» выше</div>'}</div>` +
+      (y.count ? `<div class="u3h-g-head sub"><span>Вчера</span><span class="u3h-meta">${y.count} ${u3Plural(y.count, 'позиция', 'позиции', 'позиций')}</span></div><div class="u3h-group has-tile">${y.html}</div>` : '');
+  }
+  boxes.forEach((el) => {
+    el.innerHTML = html;
+  });
+  (document.getElementById('homeTodaySwipe') as any)?._swipeRefreshHeight?.();
+}
+
+// «Сеть сегодня»: /stats/daily (loadHome) и точка смены (loadMyDay) приходят
+// независимо — рендер по готовности любого из двух.
+let u3NetStats: StatsDailyRow[] | null = null;
+let u3MyStoreId: string | null = null;
+function u3RenderNet(): void {
+  const boxes = document.querySelectorAll<HTMLElement>('.u3h-net');
+  if (!boxes.length || !u3NetStats) return;
+  const units = (s: any): number => ['sim', 'mnp', 'pa', 'combo'].reduce((a, k) => a + (Number(s[k]) || 0), 0);
+  const list = u3NetStats.map((s: any) => ({ id: String(s.store_id), name: String(s.name || s.code || ''), u: units(s) })).sort((x, y) => y.u - x.u);
+  const total = list.reduce((a, s) => a + s.u, 0);
+  const sum = (k: string): number => u3NetStats!.reduce((a, s: any) => a + (Number(s[k]) || 0), 0);
+  const idx = u3MyStoreId ? list.findIndex((s) => s.id === u3MyStoreId) : -1;
+  const mineRow = idx >= 0 ? list[idx] : null;
+  const share = mineRow && total > 0 ? mineRow.u / total : 0;
+  const html =
+    `<div class="u3h-g-head sub"><span>Сеть сегодня</span><span class="u3h-meta">${list.length} ${u3Plural(list.length, 'магазин', 'магазина', 'магазинов')}</span></div>` +
+    `<div class="u3h-group has-tile">
+      <div class="u3h-cell"><span class="u3h-tile neu">${u3Ic('chart')}</span>
+        <span class="u3h-c-main"><span class="u3h-c-t">${u3Num(total)} ${u3Plural(total, 'продажа', 'продажи', 'продаж')} по сети</span><span class="u3h-c-s">SIM, MNP, ПА, Комбо</span></span></div>
+      <div class="u3h-cell"><span class="u3h-tile neu">${u3Ic('bag')}</span>
+        <span class="u3h-c-main"><span class="u3h-c-t">${esc(metricShort('phones'))} ${u3Num(sum('phones'))}, ${esc(metricShort('accessories'))} ${u3Num(sum('accessories'))} ₽</span><span class="u3h-c-s">телефоны и аксессуары за день</span></span></div>
+      ${mineRow ? `<div class="u3h-cell"><span class="u3h-tile neu">${u3Ic('trophy')}</span>
+        <span class="u3h-c-main"><span class="u3h-c-t">«${esc(mineRow.name)}» на ${idx + 1} месте из ${list.length}</span><span class="u3h-c-s">${Math.round(share * 100)}% продаж сети</span></span>
+        ${u3Pie(share, 'ok', `${Math.round(share * 100)}% продаж сети`)}</div>` : ''}
+    </div>`;
+  boxes.forEach((el) => {
+    el.innerHTML = html;
+  });
+  (document.getElementById('homeTodaySwipe') as any)?._swipeRefreshHeight?.();
+}
+
+/** Large title + подпись + слот hero + круглые быстрые действия (Revolut). */
+function u3HomeTopHTML(firstName: string): string {
+  const date = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+  const qa = (icon: string, label: string, attrs: string, pri = false): string =>
+    `<button type="button" class="u3h-qa-btn" ${attrs}><span class="u3h-round${pri ? ' pri' : ''}">${u3Ic(icon)}</span>${label}</button>`;
+  return `<div class="u3h u3h-top" hidden>
+      <h2 class="u3h-large">${esc(greetingByHour())}, ${esc(firstName)}</h2>
+      <p class="u3h-lede" id="u3hLede">${esc(date.charAt(0).toUpperCase() + date.slice(1))}</p>
+      <div class="u3h-hero-slot" id="u3hHero"><section class="u3h-hero" aria-label="Продажи сегодня"><div class="u3h-hero-row"><span class="u3h-h-label">Продажи сегодня</span></div><p class="u3h-h-num">—</p><p class="u3h-h-sub">Загружаем день…</p></section></div>
+      <div class="u3h-qa">
+        ${qa('plus', 'Продажа', 'data-on="openAddSale" data-on-event="click"', true)}
+        ${qa('chart', 'План', 'data-on="switchPage" data-on-event="click" data-arg="monthplan"')}
+        ${qa('cash', 'Касса', 'data-on="switchPage" data-on-event="click" data-arg="cash"')}
+        ${qa('calc', 'Комбо', 'data-on="openComboCalc" data-on-event="click"')}
+      </div>
+    </div>`;
+}
+
 export async function loadMyDay(): Promise<void> {
   const box = document.getElementById('myDayBody');
   if (!box) return;
@@ -124,10 +390,35 @@ export async function loadMyDay(): Promise<void> {
                 return progressHTML(metricShort(m), x.fact, x.plan);
               })
               .join('')}
-            <button class="btn-main" style="margin-top:8px" onclick="openAddSale()">+ Продажа</button>
+            <button class="btn-main u3-legacy" style="margin-top:8px" onclick="openAddSale()">+ Продажа</button>
+          </div>
+          <div class="u3h u3h-day" hidden>
+            ${u3DayRowsHTML(d)}
+            <div class="u3h-feed"></div>
+            <div class="u3h-net"></div>
           </div>
           ${myTasksHTML(d.tasks)}`;
     setBothHTML('myDayBody', 'myDayBodyDesktop', bodyHtml);
+    // Beta: hero над быстрыми действиями + подпись «Гелиос, смена до 21:00».
+    const heroSlot = document.getElementById('u3hHero');
+    if (heroSlot) heroSlot.innerHTML = u3HeroHTML(d);
+    const lede = document.getElementById('u3hLede');
+    if (lede) {
+      // Точка и «сменить» — прямо в подписи под приветствием (отдельная строка
+      // точки в бете скрыта, см. ui3/home.css).
+      const win = shift ? u3ShiftWindow(shift.shift_text) : null;
+      const base = (lede.dataset.date ||= lede.textContent || '');
+      const chipHtml = canChangeStore
+        ? ` <button type="button" class="u3h-store-chip" data-on="openChangeStoreModal" data-on-event="click" data-tutorial-id="academy-change-store-btn" aria-label="Сменить точку">сменить →</button>`
+        : '';
+      const where = shift
+        ? `, «${esc(shift.store_name || shift.store_code || 'точка')}»${isReplacementOpen ? ' (замена)' : ''}`
+        : ', выходной';
+      lede.innerHTML = `${esc(base)}${where}${win ? `, смена до ${u3Hm(win.end)}` : ''}${chipHtml}`;
+    }
+    u3MyStoreId = shift ? String(shift.store_id) : null;
+    u3RenderNet();
+    u3LoadFeed();
   } catch (e) {
     console.error(e);
     setBothHTML(
@@ -321,8 +612,8 @@ export async function loadHome(): Promise<void> {
   const today = todayMoscow();
   const greetEl = document.getElementById('greetingCard');
   if (greetEl) {
-    greetEl.innerHTML = `
-          <div class="greet-card">
+    greetEl.innerHTML = `${u3HomeTopHTML(firstName)}
+          <div class="greet-card u3-legacy">
             <div class="greet-shift-badge" id="greetShiftBadge" style="display:none"></div>
             <div class="greet-hi">${greetingByHour()}</div>
             <div class="greet-name">${esc(firstName)}</div>
@@ -388,6 +679,8 @@ export async function loadHome(): Promise<void> {
               </div>
             </div>`;
     setBothHTML('networkPulse', 'networkPulseDesktop', pulseHtml);
+    u3NetStats = list;
+    u3RenderNet();
     (document.getElementById('homeTodaySwipe') as any)?._swipeRefreshHeight?.();
 
     const box = document.getElementById('homeTop');

@@ -77,7 +77,7 @@ fun ShiftDialogHost(container: AppContainer) {
 
 @Composable
 private fun Block(title: String, content: @Composable () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) ru.t2sales.shared.theme.T2Radius.cell else 16.dp)
     Column(modifier = Modifier.padding(bottom = 12.dp).fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(14.dp)) {
         Text(title.uppercase(), color = T2Colors.hint, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.7.sp, modifier = Modifier.padding(bottom = 8.dp))
         content()

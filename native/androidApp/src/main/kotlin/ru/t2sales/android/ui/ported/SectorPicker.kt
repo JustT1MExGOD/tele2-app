@@ -58,15 +58,37 @@ fun SectorPickerDialog(
                 color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp)
             )
             else -> {
-                SelectField("Сектор", picked?.label ?: "", list.map { it.label }) { label -> picked = list.firstOrNull { it.label == label } }
-                Spacer(Modifier.height(16.dp))
-                MainButton("Назначить", enabled = picked != null) { picked?.let { onPick(it.id) } }
-                if (allowSkip) {
-                    Text(
-                        "Пропустить, назначу позже",
-                        fontWeight = FontWeight.Bold, fontSize = 13.sp, textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).clickable { (onSkip ?: onDismiss)() }.padding(12.dp)
-                    )
+                if (T2Colors.uiBeta) {
+                    // Beta: tappable grouped list of sectors instead of a dropdown.
+                    U3Group {
+                        list.forEachIndexed { i, o ->
+                            if (i > 0) U3Sep()
+                            val on = o.id == picked?.id
+                            U3Cell(
+                                o.label, null, highlight = on,
+                                leading = { U3Tile(o.label.take(1).uppercase(), tint = if (on) T2Colors.primary else T2Colors.textSecondary) },
+                                trailing = { if (on) U3Value("✓", T2Colors.primary) },
+                                onClick = { picked = o }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    U3PrimaryButton("Назначить", enabled = picked != null) { picked?.let { onPick(it.id) } }
+                    if (allowSkip) {
+                        Spacer(Modifier.height(8.dp))
+                        U3SecondaryButton("Пропустить, назначу позже") { (onSkip ?: onDismiss)() }
+                    }
+                } else {
+                    SelectField("Сектор", picked?.label ?: "", list.map { it.label }) { label -> picked = list.firstOrNull { it.label == label } }
+                    Spacer(Modifier.height(16.dp))
+                    MainButton("Назначить", enabled = picked != null) { picked?.let { onPick(it.id) } }
+                    if (allowSkip) {
+                        Text(
+                            "Пропустить, назначу позже",
+                            fontWeight = FontWeight.Bold, fontSize = 13.sp, textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).clickable { (onSkip ?: onDismiss)() }.padding(12.dp)
+                        )
+                    }
                 }
             }
         }

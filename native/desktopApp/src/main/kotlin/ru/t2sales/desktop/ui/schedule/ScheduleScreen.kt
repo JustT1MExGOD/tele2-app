@@ -201,7 +201,8 @@ fun ScheduleScreen(scheduleApi: ScheduleApi, teamApi: TeamApi, myEmployeeId: Int
         list == null || employees == null -> LoadingBlock()
         else -> {
             if (managerTier) {
-                Text(
+                if (T2Colors.uiBeta) ru.t2sales.desktop.ui.components.GroupHead("Сводный график команды")
+                else Text(
                     "Сводный график команды",
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
@@ -236,7 +237,7 @@ fun ScheduleScreen(scheduleApi: ScheduleApi, teamApi: TeamApi, myEmployeeId: Int
             val draftByEmp = draft?.byEmployee().orEmpty()
             people.forEach { (empId, name) ->
                 val days = byEmp[empId].orEmpty().associateBy { it.work_date.take(10) }
-                val shape = RoundedCornerShape(T2Radius.default)
+                val shape = RoundedCornerShape(if (T2Colors.uiBeta) T2Radius.cell else T2Radius.default)
                 Column(
                     modifier = Modifier
                         .padding(bottom = 12.dp)

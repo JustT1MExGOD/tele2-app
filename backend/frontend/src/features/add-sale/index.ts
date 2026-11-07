@@ -81,6 +81,7 @@ export async function openAddSale(presetEmployeeId?: number | string): Promise<v
     const body = document.getElementById('modalBody');
     if (body) {
       body.innerHTML = `
+          <div class="u3-sale-who">
           <div class="field">
             <label>Сотрудник</label>
             <select id="modalEmployee" onchange="onEmpChange()" ${isMgr ? '' : 'disabled'}>
@@ -101,21 +102,22 @@ export async function openAddSale(presetEmployeeId?: number | string): Promise<v
                 .join('')}
             </select>
           </div>
-          <div class="field">
+          </div>
+          <div class="field u3-sale-types">
             <label>Тип <span style="font-weight:500;text-transform:none;color:var(--text-secondary)">(можно несколько)</span></label>
             <div class="metric-grid" id="metricGrid"></div>
           </div>
-          <div class="field">
+          <div class="field u3-sale-qty">
             <label>Количество</label>
             <div id="saleQtyList" class="qty-list"></div>
-            <div class="quick">
+            <div class="quick" aria-label="Задать всем">
               <button type="button" onclick="setAllQty(1)">1</button>
               <button type="button" onclick="setAllQty(2)">2</button>
               <button type="button" onclick="setAllQty(5)">5</button>
               <button type="button" onclick="setAllQty(10)">10</button>
             </div>
           </div>
-          <button class="btn-main" id="saleSubmitBtn" onclick="submitSale()">Добавить</button>
+          <div class="u3-sale-foot"><div class="u3-foot-meta" id="u3SaleFootMeta"></div><button class="btn-main" id="saleSubmitBtn" onclick="submitSale()">Добавить</button></div>
         `;
     }
 
@@ -172,19 +174,33 @@ export function renderSaleQtyList(): void {
   const list = document.getElementById('saleQtyList');
   if (!list) return;
   const keys = Object.keys(saleSelection);
+  // Beta UI 3.0 footer-band line («В продаже: …»); устаревший текст живёт
+  // только внутри беты — в legacy этот div пуст и невидим.
+  const footMeta = document.getElementById('u3SaleFootMeta');
+  if (footMeta) footMeta.textContent = '';
   if (!keys.length) {
     list.innerHTML = '<div class="qty-empty">Выбери одну или несколько метрик</div>';
     return;
   }
+  if (footMeta) {
+    const n = keys.length;
+    footMeta.textContent = `В продаже: ${n} ${n % 10 === 1 && n % 100 !== 11 ? 'позиция' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'позиции' : 'позиций'}`;
+  }
   list.innerHTML = keys
     .map((key) => {
       const m = METRICS.find((x) => x.id === key) || { label: key, unit: '' };
+      // каталог хранит денежную единицу как «₽» (GET /metrics), API — 'money'
+      const money = (m as any).unit === '₽' || (m as any).unit === 'money';
       return `
-          <div class="qty-row">
+          <div class="qty-row${money ? ' u3-money' : ''}">
             <div class="qty-label">${esc(m.label)}<small>${(m as any).unit || ''}</small></div>
+            <div class="u3-stepper">
+            <button type="button" class="u3-step" hidden aria-label="Меньше" onclick="var i=this.parentNode.querySelector('input');i.stepDown();i.dispatchEvent(new Event('input'))">−</button>
             <input type="number" min="0" step="1" inputmode="decimal"
               value="${saleSelection[key]}"
-              oninput="saleSelection['${key}'] = Number(String(this.value).replace(',','.')) || 0" />
+              oninput="saleSelection['${key}'] = Number(String(this.value).replace(',','.')) || 0" />${money ? '<span class="u3-money-suffix" hidden aria-hidden="true">₽</span>' : ''}
+            <button type="button" class="u3-step" hidden aria-label="Больше" onclick="var i=this.parentNode.querySelector('input');i.stepUp();i.dispatchEvent(new Event('input'))">+</button>
+            </div>
           </div>
         `;
     })

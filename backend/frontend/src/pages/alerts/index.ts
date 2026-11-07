@@ -55,7 +55,7 @@ export async function loadAlertsPage(): Promise<void> {
           )
           .join('')}
       </div>
-      <div style="padding:0 16px 16px">
+      <div class="u3-card" style="padding:0 16px 16px">
         ${
           items.length
             ? items

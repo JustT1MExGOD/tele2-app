@@ -155,6 +155,11 @@ private fun export(scope: kotlinx.coroutines.CoroutineScope, teamApi: TeamApi, t
 
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.GroupHead(title)
+        ru.t2sales.desktop.ui.components.Group { Column(Modifier.padding(vertical = 6.dp)) { content() } }
+        return
+    }
     val shape = RoundedCornerShape(T2Radius.default)
     Column(modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(vertical = 6.dp)) {
         Text(
@@ -167,6 +172,14 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun NavRow(icon: ImageVector, title: String, sub: String?, onClick: () -> Unit) {
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.BetaCell(
+            title = title, sub = sub,
+            leading = { ru.t2sales.desktop.ui.components.BetaTile(icon) },
+            chevron = true, onClick = onClick
+        )
+        return
+    }
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically

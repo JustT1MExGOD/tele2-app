@@ -135,7 +135,7 @@ private fun StoreDayCard(store: JsonObject, d: DayData) {
     PLAN_KEYS.forEach { sf += fact[it].dbl(); sp += plan[it].dbl() }
     val overall = if (sp > 0) ((sf / sp) * 100).roundToInt() else if (sf > 0) 100 else 0
     val tone = when { overall >= 100 -> T2Colors.success; overall >= 70 -> T2Colors.warning; else -> T2Colors.danger }
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) ru.t2sales.shared.theme.T2Radius.cell else 16.dp)
     val name = store["name"].str()
     Column(modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface)) {
         Row(

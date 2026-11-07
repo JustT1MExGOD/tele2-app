@@ -1,0 +1,472 @@
+/* =========================================================
+   T2 Sales — Beta UI 3.0 «Ночная смена» · base layer
+   Источник: design-system/ui3/v5-team (index.html, NOTES.md).
+
+   Правило слоя: КАЖДЫЙ селектор ниже начинается с body[data-ui="beta"]
+   (кроме карточки-переключателя .beta-ui-*, она видна и в старом UI).
+   Без атрибута (app/nav.ts → toggleBetaUi) этот файл ничего не меняет.
+   Сначала переопределяются токены текущего styles.css (--bg, --surface,
+   --text…), поэтому все существующие компоненты сразу берут новую
+   палитру; затем идёт оболочка: шапка, лист, карточки, таб-бар, FAB,
+   кнопки, поля, шторка, тосты. Экраны — в ui3/<screen>.css.
+   ========================================================= */
+
+/* ---------- Карточка переключателя в Профиле (оба режима) ---------- */
+.beta-ui-card { padding: 0; }
+.beta-ui-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 12px);
+  padding: 14px 16px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.beta-ui-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.beta-ui-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--text); }
+.beta-ui-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--primary-soft); color: var(--primary-text-bg);
+}
+[data-theme="dark"] .beta-ui-badge { color: var(--primary); }
+.beta-ui-sub { font-size: 13px; color: var(--hint); line-height: 1.35; }
+/* iOS-style switch на нативном checkbox — фокус, клавиатура и screen
+   reader работают без JS. */
+.beta-ui-switch {
+  appearance: none; -webkit-appearance: none;
+  flex: none; position: relative;
+  width: 51px; height: 31px; border-radius: 999px;
+  background: var(--surface-3); border: 0; margin: 0; cursor: pointer;
+  transition: background-color .2s cubic-bezier(.22,1,.36,1);
+}
+.beta-ui-switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 27px; height: 27px; border-radius: 999px; background: #fff;
+  box-shadow: 0 3px 8px rgba(0,0,0,.15), 0 1px 1px rgba(0,0,0,.16);
+  transition: transform .24s cubic-bezier(.22,1,.36,1);
+}
+.beta-ui-switch:checked { background: var(--success); }
+.beta-ui-switch:checked::after { transform: translateX(20px); }
+@media (prefers-reduced-motion: reduce) {
+  .beta-ui-switch, .beta-ui-switch::after { transition: none; }
+}
+
+/* =========================================================
+   TOKENS — светлая тема (Apple grouped)
+   ========================================================= */
+body[data-ui="beta"] {
+  /* новые токены беты */
+  --u-page: #F2F2F7;
+  --u-cell: #FFFFFF;
+  --u-cell-2: #F2F2F7;
+  --u-cell-press: #E5E5EA;
+  --u-line: rgba(0,0,0,.07);
+  --u-line-2: rgba(0,0,0,.14);
+  --u-cell-line: var(--u-line);
+  --u-sep: rgba(60,60,67,.14);
+  --u-text: #0B0C0E;
+  --u-text-2: #55585F;
+  --u-text-3: #6C6F76;
+  --u-accent: #1990D2;
+  --u-accent-text: #0D6DA6;
+  --u-accent-soft: rgba(25,144,210,.11);
+  --u-primary-soft: var(--u-accent-soft);
+  --u-primary: #106FA3;
+  --u-on-primary: #FFFFFF;
+  --u-primary-press: #0C5D8A;
+  --u-success: #1E8449;  --u-success-soft: rgba(30,132,73,.11);
+  --u-warning: #945400;  --u-warning-soft: rgba(214,130,0,.13);
+  --u-danger: #C9262C;   --u-danger-soft: rgba(201,38,44,.10);
+  --u-track: rgba(0,0,0,.08);
+  --u-glass: rgba(255,255,255,.74);
+  --u-glass-line: rgba(0,0,0,.08);
+  --u-scrim: rgba(0,0,0,.32);
+  --u-glow: rgba(25,144,210,.08);
+  --u-shadow-float: 0 8px 24px rgba(0,0,0,.06);
+  --u-shadow-sheet: 0 -10px 30px rgba(0,0,0,.12);
+  /* hero mesh — одинаковый в обеих темах, только синее семейство T2 */
+  --u-hero-1: #147CB8; --u-hero-2: #106FA3; --u-hero-3: #0A4B7A; --u-hero-4: #062238; --u-hero-spot: #7FD3FF;
+  --u-on-hero: #EFF9FF; --u-on-hero-2: rgba(255,255,255,.92); --u-on-hero-line: rgba(255,255,255,.22);
+  --u-on-hero-fill: rgba(255,255,255,.14); --u-hero-chip: rgba(6,34,56,.28);
+  --u-hero: radial-gradient(120% 90% at 0% 0%, var(--u-hero-1) 0%, transparent 60%),
+            radial-gradient(70% 60% at 100% 0%, rgba(127,211,255,.30) 0%, transparent 70%),
+            linear-gradient(160deg, var(--u-hero-2) 0%, var(--u-hero-3) 55%, var(--u-hero-4) 100%);
+
+  /* радиусы / ритм / моушн */
+  --u-r-xs: 6px; --u-r-sm: 10px; --u-r-seg: 8px; --u-r-md: 14px; --u-r-lg: 22px; --u-r-xl: 28px; --u-r-pill: 999px;
+  --u-hit: 44px;
+  --u-ease-out: cubic-bezier(.22,1,.36,1);
+  --u-drawer: cubic-bezier(.32,.72,0,1);
+  --u-dur-micro: 120ms; --u-dur-short: 200ms; --u-dur-med: 320ms; --u-dur-sheet: 360ms;
+  --u-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+  --u-tr-tight: -0.022em; --u-tr-hero: -0.045em;
+
+  /* ---- переопределение токенов текущего UI: все старые компоненты
+     автоматически получают палитру беты ---- */
+  --bg: var(--u-page);
+  --surface: var(--u-cell);
+  --surface-2: var(--u-cell-2);
+  --surface-3: var(--u-cell-press);
+  --text: var(--u-text);
+  --text-secondary: var(--u-text-2);
+  --hint: var(--u-text-3);
+  --border: var(--u-line);
+  --border-strong: var(--u-line-2);
+  --accent: var(--u-text);
+  --accent-soft: var(--u-cell-2);
+  --primary: var(--u-accent);
+  --primary-soft: var(--u-accent-soft);
+  --primary-text-bg: var(--u-primary);
+  --success: var(--u-success);   --success-soft: var(--u-success-soft);
+  --warning: var(--u-warning);   --warning-soft: var(--u-warning-soft);
+  --danger: var(--u-danger);     --danger-soft: var(--u-danger-soft);
+  --shadow-xs: none;
+  --shadow: none;
+  --shadow-md: var(--u-shadow-float);
+  --shadow-lg: 0 20px 50px rgba(0,0,0,.14);
+  --header-bg: transparent;
+  --header-text: var(--u-text);
+  --nav-bg: var(--u-glass);
+  --nav-border: var(--u-glass-line);
+  --icon-bg: var(--u-cell-2);
+  --font: var(--u-font);
+  --radius: var(--u-r-lg);
+  --radius-md: var(--u-r-md);
+  --radius-sm: var(--u-r-sm);
+  --radius-xs: var(--u-r-xs);
+  --radius-lg: var(--u-r-lg);
+  --radius-xl: var(--u-r-xl);
+  --ease: var(--u-ease-out);
+  --ease-out: var(--u-ease-out);
+}
+
+/* =========================================================
+   TOKENS — тёмная тема (Linear canvas)
+   ========================================================= */
+body[data-ui="beta"][data-theme="dark"] {
+  --u-page: #08090A;
+  --u-cell: #111214;
+  --u-cell-2: #18191C;
+  --u-cell-press: #202125;
+  --u-line: rgba(255,255,255,.07);
+  --u-line-2: rgba(255,255,255,.13);
+  --u-cell-line: var(--u-line);
+  --u-sep: rgba(255,255,255,.08);
+  --u-text: #F7F8F8;
+  --u-text-2: #B0B3BA;
+  --u-text-3: #8A8F98;
+  --u-accent: #2AABEE;
+  --u-accent-text: #5CC2F5;
+  --u-accent-soft: rgba(42,171,238,.14);
+  --u-primary-soft: var(--u-accent-soft);
+  --u-primary: #2AABEE;
+  --u-on-primary: #03141F;
+  --u-primary-press: #1F96D4;
+  --u-success: #3FC07A;  --u-success-soft: rgba(63,192,122,.14);
+  --u-warning: #F5A524;  --u-warning-soft: rgba(245,165,36,.14);
+  --u-danger: #F2555A;   --u-danger-soft: rgba(242,85,90,.14);
+  --u-track: rgba(255,255,255,.10);
+  --u-glass: rgba(24,25,28,.70);
+  --u-glass-line: rgba(255,255,255,.10);
+  --u-scrim: rgba(0,0,0,.56);
+  --u-glow: rgba(42,171,238,.10);
+  --u-shadow-float: 0 8px 24px rgba(0,0,0,.28);
+  --u-shadow-sheet: 0 -16px 48px rgba(0,0,0,.55);
+  --shadow-lg: 0 20px 50px rgba(0,0,0,.55);
+}
+
+/* =========================================================
+   BASE
+   ========================================================= */
+body[data-ui="beta"] {
+  background:
+    radial-gradient(90% 360px at 50% -120px, var(--u-glow), transparent 70%) no-repeat,
+    var(--u-page);
+  color: var(--u-text);
+  font-family: var(--u-font);
+  letter-spacing: -0.01em;
+}
+body[data-ui="beta"] ::selection { background: var(--u-accent-soft); }
+body[data-ui="beta"] :focus-visible { outline-color: var(--u-accent); }
+
+/* ---------- Шапка: прозрачная, над холстом (Linear), без чёрной плашки ---------- */
+body[data-ui="beta"] .app-header {
+  background: transparent;
+  color: var(--u-text);
+  padding: calc(8px + var(--app-safe-top)) 16px 4px;
+}
+body[data-ui="beta"] .app-header-top { margin-bottom: 12px; }
+body[data-ui="beta"] .avatar {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--u-hero-1), var(--u-hero-3));
+  border: 0; color: #fff; font-size: 13px;
+}
+body[data-ui="beta"] .icon-btn {
+  width: 36px; height: 36px;
+  background: var(--u-cell);
+  color: var(--u-text);
+  border: 1px solid var(--u-line);
+  box-shadow: none;
+}
+body[data-ui="beta"] .icon-btn:active { background: var(--u-cell-press); transform: scale(.92); }
+body[data-ui="beta"] .header-pills { gap: 8px; }
+body[data-ui="beta"] .store-pill,
+body[data-ui="beta"] .header-pills .store-pill {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0 4px;
+  border-radius: 0;
+}
+body[data-ui="beta"] .store-pill .label {
+  font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0;
+  color: var(--u-text-3); margin-bottom: 0;
+}
+/* дата в шапке — как Large Title iOS */
+body[data-ui="beta"] .store-pill .value {
+  font-size: 28px; font-weight: 700; letter-spacing: var(--u-tr-tight);
+  line-height: 1.15; color: var(--u-text);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] #headerStorePill .value { font-size: 20px; }
+body[data-ui="beta"] .store-pill-addr { color: var(--u-text-3); font-size: 12px; }
+
+/* ---------- Лист контента ---------- */
+body[data-ui="beta"] .sheet {
+  margin-top: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 12px 16px 24px;
+}
+
+/* ---------- Карточки-секции: Apple inset grouped + Linear hairline ---------- */
+body[data-ui="beta"] .section {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  box-shadow: none;
+  margin-bottom: 16px;
+}
+body[data-ui="beta"][data-theme="light"] .section,
+body[data-ui="beta"]:not([data-theme]) .section { border-color: transparent; }
+body[data-ui="beta"] .section-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--u-text-3);
+  padding: 14px 16px 6px;
+}
+body[data-ui="beta"] .section-sub { color: var(--u-text-3); }
+body[data-ui="beta"] .block-label {
+  font-size: 13px; font-weight: 600; text-transform: none; letter-spacing: 0;
+  color: var(--u-text-3);
+}
+
+/* строки списков — inset-разделитель как в iOS */
+body[data-ui="beta"] .row { padding: 12px 16px; min-height: 52px; position: relative; }
+body[data-ui="beta"] .row + .row::before {
+  content: ""; position: absolute; top: 0; right: 0; left: 70px;
+  height: 1px; background: var(--u-sep);
+}
+body[data-ui="beta"] .row:active { background: var(--u-cell-press); }
+body[data-ui="beta"] .row-icon {
+  width: 38px; height: 38px; border-radius: 11px;
+  background: var(--u-cell-2); border: 0; color: var(--u-text-2);
+}
+body[data-ui="beta"] .row-title { font-weight: 600; letter-spacing: -0.01em; }
+body[data-ui="beta"] .row-sub { color: var(--u-text-3); }
+body[data-ui="beta"] .row-chevron { color: var(--u-text-3); }
+body[data-ui="beta"] .row-value { font-variant-numeric: tabular-nums; }
+
+/* прогресс-бары — тонкий трек, скруглённая заливка */
+body[data-ui="beta"] .bar { height: 6px; background: var(--u-track); border-radius: 999px; }
+
+/* чипы */
+body[data-ui="beta"] .chip {
+  background: var(--u-cell-2); border: 1px solid var(--u-line);
+  color: var(--u-text-2); border-radius: 999px;
+}
+
+/* =========================================================
+   Таб-бар: плавающая стеклянная капсула (iOS)
+   ========================================================= */
+body[data-ui="beta"] .bottom-nav {
+  left: 12px; right: 12px;
+  bottom: calc(10px + var(--app-safe-bottom));
+  border: 1px solid var(--u-glass-line);
+  border-radius: 30px;
+  background: var(--u-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 10px 30px rgba(0,0,0,.18);
+  padding: 6px 4px;
+}
+body[data-ui="beta"] .nav-item {
+  color: var(--u-text-3);
+  font-size: 10px; font-weight: 600;
+  border-radius: 22px;
+  padding: 6px 0 5px;
+}
+body[data-ui="beta"] .nav-item.active { color: var(--u-accent); background: transparent; }
+body[data-ui="beta"] .nav-item:active { background: var(--u-cell-press); }
+body[data-ui="beta"] .nav-item .ico svg { width: 22px; height: 22px; }
+
+/* FAB — сплошной акцент, круг 56, над капсулой */
+body[data-ui="beta"] .fab {
+  width: 56px; height: 56px;
+  bottom: calc(var(--bottom-nav-safe-offset) + 4px);
+  background: var(--u-primary);
+  color: var(--u-on-primary);
+  box-shadow: 0 10px 24px -6px rgba(42,171,238,.55);
+  font-size: 28px;
+}
+body[data-ui="beta"] .fab:active { transform: scale(.92); background: var(--u-primary-press); }
+
+/* =========================================================
+   Кнопки
+   ========================================================= */
+body[data-ui="beta"] .btn-main,
+body[data-ui="beta"][data-theme="dark"] .btn-main {
+  background: var(--u-primary);
+  color: var(--u-on-primary);
+  border-radius: var(--u-r-pill);
+  min-height: 52px;
+  padding: 14px 20px;
+  font-weight: 700;
+  font-size: 17px;
+  box-shadow: none;
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-short) var(--u-ease-out), opacity var(--u-dur-micro);
+}
+body[data-ui="beta"] .btn-main:active { transform: scale(.97); background: var(--u-primary-press); opacity: 1; }
+body[data-ui="beta"] .btn-ghost {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  color: var(--u-text);
+  border-radius: var(--u-r-pill);
+  min-height: 52px;
+  padding: 14px 20px;
+  font-weight: 600;
+  font-size: 17px;
+}
+body[data-ui="beta"] .btn-ghost:active { transform: scale(.97); background: var(--u-cell-press); }
+
+/* =========================================================
+   Поля ввода и чипы метрик
+   ========================================================= */
+body[data-ui="beta"] .field label {
+  font-size: 13px; font-weight: 600; text-transform: none; letter-spacing: 0;
+  color: var(--u-text-3);
+}
+body[data-ui="beta"] .field select,
+body[data-ui="beta"] .field input,
+body[data-ui="beta"] .field textarea {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: 12px;
+  color: var(--u-text);
+  min-height: 48px;
+}
+body[data-ui="beta"] .field select:focus-visible,
+body[data-ui="beta"] .field input:focus-visible,
+body[data-ui="beta"] .field textarea:focus-visible {
+  outline: 2px solid var(--u-accent); outline-offset: 0; border-color: transparent;
+}
+body[data-ui="beta"] .mchip {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: 12px;
+  color: var(--u-text);
+  font-weight: 600;
+  min-height: var(--u-hit);
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-short);
+}
+body[data-ui="beta"] .mchip:active { transform: scale(.95); }
+body[data-ui="beta"] .mchip.on {
+  background: var(--u-primary);
+  border-color: var(--u-primary);
+  color: var(--u-on-primary);
+}
+
+/* =========================================================
+   Шторка (overlay + sheet-modal): grabber, скрим, drawer-кривая
+   ========================================================= */
+body[data-ui="beta"] .overlay {
+  background: var(--u-scrim);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+body[data-ui="beta"] .sheet-modal {
+  background: var(--u-page);
+  border-radius: var(--u-r-xl) var(--u-r-xl) 0 0;
+  border: 1px solid var(--u-line);
+  border-bottom: 0;
+  box-shadow: var(--u-shadow-sheet);
+  padding: 8px 16px calc(24px + var(--app-safe-bottom));
+  animation: u3SheetUp var(--u-dur-sheet) var(--u-drawer);
+}
+@keyframes u3SheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+body[data-ui="beta"] .grab {
+  width: 36px; height: 5px; border-radius: 999px;
+  background: var(--u-line-2); margin: 0 auto 10px;
+}
+body[data-ui="beta"] .modal-title {
+  font-size: 20px; font-weight: 700; letter-spacing: var(--u-tr-tight);
+  text-align: center; color: var(--u-text);
+}
+body[data-ui="beta"] .modal-close-btn {
+  width: 30px; height: 30px; border-radius: 999px;
+  background: var(--u-cell-2); color: var(--u-text-2);
+  border: 0; font-size: 14px;
+}
+/* внутри шторки карточки на --cell, сама шторка на --page (iOS grouped) */
+body[data-ui="beta"] .sheet-modal .section { background: var(--u-cell); }
+
+/* =========================================================
+   Тосты, пустые состояния, skeleton
+   ========================================================= */
+body[data-ui="beta"] .toast {
+  background: var(--u-glass);
+  color: var(--u-text);
+  border: 1px solid var(--u-glass-line);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 999px;
+  box-shadow: var(--u-shadow-float);
+  font-weight: 600;
+}
+body[data-ui="beta"] .toast.ok { background: var(--u-success); color: #fff; border-color: transparent; }
+body[data-ui="beta"] .toast.err { background: var(--u-danger); color: #fff; border-color: transparent; }
+body[data-ui="beta"] .empty-state .es-icon { background: var(--u-cell-2); color: var(--u-text-3); }
+body[data-ui="beta"] .empty-state .es-title { font-weight: 600; }
+body[data-ui="beta"] .skeleton {
+  background: var(--u-cell-2);
+  animation: u3Pulse 1.4s var(--u-ease-out) infinite;
+  border-radius: 8px;
+}
+@keyframes u3Pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* =========================================================
+   Общие утилиты беты для экранов (ui3/<screen>.css)
+   ========================================================= */
+/* Revolut-hero: класс для экранов, которым нужна градиентная карта */
+body[data-ui="beta"] .u3-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--u-r-xl);
+  background: var(--u-hero);
+  color: var(--u-on-hero);
+  border: 0;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+}
+
+/* Reduced motion — без сдвигов и масштаба, финальные состояния сразу */
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .sheet-modal { animation: none; }
+  body[data-ui="beta"] .skeleton { animation: none; }
+  body[data-ui="beta"] .btn-main:active,
+  body[data-ui="beta"] .btn-ghost:active,
+  body[data-ui="beta"] .mchip:active,
+  body[data-ui="beta"] .fab:active,
+  body[data-ui="beta"] .icon-btn:active { transform: none; }
+}

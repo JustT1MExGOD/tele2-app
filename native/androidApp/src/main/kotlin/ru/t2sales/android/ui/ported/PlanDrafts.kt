@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -139,6 +140,27 @@ fun EmployeePlanDraftSection(container: AppContainer, metrics: List<MetricDef>, 
             }
             if (d.items.isEmpty()) {
                 Text("Нет сотрудников с запланированными сменами на этот месяц.", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp))
+            } else if (T2Colors.uiBeta) {
+                // Beta: one grouped list, a cell per employee; metrics collapse into a two-line summary.
+                U3Group(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
+                    d.items.forEachIndexed { i, item ->
+                        if (i > 0) U3Sep(inset = 16.dp)
+                        val plan = item["final_plan"].obj()
+                        val top = metrics.take(4).joinToString("  ·  ") { m -> "${m.label ?: m.id} ${fmtMetric(plan[m.id].dbl())}" }
+                        val warnings = item["warnings"].arr().map { it.str() }
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(item["full_name"].str(), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = T2Colors.text)
+                                    Text("смен: ${item["total_shifts"].dbl().toInt()}  ·  $top", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                                }
+                                U3Tile(item["full_name"].str().take(1).uppercase())
+                            }
+                            Text(explanation(item), color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                            if (warnings.isNotEmpty()) Text(warnings.joinToString("\n"), color = PLAN_WARNING, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                }
             } else Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 d.items.forEach { item ->
                     Column(modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape).padding(12.dp)) {

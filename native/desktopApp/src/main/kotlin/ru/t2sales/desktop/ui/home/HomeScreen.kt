@@ -47,6 +47,12 @@ import androidx.compose.material.icons.outlined.Store
 import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -149,6 +155,11 @@ fun HomeScreen(container: AppContainer, me: MeResponse, onNavigate: (Screen) -> 
     }
 
     val firstName = me.full_name?.split(" ")?.let { it.getOrNull(1) ?: it.getOrNull(0) } ?: "команда"
+    if (T2Colors.uiBeta) {
+        BetaHome(uiState, firstName, shiftOpen, container, me, onNavigate, onTaskDone = { refresh++ }, onAbout = { about = true })
+        if (about) AboutDialog(container) { about = false }
+        return
+    }
     Box(Modifier.reveal(0)) { Greeting(firstName, role, shiftOpen, daysOffText) }
     Spacer(Modifier.height(T2Spacing.sp4))
 
@@ -198,6 +209,7 @@ fun HomeScreen(container: AppContainer, me: MeResponse, onNavigate: (Screen) -> 
             }
             Spacer(Modifier.height(T2Spacing.sp4))
             Box(Modifier.reveal(9)) { ToolsSection(onNavigate, onAbout = { about = true }) }
+            Box(Modifier.reveal(10)) { DopServicesSection(onNavigate) }
         }
     }
 
@@ -635,6 +647,19 @@ private fun ToolsSection(onNavigate: (Screen) -> Unit, onAbout: () -> Unit) {
         ListRow(Icons.Outlined.Assignment, null, "Задачи", "Кто что делает по сети") { onNavigate(Screen.Tasks) }
         ListRow(Icons.Outlined.NotificationsActive, null, "Алерты", "Полный жизненный цикл, не только открытые") { onNavigate(Screen.Alerts) }
         ListRow(Icons.Outlined.Info, null, "О приложении", "T2 Sales v$APP_VERSION", onClick = onAbout)
+    }
+}
+
+@Composable
+private fun DopServicesSection(onNavigate: (Screen) -> Unit) {
+    Section("Доп услуги") {
+        ListRow(Icons.Outlined.Sensors, null, "5G iPhone", "Профили оператора · VoWiFi · EVS") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("carrier5g") }
+        ListRow(Icons.Outlined.Receipt, null, "Приём б/у", "Оценка телефона · IMEI · аккаунты · тест экрана") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("tradein") }
+        ListRow(Icons.Outlined.Analytics, null, "Диагностика", "Батарея · память · SIM · состояние") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("diag") }
+        ListRow(Icons.Outlined.Terminal, null, "ADB-терминал", "Команды на телефоне · screencap") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("adbterm") }
+        ListRow(Icons.Outlined.Security, null, "Чистка и защита", "Мусор · антивирус · оптимизация") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("cleanguard") }
+        ListRow(Icons.Outlined.Group, null, "Перенос контактов", "Android→Android · телефон→телефон") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("contacts") }
+        ListRow(Icons.Outlined.SwapHoriz, null, "Перенос телефона", "APK · файлы · контакты · SMS · настройки") { ru.t2sales.desktop.ui.tools.ToolDialogs.open("phonemove") }
     }
 }
 

@@ -363,6 +363,13 @@ fun TeamScreen(teamApi: TeamApi, scheduleApi: ScheduleApi, salesApi: SalesApi, a
 
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.GroupHead(title)
+        ru.t2sales.desktop.ui.components.Group {
+            Column(Modifier.padding(T2Spacing.sp4)) { content() }
+        }
+        return
+    }
     val shape = RoundedCornerShape(T2Radius.lg)
     Column(
         modifier = Modifier
@@ -392,7 +399,7 @@ private fun HeaderCell(label: String, key: SortKey, current: SortKey, asc: Boole
 
 @Composable
 private fun Chip(label: String, danger: Boolean = false, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) 99.dp else 12.dp)
     Text(
         label,
         color = if (danger) T2Colors.danger else T2Colors.text,
@@ -409,6 +416,14 @@ private fun Chip(label: String, danger: Boolean = false, onClick: () -> Unit) {
 
 @Composable
 private fun ToolRow(icon: ImageVector, title: String, sub: String?, onClick: () -> Unit) {
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.BetaCell(
+            title = title, sub = sub,
+            leading = { ru.t2sales.desktop.ui.components.BetaTile(icon) },
+            chevron = true, onClick = onClick
+        )
+        return
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()

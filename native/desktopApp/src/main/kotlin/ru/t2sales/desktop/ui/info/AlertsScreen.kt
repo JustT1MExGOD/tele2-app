@@ -67,6 +67,39 @@ fun AlertsScreen(container: AppContainer, onNavigate: (Screen) -> Unit) {
         runCatching { api.list(filter) }.onSuccess { items = it }.onFailure { failed = true }
     }
 
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.Segmented(
+            FILTERS.map { STATUS[it] ?: it }, FILTERS.indexOf(filter).coerceAtLeast(0),
+            modifier = Modifier.padding(bottom = 12.dp)
+        ) { filter = FILTERS[it]; items = null }
+        val list = items
+        when {
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить алерты", onRetry = { reload++ })
+            list == null -> LoadingBlock()
+            list.isEmpty() -> Text("Нет алертов", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            else -> ru.t2sales.desktop.ui.components.Group {
+                list.forEachIndexed { i, a ->
+                    if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator()
+                    ru.t2sales.desktop.ui.components.BetaCell(
+                        title = a.title,
+                        sub = (a.store_name ?: "") + " · " + (STATUS[a.status] ?: a.status) + if (a.task_id != null) " · есть задача" else "",
+                        leading = {
+                            ru.t2sales.desktop.ui.components.BetaTile(null, text = if (a.severity == "critical") "🔴" else "⚠️", tone = if (a.severity == "critical") T2Colors.danger else T2Colors.warning)
+                        },
+                        chevron = true,
+                        onClick = { opened = a.id; scope.launch { runCatching { api.markRead(a.id) } } }
+                    )
+                }
+            }
+        }
+        val id = opened
+        if (id != null) {
+            val a = items?.firstOrNull { it.id == id } ?: AlertItem(id = id, title = "Алерт", status = filter)
+            AlertDetail(api, a, onDismiss = { opened = null }, onChanged = { reload++ }, onOpenTask = { opened = null; onNavigate(Screen.Tasks) })
+        }
+        return
+    }
+
     Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FILTERS.forEach { s ->
             val active = s == filter

@@ -80,7 +80,9 @@ private fun Brief(data: JsonObject, onDismiss: () -> Unit) {
     val plan = data["day_plan"].o()
     val handover = data["handover"] as? JsonObject
     val tasks = data["open_tasks"].a()
-    BottomSheet("Смена открыта", onDismiss = onDismiss, footer = { MainButton("Понятно", onClick = onDismiss) }) {
+    BottomSheet("Смена открыта", onDismiss = onDismiss, footer = {
+        if (T2Colors.uiBeta) U3PrimaryButton("Понятно", onClick = onDismiss) else MainButton("Понятно", onClick = onDismiss)
+    }) {
         Block("План на сегодня") {
             listOf("sim" to "SIM", "mnp" to "MNP", "pa" to "ПА", "combo" to "Комбо").forEach { (id, l) -> ProgressRow(l, 0.0, plan[id].d()) }
         }
@@ -131,12 +133,14 @@ private fun ChangeStoreSheet(container: AppContainer, scope: CoroutineScope) {
     BottomSheet("Сменить точку", busy, onDismiss = { ShiftUi.changeStore = false }, footer = {
         val st = store
         if (st != null) {
-            MainButton(if (busy) "Открываем…" else "Продолжить", !busy) {
+            val label = if (busy) "Открываем…" else "Продолжить"
+            val action = {
                 busy = true
                 ShiftUi.open(container, scope, st["code"].s()) { ok -> busy = false; if (ok) ShiftUi.changeStore = false else error = "Не удалось открыть смену" }
             }
+            if (T2Colors.uiBeta) U3PrimaryButton(label, enabled = !busy) { action() } else MainButton(label, !busy) { action() }
         } else {
-            MainButton("Проверить", code.isNotBlank()) {
+            val action = {
                 status = "Проверяем…"; error = null
                 scope.launch {
                     runCatching { container.profileApi.resolveStore(code.trim()) }
@@ -149,6 +153,7 @@ private fun ChangeStoreSheet(container: AppContainer, scope: CoroutineScope) {
                         .onFailure { status = null; error = it.message ?: "Ошибка проверки" }
                 }
             }
+            if (T2Colors.uiBeta) U3PrimaryButton("Проверить", enabled = code.isNotBlank()) { action() } else MainButton("Проверить", code.isNotBlank()) { action() }
         }
     }) {
         Field("Код точки", code, { v -> code = v.filter { it.isDigit() }; store = null; error = null }, keyboard = KeyboardType.Number)

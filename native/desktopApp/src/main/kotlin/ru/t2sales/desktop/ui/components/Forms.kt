@@ -120,19 +120,21 @@ fun MainButton(text: String, enabled: Boolean, container: Color? = null, content
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && enabled) 0.97f else 1f, pressSpring())
     val hover by animateFloatAsState(if (hovered && enabled) 0.12f else 0f)
-    val base = (container ?: T2Colors.accent).copy(alpha = if (enabled) 1f else 0.5f)
+    // Beta UI 3.0 (btn-pri): primary fill + onPrimary text, flat — no hover tint mix.
+    val beta = T2Colors.uiBeta
+    val base = (container ?: if (beta) T2Colors.primary else T2Colors.accent).copy(alpha = if (enabled) 1f else 0.5f)
     Box(
         modifier = Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(lerp(base, T2Colors.primary, hover))
+            .background(if (beta && container == null) base else lerp(base, T2Colors.primary, hover))
             .hoverable(source)
             .clickable(interactionSource = source, indication = LocalIndication.current, enabled = enabled, onClick = onClick)
             .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = content ?: T2Colors.onAccent, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.body1)
+        Text(text, color = content ?: if (beta) T2Colors.onPrimary else T2Colors.onAccent, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.body1)
     }
 }
 

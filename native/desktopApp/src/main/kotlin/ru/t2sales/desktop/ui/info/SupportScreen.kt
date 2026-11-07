@@ -61,6 +61,75 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
         if (isAdmin) runCatching { api.allTickets() }.onSuccess { all = it }.onFailure { all = emptyList() }
     }
 
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.GroupHead("Частые вопросы")
+        val list = faq
+        when {
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
+            faqFailed -> Text("Не удалось загрузить FAQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            list.isEmpty() -> Text("FAQ пока пуст", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            else -> ru.t2sales.desktop.ui.components.Group {
+                list.forEachIndexed { i, f ->
+                    if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator()
+                    ru.t2sales.desktop.ui.components.BetaCell(
+                        title = f.question,
+                        sub = if (expanded == f.id) f.answer else null,
+                        chevron = true,
+                        onClick = { expanded = if (expanded == f.id) null else f.id }
+                    )
+                }
+            }
+        }
+        ru.t2sales.desktop.ui.components.GroupHead("Чат с поддержкой")
+        ru.t2sales.desktop.ui.components.Group {
+            Column(modifier = Modifier.padding(16.dp)) {
+                if (my.isEmpty()) Text("Пока нет обращений", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                my.take(8).forEach { t ->
+                    val shape = RoundedCornerShape(12.dp)
+                    Column(modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        Text("#${t.id} · ${t.status ?: ""}", color = T2Colors.hint, fontSize = 12.sp)
+                        Text(t.message, fontSize = 14.sp, modifier = Modifier.padding(vertical = 4.dp))
+                        if (!t.admin_reply.isNullOrBlank()) Text("↩ ${t.admin_reply}", color = T2Colors.primary, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Field("Сообщение", message, { message = it }, placeholder = "Опишите вопрос или проблему", fill = T2Colors.surface2)
+                Spacer(Modifier.height(12.dp))
+                ru.t2sales.desktop.ui.components.BetaButton("Отправить") {
+                    val m = message.trim()
+                    if (m.isEmpty()) { T2Toast.show("Введите сообщение", true); return@BetaButton }
+                    scope.launch {
+                        runCatching { api.createTicket(m, me.full_name ?: "Гость") }
+                            .onSuccess { r -> result = r.auto_reply ?: r.message ?: "Отправлено"; message = ""; T2Toast.show("Отправлено"); reload++ }
+                            .onFailure { T2Toast.show("Ошибка отправки", true) }
+                    }
+                }
+                result?.let { Text(it, color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) }
+            }
+        }
+        if (isAdmin) {
+            ru.t2sales.desktop.ui.components.GroupHead("Тикеты")
+            val allList = all
+            when {
+                allList == null -> LoadingBlock(Modifier.padding(16.dp))
+                allList.isEmpty() -> Text("Нет тикетов", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+                else -> ru.t2sales.desktop.ui.components.Group {
+                    allList.forEachIndexed { i, t ->
+                        if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator()
+                        ru.t2sales.desktop.ui.components.BetaCell(
+                            title = "#${t.id} ${t.full_name ?: ""}",
+                            sub = t.message,
+                            value = "Ответить",
+                            valueColor = T2Colors.accentText,
+                            onClick = { replyTo = t }
+                        )
+                    }
+                }
+            }
+        }
+        replyTo?.let { t -> TicketReply(t, api, scope) { replyTo = null; reload++ } }
+        return
+    }
     PageSection("Частые вопросы") {
         val list = faq
         when {
@@ -123,18 +192,21 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
         }
     }
 
-    replyTo?.let { t ->
-        var reply by remember(t.id) { mutableStateOf("") }
-        SheetDialog("Ответ на тикет #${t.id}", onDismiss = { replyTo = null }) {
-            Field("", reply, { reply = it }, placeholder = "Ответ", fill = T2Colors.surface2)
-            Spacer(Modifier.height(16.dp))
-            MainButton("Отправить", enabled = true) {
-                if (reply.isBlank()) return@MainButton
-                scope.launch {
-                    runCatching { api.replyTicket(t.id, reply.trim()) }
-                        .onSuccess { T2Toast.show("Ответ отправлен"); replyTo = null; reload++ }
-                        .onFailure { T2Toast.show("Ошибка", true) }
-                }
+    replyTo?.let { t -> TicketReply(t, api, scope) { replyTo = null; reload++ } }
+}
+
+@Composable
+private fun TicketReply(t: SupportTicket, api: ru.t2sales.shared.api.InfoApi, scope: kotlinx.coroutines.CoroutineScope, onDone: () -> Unit) {
+    var reply by remember(t.id) { mutableStateOf("") }
+    SheetDialog("Ответ на тикет #${t.id}", onDismiss = onDone) {
+        Field("", reply, { reply = it }, placeholder = "Ответ", fill = T2Colors.surface2)
+        Spacer(Modifier.height(16.dp))
+        MainButton("Отправить", enabled = true) {
+            if (reply.isBlank()) return@MainButton
+            scope.launch {
+                runCatching { api.replyTicket(t.id, reply.trim()) }
+                    .onSuccess { T2Toast.show("Ответ отправлен"); onDone() }
+                    .onFailure { T2Toast.show("Ошибка", true) }
             }
         }
     }

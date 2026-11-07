@@ -91,6 +91,10 @@ fun HeatmapScreen(container: AppContainer) {
         }
     }
 
+    if (T2Colors.uiBeta) {
+        HeatmapBeta(stores, storeId, { storeId = it }, cells, note, failed, updatedAt, hover, { hover = it })
+        return
+    }
     PageSection("Heatmap по часам") {
         Box(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
             SelectField("Точка", stores.firstOrNull { it.id == storeId }?.name ?: "", stores.map { it.name }) { n -> stores.firstOrNull { it.name == n }?.let { storeId = it.id } }
@@ -207,6 +211,94 @@ private fun HeatmapSkeleton() {
                     repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
+        }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+/** Beta heatmap: large title, store chips, the same hour grid inside a group, legend as cells. */
+@Composable
+private fun HeatmapBeta(
+    stores: List<StoreInfo>, storeId: String?, onStore: (String) -> Unit,
+    cells: List<Pair<Int, Double>>?, note: String, failed: Boolean,
+    updatedAt: LocalTime?, hover: Int?, onHover: (Int?) -> Unit
+) {
+    U3LargeTitle("Heatmap", note.ifEmpty { "Продажи по часу, 9:00–21:00" })
+    U3FilterChips(
+        options = stores.map { it.id to it.name },
+        selected = storeId ?: "",
+        onSelect = onStore
+    )
+
+    Spacer(Modifier.height(12.dp))
+    val list = cells
+    when {
+        failed -> ErrorState("Heatmap временно недоступна — обновится автоматически")
+        list == null -> HeatmapSkeleton()
+        else -> {
+            val max = maxOf(1.0, list.maxOf { it.second })
+            val total = list.sumOf { it.second }
+            val best = list.maxByOrNull { it.second }
+            val ranks = list.sortedByDescending { it.second }.mapIndexed { i, p -> p.first to i + 1 }.toMap()
+            val nowHour = LocalTime.now(MOSCOW).hour
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LiveDot()
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = T2Colors.hint)) { append("9:00–21:00") }
+                        if (best != null && best.second > 0) {
+                            withStyle(SpanStyle(color = T2Colors.primary, fontWeight = FontWeight.Bold)) { append(" · лучший час ${best.first}:00 (${fmtN(best.second)})") }
+                        }
+                    },
+                    fontSize = 13.sp
+                )
+            }
+            val hv = hover
+            Box(Modifier.height(22.dp)) {
+                if (hv != null) {
+                    val v = list.firstOrNull { it.first == hv }?.second ?: 0.0
+                    val share = if (total > 0) (v / total * 100).toInt() else 0
+                    Text("$hv:00 · ${fmtN(v)} · $share% от дня · #${ranks[hv]} из ${list.size} по часам", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                } else {
+                    updatedAt?.let { Text("обновлено ${it.format(DateTimeFormatter.ofPattern("HH:mm:ss"))} · само раз в 30 с", color = T2Colors.hint, fontSize = 12.sp) }
+                }
+            }
+            U3Group(modifier = Modifier.padding(vertical = 8.dp)) {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                    val cols = ((maxWidth + 8.dp) / (64.dp + 8.dp)).toInt().coerceAtLeast(1)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        list.chunked(cols).forEachIndexed { rowIdx, row ->
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                row.forEachIndexed { colIdx, (h, v) ->
+                                    HeatCell(
+                                        hour = h, value = v, max = max,
+                                        isBest = best != null && best.second > 0 && h == best.first,
+                                        isNow = h == nowHour,
+                                        order = rowIdx * cols + colIdx,
+                                        modifier = Modifier.weight(1f),
+                                        onHover = { on -> if (on) onHover(h) else if (hover == h) onHover(null) }
+                                    )
+                                }
+                                repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                            }
+                        }
+                    }
+                }
+            }
+            if (best != null && best.second > 0) {
+                Spacer(Modifier.height(4.dp))
+                U3Group {
+                    U3Cell(
+                        "Лучший час", "${best.first}:00 — пик дня по продажам",
+                        leading = { U3IconTile(NavIcons.svTrend, tint = T2Colors.success) },
+                        trailing = { U3Value(fmtN(best.second), T2Colors.success) }
+                    )
+                }
+            }
+            Spacer(Modifier.height(96.dp))
         }
     }
 }

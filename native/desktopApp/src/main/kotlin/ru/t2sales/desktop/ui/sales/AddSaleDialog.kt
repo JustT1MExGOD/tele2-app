@@ -42,9 +42,11 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import ru.t2sales.desktop.ui.components.FieldBox
+import ru.t2sales.desktop.ui.components.DropdownField
 import ru.t2sales.desktop.ui.components.FieldLabel
 import ru.t2sales.desktop.ui.components.MainButton
 import ru.t2sales.desktop.ui.components.SheetDialog
@@ -87,6 +89,7 @@ fun AddSaleDialog(
     myName: String?,
     canManage: Boolean,
     presetEmployeeId: Int?,
+    homeApi: ru.t2sales.shared.api.HomeApi? = null,
     onDismiss: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -99,6 +102,8 @@ fun AddSaleDialog(
     var busy by remember { mutableStateOf(false) }
     val clientId = remember { UUID.randomUUID().toString() }
     val today = remember { LocalDate.now(ZoneId.of("Europe/Moscow")).toString() }
+    var myDay by remember { mutableStateOf<ru.t2sales.shared.api.MeDayResponse?>(null) }
+    LaunchedEffect(homeApi) { if (T2Colors.uiBeta && homeApi != null) runCatching { homeApi.getMyDay() }.onSuccess { myDay = it } }
 
     LaunchedEffect(Unit) {
         runCatching {
@@ -139,6 +144,77 @@ fun AddSaleDialog(
                 form = SaleForm(cached.employees, cached.stores, cached.storeByEmployee, cached.metrics.ifEmpty { FALLBACK_METRICS })
             }
         }
+    }
+
+    fun submit(f: SaleForm) {
+        val emp = employeeId
+        val store = storeId
+        if (emp == null || store == null) {
+            T2Toast.show("Укажи сотрудника и точку", true)
+            return
+        }
+        val chosen = f.metrics.mapNotNull { m ->
+            val n = selection[m.id]?.replace(',', '.')?.toDoubleOrNull() ?: return@mapNotNull null
+            if (n > 0) m to n else null
+        }
+        if (chosen.isEmpty()) {
+            T2Toast.show("Выбери метрики и количество", true)
+            return
+        }
+        busy = true
+        val body = buildJsonObject {
+            put("employee_id", JsonPrimitive(emp))
+            put("store_id", JsonPrimitive(store))
+            put("sale_date", JsonPrimitive(today))
+            put("client_id", JsonPrimitive(clientId))
+            chosen.forEach { (m, n) -> put(m.id, JsonPrimitive(if (n % 1.0 == 0.0) n.toLong() else n)) }
+        }
+        val summary = chosen.joinToString(", ") { (m, n) -> "${m.label ?: m.id} × ${if (n % 1.0 == 0.0) n.toLong().toString() else n.toString()}" }
+        scope.launch {
+            runCatching { salesApi.createSale(body) }
+                .onSuccess {
+                    T2Toast.show("Добавлено: $summary")
+                    AddSaleState.refreshTick++
+                    onDismiss()
+                }
+                .onFailure { e ->
+                    if (e is ApiException) {
+                        // the server answered and said no: show why, the form stays open
+                        T2Toast.show(e.message.takeIf { m -> m != "fail" } ?: "Ошибка сохранения", true)
+                        busy = false
+                    } else {
+                        // no answer at all: keep the sale (same client_id, so a resend can never double it) and send it later
+                        runCatching { outbox.enqueue(body, summary) }
+                            .onSuccess {
+                                T2Toast.show("Нет связи: продажа сохранена и отправится сама (в очереди: ${outbox.pendingCount})")
+                                onDismiss()
+                            }
+                            .onFailure { T2Toast.show("Ошибка сохранения", true); busy = false }
+                    }
+                }
+        }
+
+    }
+
+    if (T2Colors.uiBeta) {
+        SheetDialog("Новая продажа", onDismiss = { if (!busy) onDismiss() }) {
+            val f = form
+            when {
+                failed -> Text("Ошибка загрузки", color = T2Colors.danger)
+                f == null -> FormSkeleton()
+                else -> BetaSaleBody(
+                    f.metrics, f.employees.map { it.full_name }, f.stores.map { it.name },
+                    employee = f.employees.firstOrNull { it.id == employeeId }?.full_name ?: "",
+                    store = f.stores.firstOrNull { it.id == storeId }?.name ?: "",
+                    canManage = canManage, cachedAt = cachedAt, selection = selection, busy = busy,
+                    dayPlan = if (employeeId == myEmployeeId) myDay else null,
+                    onEmployee = { picked -> f.employees.firstOrNull { it.full_name == picked }?.let { e -> employeeId = e.id; f.byEmp[e.id]?.let { storeId = it } } },
+                    onStore = { picked -> f.stores.firstOrNull { it.name == picked }?.let { storeId = it.id } },
+                    onSubmit = { submit(f) }
+                )
+            }
+        }
+        return
     }
 
     SheetDialog("Добавить продажу", onDismiss = { if (!busy) onDismiss() }) {
@@ -257,54 +333,7 @@ fun AddSaleDialog(
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                MainButton(if (busy) "Сохраняем…" else "Добавить", enabled = !busy) {
-                    val emp = employeeId
-                    val store = storeId
-                    if (emp == null || store == null) {
-                        T2Toast.show("Укажи сотрудника и точку", true)
-                        return@MainButton
-                    }
-                    val chosen = f.metrics.mapNotNull { m ->
-                        val n = selection[m.id]?.replace(',', '.')?.toDoubleOrNull() ?: return@mapNotNull null
-                        if (n > 0) m to n else null
-                    }
-                    if (chosen.isEmpty()) {
-                        T2Toast.show("Выбери метрики и количество", true)
-                        return@MainButton
-                    }
-                    busy = true
-                    val body = buildJsonObject {
-                        put("employee_id", JsonPrimitive(emp))
-                        put("store_id", JsonPrimitive(store))
-                        put("sale_date", JsonPrimitive(today))
-                        put("client_id", JsonPrimitive(clientId))
-                        chosen.forEach { (m, n) -> put(m.id, JsonPrimitive(if (n % 1.0 == 0.0) n.toLong() else n)) }
-                    }
-                    val summary = chosen.joinToString(", ") { (m, n) -> "${m.label ?: m.id} × ${if (n % 1.0 == 0.0) n.toLong().toString() else n.toString()}" }
-                    scope.launch {
-                        runCatching { salesApi.createSale(body) }
-                            .onSuccess {
-                                T2Toast.show("Добавлено: $summary")
-                                AddSaleState.refreshTick++
-                                onDismiss()
-                            }
-                            .onFailure { e ->
-                                if (e is ApiException) {
-                                    // the server answered and said no: show why, the form stays open
-                                    T2Toast.show(e.message.takeIf { m -> m != "fail" } ?: "Ошибка сохранения", true)
-                                    busy = false
-                                } else {
-                                    // no answer at all: keep the sale (same client_id, so a resend can never double it) and send it later
-                                    runCatching { outbox.enqueue(body, summary) }
-                                        .onSuccess {
-                                            T2Toast.show("Нет связи: продажа сохранена и отправится сама (в очереди: ${outbox.pendingCount})")
-                                            onDismiss()
-                                        }
-                                        .onFailure { T2Toast.show("Ошибка сохранения", true); busy = false }
-                                }
-                            }
-                    }
-                }
+                MainButton(if (busy) "Сохраняем…" else "Добавить", enabled = !busy) { submit(f) }
             }
         }
     }
@@ -329,5 +358,110 @@ private fun FormSkeleton() {
                 repeat(3) { SkeletonBlock(Modifier.weight(1f).height(46.dp), 14.dp) }
             }
         }
+    }
+}
+
+/* ================= Beta UI 3.0 «Новая продажа» (design-system/ui3/v5-team, frame 2) ================= */
+
+private val BETA_MONEY = setOf("phones", "accessories", "settings", "insurance", "wink", "focus", "credit_issued")
+
+/**
+ * The sheet body of the beta: client-type segmented control, the metric list as grouped cells with
+ * iOS steppers (money metrics keep a numeric field), and a footer that says what the day plan becomes.
+ */
+@Composable
+private fun BetaSaleBody(
+    metrics: List<MetricDef>,
+    employeeNames: List<String>,
+    storeNames: List<String>,
+    employee: String,
+    store: String,
+    canManage: Boolean,
+    cachedAt: java.time.Instant?,
+    selection: MutableMap<String, String>,
+    busy: Boolean,
+    dayPlan: ru.t2sales.shared.api.MeDayResponse?,
+    onEmployee: (String) -> Unit,
+    onStore: (String) -> Unit,
+    onSubmit: () -> Unit
+) {
+    var clientType by remember { mutableStateOf(0) }
+    ru.t2sales.desktop.ui.components.Segmented(listOf("Новый абонент", "Действующий"), clientType) { clientType = it }
+    Spacer(Modifier.height(12.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f)) {
+            FieldLabel("Сотрудник")
+            DropdownField(employee, employeeNames, enabled = canManage, onPick = onEmployee)
+        }
+        Column(Modifier.weight(1f)) {
+            FieldLabel("Точка")
+            DropdownField(store, storeNames, enabled = true, onPick = onStore)
+        }
+    }
+    cachedAt?.let { at ->
+        val shown = java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm").format(at.atZone(java.time.ZoneId.of("Europe/Moscow")))
+        Text("Нет связи: данные от $shown. Продажа сохранится и отправится сама.", color = T2Colors.warning, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+    }
+    if (!canManage) Text("Можно вносить только свои продажи", color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+
+    ru.t2sales.desktop.ui.components.GroupHead("Что продали", "${selection.values.count { (it.toDoubleOrNull() ?: 0.0) > 0 }} позиции")
+    ru.t2sales.desktop.ui.components.Group {
+        metrics.forEachIndexed { i, m ->
+            if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator()
+            if (m.id in BETA_MONEY) MoneyRow(m, selection) else StepperRow(m, selection)
+        }
+    }
+
+    // footer of the mock: «План дня станет 14 из 16 · +2 к плану»
+    val added = selection.values.sumOf { it.toDoubleOrNull() ?: 0.0 }
+    var delta = 0.0
+    dayPlan?.progress?.forEach { (id, e) ->
+        if (id !in BETA_MONEY) (selection[id]?.toDoubleOrNull() ?: 0.0).let { delta += it }
+    }
+    val total = dayPlan?.total
+    val line = if (total != null && total.plan > 0) {
+        "План дня станет ${(total.fact + delta).roundToInt2()} из ${total.plan.roundToInt2()}"
+    } else null
+    Spacer(Modifier.height(14.dp))
+    Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(line ?: " ", color = T2Colors.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        if (delta > 0) Text("+${delta.roundToInt2()} к плану", color = T2Colors.success, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        else if (added == 0.0) Text("выбери метрики и количество", color = T2Colors.hint, fontSize = 13.sp)
+    }
+    ru.t2sales.desktop.ui.components.BetaButton(if (busy) "Сохраняем…" else "Сохранить продажу", enabled = !busy, onClick = onSubmit)
+}
+
+private fun Double.roundToInt2() = this.roundToInt().toString()
+
+/** .stepper row: name + sub on the left, − value + on the right (44px targets, 160ms roll). */
+@Composable
+private fun StepperRow(m: MetricDef, selection: MutableMap<String, String>) {
+    val v = (selection[m.id]?.toDoubleOrNull() ?: 0.0)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(m.label ?: m.id, color = T2Colors.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(m.unit ?: "шт", color = T2Colors.hint, fontSize = 13.sp)
+        }
+        ru.t2sales.desktop.ui.components.Stepper(v.toInt(), onChange = { n -> selection[m.id] = n.toString(); if (n <= 0) selection.remove(m.id) })
+    }
+}
+
+/** Money metric: same grouped cell, but a wide numeric field instead of a stepper. */
+@Composable
+private fun MoneyRow(m: MetricDef, selection: MutableMap<String, String>) {
+    val inShape = RoundedCornerShape(10.dp)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(m.label ?: m.id, color = T2Colors.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(m.unit ?: "₽", color = T2Colors.hint, fontSize = 13.sp)
+        }
+        BasicTextField(
+            value = selection[m.id] ?: "0",
+            onValueChange = { v -> selection[m.id] = v.filter { it.isDigit() || it == '.' || it == ',' }.take(9) },
+            singleLine = true,
+            textStyle = TextStyle(color = T2Colors.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+            cursorBrush = SolidColor(T2Colors.primary),
+            modifier = Modifier.width(110.dp).clip(inShape).background(T2Colors.surface2).border(1.dp, T2Colors.border, inShape).padding(horizontal = 8.dp, vertical = 8.dp)
+        )
     }
 }

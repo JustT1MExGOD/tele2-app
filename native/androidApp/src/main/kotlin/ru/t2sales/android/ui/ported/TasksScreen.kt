@@ -74,6 +74,13 @@ fun TasksScreen(tasksApi: TasksApi, myEmployeeId: Int?, role: String?, isManager
         }
     }
 
+    if (T2Colors.uiBeta) {
+        TasksBeta(tasks, failed, filter, { filter = it }) { openId = it }
+        val id = openId
+        if (id != null) TaskDetail(tasksApi, id, myEmployeeId, canManageTask, onClose = { openId = null })
+        return
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -243,5 +250,62 @@ private fun TaskDetail(tasksApi: TasksApi, id: Int, myEmployeeId: Int?, canManag
                 }
             }
         }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (design-system/ui3/v5-team, screen "Задачи") =======================
+
+private fun priorityLabel(p: String) = when (p) { "urgent" -> "Срочно"; "high" -> "Высокий"; "low" -> "Низкий"; else -> "" }
+
+private fun taskLeadingIcon(t: TaskListItem) = when (t.status) { "done" -> NavIcons.checkmark; "cancelled" -> NavIcons.cancelled; else -> NavIcons.clipboard }
+
+private fun taskLeadingTint(t: TaskListItem) = when (t.status) { "done" -> T2Colors.success; "cancelled" -> T2Colors.danger; else -> T2Colors.textSecondary }
+
+/** Progress hero ("выполнено X из Y" + ring), filter chips, then the filtered tasks as a grouped cell list. */
+@Composable
+private fun TasksBeta(tasks: List<TaskListItem>?, failed: Boolean, filter: TaskFilter, onFilter: (TaskFilter) -> Unit, onOpen: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("Задачи")
+        val list = tasks
+        when {
+            failed -> ErrorState("Не удалось загрузить задачи")
+            list == null -> SkeletonBlock(Modifier.fillMaxWidth().height(160.dp), 28.dp)
+            else -> {
+                val total = list.size
+                val done = list.count { it.status == "done" }
+                val pct = if (total > 0) (done * 100 / total) else 0
+                U3Hero {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            U3HeroRow("Выполнение", chip = if (done == total && total > 0) "Все закрыты" else null)
+                            U3HeroNumber("$done", "из $total")
+                        }
+                        U3Ring(pct, "готово", size = 72.dp)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                U3FilterChips(TaskFilter.values().map { it.name to it.label }, filter.name) { sel -> TaskFilter.values().firstOrNull { it.name == sel }?.let(onFilter) }
+                Spacer(Modifier.height(10.dp))
+                val items = list.filter(filter::matches)
+                if (items.isEmpty()) EmptyText("Нет задач")
+                else U3Group {
+                    items.forEachIndexed { i, t ->
+                        if (i > 0) U3Sep()
+                        val sub = listOfNotNull(
+                            t.assignee_name?.takeIf { it.isNotBlank() },
+                            t.store_name?.takeIf { it.isNotBlank() },
+                            STATUS_LABEL[t.status] ?: t.status
+                        ).joinToString(" · ") + priorityLabel(t.priority).let { if (it.isEmpty()) "" else " · $it" }
+                        U3Cell(
+                            t.title, sub,
+                            leading = { U3IconTile(taskLeadingIcon(t), tint = taskLeadingTint(t)) },
+                            trailing = { Text("›", color = T2Colors.hint, fontSize = 18.sp) },
+                            onClick = { onOpen(t.id) }
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
     }
 }

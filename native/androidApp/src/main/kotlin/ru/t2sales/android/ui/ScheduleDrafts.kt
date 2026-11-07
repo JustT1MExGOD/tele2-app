@@ -87,7 +87,8 @@ private fun parseDraft(view: JsonObject, fallbackId: Int, fallbackMonth: String,
 internal fun DraftConfirmDialog(title: String, text: String, confirmLabel: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     SheetDialog(title, onDismiss) {
         Text(text, color = T2Colors.hint, fontSize = 14.sp, modifier = Modifier.padding(bottom = 16.dp))
-        MainButton(confirmLabel, enabled = true, onClick = onConfirm)
+        if (T2Colors.uiBeta) U3PrimaryButton(confirmLabel, enabled = true, onClick = onConfirm)
+        else MainButton(confirmLabel, enabled = true, onClick = onConfirm)
     }
 }
 
@@ -141,25 +142,44 @@ fun DraftSection(
                 SelectField("", monthTitle(options[monthIdx]), options.map { monthTitle(it) }) { picked -> monthIdx = options.indexOfFirst { monthTitle(it) == picked }.coerceAtLeast(0) }
             }
             Column(modifier = Modifier.width(260.dp)) {
-                MainButton(if (generating) "Считаем…" else "Составить график автоматически", enabled = !generating) {
-                    generating = true
-                    scope.launch {
-                        runCatching {
-                            val month = options[monthIdx].atDay(1).toString()
-                            val gen = scheduleApi.generateDraft(month)
-                            val id = gen["draft_id"].dbl().toInt()
-                            val view = scheduleApi.getDraft(id)
-                            val d = parseDraft(view, id, gen["month"].str(), gen["status"].str(), gen["blocking_errors"].arr().map { it.obj()["message"].str() })
-                            onDraft(d)
-                            Toaster.show("Черновик графика на ${monthTitle(YearMonth.parse(d.month.take(7)))} рассчитан")
-                        }.onFailure { Toaster.show(it.message ?: "Не удалось рассчитать черновик графика", true) }
-                        generating = false
+                if (T2Colors.uiBeta) {
+                    U3PrimaryButton(if (generating) "Считаем…" else "Составить график автоматически", enabled = !generating) {
+                        generating = true
+                        scope.launch {
+                            runCatching {
+                                val month = options[monthIdx].atDay(1).toString()
+                                val gen = scheduleApi.generateDraft(month)
+                                val id = gen["draft_id"].dbl().toInt()
+                                val view = scheduleApi.getDraft(id)
+                                val d = parseDraft(view, id, gen["month"].str(), gen["status"].str(), gen["blocking_errors"].arr().map { it.obj()["message"].str() })
+                                onDraft(d)
+                                Toaster.show("Черновик графика на ${monthTitle(YearMonth.parse(d.month.take(7)))} рассчитан")
+                            }.onFailure { Toaster.show(it.message ?: "Не удалось рассчитать черновик графика", true) }
+                            generating = false
+                        }
+                    }
+                } else {
+                    MainButton(if (generating) "Считаем…" else "Составить график автоматически", enabled = !generating) {
+                        generating = true
+                        scope.launch {
+                            runCatching {
+                                val month = options[monthIdx].atDay(1).toString()
+                                val gen = scheduleApi.generateDraft(month)
+                                val id = gen["draft_id"].dbl().toInt()
+                                val view = scheduleApi.getDraft(id)
+                                val d = parseDraft(view, id, gen["month"].str(), gen["status"].str(), gen["blocking_errors"].arr().map { it.obj()["message"].str() })
+                                onDraft(d)
+                                Toaster.show("Черновик графика на ${monthTitle(YearMonth.parse(d.month.take(7)))} рассчитан")
+                            }.onFailure { Toaster.show(it.message ?: "Не удалось рассчитать черновик графика", true) }
+                            generating = false
+                        }
                     }
                 }
             }
             if (draft != null && draft.status == "draft" && draft.blocking.isEmpty()) {
                 Column(modifier = Modifier.width(200.dp)) {
-                    MainButton(if (applying) "Применяем…" else "Применить график", enabled = !applying) { confirmApply = true }
+                    if (T2Colors.uiBeta) U3SecondaryButton(if (applying) "Применяем…" else "Применить график") { if (!applying) confirmApply = true }
+                    else MainButton(if (applying) "Применяем…" else "Применить график", enabled = !applying) { confirmApply = true }
                 }
             }
             GhostButton("Требования к покрытию") { staffing = true }
@@ -266,6 +286,26 @@ private fun DraftSummary(draft: ScheduleDraft, stores: Map<String, StoreInfo>, e
         return
     }
     val names = employees.associate { it.id to it.full_name }
+    if (T2Colors.uiBeta) {
+        // Beta UI 3.0: the per-employee breakdown as a grouped list instead of stacked surface-2 cards.
+        U3Group(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
+            byEmp.entries.sortedBy { (names[it.key] ?: "").lowercase() }.forEachIndexed { i, (empId, byDate) ->
+                if (i > 0) U3Sep()
+                val items = byDate.values
+                val hours = items.sumOf { it["hours"].dbl() }
+                val perStore = items.groupingBy { it["store_id"].str() }.eachCount()
+                val breakdown = perStore.entries.joinToString("; ") { (sid, c) -> "${stores[sid]?.name ?: sid}: $c смен" }
+                val tiers = items.map { it["explanation"].obj()["tier"].str() }.filter { it.isNotEmpty() }.distinct().joinToString("; ") { tierLabel(it) }
+                U3Cell(
+                    names[empId] ?: "#$empId",
+                    "смен: ${items.size} · часов: ${if (hours % 1.0 == 0.0) hours.toLong().toString() else hours.toString()}" + (if (tiers.isNotEmpty()) "\n$breakdown · $tiers" else "\n$breakdown"),
+                    leading = { U3Tile((names[empId] ?: "#").take(1)) },
+                    trailing = { U3Value(items.size.toString()) }
+                )
+            }
+        }
+        return
+    }
     Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         byEmp.entries.sortedBy { (names[it.key] ?: "").lowercase() }.forEach { (empId, byDate) ->
             val items = byDate.values
@@ -325,15 +365,20 @@ private fun StaffingDialog(api: ScheduleApi, stores: List<StoreInfo>, onDismiss:
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                MainButton(if (busy) "Сохраняем…" else "Сохранить", enabled = !busy) {
-                    val sid = storeId ?: return@MainButton
-                    busy = true
-                    scope.launch {
-                        runCatching { api.saveStaffing(sid, List(7) { wd -> Triple(wd, required.value[wd].toIntOrNull() ?: 0, trainees.value[wd].toIntOrNull() ?: 0) }) }
-                            .onSuccess { Toaster.show("Покрытие сохранено"); onDismiss() }
-                            .onFailure { Toaster.show(it.message ?: "Ошибка", true); busy = false }
+                val saveLabel = if (busy) "Сохраняем…" else "Сохранить"
+                val saveAction = {
+                    val sid = storeId
+                    if (sid != null) {
+                        busy = true
+                        scope.launch {
+                            runCatching { api.saveStaffing(sid, List(7) { wd -> Triple(wd, required.value[wd].toIntOrNull() ?: 0, trainees.value[wd].toIntOrNull() ?: 0) }) }
+                                .onSuccess { Toaster.show("Покрытие сохранено"); onDismiss() }
+                                .onFailure { Toaster.show(it.message ?: "Ошибка", true); busy = false }
+                        }
                     }
                 }
+                if (T2Colors.uiBeta) U3PrimaryButton(saveLabel, enabled = !busy) { saveAction() }
+                else MainButton(saveLabel, enabled = !busy) { saveAction() }
             }
         }
     }
@@ -393,14 +438,16 @@ private fun AvailabilityDialog(api: ScheduleApi, employees: List<EmployeeListIte
             }
         }
         Spacer(Modifier.height(12.dp))
-        MainButton("Добавить", enabled = true) {
+        val addAction = {
             val id = empId
-            if (id == null || runCatching { LocalDate.parse(date.trim()) }.isFailure) { Toaster.show("Укажите дату в формате ГГГГ-ММ-ДД", true); return@MainButton }
-            scope.launch {
+            if (id == null || runCatching { LocalDate.parse(date.trim()) }.isFailure) { Toaster.show("Укажите дату в формате ГГГГ-ММ-ДД", true) }
+            else scope.launch {
                 runCatching { api.addAvailability(id, kind, date.trim()) }
                     .onSuccess { Toaster.show("Добавлено"); reload++ }
                     .onFailure { Toaster.show(it.message ?: "Ошибка", true) }
             }
         }
+        if (T2Colors.uiBeta) U3PrimaryButton("Добавить", enabled = true) { addAction() }
+        else MainButton("Добавить", enabled = true) { addAction() }
     }
 }

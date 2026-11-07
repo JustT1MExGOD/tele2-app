@@ -1,0 +1,301 @@
+/* =========================================================
+   T2 Sales — Beta UI 3.0 «Ночная смена» · comms layer
+   Экраны коммуникации: чат (#page-chat), поддержка (#page-support),
+   задачи (#page-tasks), алерты (#page-alerts).
+   Слой НАД ui3/rest.css (уже покрывает пузыри/композер чата и
+   сегменты .quick): здесь — хвосты пузырей, стеклянный композер,
+   статусы отправки, карточки-ячейки списков задач/алертов, тикеты
+   поддержки. Каждый селектор начинается с body[data-ui="beta"];
+   разметка, id и data-on не меняются.
+   ========================================================= */
+
+/* =========================================================
+   ЧАТ — хвосты пузырей, статусы, стеклянный композер
+   (база цветов/радиусов — в rest.css)
+   ========================================================= */
+
+/* Свои пузыри — без имени/роли: как в iMessage/Telegram, подпись
+   автора нужна только чужим сообщениям в общей ленте. */
+body[data-ui="beta"] .chat-message-mine .chat-bubble-meta { display: none; }
+
+/* Хвосты: маленький «язычок» у нижнего угла пузыря — свой справа,
+   чужой слева. Треугольник-clip-path поверх угла пузыря; часть внутри
+   пузыря сливается с его фоном (background: inherit). */
+body[data-ui="beta"] .chat-bubble { position: relative; }
+body[data-ui="beta"] .chat-message .chat-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  pointer-events: none;
+}
+body[data-ui="beta"] .chat-message:not(.chat-message-mine) .chat-bubble::after {
+  left: -6px;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+body[data-ui="beta"] .chat-message-mine .chat-bubble::after {
+  right: -6px;
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+}
+
+/* Чужой пузырь чуть «приподнят» над холстом — едва заметная
+   float-тень, свой остаётся плоским акцентом (Linear). */
+body[data-ui="beta"] .chat-message:not(.chat-message-mine) .chat-bubble {
+  box-shadow: 0 1px 2px rgba(0,0,0,.18);
+}
+
+/* Метаданные чужого пузыря — компактнее и в один ряд с текстом роли */
+body[data-ui="beta"] .chat-bubble-meta { gap: 8px; margin-bottom: 3px; }
+body[data-ui="beta"] .chat-sender-role {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--u-cell-2);
+  color: var(--u-text-3);
+}
+/* Время в пузыре — в строке после текста, не отдельным блоком */
+body[data-ui="beta"] .chat-bubble-time {
+  font-size: 10px;
+  margin-top: 2px;
+  justify-content: flex-end;
+  letter-spacing: .01em;
+}
+
+/* Статусы отправки (pending/unknown/failed) — в тон пузырю */
+body[data-ui="beta"] .chat-pending-status { opacity: .8; }
+body[data-ui="beta"] .chat-message-mine .chat-pending-failed { color: #FFD9DB; }
+body[data-ui="beta"][data-theme="light"] .chat-message-mine .chat-pending-failed,
+body[data-ui="beta"]:not([data-theme]) .chat-message-mine .chat-pending-failed { color: #FFE3E5; }
+body[data-ui="beta"] .chat-message-mine .chat-pending-unknown { color: var(--u-on-primary); opacity: .7; }
+
+/* Ошибка загрузки ленты — структурная empty-карточка по центру */
+body[data-ui="beta"] .chat-error {
+  margin: auto;
+  padding: 28px 20px;
+  max-width: 300px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--u-text-2);
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+}
+body[data-ui="beta"] .chat-error::before {
+  content: "!";
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: var(--u-danger-soft);
+  color: var(--u-danger);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* Плавающая кнопка «Новые сообщения» — стекло уже в rest.css;
+   добавляем тень и нижнее положение над композером. */
+body[data-ui="beta"] .chat-new-messages {
+  box-shadow: var(--u-shadow-float);
+  font-weight: 700;
+  bottom: calc(64px + var(--app-safe-bottom, 0px));
+}
+
+/* Композер — стеклянная планка: лента прокручивается под ней,
+   края скруглены у инпута (rest.css), кнопки круглые 44px. */
+body[data-ui="beta"] .chat-composer {
+  background: var(--u-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-top: 1px solid var(--u-glass-line);
+}
+body[data-ui="beta"] .chat-attach-btn {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  color: var(--u-text-2);
+}
+body[data-ui="beta"] .chat-attach-btn:active { background: var(--u-cell-press); transform: scale(.92); }
+body[data-ui="beta"] .chat-send-btn { box-shadow: 0 6px 16px -4px rgba(42,171,238,.45); }
+body[data-ui="beta"] .chat-send-btn:disabled { box-shadow: inset 0 0 0 1px var(--u-line); }
+
+/* Чипы выбранных файлов над композером */
+body[data-ui="beta"] .chat-composer-file {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+body[data-ui="beta"] .chat-composer-file button { color: var(--u-text-3); }
+
+/* Skeleton в ленте — по ширине как пузырь */
+body[data-ui="beta"] .chat-feed > .skeleton { height: 56px; border-radius: 18px; }
+
+/* =========================================================
+   ЗАДАЧИ / АЛЕРТЫ — сгруппированные ячейки + статус-акценты
+   Список рендерится голыми .row-кнопками в div (не .section):
+   оборачиваем их в карточку-ячейку через .u3-card, которую
+   добавляет index.ts этих страниц (beta-only класс).
+   ========================================================= */
+
+/* Карточка-обёртка списка: Apple inset grouped, тот же язык,
+   что у .section в base.css, но без заголовка. padding !important
+   перебивает inline-padding обёртки (0 16px 16px) — внутри карточки
+   ряды идут в полную ширину, отступы рисуют сами .row. */
+body[data-ui="beta"] .u3-card {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  overflow: hidden;
+  margin: 0 16px 16px;
+  padding: 0 !important;
+}
+body[data-ui="beta"][data-theme="light"] .u3-card,
+body[data-ui="beta"]:not([data-theme]) .u3-card { border-color: transparent; }
+
+/* Строки внутри карточки — без внешних паддингов обёртки, сами
+   ряды тянутся на всю ширину; inset-разделитель из base.css
+   (.row + .row::before, left:70px) уже работает. */
+body[data-ui="beta"] .u3-card .row {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+body[data-ui="beta"] .u3-card .row .row-body { flex: 1; min-width: 0; }
+
+/* Иконки-статусы задач: выполнена — зелёная заливка, отменена —
+   приглушённая, открыта/в работе — нейтральная ячейка. SVG внутри
+   наследует currentColor от .row-icon. */
+body[data-ui="beta"] #page-tasks .row .row-icon { transition: none; }
+body[data-ui="beta"] #page-tasks .row .row-icon:has(> .ic) { color: var(--u-accent-text); }
+body[data-ui="beta"] #page-tasks .row:has(.ic path[d="M20 6 9 17l-5-5"]) .row-icon {
+  background: var(--u-success-soft);
+  color: var(--u-success);
+}
+body[data-ui="beta"] #page-tasks .row:has(.ic circle[cx="12"][cy="12"][r="10"]) .row-icon {
+  background: var(--u-cell-2);
+  color: var(--u-text-3);
+}
+
+/* Иконки алертов по severity: critical — красный, прочие — янтарь.
+   CRITICAL_ICON — «солнце/колокол» (path d="M7 18v-6a5…"),
+   WARN_ICON — треугольник. */
+body[data-ui="beta"] #page-alerts .row-icon {
+  background: var(--u-warning-soft);
+  color: var(--u-warning);
+}
+body[data-ui="beta"] #page-alerts .row:has(.ic path[d^="M7 18v-6a5"]) .row-icon {
+  background: var(--u-danger-soft);
+  color: var(--u-danger);
+}
+
+/* Приоритет задач: точки-статусы в заголовке — чуть воздуха вокруг;
+   заголовок задачи/алерта может переноситься на 2 строки, иначе
+   бейдж приоритета уходит в ellipsis (base .row-title = nowrap). */
+body[data-ui="beta"] #page-tasks .row-title,
+body[data-ui="beta"] #page-alerts .row-title {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+body[data-ui="beta"] .row-title .status-dot { margin: 0 6px 0 4px; vertical-align: 1px; }
+
+/* Сегмент фильтра — уже iOS-стиль из rest.css (.quick); здесь только
+   выравнивание по краю экрана: inline-padding обёртки убираем, сегмент
+   и карточка встают в одну горизонтальную сетку с .section. */
+body[data-ui="beta"] #page-tasks > #tasksPageBody > .quick,
+body[data-ui="beta"] #page-alerts > #alertsPageBody > .quick {
+  padding: 2px !important;
+  margin: 0 16px 12px;
+}
+
+/* Пустые состояния внутри карточки-обёртки не дублируют рамку */
+body[data-ui="beta"] .u3-card .empty-state { padding: 40px 16px; }
+
+/* Детали задачи/алерта в шторке (#modalBody): сегмент действий —
+   компактнее, чек-история комментариев на фоне ячейки */
+body[data-ui="beta"] #modalBody .quick { margin-bottom: 12px; }
+body[data-ui="beta"] #modalBody .quick button {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-sm);
+  color: var(--u-text);
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+body[data-ui="beta"] #modalBody .quick button:active { background: var(--u-cell-press); }
+body[data-ui="beta"] #taskComments {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+  padding: 6px 12px;
+}
+body[data-ui="beta"] #taskComments > div:last-child { border-bottom: 0 !important; }
+
+/* =========================================================
+   ПОДДЕРЖКА — FAQ-аккордеон и тикеты
+   ========================================================= */
+
+/* FAQ: стрелка поворота у раскрытого ответа не отслеживается в
+   разметке (toggle через inline style), поэтому только ритм:
+   ответ — под строкой вопроса тем же шрифтом-подписью. */
+body[data-ui="beta"] #faqList .row { cursor: pointer; }
+body[data-ui="beta"] #faqList .row + .empty { border-top: 1px solid var(--u-sep); }
+
+/* Тикеты поддержки в «Чат с поддержкой» — мини-карточки-ячейки
+   внутри progress-block, визуально как сообщения треда. */
+body[data-ui="beta"] #supportChat .progress-block {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+  padding: 10px 12px !important;
+}
+body[data-ui="beta"] #supportChat .progress-block [style*="var(--primary)"] { color: var(--u-accent-text) !important; }
+
+/* Поле ввода обращения и результат отправки */
+body[data-ui="beta"] #page-support #supportMsg { font-size: 16px; /* <16px зумит iOS Safari */ }
+body[data-ui="beta"] #supportResult {
+  margin-top: 12px;
+  padding: 12px 14px !important;
+  text-align: left;
+  font-weight: 600;
+  color: var(--u-success);
+  background: var(--u-success-soft);
+  border-radius: var(--u-r-md);
+}
+
+/* Тикеты админа — строки в ячейке, кнопка «Ответить» компактнее */
+body[data-ui="beta"] #adminTicketsList .row { flex-direction: column; align-items: stretch; }
+body[data-ui="beta"] #adminTicketsList .btn-main { min-height: 44px; font-size: 15px; }
+
+/* =========================================================
+   ПРОМО / АНОНСЫ внутри comms-экранов
+   ========================================================= */
+
+/* Объявления (#page-announce) — карточки сети, если блок попадает
+   в зону этих экранов: тот же язык ячеек. */
+body[data-ui="beta"] #anList .progress-block,
+body[data-ui="beta"] #anList .an-card {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+}
+
+/* =========================================================
+   Reduced motion — приседания кнопок композера отключены
+   ========================================================= */
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .chat-attach-btn:active { transform: none; }
+}

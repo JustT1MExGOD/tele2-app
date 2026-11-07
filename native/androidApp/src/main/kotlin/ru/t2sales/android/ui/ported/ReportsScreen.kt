@@ -57,6 +57,25 @@ fun ReportsScreen(reportsApi: ReportsApi, teamApi: TeamApi, isAdmin: Boolean, ca
         if (isAdmin) runCatching { reportsApi.getAlertsEffectiveness() }.onSuccess { learn = it }.onFailure { learnFailed = true }
     }
 
+    if (T2Colors.uiBeta) {
+        ReportsBeta(
+            canManage, isAdmin,
+            onDigest = { kind, okMsg ->
+                if (!digestBusy) {
+                    digestBusy = true
+                    scope.launch {
+                        runCatching { reportsApi.sendDigest(kind) }
+                            .onSuccess { T2Toast.show(okMsg) }
+                            .onFailure { T2Toast.show(it.message ?: "Не удалось отправить сводку", true) }
+                        digestBusy = false
+                    }
+                }
+            },
+            onOpenReportImg, onExport = { export(scope, teamApi, it) },
+            learn, learnFailed
+        )
+        return
+    }
     Section("Сводка по сети") {
         Text(
             "Итог по сети (план/темп, лучшие и отстающие точки) — как ежедневные фото-отчёты по точке, только раз в неделю/месяц по всей сети.",
@@ -210,5 +229,78 @@ private fun TypeBlock(title: String, data: AlertTypeEffectiveness) {
             val delta = ((w - wo) * 100).roundToInt()
             Text("Задача меняет исход: ${if (delta > 0) "+" else ""}$delta п.п.", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
         }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+@Composable
+private fun ReportsBeta(
+    canManage: Boolean, isAdmin: Boolean,
+    onDigest: (String, String) -> Unit,
+    onOpenReportImg: () -> Unit,
+    onExport: (String) -> Unit,
+    learn: EffectivenessSummaryResponse?, learnFailed: Boolean
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("Отчёты", "Итоги по сети и по точке, выгрузки и эффективность рекомендаций")
+
+        U3GroupHead("Сводка по сети")
+        U3Group {
+            U3Cell(
+                "Итог по сети",
+                "План/темп, лучшие и отстающие точки — раз в неделю/месяц по всей сети",
+                leading = { U3IconTile(NavIcons.reportImg, tint = T2Colors.accentText) },
+                trailing = null
+            )
+        }
+        if (canManage) {
+            Spacer(Modifier.height(10.dp))
+            U3SecondaryButton("Отправить недельную сводку") { onDigest("weekly", "Недельная сводка отправлена") }
+            Spacer(Modifier.height(8.dp))
+            U3SecondaryButton("Отправить месячную сводку") { onDigest("monthly", "Месячная сводка отправлена") }
+        }
+
+        U3GroupHead("Отчёт по точке")
+        U3Group {
+            U3Cell(
+                "Отчёт-картинка", "SVG итог дня по выбранной точке",
+                leading = { U3IconTile(NavIcons.reportImg, tint = T2Colors.accentText) },
+                trailing = { U3Value("›", T2Colors.hint) },
+                onClick = onOpenReportImg
+            )
+        }
+
+        if (canManage) {
+            U3GroupHead("Экспорт CSV")
+            U3Group {
+                U3Cell("Продажи", "За текущий месяц", leading = { U3IconTile(NavIcons.download) }, trailing = { U3Value("›", T2Colors.hint) }, onClick = { onExport("sales") })
+                U3Sep()
+                U3Cell("BFQ", "За текущий месяц", leading = { U3IconTile(NavIcons.download) }, trailing = { U3Value("›", T2Colors.hint) }, onClick = { onExport("bfq") })
+                U3Sep()
+                U3Cell("График", "За текущий месяц", leading = { U3IconTile(NavIcons.download) }, trailing = { U3Value("›", T2Colors.hint) }, onClick = { onExport("schedules") })
+            }
+        }
+
+        if (isAdmin) {
+            U3GroupHead("Эффективность рекомендаций")
+            Text(
+                "Сравнение алертов с доведённой до конца задачей и без.",
+                color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
+            U3Group {
+                val l = learn
+                when {
+                    learnFailed -> U3Cell("Не удалось загрузить", null)
+                    l == null -> U3Cell("Загрузка…", null)
+                    else -> {
+                        U3Cell("Прогноз конца дня", "plan_miss_projected · ${l.plan_miss_projected.total}", leading = { U3IconTile(NavIcons.alerts, tint = T2Colors.warning) })
+                        U3Sep()
+                        U3Cell("Просевшие дни", "anomaly_vs_forecast · ${l.anomaly_vs_forecast.total}", leading = { U3IconTile(NavIcons.alerts, tint = T2Colors.warning) })
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
     }
 }

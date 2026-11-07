@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
@@ -99,6 +100,22 @@ fun MonthPlanScreen(container: AppContainer, me: MeResponse) {
     PageSection("Планы и факт за месяц") {
         MonthNav(month) { PlanMonthState.month = it }
         val d = data
+        if (T2Colors.uiBeta && d != null) {
+            val sumP = d.rows.sumOf { r -> r.plan.values.sum() }
+            val sumF = d.rows.sumOf { r -> r.fact.values.sum() }
+            val pct = if (sumP > 0) sumF / sumP else 0.0
+            val dayOf = java.time.LocalDate.now(ZoneId.of("Europe/Moscow")).dayOfMonth
+            val dim = month.lengthOfMonth()
+            val shown = ru.t2sales.desktop.ui.components.animatedInt((pct * 100).roundToInt(), 720)
+            ru.t2sales.desktop.ui.components.BetaHero(
+                "${monthLabel(month).split(" ")[0]}, день $dayOf из $dim",
+                chip = "прогноз ${((sumF / maxOf(dayOf, 1)) * dim / maxOf(sumP, 1.0) * 100).roundToInt()}%",
+                flat = true
+            ) {
+                ru.t2sales.desktop.ui.components.HeroNumber("$shown", "%", if (pct >= 1.0) T2Colors.success else T2Colors.text, size = 56)
+                Text("${n(sumF)} из ${n(sumP)} продаж · осталось дней: ${d.remaining_days ?: "—"}", color = T2Colors.textSecondary, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
         when {
             failed -> ru.t2sales.desktop.ui.components.ErrorState("Планы месяца недоступны", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
@@ -128,7 +145,18 @@ fun MonthPlanScreen(container: AppContainer, me: MeResponse) {
                                 Head("ФИО", metricSort == null && sort == PlanSort.Name, asc, Modifier.weight(2.5f)) { sortStatic(PlanSort.Name) }
                                 Head("Роль", metricSort == null && sort == PlanSort.Role, asc, Modifier.weight(1.8f)) { sortStatic(PlanSort.Role) }
                                 Head("Смены", metricSort == null && sort == PlanSort.Shifts, asc, Modifier.weight(1.5f)) { sortStatic(PlanSort.Shifts) }
-                                cols.forEach { m -> Head(m.label ?: m.id, metricSort == m.id, asc, Modifier.weight(1f)) { sortMetric(m.id) } }
+                                cols.forEach { m ->
+                                    if (T2Colors.uiBeta) {
+                                        val p = (d.totals?.pct?.get(m.id)?.toFloat()?.div(100f))
+                                            ?: d.totals?.let { t -> ((t.fact[m.id] ?: 0.0) / maxOf(t.plan[m.id] ?: 0.0, 1.0)).toFloat() }
+                                            ?: 0f
+                                        Row(Modifier.weight(1f).clickable { sortMetric(m.id) }, verticalAlignment = Alignment.CenterVertically) {
+                                            ru.t2sales.desktop.ui.components.BetaPie(p.coerceIn(0f, 1f), 14.dp)
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("${m.label ?: m.id} ${if (metricSort == m.id) (if (asc) "↑" else "↓") else "⇅"}", color = if (metricSort == m.id) T2Colors.primary else T2Colors.hint, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+                                        }
+                                    } else Head(m.label ?: m.id, metricSort == m.id, asc, Modifier.weight(1f)) { sortMetric(m.id) }
+                                }
                             }
                             sorted.forEach { r ->
                                 Row(

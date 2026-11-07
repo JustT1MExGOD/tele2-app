@@ -67,7 +67,7 @@ export async function loadTasksPage(): Promise<void> {
         <button class="${tasksFilter === 'done' ? 'active' : ''}" onclick="setTasksFilter('done')">Выполненные</button>
         <button class="${tasksFilter === 'all' ? 'active' : ''}" onclick="setTasksFilter('all')">Все</button>
       </div>
-      <div style="padding:0 16px 16px">
+      <div class="u3-card" style="padding:0 16px 16px">
         ${
           items.length
             ? items

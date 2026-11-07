@@ -38,6 +38,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.height
+import ru.t2sales.desktop.ui.components.betaPress
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import ru.t2sales.desktop.di.AppContainer
@@ -100,6 +103,25 @@ fun AppShell(
                             .background(T2Colors.bg)
                     ) { key(reload) { content(selected) } }
                 }
+            } else if (T2Colors.uiBeta) {
+                // Beta UI 3.0: flat canvas, large title in the content, sticky glass bar on top (title fades in once the large one scrolls away)
+                val scrollState = rememberScrollState()
+                Box(modifier = Modifier.fillMaxSize().background(T2Colors.bg)) {
+                    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
+                        Spacer(Modifier.height(BETA_BAR_HEIGHT))
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                            Column(modifier = Modifier.widthIn(max = 1200.dp).fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 96.dp)) {
+                                BetaLargeTitle(selected, myDay)
+                                ScreenEnter(selected) { key(reload, AddSaleState.refreshTick) { content(selected) } }
+                            }
+                        }
+                    }
+                    BetaBar(selected, scrollState.value, teamApi, myEmployeeId, container.network, container.outbox, onRefresh = { reload++ })
+                    androidx.compose.foundation.VerticalScrollbar(
+                        adapter = androidx.compose.foundation.rememberScrollbarAdapter(scrollState),
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    )
+                }
             } else {
                 val scrollState = rememberScrollState()
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -141,6 +163,7 @@ fun AppShell(
                     myName = me.full_name,
                     canManage = canManage,
                     presetEmployeeId = AddSaleState.presetEmployeeId,
+                    homeApi = homeApi,
                     onDismiss = { AddSaleState.visible = false }
                 )
             }
@@ -206,9 +229,85 @@ private fun HeaderButton(label: String, onClick: () -> Unit) {
     ) { Text(label, color = T2Colors.text, style = MaterialTheme.typography.subtitle1) }
 }
 
-/** The web's .fab (styles.css:735): 58px blue gradient "+" bottom-right. */
+private val BETA_BAR_HEIGHT = 60.dp
+
+/** Beta UI 3.0 large title: 34/700 with the date and the store as a lede (Home has its own greeting, so it skips this). */
+@Composable
+private fun BetaLargeTitle(selected: Screen, myDay: MeDayResponse?) {
+    if (selected == Screen.Home) return
+    val today = remember { LocalDate.now(ZoneId.of("Europe/Moscow")) }
+    val date = today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", java.util.Locale("ru"))).replaceFirstChar { it.uppercase() }
+    val store = myDay?.shift?.let { it.store_name ?: it.store_code }
+    ru.t2sales.desktop.ui.components.LargeTitle(selected.label, listOfNotNull(date, store?.let { "«$it»" }).joinToString(", "))
+}
+
+/** Beta UI 3.0 header: a translucent bar that stays on top; the compact title appears after 56 px of scroll, like iOS. */
+@Composable
+private fun BetaBar(selected: Screen, scrolled: Int, teamApi: TeamApi, myEmployeeId: Int?, network: ru.t2sales.desktop.network.NetworkManager, outbox: ru.t2sales.desktop.offline.SalesOutbox, onRefresh: () -> Unit) {
+    val titleAlpha by androidx.compose.animation.core.animateFloatAsState(
+        if (scrolled > 56 || selected == Screen.Home && scrolled > 80) 1f else 0f,
+        androidx.compose.animation.core.tween(ru.t2sales.shared.theme.T2Motion.short, easing = ru.t2sales.shared.theme.T2Motion.easeOut)
+    )
+    val glassy = scrolled > 4
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(BETA_BAR_HEIGHT)
+                .background(if (glassy) T2Colors.glass else T2Colors.bg)
+                .padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AvatarImage(teamApi, myEmployeeId, "T2", size = 32.dp)
+            Spacer(Modifier.width(T2Spacing.sp3))
+            Text(
+                selected.label, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T2Colors.text,
+                modifier = Modifier.weight(1f).graphicsLayer { alpha = titleAlpha }
+            )
+            OutboxPill(outbox)
+            NetworkIndicator(network)
+            Spacer(Modifier.width(T2Spacing.sp2))
+            BetaIconButton(if (T2Colors.dark) "☾" else "☀", "Сменить тему") {
+                ThemePrefs.auto = false
+                T2Colors.dark = !T2Colors.dark
+                ThemePrefs.setDark(T2Colors.dark)
+            }
+            Spacer(Modifier.width(T2Spacing.sp2))
+            BetaIconButton("↻", "Обновить", onRefresh)
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(if (glassy) T2Colors.border else Color.Transparent))
+    }
+}
+
+/** .ib: 36px round icon button on a cell, hit area padded to 44. */
+@Composable
+private fun BetaIconButton(glyph: String, label: String, onClick: () -> Unit) {
+    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(Modifier.size(T2Spacing.hit).clip(CircleShape).clickable(interactionSource = src, indication = null, onClick = onClick), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.betaPress(src, 0.92f).size(36.dp).clip(CircleShape).background(T2Colors.surface).border(1.dp, T2Colors.border, CircleShape),
+            contentAlignment = Alignment.Center
+        ) { Text(glyph, color = T2Colors.text, fontSize = 16.sp) }
+    }
+}
+
+/** The web's .fab (styles.css:735): 58px blue gradient "+" bottom-right. In the beta: flat [T2Colors.primary] with [T2Colors.onPrimary]. */
 @Composable
 private fun Fab(modifier: Modifier, onClick: () -> Unit) {
+    if (T2Colors.uiBeta) {
+        val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        Box(
+            modifier = modifier
+                .betaPress(src, 0.92f)
+                .size(56.dp)
+                .shadow(12.dp, CircleShape, ambientColor = Color.Black, spotColor = Color.Black)
+                .clip(CircleShape)
+                .background(T2Colors.primary)
+                .clickable(interactionSource = src, indication = null, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) { Text("+", color = T2Colors.onPrimary, fontSize = 28.sp, fontWeight = FontWeight.Normal) }
+        return
+    }
     Box(
         modifier = modifier
             .size(58.dp)
@@ -231,4 +330,8 @@ object ThemePrefs {
     var auto: Boolean
         get() = autoState
         set(v) { autoState = v; prefs.putBoolean("themeAuto", v) }
+
+    /** Beta UI 3.0 «Ночная смена»: off by default, like the web; turned on in Профиль or the command palette. */
+    fun isUiBeta() = prefs.getBoolean("uiBeta", false)
+    fun setUiBeta(value: Boolean) { T2Colors.uiBeta = value; prefs.putBoolean("uiBeta", value) }
 }

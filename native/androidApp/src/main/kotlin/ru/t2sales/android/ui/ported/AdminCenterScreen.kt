@@ -46,7 +46,9 @@ import ru.t2sales.shared.api.AcEmployeeHit
 import ru.t2sales.shared.api.AcOverview
 import ru.t2sales.shared.api.AcStore
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
 import ru.t2sales.shared.theme.T2Radius
+import ru.t2sales.shared.theme.T2Spacing
 
 private enum class AcTab(val label: String) {
     Overview("Обзор"), Employees("Сотрудники"), Stores("Точки"), Sales("Коррекции продаж"), Shifts("Коррекции смен"),
@@ -70,28 +72,36 @@ private const val WEB_ONLY = "Эта вкладка пока доступна т
 fun AdminCenterScreen(container: AppContainer) {
     var tab by remember { mutableStateOf(AcTab.Overview) }
 
-    PageSection(null) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AcTab.values().forEach { t ->
-                val active = t == tab
-                val shape = RoundedCornerShape(T2Radius.md)
-                Text(
-                    t.label,
-                    color = if (active) T2Colors.primary else T2Colors.text,
-                    fontWeight = FontWeight.Bold, fontSize = 13.sp,
-                    modifier = Modifier.clip(shape)
-                        .background(if (active) T2Colors.primarySoft else T2Colors.surface2)
-                        .border(1.dp, if (active) T2Colors.primary else T2Colors.border, shape)
-                        .clickable { tab = t }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                )
+    if (T2Colors.uiBeta) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            U3LargeTitle("Admin Center", tab.label)
+            U3FilterChips(AcTab.values().map { it.name to it.label }, tab.name) { id -> tab = AcTab.valueOf(id) }
+        }
+        Spacer(Modifier.height(8.dp))
+    } else {
+        PageSection(null) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AcTab.values().forEach { t ->
+                    val active = t == tab
+                    val shape = RoundedCornerShape(T2Radius.md)
+                    Text(
+                        t.label,
+                        color = if (active) T2Colors.primary else T2Colors.text,
+                        fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                        modifier = Modifier.clip(shape)
+                            .background(if (active) T2Colors.primarySoft else T2Colors.surface2)
+                            .border(1.dp, if (active) T2Colors.primary else T2Colors.border, shape)
+                            .clickable { tab = t }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
+        Spacer(Modifier.height(12.dp))
     }
-    Spacer(Modifier.height(12.dp))
 
     when (tab) {
         AcTab.Overview -> OverviewTab(container)
@@ -121,6 +131,11 @@ private fun OverviewTab(container: AppContainer) {
     var failed by remember { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
     LaunchedEffect(reload) { failed = false; runCatching { container.adminCenterApi.overview() }.onSuccess { data = it }.onFailure { failed = true } }
+
+    if (T2Colors.uiBeta) {
+        OverviewTabBeta(data, failed) { reload++ }
+        return
+    }
 
     PageSection("Обзор сети") {
         val d = data
@@ -169,6 +184,10 @@ private fun OverviewTab(container: AppContainer) {
 // ---------------- shared row
 @Composable
 internal fun NavRow(title: String, sub: String?, onClick: () -> Unit) {
+    if (T2Colors.uiBeta) {
+        U3Cell(title, sub, trailing = { Text("\u203A", color = T2Colors.hint, fontSize = 18.sp) }, onClick = onClick)
+        return
+    }
     Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -530,4 +549,46 @@ private fun deviceLabel(ua: String?): String {
         "Chrome" in ua -> "Chrome"; "Safari" in ua -> "Safari"; else -> "Браузер"
     }
     return (if (mobile) "\uD83D\uDCF1 " else "\uD83D\uDCBB ") + "$browser, $os"
+}
+
+// ======================= Beta UI 3.0 \u00AB\u041D\u043E\u0447\u043D\u0430\u044F \u0441\u043C\u0435\u043D\u0430\u00BB =======================
+
+/** Overview tab in beta: hero with active employees + a group of stat cells. */
+@Composable
+private fun OverviewTabBeta(data: AcOverview?, failed: Boolean, onRetry: () -> Unit) {
+    if (failed) { ErrorState("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043E\u0431\u0437\u043E\u0440", onRetry = onRetry); return }
+    val d = data
+    if (d == null) { Column(Modifier.padding(horizontal = 16.dp)) { SkeletonBlock(Modifier.fillMaxWidth().height(200.dp), 28.dp) }; return }
+    val st = d.shifts_today
+    fun num(e: kotlinx.serialization.json.JsonElement?) = (e as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 0
+    val active = if (st is kotlinx.serialization.json.JsonObject) num(st["active"]) else num(st)
+    val replacement = if (st is kotlinx.serialization.json.JsonObject) num(st["replacement"]) else 0
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3Hero {
+            U3HeroRow("\u0421\u0435\u0442\u044C", "\u0441\u0435\u0433\u043E\u0434\u043D\u044F")
+            U3HeroNumber("${d.employees.active}", "\u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0445 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432")
+            Text(
+                "${d.stores.active}/${d.stores.total} \u0442\u043E\u0447\u0435\u043A \u00B7 \u0441\u043C\u0435\u043D \u043E\u0442\u043A\u0440\u044B\u0442\u043E $active" + (if (replacement > 0) " \u00B7 \u0437\u0430\u043C\u0435\u043D: $replacement" else ""),
+                color = T2Hero.onHero2, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+
+        U3GroupHead("\u041E\u0431\u0437\u043E\u0440 \u0441\u0435\u0442\u0438")
+        U3Group {
+            U3Cell("\u0422\u043E\u0447\u043A\u0438", "\u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0435 / \u0432\u0441\u0435\u0433\u043E", leading = { U3IconTile(NavIcons.svStores, tint = T2Colors.accentText) }, trailing = { U3Value("${d.stores.active}/${d.stores.total}") })
+            U3Sep()
+            U3Cell("\u0421\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0438", "\u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0435 / \u0432\u0441\u0435\u0433\u043E", leading = { U3IconTile(NavIcons.team, tint = T2Colors.accentText) }, trailing = { U3Value("${d.employees.active}/${d.employees.total}") })
+            U3Sep()
+            U3Cell("\u0421\u043C\u0435\u043D\u044B \u0441\u0435\u0433\u043E\u0434\u043D\u044F", "\u043E\u0442\u043A\u0440\u044B\u0442\u043E" + if (replacement > 0) " \u00B7 \u0437\u0430\u043C\u0435\u043D: $replacement" else "", leading = { U3IconTile(NavIcons.schedule, tint = T2Colors.accentText) }, trailing = { U3Value("$active") })
+        }
+        U3GroupHead("\u041E\u0447\u0435\u0440\u0435\u0434\u0438")
+        U3Group {
+            U3Cell("\u0417\u0430\u044F\u0432\u043A\u0438 \u043D\u0430 \u0434\u043E\u0441\u0442\u0443\u043F", "\u0432 \u043E\u0436\u0438\u0434\u0430\u043D\u0438\u0438", leading = { U3IconTile(NavIcons.profile, tint = T2Colors.warning) }, trailing = { U3Value("${d.pending_access_requests}", if (d.pending_access_requests > 0) T2Colors.warning else T2Colors.text) })
+            U3Sep()
+            U3Cell("\u041E\u0431\u0440\u0430\u0449\u0435\u043D\u0438\u044F \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0438", "\u043E\u0442\u043A\u0440\u044B\u0442\u043E", leading = { U3IconTile(NavIcons.support, tint = T2Colors.accentText) }, trailing = { U3Value("${d.open_support_tickets}") })
+            U3Sep()
+            U3Cell("\u0410\u043B\u0435\u0440\u0442\u044B", "\u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0435", leading = { U3IconTile(NavIcons.alerts, tint = if (d.active_alerts > 0) T2Colors.danger else T2Colors.accentText) }, trailing = { U3Value("${d.active_alerts}", if (d.active_alerts > 0) T2Colors.danger else T2Colors.text) })
+        }
+        Spacer(Modifier.height(16.dp))
+    }
 }

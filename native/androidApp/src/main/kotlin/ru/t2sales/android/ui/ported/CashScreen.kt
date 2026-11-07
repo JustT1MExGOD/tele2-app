@@ -40,6 +40,7 @@ import ru.t2sales.shared.api.CashEntry
 import ru.t2sales.shared.api.CashStore
 import ru.t2sales.shared.api.CashTable
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
 import ru.t2sales.shared.theme.T2Radius
 
 private val NF = NumberFormat.getInstance(Locale("ru", "RU"))
@@ -73,6 +74,12 @@ fun CashScreen(container: AppContainer) {
         failed = false
         runCatching { api.getTable(today.take(8) + "01", today) }.onSuccess { table = it }.onFailure { failed = true }
     }
+
+    val onFillBeta = { sid: String, d: String, f: Double, c: Double ->
+        storeId = sid; date = d
+        fact = f.toLong().toString(); c1 = c.toLong().toString()
+    }
+    if (T2Colors.uiBeta) CashBetaTop(table, failed, stores, onRetry = { reload++ }, onFill = onFillBeta)
 
     Section("Внести кассу") {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 14.dp)) {
@@ -111,6 +118,10 @@ fun CashScreen(container: AppContainer) {
     }
     Spacer(Modifier.height(12.dp))
 
+    if (T2Colors.uiBeta) {
+        CashBetaHistory(table, stores, onFillBeta)
+        return
+    }
     Section("Касса по дням") {
         Text("\u0394 = факт \u2212 (1С + 2000)", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         val t = table
@@ -180,6 +191,102 @@ private fun DayCard(date: String, stores: List<CashStore>, cells: Map<String, Ca
             if (i < stores.lastIndex) Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(T2Colors.border))
         }
     }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (design-system/ui3/v5-team, screen 5 "Касса") =======================
+
+private class CashLine(val store: CashStore, val fact: Double?, val c1: Double?, val delta: Double?)
+
+private fun cashLines(date: String, stores: List<CashStore>, cells: Map<String, CashEntry>): List<CashLine> = stores.map { s ->
+    val c = cells[s.id]
+    val f = c?.cash_fact.num()
+    val one = c?.cash_1c.num()
+    CashLine(s, f, one, c?.delta.num() ?: if (f != null && one != null) f - (one + 2000) else null)
+}
+
+private fun signed(v: Double) = (if (v > 0) "+" else if (v < 0) "−" else "") + NF.format(kotlin.math.abs(v))
+
+private fun dayLabel(d: String) = d.slice(8..9) + "." + d.slice(5..6)
+
+/** Hero with the Δ of the latest day, a warning row when it is off, then the per-store сверка list (tap fills the form). */
+@Composable
+private fun CashBetaTop(table: CashTable?, failed: Boolean, fallbackStores: List<CashStore>, onRetry: () -> Unit, onFill: (String, String, Double, Double) -> Unit) {
+    U3LargeTitle("Касса")
+    when {
+        failed -> { ErrorState("Касса сейчас недоступна, зайди чуть позже", onRetry = onRetry); return }
+        table == null -> { SkeletonBlock(Modifier.fillMaxWidth().height(160.dp), 28.dp); return }
+        table.dates.isEmpty() -> { EmptyText("Пока нет ни одной записи кассы — внеси первую строку ниже"); Spacer(Modifier.height(12.dp)); return }
+    }
+    val t = table!!
+    val list = t.stores.ifEmpty { fallbackStores }
+    val last = t.dates.last()
+    val lines = cashLines(last, list, t.cells[last].orEmpty())
+    val withDelta = lines.mapNotNull { it.delta }
+    val total = withDelta.sum()
+    val off = withDelta.any { it != 0.0 }
+    val bad = total < 0
+    U3Hero {
+        U3HeroRow(
+            "Δ наличные, ${dayLabel(last)}",
+            chip = if (withDelta.isEmpty()) "нет данных" else if (off) "Нужна сверка" else "Сходится",
+            chipColor = if (off) (if (bad) T2Colors.danger else T2Colors.warning).copy(alpha = 0.9f) else T2Hero.chip,
+            chipText = if (off) androidx.compose.ui.graphics.Color(0xFF1A1000) else T2Hero.onHero
+        )
+        U3HeroNumber(if (withDelta.isEmpty()) "—" else signed(total), "₽")
+        Text("Δ = Факт − (1С + 2 000 ₽ размена)", color = T2Hero.onHero2, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp))
+    }
+    if (off) {
+        Spacer(Modifier.height(12.dp))
+        val n = withDelta.count { it != 0.0 }
+        U3WarnRow(
+            "Расхождение на $n ${if (n == 1) "точке" else "точках"}. Пересчитайте наличные и внесите факт ниже",
+            tone = if (bad) T2Colors.danger else T2Colors.warning, soft = if (bad) T2Colors.dangerSoft else T2Colors.warningSoft
+        )
+    }
+    U3GroupHead("Сверка", dayLabel(last))
+    U3Group {
+        lines.forEachIndexed { i, l ->
+            if (i > 0) U3Sep()
+            val tone = when { l.delta == null -> T2Colors.hint; l.delta == 0.0 -> T2Colors.success; l.delta < 0 -> T2Colors.danger; else -> T2Colors.warning }
+            U3Cell(
+                l.store.name ?: l.store.id,
+                "Факт ${l.fact?.let { NF.format(it) } ?: "—"} · 1С ${l.c1?.let { NF.format(it) } ?: "—"}",
+                leading = { U3IconTile(NavIcons.cash, tint = tone, bg = T2Colors.surface2) },
+                trailing = { U3Value(l.delta?.let { signed(it) } ?: "—", if (l.delta == null) T2Colors.hint else tone) },
+                onClick = { onFill(l.store.id, last, l.fact ?: 0.0, l.c1 ?: 0.0) }
+            )
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+}
+
+/** Earlier days: one cell per day with the total Δ; tap opens that day's stores. */
+@Composable
+private fun CashBetaHistory(table: CashTable?, fallbackStores: List<CashStore>, onFill: (String, String, Double, Double) -> Unit) {
+    val t = table ?: return
+    if (t.dates.size < 2) return
+    val list = t.stores.ifEmpty { fallbackStores }
+    U3GroupHead("История")
+    U3Group {
+        t.dates.dropLast(1).reversed().forEachIndexed { i, d ->
+            if (i > 0) U3Sep()
+            var open by remember(d) { mutableStateOf(false) }
+            val lines = cashLines(d, list, t.cells[d].orEmpty())
+            val deltas = lines.mapNotNull { it.delta }
+            val sum = deltas.sum()
+            val tone = when { deltas.isEmpty() -> T2Colors.hint; sum == 0.0 -> T2Colors.success; sum < 0 -> T2Colors.danger; else -> T2Colors.warning }
+            U3Cell(dayLabel(d), "${deltas.size} из ${lines.size} точек", leading = { U3Tile(d.slice(8..9)) },
+                trailing = { U3Value(if (deltas.isEmpty()) "—" else signed(sum), tone) }, onClick = { open = !open })
+            if (open) lines.forEach { l ->
+                U3Cell(
+                    l.store.name ?: l.store.id, null, modifier = Modifier.padding(start = 50.dp),
+                    trailing = { U3Value(l.delta?.let { signed(it) } ?: "—", T2Colors.textSecondary) },
+                    onClick = { onFill(l.store.id, d, l.fact ?: 0.0, l.c1 ?: 0.0) }
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(96.dp))
 }
 
 @Composable

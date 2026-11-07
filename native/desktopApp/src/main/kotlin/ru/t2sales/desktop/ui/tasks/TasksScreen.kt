@@ -86,6 +86,44 @@ fun TasksScreen(tasksApi: TasksApi, myEmployeeId: Int?, role: String?, isManager
         }
     }
 
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.Segmented(
+            TaskFilter.values().map { it.label }, TaskFilter.values().indexOf(filter),
+            modifier = Modifier.padding(bottom = 12.dp)
+        ) { filter = TaskFilter.values()[it] }
+        val list = tasks
+        when {
+            failed -> Text("Не удалось загрузить задачи", color = T2Colors.hint, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            list == null -> LoadingBlock()
+            else -> {
+                val items = list.filter(filter::matches)
+                if (items.isEmpty()) Text("Нет задач", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+                else ru.t2sales.desktop.ui.components.Group {
+                    items.forEachIndexed { i, t ->
+                        if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator()
+                        val icon = when (t.status) { "done" -> Icons.Outlined.Check; "cancelled" -> Icons.Outlined.Block; else -> Icons.Outlined.Assignment }
+                        ru.t2sales.desktop.ui.components.BetaCell(
+                            title = t.title,
+                            sub = listOfNotNull(
+                                t.assignee_name?.takeIf { it.isNotBlank() },
+                                t.store_name?.takeIf { it.isNotBlank() },
+                                STATUS_LABEL[t.status] ?: t.status
+                            ).joinToString(" · ") + when (t.priority) {
+                                "urgent" -> " · Срочно"; "high" -> " · Высокий"; "low" -> " · Низкий"; else -> ""
+                            },
+                            leading = { ru.t2sales.desktop.ui.components.BetaTile(icon, tone = if (t.status == "done") T2Colors.success else null) },
+                            chevron = true,
+                            onClick = { openId = t.id }
+                        )
+                    }
+                }
+            }
+        }
+        val id = openId
+        if (id != null) TaskDetail(tasksApi, id, myEmployeeId, canManageTask, onClose = { openId = null })
+        return
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)

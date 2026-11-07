@@ -95,28 +95,35 @@ fun AdminCenterScreen(container: AppContainer, me: ru.t2sales.shared.api.MeRespo
         Spacer(Modifier.height(12.dp))
     }
 
-    PageSection(null) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AcTab.values().forEach { t ->
-                val active = t == tab
-                val shape = RoundedCornerShape(T2Radius.md)
-                Text(
-                    t.label,
-                    color = if (active) T2Colors.primary else T2Colors.text,
-                    fontWeight = FontWeight.Bold, fontSize = 13.sp,
-                    modifier = Modifier.clip(shape)
-                        .background(if (active) T2Colors.primarySoft else T2Colors.surface2)
-                        .border(1.dp, if (active) T2Colors.primary else T2Colors.border, shape)
-                        .clickable { tab = t }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                )
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.Segmented(
+            AcTab.values().map { it.label }, AcTab.values().indexOf(tab),
+            modifier = Modifier.padding(bottom = 12.dp)
+        ) { tab = AcTab.values()[it] }
+    } else {
+        PageSection(null) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AcTab.values().forEach { t ->
+                    val active = t == tab
+                    val shape = RoundedCornerShape(T2Radius.md)
+                    Text(
+                        t.label,
+                        color = if (active) T2Colors.primary else T2Colors.text,
+                        fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                        modifier = Modifier.clip(shape)
+                            .background(if (active) T2Colors.primarySoft else T2Colors.surface2)
+                            .border(1.dp, if (active) T2Colors.primary else T2Colors.border, shape)
+                            .clickable { tab = t }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
+        Spacer(Modifier.height(12.dp))
     }
-    Spacer(Modifier.height(12.dp))
 
     when (tab) {
         AcTab.Overview -> OverviewTab(container)

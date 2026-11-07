@@ -66,26 +66,40 @@ fun ReportImgScreen(container: AppContainer) {
         runCatching { container.scheduleApi.getOrgStores().stores }.onSuccess { stores = it; storeId = it.firstOrNull()?.id }
     }
 
+    fun generate() {
+        val sid = storeId
+        if (sid == null) { frames = null; message = "Выбери точку"; return }
+        busy = true; frames = null; message = null
+        scope.launch {
+            runCatching {
+                val d: JsonObject = container.reportsApi.getReportDay(sid, date.trim().ifEmpty { LocalDate.now(ZoneId.of("Europe/Moscow")).toString() })
+                val svgs = d["svgs"] as? JsonObject
+                if (svgs != null) listOf("План" to svgs["plan"].str(), "Факт" to svgs["fact"].str(), "Завтра" to svgs["tomorrow"].str())
+                else d["svg"].str().takeIf { it.isNotEmpty() }?.let { listOf<Pair<String?, String>>(null to it) } ?: error("Пустой svg в ответе")
+            }.onSuccess { frames = it }.onFailure { message = "Не удалось сгенерировать\n" + (it.message ?: it.toString()) }
+            busy = false
+        }
+    }
+
+    if (T2Colors.uiBeta) {
+        ReportImgBeta(
+            stores, storeId, { storeId = it }, date, { date = it }, busy,
+            onGenerate = ::generate
+        )
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            ReportImgFrames(frames, message, busy, stores, storeId, date)
+        }
+        Spacer(Modifier.height(96.dp))
+        return
+    }
+
     PageSection("Картинка-отчёт (SVG)") {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
             SelectField("Точка", stores.firstOrNull { it.id == storeId }?.name ?: "", stores.map { it.name }) { n -> stores.firstOrNull { it.name == n }?.let { storeId = it.id } }
             Spacer(Modifier.height(12.dp))
             Field("Дата", date, { date = it }, placeholder = "ГГГГ-ММ-ДД", fill = T2Colors.surface2)
             Spacer(Modifier.height(12.dp))
-            MainButton(if (busy) "Генерируем…" else "Сгенерировать", enabled = !busy) {
-                val sid = storeId
-                if (sid == null) { frames = null; message = "Выбери точку"; return@MainButton }
-                busy = true; frames = null; message = null
-                scope.launch {
-                    runCatching {
-                        val d: JsonObject = container.reportsApi.getReportDay(sid, date.trim().ifEmpty { LocalDate.now(ZoneId.of("Europe/Moscow")).toString() })
-                        val svgs = d["svgs"] as? JsonObject
-                        if (svgs != null) listOf("План" to svgs["plan"].str(), "Факт" to svgs["fact"].str(), "Завтра" to svgs["tomorrow"].str())
-                        else d["svg"].str().takeIf { it.isNotEmpty() }?.let { listOf<Pair<String?, String>>(null to it) } ?: error("Пустой svg в ответе")
-                    }.onSuccess { frames = it }.onFailure { message = "Не удалось сгенерировать\n" + (it.message ?: it.toString()) }
-                    busy = false
-                }
-            }
+            MainButton(if (busy) "Генерируем…" else "Сгенерировать", enabled = !busy) { generate() }
         }
         when {
             busy -> Text("Генерируем…", color = T2Colors.hint, modifier = Modifier.padding(16.dp))
@@ -103,6 +117,57 @@ fun ReportImgScreen(container: AppContainer) {
                                 val name = (stores.firstOrNull { it.id == storeId }?.name ?: "точка") + "-" + date.trim() + (label?.let { "-$it" } ?: "")
                                 FileShare.share("T2-report-$name.png", "image/png", png(bmp))
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (design-system/ui3/v5-team, screen "Картинка-отчёт") =======================
+
+/** The generate form: a group head + grouped cell holding the store/date fields and a U3PrimaryButton. */
+@Composable
+private fun ReportImgBeta(
+    stores: List<StoreInfo>, storeId: String?, onStore: (String?) -> Unit,
+    date: String, onDate: (String) -> Unit, busy: Boolean, onGenerate: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("Картинка-отчёт", "SVG-кадры дня по точке: План / Факт / Завтра")
+        U3Group {
+            Column(Modifier.padding(16.dp)) {
+                SelectField("Точка", stores.firstOrNull { it.id == storeId }?.name ?: "", stores.map { it.name }) { n -> stores.firstOrNull { it.name == n }?.let { onStore(it.id) } }
+                Spacer(Modifier.height(12.dp))
+                Field("Дата", date, onDate, placeholder = "ГГГГ-ММ-ДД", fill = T2Colors.surface2)
+                Spacer(Modifier.height(14.dp))
+                U3PrimaryButton(if (busy) "Генерируем…" else "Сгенерировать", enabled = !busy, onClick = onGenerate)
+            }
+        }
+    }
+}
+
+/** The generated frames + the status/empty text — identical markup in both skins (images and their share buttons). */
+@Composable
+private fun ReportImgFrames(
+    frames: List<Pair<String?, String>>?, message: String?, busy: Boolean,
+    stores: List<StoreInfo>, storeId: String?, date: String
+) {
+    when {
+        busy -> Text("Генерируем…", color = T2Colors.hint, modifier = Modifier.padding(16.dp))
+        message != null -> Text(message, color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
+        frames != null -> Column(Modifier.padding(12.dp)) {
+            frames.forEach { (label, svg) ->
+                val bmp = remember(svg) { renderSvg(svg) }
+                Column(Modifier.padding(bottom = 12.dp)) {
+                    if (label != null) Text(label, color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(start = 2.dp, bottom = 6.dp))
+                    if (bmp != null) Image(bmp.asImageBitmap(), contentDescription = label, contentScale = ContentScale.FillWidth, modifier = Modifier.fillMaxWidth())
+                    else Text("Не удалось нарисовать картинку", color = T2Colors.danger, fontSize = 13.sp)
+                    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MChipButton("Поделиться PNG") {
+                            if (bmp == null) return@MChipButton
+                            val name = (stores.firstOrNull { it.id == storeId }?.name ?: "точка") + "-" + date.trim() + (label?.let { "-$it" } ?: "")
+                            FileShare.share("T2-report-$name.png", "image/png", png(bmp))
                         }
                     }
                 }

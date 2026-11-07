@@ -1,0 +1,349 @@
+/* =========================================================
+   Beta UI 3.0 «Ночная смена» — supervisor / admin-area layer
+   Экраны: кабинет супервайзера (#page-sv-overview/-stores/-people/
+   -trend), Командный центр (#page-command-center), заявки на доступ
+   (#page-access) и access-гейт (#accessGate: логин/регистрация/MFA).
+
+   Базовый слой (base.css) уже перекрасил токены, .section, .row,
+   .field, .btn-main/.btn-ghost, .mchip и таб-бар; rest.css уже накрыл
+   sv-hero/sv-store/sv-rank/sv-badge/sv-drop/cc-health поверхностями.
+   Здесь — то, что осталось «легаси»: access-гейт целиком, внутренняя
+   типографика sv-блоков, sparkline, заявки и мелкие утилиты.
+
+   Каждый селектор начинается с body[data-ui="beta"]; разметка, id и
+   data-on не меняются.
+   ========================================================= */
+
+/* =========================================================
+   ACCESS GATE (#accessGate) — логин / регистрация / pending /
+   rejected / MFA. Поверхность и цвета карточки задаёт shell.css:
+   гейт намеренно остаётся «ночной обложкой» в ОБЕИХ темах
+   (тёмное стекло на градиентном канвасе). Здесь — только геометрия
+   и элементы, которых у shell.css нет; не дублируем и не
+   перебиваем его фоны/цвета, чтобы не драться за !important.
+   ========================================================= */
+body[data-ui="beta"] .gate-shell {
+  /* шире легаси-420px под тач/десктоп, но всё ещё узкая колонка */
+  max-width: 400px;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+body[data-ui="beta"] .gate-logo { font-size: 44px; }
+body[data-ui="beta"] .gate-brand { font-size: 30px; font-weight: 700; }
+body[data-ui="beta"] .gate-sub { font-size: 14px; letter-spacing: -0.01em; }
+
+/* squircle-плитка иконки (размеры) — оттенки severity уже в shell.css */
+body[data-ui="beta"] .gate-icon {
+  width: 64px; height: 64px;
+  border-radius: 20px;
+}
+body[data-ui="beta"] .gate-icon .ic { width: 30px; height: 30px; }
+
+/* recovery-коды и monospace-блоки — стеклянная плашка под ночной
+   карточкой (не cell-2: в light-теме она белая и слепила бы на тёмном
+   гейте). bind-foot/code держим в on-glass гамме. */
+body[data-ui="beta"] .gate-card .bind-foot { font-size: 12px; }
+body[data-ui="beta"] .gate-card .bind-foot a { color: var(--u-accent-text); }
+body[data-ui="beta"] .gate-card code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: var(--u-r-xs);
+  padding: 2px 6px;
+  color: #EFF9FF;
+}
+body[data-ui="beta"] .gate-card div[style*="monospace"] {
+  background: rgba(255,255,255,.06) !important;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: var(--u-r-md);
+}
+/* MFA QR — белая плашка под тёмной темой читается лучше сканеру;
+   гейт тёмный в обеих темах, поэтому белая подложка нужна всегда. */
+body[data-ui="beta"] .gate-card img[alt="QR"] {
+  border-radius: var(--u-r-md);
+  padding: 10px;
+  background: #fff;
+}
+
+/* =========================================================
+   ЗАЯВКИ НА ДОСТУП (#page-access) — карточки-заявки это
+   .progress-block внутри .section: делаем их отдельными grouped-
+   ячейками с hairline, select и кнопки уже накрыты base.
+   ========================================================= */
+body[data-ui="beta"] #page-access .section {
+  background: transparent;
+  border: 0;
+}
+body[data-ui="beta"] #page-access #accessList > .progress-block {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  margin: 0 0 12px !important;
+  padding: 14px 16px;
+}
+body[data-ui="beta"] #page-access .progress-block .row-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+body[data-ui="beta"] #page-access .progress-block .row-sub {
+  color: var(--u-text-3);
+  font-size: 13px;
+  margin-top: 2px;
+}
+body[data-ui="beta"] #page-access .progress-block select {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: 12px;
+  color: var(--u-text);
+  min-height: 44px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 15px;
+}
+body[data-ui="beta"] #page-access .progress-block .btn-main {
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 15px;
+}
+/* «Отклонить» — семантический danger, не тот же primary что подтверждение */
+body[data-ui="beta"] #page-access .progress-block .btn-main[style*="danger"] {
+  background: var(--u-danger) !important;
+  color: #fff;
+}
+/* SLA-тикеты (supportSlaBox) — те же progress-block с цветным
+   border-left от статуса; сохраняем левую кромку статуса, красим тело */
+body[data-ui="beta"] #supportSlaBox .progress-block {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+}
+
+/* =========================================================
+   SUPERVISOR OVERVIEW — внутренняя типографика hero и блоков.
+   Поверхности (sv-hero/sv-store/sv-rank/sv-drop/sv-chart) уже
+   перекрашены в rest.css — здесь текст, сетки, sparkline, тоггл.
+   ========================================================= */
+body[data-ui="beta"] .sv-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: var(--u-tr-tight);
+}
+body[data-ui="beta"] .sv-sub { letter-spacing: -0.01em; }
+body[data-ui="beta"] .sv-metric .n {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: var(--u-tr-tight);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .sv-pace { font-size: 13px; }
+body[data-ui="beta"] .sv-pace b { font-variant-numeric: tabular-nums; }
+
+/* sparkline: легаси-фиолет #8B5CF6 зашит в SVG-атрибуты — CSS
+   stroke/fill перебивает presentation-attributes, переводим линию
+   и точку в accent-семейство T2, заливку делаем из accent-soft. */
+body[data-ui="beta"] .sv-chart svg path[stroke="#8B5CF6"] {
+  stroke: var(--u-accent);
+}
+body[data-ui="beta"] .sv-chart svg circle[stroke="#8B5CF6"] {
+  stroke: var(--u-accent);
+}
+/* area-fill под линией — та же легаси-фиолетовая заливка, но она живёт в
+   <stop stop-color> градиента, не в stroke/fill самих path. stop-color тоже
+   presentation-attr → перебиваем на accent, сохраняя fade к прозрачному. */
+body[data-ui="beta"] .sv-chart svg stop[stop-color="#8B5CF6"] {
+  stop-color: var(--u-accent);
+}
+/* запасной случай — если градиент собран с любым другим id или цвет
+   уже частично переписан, красим все stop внутри .sv-chart одинаково */
+body[data-ui="beta"] .sv-chart svg linearGradient stop {
+  stop-color: var(--u-accent);
+}
+body[data-ui="beta"] .sv-chart-legend {
+  font-size: 12px;
+  color: var(--u-text-3);
+  justify-content: space-between;
+}
+body[data-ui="beta"] .sv-chart-legend i { border-radius: 3px; }
+body[data-ui="beta"] .sv-chart-legend i[style*="#8B5CF6"] {
+  background: var(--u-accent) !important;
+}
+
+/* строки-бары (SIM/MNP/ПА, месячный план) — читаемость: крупнее
+   подпись, табличные цифры справа, подпись-лейбл во вторичный текст */
+body[data-ui="beta"] .sv-bar-row {
+  font-size: 12px;
+  grid-template-columns: 46px 1fr 56px;
+  gap: 10px;
+  color: var(--u-text-3);
+}
+body[data-ui="beta"] .sv-bar-row > div:first-child {
+  color: var(--u-text-2);
+  font-weight: 600;
+}
+body[data-ui="beta"] .sv-bar-row > div:last-child {
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .sv-bar-track { height: 6px; border-radius: 999px; }
+body[data-ui="beta"] .sv-bar-fill { border-radius: 999px; }
+
+/* шапка карточки точки и подписи */
+body[data-ui="beta"] .sv-store-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+body[data-ui="beta"] .sv-store-org,
+body[data-ui="beta"] .sv-rank .org {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+body[data-ui="beta"] .sv-store-code { font-size: 12px; }
+body[data-ui="beta"] .sv-staff {
+  font-size: 12px;
+  color: var(--u-text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+body[data-ui="beta"] .sv-staff .ic { width: 15px; height: 15px; }
+/* предупреждения внутри карточки точки — семантический warning */
+body[data-ui="beta"] .sv-store div[style*="#FF9F0A"],
+body[data-ui="beta"] .sv-store div[style*="#ff9f0a"] {
+  color: var(--u-warning) !important;
+}
+
+/* drop-карточки: иконка в soft-плашке под severity */
+body[data-ui="beta"] .sv-drop { align-items: flex-start; padding: 12px 14px; }
+body[data-ui="beta"] .sv-drop .ico {
+  width: 34px; height: 34px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 11px;
+  background: var(--u-danger-soft);
+  color: var(--u-danger);
+}
+body[data-ui="beta"] .sv-drop.warn .ico {
+  background: var(--u-warning-soft);
+  color: var(--u-warning);
+}
+body[data-ui="beta"] .sv-drop .ico .ic { width: 18px; height: 18px; }
+body[data-ui="beta"] .sv-drop .t {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+body[data-ui="beta"] .sv-drop .s { font-size: 12px; line-height: 1.4; }
+body[data-ui="beta"] .sv-drop .s .ic {
+  width: 13px; height: 13px; vertical-align: -2px;
+  color: var(--u-accent-text);
+}
+
+/* rank-строки людей */
+body[data-ui="beta"] .sv-rank { align-items: center; padding: 10px 14px; }
+body[data-ui="beta"] .sv-rank .pos {
+  width: 30px; height: 30px;
+  font-size: 13px;
+  font-weight: 700;
+}
+body[data-ui="beta"] .sv-rank .name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+body[data-ui="beta"] .sv-rank .sub {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* кнопка «Ещё метрики» внутри sv-блоков — прижимаем влево, без
+   лишнего визуального веса (сам .sv-toggle раскрашен в plans-rating) */
+body[data-ui="beta"] .sv-store .mt-more,
+body[data-ui="beta"] .sv-store .sv-toggle {
+  margin-left: -8px;
+}
+body[data-ui="beta"] .sv-extra { margin-top: 6px; }
+
+/* hero-кнопки и чипы внутри sv-hero / sv-drop на тёмном hero-фоне:
+   mchip на hero получает стеклянный on-hero вид */
+body[data-ui="beta"] .sv-hero .mchip {
+  background: var(--u-on-hero-fill);
+  border-color: var(--u-on-hero-line);
+  color: var(--u-on-hero);
+}
+
+/* =========================================================
+   COMMAND CENTER (#page-command-center) — health-чип и карточки
+   точек. Поверхности накрыты общими правилами; здесь геометрия
+   кольца health и левая цветная кромка store-карточек.
+   ========================================================= */
+body[data-ui="beta"] .cc-health {
+  width: 56px; height: 56px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: var(--u-tr-tight);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .cc-meta { display: flex; flex-direction: column; gap: 2px; }
+body[data-ui="beta"] .cc-line { font-size: 13px; line-height: 1.45; }
+/* store-карточки в «Что происходит» — progress-block с инлайновой
+   border-left под цвет точки; в бете это наша .sv-store-подобная ячейка */
+body[data-ui="beta"] #page-command-center .workspace-grid > .progress-block {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  padding: 14px 16px;
+  margin-bottom: 0 !important;
+}
+body[data-ui="beta"] #page-command-center .workspace-grid > .progress-block strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+body[data-ui="beta"] #page-command-center .workspace-grid > .progress-block span[style*="font-weight:700"],
+body[data-ui="beta"] #page-command-center .workspace-grid > .progress-block span[style*="font-weight: 700"] {
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] #page-command-center .workspace-grid > .progress-block div[style*="--hint"] {
+  color: var(--u-text-3) !important;
+}
+/* action-чипы под проблемой — компактнее, прижаты к тексту */
+body[data-ui="beta"] #page-command-center .sv-drop .mchip {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: var(--u-r-sm);
+}
+
+/* =========================================================
+   SUPERVISOR TREND — селект глубины и сетка прогноза.
+   field/select уже накрыты base; здесь только композиция секций
+   и повторяющиеся .sv-store прогнозных карточек в grid.
+   ========================================================= */
+body[data-ui="beta"] #page-sv-trend > .field {
+  margin: 0 0 4px !important;
+}
+body[data-ui="beta"] #page-sv-trend .field label { padding: 0 4px; }
+body[data-ui="beta"] #svTrendBody > .sv-store:first-of-type,
+body[data-ui="beta"] #svTrendBody > .workspace-grid { margin-top: 0; }
+
+/* =========================================================
+   СУПЕРВАЙЗЕР-НАВ: активная вкладка и кнопка выхода — акцент T2
+   вместо легаси-фиолета (rest.css уже перекрасил .nav-item.active;
+   здесь только если что-то осталось фиолетовым/инлайновым).
+   ========================================================= */
+body[data-ui="beta"] #bottomNavSupervisor .nav-item.active { color: var(--u-accent); }
+body[data-ui="beta"] .sv-exit-btn {
+  border-radius: 999px;
+  padding: 8px 14px;
+  min-height: 40px;
+}
+
+/* =========================================================
+   Reduced motion — без scale-пружин
+   ========================================================= */
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .sv-exit-btn:active,
+  body[data-ui="beta"] .sv-toggle:active { transform: none; }
+}

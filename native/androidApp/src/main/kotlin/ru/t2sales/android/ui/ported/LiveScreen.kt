@@ -53,14 +53,18 @@ fun LiveScreen(container: AppContainer) {
     var reload by remember { mutableStateOf(0) }
     LaunchedEffect(reload) { runCatching { container.analyticsApi.live() }.onSuccess { data = it }.onFailure { failed = true } }
 
+    if (T2Colors.uiBeta) {
+        LiveBeta(data, failed) { reload++ }
+        return
+    }
     PageSection("Сеть сейчас") {
         val d = data
         when {
-            failed -> ErrorState("\uD83C\uDF49 Живая карта сети сейчас недоступна, зайди чуть позже", onRetry = { reload++ })
+            failed -> ErrorState("🍉 Живая карта сети сейчас недоступна, зайди чуть позже", onRetry = { reload++ })
             d == null -> LoadingBlock(Modifier.padding(16.dp))
             else -> {
                 val today = LocalDate.now(ZoneId.of("Europe/Moscow")).toString()
-                Text("Дата: ${d["date"].str().ifEmpty { today }} \u00B7 обновление при открытии экрана", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text("Дата: ${d["date"].str().ifEmpty { today }} · обновление при открытии экрана", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 val stores = d["stores"].arr()
                 if (stores.isEmpty()) Text("Нет точек", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
                 else BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
@@ -96,8 +100,52 @@ private fun StoreLive(st: JsonObject) {
                 Text("${fmtN(st["plan_pct"].dbl())}%", color = statusColor, fontWeight = FontWeight.Bold)
             }
             Text(staff, color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            Text("SIM ${fmtN(fact["sim"].dbl())}/${fmtN(plan["sim"].dbl())} \u00B7 MNP ${fmtN(fact["mnp"].dbl())}/${fmtN(plan["mnp"].dbl())}", color = T2Colors.hint, fontSize = 12.sp)
-            Text(if (cash != null) "Касса \u0394 ${cash["delta"].str()}" else "Касса \u2014", color = T2Colors.hint, fontSize = 12.sp)
+            Text("SIM ${fmtN(fact["sim"].dbl())}/${fmtN(plan["sim"].dbl())} · MNP ${fmtN(fact["mnp"].dbl())}/${fmtN(plan["mnp"].dbl())}", color = T2Colors.hint, fontSize = 12.sp)
+            Text(if (cash != null) "Касса Δ ${cash["delta"].str()}" else "Касса —", color = T2Colors.hint, fontSize = 12.sp)
         }
     }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+@Composable
+private fun LiveBeta(data: JsonObject?, failed: Boolean, onRetry: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        val today = LocalDate.now(ZoneId.of("Europe/Moscow")).toString()
+        U3LargeTitle("Сеть сейчас", data?.get("date")?.str()?.ifEmpty { today }?.let { "Дата: $it · обновление при открытии экрана" } ?: "Живая карта точек")
+        when {
+            failed -> ErrorState("Живая карта сети сейчас недоступна, зайди чуть позже", onRetry = onRetry)
+            data == null -> SkeletonBlock(Modifier.fillMaxWidth().height(160.dp), 28.dp)
+            else -> {
+                val stores = data["stores"].arr()
+                if (stores.isEmpty()) EmptyText("Нет точек")
+                else U3Group {
+                    stores.forEachIndexed { i, el ->
+                        if (i > 0) U3Sep()
+                        LiveBetaCell(el.obj())
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
+    }
+}
+
+@Composable
+private fun LiveBetaCell(st: JsonObject) {
+    val status = st["status"].str()
+    val statusColor = when (status) { "critical" -> T2Colors.danger; "warn" -> T2Colors.warning; else -> T2Colors.success }
+    val initial = st["name"].str().take(1).ifEmpty { "·" }
+    val staff = st["staff"].arr().joinToString(", ") { s -> s.obj().let { it["short_name"].str().ifEmpty { it["full_name"].str().ifEmpty { it["employee_id"].str() } } } }.ifEmpty { "никого" }
+    val fact = st["fact"].obj()
+    val plan = st["plan"].obj()
+    val cash = st["cash"] as? JsonObject
+    val pct = fmtN(st["plan_pct"].dbl())
+    U3Cell(
+        st["name"].str(),
+        "$staff\nSIM ${fmtN(fact["sim"].dbl())}/${fmtN(plan["sim"].dbl())} · MNP ${fmtN(fact["mnp"].dbl())}/${fmtN(plan["mnp"].dbl())} · ${if (cash != null) "Касса Δ ${cash["delta"].str()}" else "Касса —"}",
+        leading = { U3Tile(initial, tint = statusColor) },
+        trailing = { U3Value("$pct%", statusColor) },
+        onClick = { AppNav.openStore(st["store_id"].str()) }
+    )
 }

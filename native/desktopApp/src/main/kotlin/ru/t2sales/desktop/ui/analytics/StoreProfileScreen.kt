@@ -100,7 +100,9 @@ fun StoreProfileScreen(container: AppContainer, me: MeResponse, onNavigate: (Scr
                     if (canManage) MChipButton("\u270E Название") { renaming = true }
                 }
                 Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Box(
+                    if (T2Colors.uiBeta) {
+                        ru.t2sales.desktop.ui.components.BetaRing((score / 100.0).toFloat().coerceIn(0f, 1f), fmtN(score), size = 56.dp, stroke = 5.dp, tone = tone)
+                    } else Box(
                         modifier = Modifier.size(52.dp).clip(CircleShape).background(tone.copy(alpha = 0.13f)).border(2.dp, tone.copy(alpha = 0.27f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) { Text(fmtN(score), color = tone, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp) }

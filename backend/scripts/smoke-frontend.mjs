@@ -57,7 +57,7 @@ function makeFakeElement(id) {
       if (
         [
           'addEventListener', 'removeEventListener', 'appendChild', 'removeChild', 'remove',
-          'focus', 'blur', 'click', 'scrollIntoView', 'dispatchEvent', 'setAttribute'
+          'focus', 'blur', 'click', 'scrollIntoView', 'dispatchEvent', 'setAttribute', 'removeAttribute', 'toggleAttribute'
         ].includes(prop)
       ) return noop;
       if (prop === 'getAttribute') return () => null;

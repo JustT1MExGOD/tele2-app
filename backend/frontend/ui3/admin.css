@@ -1,0 +1,220 @@
+/* =========================================================
+   T2 Sales — Beta UI 3.0 «Ночная смена» · admin/ops screens
+   Админ-центр, Дилеры, Отчёты, Алерты, Анонсы, Организации,
+   Heatmap, Forecast, Live, History, Today.
+   Каждый селектор начинается с body[data-ui="beta"].
+   ========================================================= */
+
+/* Универсальная сетка админ-экранов: крупный заголовок секции,
+   карточки как сгруппированные ячейки, hairline-разделители. */
+body[data-ui="beta"] #page-admin-center .section h2,
+body[data-ui="beta"] #page-admin-center .section h3,
+body[data-ui="beta"] #page-dealers .section h2,
+body[data-ui="beta"] #page-reports .section h2,
+body[data-ui="beta"] #page-alerts .section h2,
+body[data-ui="beta"] #page-announce .section h2,
+body[data-ui="beta"] #page-orgs .section h2,
+body[data-ui="beta"] #page-heatmap .section h2,
+body[data-ui="beta"] #page-forecast .section h2,
+body[data-ui="beta"] #page-live .section h2,
+body[data-ui="beta"] #page-history .section h2,
+body[data-ui="beta"] #page-today .section h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 4px 4px 8px;
+}
+
+/* Карточки/блоки в админ-зоне → сгруппированные ячейки как у Apple. */
+body[data-ui="beta"] #page-admin-center .section,
+body[data-ui="beta"] #page-admin-center .card,
+body[data-ui="beta"] #page-admin-center .mt-card,
+body[data-ui="beta"] #page-dealers .section,
+body[data-ui="beta"] #page-dealers .card,
+body[data-ui="beta"] #page-reports .section,
+body[data-ui="beta"] #page-reports .card,
+body[data-ui="beta"] #page-alerts .section,
+body[data-ui="beta"] #page-alerts .card,
+body[data-ui="beta"] #page-announce .section,
+body[data-ui="beta"] #page-announce .card,
+body[data-ui="beta"] #page-orgs .section,
+body[data-ui="beta"] #page-orgs .card,
+body[data-ui="beta"] #page-heatmap .section,
+body[data-ui="beta"] #page-heatmap .card,
+body[data-ui="beta"] #page-forecast .section,
+body[data-ui="beta"] #page-forecast .card,
+body[data-ui="beta"] #page-live .section,
+body[data-ui="beta"] #page-live .card,
+body[data-ui="beta"] #page-history .section,
+body[data-ui="beta"] #page-history .card,
+body[data-ui="beta"] #page-today .section,
+body[data-ui="beta"] #page-today .card {
+  background: var(--u-cell);
+  border: 1px solid var(--u-cell-line);
+  border-radius: var(--u-r-lg);
+  box-shadow: none;
+}
+
+/* Вложенная карточка внутри .section — уплощаем, убираем двойную рамку. */
+body[data-ui="beta"] #page-admin-center .section .card,
+body[data-ui="beta"] #page-admin-center .section .mt-card,
+body[data-ui="beta"] #page-forecast .section .card,
+body[data-ui="beta"] #page-forecast .section .mt-card,
+body[data-ui="beta"] #page-admin-center .section .section {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Списки/строки внутри админ-блоков — hairline-разделители. */
+body[data-ui="beta"] #page-admin-center .list-item + .list-item,
+body[data-ui="beta"] #page-dealers .list-item + .list-item,
+body[data-ui="beta"] #page-alerts .list-item + .list-item,
+body[data-ui="beta"] #page-orgs .list-item + .list-item,
+body[data-ui="beta"] #page-history .list-item + .list-item,
+body[data-ui="beta"] #page-today .list-item + .list-item {
+  border-top: 1px solid var(--u-cell-line);
+}
+
+/* Таблицы данных → плоские, hairline-строки, без тяжёлых рамок. */
+body[data-ui="beta"] .data-table,
+body[data-ui="beta"] #page-admin-center table,
+body[data-ui="beta"] #page-heatmap table,
+body[data-ui="beta"] #page-forecast table,
+body[data-ui="beta"] #page-history table,
+body[data-ui="beta"] #page-reports table {
+  border-collapse: collapse;
+  width: 100%;
+  background: transparent;
+}
+body[data-ui="beta"] .data-table th,
+body[data-ui="beta"] .data-table td,
+body[data-ui="beta"] #page-admin-center table th,
+body[data-ui="beta"] #page-admin-center table td,
+body[data-ui="beta"] #page-heatmap table td,
+body[data-ui="beta"] #page-forecast table td,
+body[data-ui="beta"] #page-history table td,
+body[data-ui="beta"] #page-reports table td {
+  border: none;
+  border-bottom: 1px solid var(--u-cell-line);
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 14px;
+}
+body[data-ui="beta"] .data-table tr:last-child td,
+body[data-ui="beta"] #page-admin-center table tr:last-child td,
+body[data-ui="beta"] #page-heatmap table tr:last-child td,
+body[data-ui="beta"] #page-forecast table tr:last-child td,
+body[data-ui="beta"] #page-history table tr:last-child td,
+body[data-ui="beta"] #page-reports table tr:last-child td {
+  border-bottom: none;
+}
+body[data-ui="beta"] .data-table th,
+body[data-ui="beta"] #page-admin-center table th,
+body[data-ui="beta"] #page-heatmap table th,
+body[data-ui="beta"] #page-forecast table th,
+body[data-ui="beta"] #page-history table th,
+body[data-ui="beta"] #page-reports table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--u-text-3);
+  font-weight: 600;
+}
+
+/* Фильтры/инпуты/даты — поля в стиле iOS (cell-2, pill, 16px против zoom). */
+body[data-ui="beta"] #page-admin-center input,
+body[data-ui="beta"] #page-admin-center select,
+body[data-ui="beta"] #page-admin-center textarea,
+body[data-ui="beta"] #page-dealers input,
+body[data-ui="beta"] #page-dealers select,
+body[data-ui="beta"] #page-reports input,
+body[data-ui="beta"] #page-reports select,
+body[data-ui="beta"] #page-alerts input,
+body[data-ui="beta"] #page-announce input,
+body[data-ui="beta"] #page-orgs input,
+body[data-ui="beta"] #page-orgs select,
+body[data-ui="beta"] #page-heatmap input,
+body[data-ui="beta"] #page-forecast input,
+body[data-ui="beta"] #page-history input,
+body[data-ui="beta"] #page-today input,
+body[data-ui="beta"] .field input,
+body[data-ui="beta"] .field select,
+body[data-ui="beta"] .field textarea {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-cell-line);
+  border-radius: var(--u-r-md);
+  color: var(--u-text);
+  font-size: 16px;
+  padding: 10px 12px;
+}
+body[data-ui="beta"] .field input:focus,
+body[data-ui="beta"] .field select:focus,
+body[data-ui="beta"] .field textarea:focus {
+  border-color: var(--u-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--u-primary-soft);
+}
+
+/* Первичные кнопки — заливка accent, pill. */
+body[data-ui="beta"] .btn-main,
+body[data-ui="beta"] #page-admin-center .btn-main,
+body[data-ui="beta"] #page-dealers .btn-main,
+body[data-ui="beta"] #page-reports .btn-main,
+body[data-ui="beta"] #page-alerts .btn-main,
+body[data-ui="beta"] #page-announce .btn-main,
+body[data-ui="beta"] #page-orgs .btn-main {
+  background: var(--u-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--u-r-pill);
+  font-weight: 700;
+  font-size: 16px;
+  padding: 14px 20px;
+  box-shadow: 0 8px 20px -8px var(--u-primary);
+}
+body[data-ui="beta"] .btn-main:active { transform: scale(0.97); }
+
+/* Чипы/бейджи статусов — pill на мягких тонах. */
+body[data-ui="beta"] .stat-chip,
+body[data-ui="beta"] .badge,
+body[data-ui="beta"] .chip {
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+/* Прогресс-бары — тонкие треки + заливка accent. */
+body[data-ui="beta"] .progress,
+body[data-ui="beta"] .bar {
+  background: var(--u-track);
+  border-radius: 999px;
+  overflow: hidden;
+}
+body[data-ui="beta"] .progress > *,
+body[data-ui="beta"] .bar > * { border-radius: 999px; }
+
+/* Пустые состояния и ошибки. */
+body[data-ui="beta"] .empty,
+body[data-ui="beta"] .empty-state {
+  color: var(--u-text-3);
+}
+body[data-ui="beta"] .empty[role="alert"],
+body[data-ui="beta"] .error-state {
+  background: var(--u-cell);
+  border: 1px solid var(--u-cell-line);
+  border-radius: var(--u-r-lg);
+  color: var(--u-text);
+}
+
+/* Специфика админ-центра: табы/нав */
+body[data-ui="beta"] #page-admin-center .ac-tab,
+body[data-ui="beta"] #page-admin-center .admin-tab,
+body[data-ui="beta"] #page-admin-center .seg {
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] #page-admin-center .ac-tab.on,
+body[data-ui="beta"] #page-admin-center .admin-tab.on,
+body[data-ui="beta"] #page-admin-center .seg.on {
+  background: var(--u-cell-2);
+  color: var(--u-text);
+}

@@ -17,10 +17,10 @@ import androidx.compose.ui.unit.sp
 import ru.t2sales.shared.theme.T2Colors
 import ru.t2sales.shared.theme.T2Radius
 
-/** The web's .section: surface card, radius 20, border, uppercase title. */
+/** The web's .section: surface card, radius 20, border, uppercase title. Beta: a .group cell (22 dp). */
 @Composable
 fun PageSection(title: String?, content: @Composable () -> Unit) {
-    val shape = RoundedCornerShape(T2Radius.default)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) T2Radius.cell else T2Radius.default)
     Column(modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(vertical = 6.dp)) {
         if (title != null) {
             Text(
@@ -32,10 +32,22 @@ fun PageSection(title: String?, content: @Composable () -> Unit) {
     }
 }
 
-/** The web's .mchip button. */
+/**
+ * Section wrapper for beta screens: GroupHead + Group on the dark canvas (when [T2Colors.uiBeta]),
+ * [PageSection] otherwise. Use for new beta branches so the classic UI is untouched.
+ */
+@Composable
+fun BetaSection(title: String?, content: @Composable () -> Unit) {
+    if (T2Colors.uiBeta) {
+        if (title != null) GroupHead(title)
+        Group { content() }
+    } else PageSection(title, content)
+}
+
+/** The web's .mchip button; a capsule in the beta. */
 @Composable
 fun MChipButton(label: String, danger: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) 99.dp else 12.dp)
     Text(
         label,
         color = if (danger) T2Colors.danger else T2Colors.text,

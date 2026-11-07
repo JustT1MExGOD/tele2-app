@@ -1,6 +1,7 @@
 package ru.t2sales.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,14 +53,33 @@ fun MetricsDialog(salesApi: SalesApi, onDismiss: () -> Unit) {
     SheetDialog("Метрики плана", onDismiss) {
         val custom = items.orEmpty().filter { it.id !in LOCKED_METRICS }
         if (custom.isNotEmpty()) {
-            Text("СВОИ МЕТРИКИ", color = T2Colors.hint, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 0.4.sp, modifier = Modifier.padding(bottom = 8.dp))
-            custom.forEach { m ->
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${m.label ?: m.id} (${m.id})", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    MChipButton("Удалить", danger = true) { deleting = m }
+            if (T2Colors.uiBeta) {
+                U3GroupHead("Свои метрики")
+                U3Group {
+                    custom.forEachIndexed { i, m ->
+                        if (i > 0) U3Sep()
+                        U3Cell(
+                            m.label ?: m.id, m.id,
+                            leading = { U3Tile((m.short_label ?: m.label ?: m.id).take(2).uppercase()) },
+                            trailing = {
+                                Box(Modifier.height(44.dp).bouncyClickable { deleting = m }.padding(start = 8.dp), contentAlignment = Alignment.Center) {
+                                    Text("Удалить", color = T2Colors.danger, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        )
+                    }
                 }
+                Spacer(Modifier.height(8.dp))
+            } else {
+                Text("СВОИ МЕТРИКИ", color = T2Colors.hint, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 0.4.sp, modifier = Modifier.padding(bottom = 8.dp))
+                custom.forEach { m ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${m.label ?: m.id} (${m.id})", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        MChipButton("Удалить", danger = true) { deleting = m }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
         }
         Text("НОВАЯ МЕТРИКА", color = T2Colors.hint, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 0.4.sp, modifier = Modifier.padding(bottom = 8.dp))
         Field("Название", label, { label = it }, placeholder = "Например: eSIM", fill = T2Colors.surface2)

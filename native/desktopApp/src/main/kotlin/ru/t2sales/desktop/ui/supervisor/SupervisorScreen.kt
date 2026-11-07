@@ -61,6 +61,7 @@ import ru.t2sales.shared.api.MetricDef
 import ru.t2sales.shared.api.SalesApi
 import ru.t2sales.shared.api.SupervisorApi
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Radius
 
 enum class SvTab { Overview, Stores, People, Trend }
 
@@ -185,6 +186,10 @@ internal fun <T> Grid(items: List<T>, item: @Composable (T) -> Unit) {
 
 @Composable
 internal fun SectionTitle(text: String, dim: String? = null) {
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.GroupHead(text + (dim ?: ""))
+        return
+    }
     Row(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)) {
         Text(text, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp)
         if (dim != null) Text(" $dim", fontSize = 13.sp, color = T2Colors.hint)
@@ -197,6 +202,32 @@ private fun Overview(d: JsonObject) {
     val health = net["health"].d()
     val hColor = healthColor(health)
     val pace = net["pace_delta"].d().roundToInt()
+    if (T2Colors.uiBeta) {
+        ru.t2sales.desktop.ui.components.BetaHero("Обзор сектора · ${d["date"].s()}", chip = "${net["stores_count"].d().roundToInt()} точек · на смене ${net["staff_on_shift"].d().roundToInt()}", chipWarn = pace < 0) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ru.t2sales.desktop.ui.components.BetaRing((health / 100f).toFloat().coerceIn(0f, 1f), "${health.roundToInt()}", size = 64.dp, stroke = 6.dp, tone = hColor)
+                Column {
+                    Text("Сектор под контролем", color = ru.t2sales.shared.theme.T2Hero.onHero, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${net["overall_pct"].d().roundToInt()}% план дня · ${net["day_progress_pct"].d().roundToInt()}% прогресс · SIM ${fmt(net["sim"].d())}/${fmt(net["plan_sim"].d())} · MNP ${fmt(net["mnp"].d())}/${fmt(net["plan_mnp"].d())}",
+                        color = ru.t2sales.shared.theme.T2Hero.onHero2, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Text(
+                        (if (pace >= 0) "+$pace" else "$pace") + "% к темпу · просадки: ${net["drops_count"].d().roundToInt()}",
+                        color = if (pace >= 0) ru.t2sales.shared.theme.T2Hero.onHero2 else T2Colors.danger, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        }
+        SectionTitle("Просадки и риски", "· live")
+        val drops = d["drops"].arr()
+        if (drops.isEmpty()) {
+            Text("Критических просадок нет — сектор в ритме", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(12.dp))
+        } else {
+            Grid(drops) { x -> Drop(x.obj()) }
+        }
+        return
+    }
     val shape = RoundedCornerShape(24.dp)
     Column(
         modifier = Modifier
@@ -310,7 +341,7 @@ internal fun BarRow(label: String, fact: Double, plan: Double, low: Double? = nu
 
 @Composable
 internal fun StoreCard(color: Color, content: @Composable () -> Unit) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) T2Radius.cell else 20.dp)
     Row(modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape)) {
         Box(Modifier.width(4.dp).fillMaxHeight().background(color))
         Column(modifier = Modifier.weight(1f).padding(14.dp)) { content() }
@@ -438,7 +469,7 @@ private fun Trend(d: JsonObject) {
     val factPct = avgPct(month["metrics"].obj(), "pct")
     val fcPct = avgPct(month["forecast"].obj(), "pct")
 
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) T2Radius.cell else 20.dp)
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(14.dp)) {
         val trend = d["trend"].arr().map { it.obj()["units"].d() }
         if (trend.isEmpty()) Text("Нет ряда", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(12.dp))

@@ -397,6 +397,29 @@ fun ProfileScreen(me: MeResponse, container: AppContainer, onNavigate: (Screen) 
     }
     Spacer(Modifier.height(T2Spacing.sp2))
 
+    // --- Beta UI 3.0 switch (web: .beta-ui-card in Профиль); visible in both UIs
+    Card {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Beta UI 3.0", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "BETA", color = if (T2Colors.dark) T2Colors.primary else T2Colors.primaryTextBg, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp,
+                        modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(T2Colors.primarySoft).padding(horizontal = 7.dp, vertical = 2.dp)
+                    )
+                }
+                Text("Новый интерфейс «Ночная смена»: крупные заголовки, кольца плана, плоские карточки. Можно выключить в любой момент.", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(top = 3.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            ru.t2sales.desktop.ui.components.BetaSwitch(T2Colors.uiBeta) { on ->
+                ru.t2sales.desktop.ui.shell.ThemePrefs.setUiBeta(on)
+                T2Toast.show(if (on) "Beta UI 3.0 включён" else "Beta UI 3.0 выключен")
+            }
+        }
+    }
+    Spacer(Modifier.height(T2Spacing.sp3))
+
     // --- phone auth (lkPhoneAuth)
     Card {
         CardTitle("Вход с компьютера")

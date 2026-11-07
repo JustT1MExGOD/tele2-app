@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import ru.t2sales.shared.api.MetricDef
 import ru.t2sales.shared.api.MonthSummaryResponse
 import ru.t2sales.shared.api.StoreMonthRow
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
 
 private val BLUE = T2Colors.blue
 private val ROLES = mapOf("trainee" to "Стажёр", "employee" to "Продавец", "senior" to "Старший продавец", "manager" to "Руководитель", "supervisor" to "Супервайзер", "admin" to "Администратор")
@@ -53,6 +55,10 @@ fun NetMonthScreen(container: AppContainer) {
         }.onSuccess { (e, s) -> emp = e; stores = s }.onFailure { failed = true }
     }
 
+    if (T2Colors.uiBeta) {
+        NetMonthBeta(month, emp, stores, failed, metrics) { reload++ }
+        return
+    }
     PageSection("Сеть за месяц") {
         MonthNav(month) { PlanMonthState.month = it }
         val d = emp
@@ -100,6 +106,94 @@ private fun BlueCard(metrics: List<MetricDef>, name: String, sub: String, fact: 
         }
         if (metrics.size > 6) ExtraToggle {
             metrics.drop(6).forEach { m -> BarRow(m.label ?: m.id, fact[m.id] ?: 0.0, plan[m.id] ?: 0.0) }
+        }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+/** Blended completion % across the metrics that have a plan (fact/plan otherwise). */
+private fun blendPct(fact: Map<String, Double>, plan: Map<String, Double>, pct: Map<String, Double>?): Int {
+    val fromPct = pct?.values?.filter { it > 0 }.orEmpty()
+    if (fromPct.isNotEmpty()) return (fromPct.sum() / fromPct.size).toInt()
+    var f = 0.0; var p = 0.0
+    plan.forEach { (k, v) -> if (v > 0) { p += v; f += fact[k] ?: 0.0 } }
+    return if (p > 0) (f / p * 100).toInt() else 0
+}
+
+private fun factPlanSub(metrics: List<MetricDef>, fact: Map<String, Double>, plan: Map<String, Double>): String =
+    metrics.take(4).joinToString("  ·  ") { m -> "${m.short_label ?: m.label ?: m.id} ${fmtN(fact[m.id] ?: 0.0)}/${fmtN(plan[m.id] ?: 0.0)}" }
+
+/** Beta: hero with the network completion ring + month nav, then grouped employee/store cells. */
+@Composable
+private fun NetMonthBeta(
+    month: java.time.YearMonth, emp: MonthSummaryResponse?, stores: List<StoreMonthRow>,
+    failed: Boolean, metrics: List<MetricDef>, onRetry: () -> Unit
+) {
+    val d = emp
+    U3LargeTitle(
+        "Динамика",
+        if (d != null) "Сотрудников: ${d.rows.size} · ост. дней: ${d.remaining_days ?: "—"} · ${monthLabel(month)}" else monthLabel(month)
+    )
+    MonthNav(month) { PlanMonthState.month = it }
+    Spacer(Modifier.height(8.dp))
+    when {
+        failed -> ErrorState("Не удалось загрузить", onRetry = onRetry)
+        d == null -> SkeletonBlock(Modifier.fillMaxWidth().height(160.dp), 28.dp)
+        else -> {
+            val totals = d.totals
+            val pct = blendPct(totals?.fact.orEmpty(), totals?.plan.orEmpty(), totals?.pct)
+            U3Hero {
+                U3HeroRow("Выполнение сети", chip = monthLabel(month))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        U3HeroNumber("$pct", "%")
+                        Text(
+                            metrics.take(3).joinToString("  ·  ") { m -> "${m.short_label ?: m.label ?: m.id} ${fmtN(totals?.fact?.get(m.id) ?: 0.0)}/${fmtN(totals?.plan?.get(m.id) ?: 0.0)}" },
+                            color = T2Hero.onHero2, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    U3Ring(pct, "план", size = 84.dp)
+                }
+            }
+            if (d.rows.isNotEmpty()) {
+                U3GroupHead("По сотрудникам")
+                U3Group {
+                    d.rows.forEachIndexed { i, r ->
+                        if (i > 0) U3Sep()
+                        val p = blendPct(r.fact, r.plan, r.pct)
+                        U3Cell(
+                            r.full_name, "${ROLES[r.role] ?: r.role} · смен ${r.shifts ?: 0} · ост. ${r.remaining_shifts ?: 0}",
+                            leading = { U3Tile(r.full_name.take(1).uppercase(), tint = u3Tone(p)) },
+                            trailing = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    U3Pie(p, 18.dp)
+                                    Spacer(Modifier.width(8.dp)); U3Value("$p%", u3Tone(p))
+                                }
+                            }
+                        )
+                        Text(
+                            factPlanSub(metrics, r.fact, r.plan), color = T2Colors.hint, fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 70.dp, end = 16.dp, bottom = 10.dp)
+                        )
+                    }
+                }
+            }
+            if (stores.isNotEmpty()) {
+                U3GroupHead("По точкам")
+                U3Group {
+                    stores.forEachIndexed { i, r ->
+                        if (i > 0) U3Sep()
+                        val p = blendPct(r.fact, r.plan, null)
+                        U3Cell(
+                            r.name, (r.code ?: "") + "  ·  " + factPlanSub(metrics, r.fact, r.plan),
+                            leading = { U3IconTile(NavIcons.svStores, tint = u3Tone(p)) },
+                            trailing = { U3Value("$p%", u3Tone(p)) }
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(96.dp))
         }
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -59,6 +60,8 @@ import ru.t2sales.shared.api.MetricDef
 import ru.t2sales.shared.api.SalesApi
 import ru.t2sales.shared.api.SupervisorApi
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
+import ru.t2sales.shared.theme.T2Spacing
 
 enum class SvTab { Overview, Stores, People, Trend }
 
@@ -121,6 +124,16 @@ fun SupervisorScreen(api: SupervisorApi, salesApi: SalesApi, tab: SvTab) {
         SvTab.People -> "Люди" to "Топ по сектору"
         SvTab.Trend -> "Тренд" to "Динамика по дням"
     }
+
+    if (T2Colors.uiBeta) {
+        SvBeta(
+            tab = tab, title = title, sub = sub,
+            onRefresh = { scope.launch { SvData.load(api, force = true) } },
+            onDays = { days -> SvData.days = days; scope.launch { SvData.load(api, force = true) } }
+        )
+        return
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -494,5 +507,252 @@ private fun Sparkline(values: List<Double>) {
         }
         drawPath(area, Brush.verticalGradient(listOf(PURPLE.copy(alpha = 0.35f), PURPLE.copy(alpha = 0f))))
         drawPath(line, PURPLE, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+/** One large title + optional refresh action + the per-tab beta body. Only called inside `if (T2Colors.uiBeta)`. */
+@Composable
+private fun SvBeta(tab: SvTab, title: String, sub: String, onRefresh: () -> Unit, onDays: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { U3LargeTitle(title, sub) }
+            if (tab == SvTab.Overview) {
+                Box(
+                    Modifier.size(T2Spacing.hit).clip(CircleShape).background(T2Colors.surface2).bouncyClickable(onClick = onRefresh),
+                    contentAlignment = Alignment.Center
+                ) { NavIcon(NavIcons.refresh, contentDescription = "Обновить", tint = T2Colors.textSecondary, size = 20.dp) }
+            }
+        }
+        if (tab == SvTab.Trend) {
+            val options = listOf(14 to "14 дней", 30 to "30 дней", 60 to "60 дней")
+            U3FilterChips(
+                options.map { it.first.toString() to it.second },
+                selected = SvData.days.toString()
+            ) { onDays(it.toInt()) }
+            Spacer(Modifier.height(4.dp))
+        }
+        val d = SvData.data
+        val err = SvData.error
+        when {
+            err != null && d == null -> ErrorState("Кабинет супервайзера недоступен" + if (err.isNotEmpty()) ": $err" else "", onRetry = onRefresh)
+            d == null || (SvData.loading && tab == SvTab.Trend) -> SkeletonBlock(Modifier.fillMaxWidth().height(200.dp), 28.dp)
+            else -> when (tab) {
+                SvTab.Overview -> SvBetaOverview(d)
+                SvTab.Stores -> SvBetaStores(d)
+                SvTab.People -> SvBetaPeople(d)
+                SvTab.Trend -> SvBetaTrend(d)
+            }
+        }
+        Spacer(Modifier.height(96.dp))
+    }
+}
+
+/** Overview: hero with the network plan % + health ring, then drops as warn rows. */
+@Composable
+private fun SvBetaOverview(d: JsonObject) {
+    val net = d["network"].obj()
+    val health = net["health"].d().roundToInt()
+    val overall = net["overall_pct"].d().roundToInt()
+    val pace = net["pace_delta"].d().roundToInt()
+    val dropsCount = net["drops_count"].d().roundToInt()
+
+    U3Hero {
+        U3HeroRow(
+            "План дня · ${d["date"].s()}",
+            chip = if (dropsCount > 0) "просадок: $dropsCount" else "в ритме",
+            chipColor = if (dropsCount > 0) T2Colors.warning.copy(alpha = 0.9f) else T2Hero.chip,
+            chipText = if (dropsCount > 0) Color(0xFF1A1000) else T2Hero.onHero
+        )
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                U3HeroNumber("$overall", "%")
+                Text(
+                    "темп ${(if (pace >= 0) "+$pace" else "$pace")}% · ${net["stores_count"].d().roundToInt()} точек · на смене ${net["staff_on_shift"].d().roundToInt()}",
+                    color = T2Hero.onHero2, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp)
+                )
+                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    SvHeroStat("SIM", net["sim"].d(), net["plan_sim"].d())
+                    SvHeroStat("MNP", net["mnp"].d(), net["plan_mnp"].d())
+                    SvHeroStat("Прогресс дня", net["day_progress_pct"].d(), 100.0, suffix = "%")
+                }
+            }
+            U3Ring(health, "здоровье", size = 76.dp)
+        }
+    }
+
+    val drops = d["drops"].arr()
+    U3GroupHead("Просадки и риски", if (drops.isNotEmpty()) "live" else null)
+    if (drops.isEmpty()) {
+        U3Group { U3Cell("Критических просадок нет", "сектор в ритме", leading = { U3Tile("✓", tint = T2Colors.success) }) }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            drops.forEach { el ->
+                val x = el.obj()
+                val warn = x["severity"].s() != "critical"
+                val tone = if (warn) T2Colors.warning else T2Colors.danger
+                val soft = if (warn) T2Colors.warningSoft else T2Colors.dangerSoft
+                U3WarnRow(
+                    x["store_name"].s().ifEmpty { "Точка" } + " — " + x["message"].s() +
+                        ((x["overall"] as? JsonPrimitive)?.doubleOrNull?.let { " · ${fmt(it)}% плана" } ?: ""),
+                    tone = tone, soft = soft
+                )
+                if (x["store_id"].s().isNotEmpty()) {
+                    Box(Modifier.padding(start = 8.dp)) {
+                        Text(
+                            "Предложить перенос", color = T2Colors.accentText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                            modifier = Modifier.heightIn(min = T2Spacing.hit).bouncyClickable { AppNav.proposeMove(x["store_id"].s()) }.padding(horizontal = 8.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SvHeroStat(label: String, fact: Double, plan: Double, suffix: String = "") {
+    Column {
+        Text(fmt(fact) + "/" + fmt(plan) + suffix, color = T2Hero.onHero, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(label.uppercase(), color = T2Hero.onHero2, fontSize = 10.sp, letterSpacing = 0.4.sp)
+    }
+}
+
+/** Stores tab: one grouped list, each store a cell with a U3Pie trailing. Tap expands metric bars. */
+@Composable
+private fun SvBetaStores(d: JsonObject) {
+    val stores = d["stores"].arr()
+    if (stores.isEmpty()) {
+        EmptyText("Нет точек — сектор не назначен")
+        return
+    }
+    U3GroupHead("Точки сектора", "${stores.size}")
+    U3Group {
+        stores.forEachIndexed { i, el ->
+            val s = el.obj()
+            val t = s["today"].obj()
+            val overall = t["overall"].d().roundToInt()
+            var open by remember(s["name"].s()) { mutableStateOf(false) }
+            if (i > 0) U3Sep()
+            U3Cell(
+                s["name"].s(),
+                "${s["org_name"].s()} · ${s["code"].s()} · на смене ${s["staff_count"].d().roundToInt()}",
+                leading = { U3Tile(s["name"].s().take(2).uppercase(), tint = svColor(s["color"].s().ifEmpty { null })) },
+                trailing = { U3Pie(overall, size = 26.dp) },
+                onClick = { open = !open }
+            )
+            if (open) {
+                Column(Modifier.padding(start = 66.dp, end = 16.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    BarRow("SIM", t["sim"].d(), t["plan_sim"].d())
+                    BarRow("MNP", t["mnp"].d(), t["plan_mnp"].d())
+                    BarRow("ПА", t["pa"].d(), t["plan_pa"].d())
+                    val shown = setOf("sim", "mnp", "pa")
+                    SvData.metrics.filter { it.first !in shown }.forEach { (id, label) ->
+                        val v = t["metrics"].obj()[id].obj()
+                        BarRow(label, v["fact"].d(), v["plan"].d())
+                    }
+                    val staff = s["staff"].arr().joinToString(", ") { it.obj()["name"].s().substringBefore(' ') }.ifEmpty { "—" }
+                    Text("На смене: $staff", color = T2Colors.hint, fontSize = 12.sp)
+                    s["alerts"].arr().forEach { a -> Text("• ${a.s()}", color = T2Colors.warning, fontSize = 11.sp) }
+                }
+            }
+        }
+    }
+}
+
+/** People tab: leaderboard of the sector as grouped cells with a rank tile. */
+@Composable
+private fun SvBetaPeople(d: JsonObject) {
+    val list = d["top_employees"].arr()
+    if (list.isEmpty()) {
+        EmptyText("Нет продаж за период")
+        return
+    }
+    U3GroupHead("Топ по сектору", "${list.size}")
+    U3Group {
+        list.forEachIndexed { i, el ->
+            val e = el.obj()
+            val rank = e["rank"].d().roundToInt().takeIf { it > 0 } ?: (i + 1)
+            if (i > 0) U3Sep()
+            U3Cell(
+                e["full_name"].s(),
+                "SIM ${fmt(e["sim"].d())} · MNP ${fmt(e["mnp"].d())} · ПА ${fmt(e["pa"].d())}",
+                leading = { U3Tile("$rank", tint = if (i < 3) T2Colors.warning else T2Colors.textSecondary) },
+                trailing = { U3Value(fmt(e["score"].d()), T2Colors.textSecondary) }
+            )
+        }
+    }
+}
+
+/** Trend tab: sparkline hero + month plan + forecast + per-store forecast cells. */
+@Composable
+private fun SvBetaTrend(d: JsonObject) {
+    val net = d["network"].obj()
+    val month = net["month"].obj()
+    val factPct = avgPct(month["metrics"].obj(), "pct")
+    val fcPct = avgPct(month["forecast"].obj(), "pct")
+
+    U3Hero {
+        U3HeroRow("Динамика", "с ${d["from"].s()} по ${d["date"].s()}")
+        U3HeroNumber("$factPct", "% мес. плана")
+        val trend = d["trend"].arr().map { it.obj()["units"].d().toFloat() }
+        if (trend.size >= 2) {
+            Spacer(Modifier.height(8.dp))
+            U3Sparkline(trend, height = 64.dp)
+        }
+    }
+
+    U3GroupHead("Месячный план — сектор", "выполнено $factPct%")
+    U3Group {
+        SvMetricCells(month["metrics"].obj(), "fact")
+    }
+
+    U3GroupHead("Прогноз на конец месяца", "ожидается $fcPct%")
+    U3Group {
+        SvMetricCells(month["forecast"].obj(), "total")
+    }
+
+    U3GroupHead("Прогноз по точкам")
+    val stores = d["stores"].arr()
+    if (stores.isEmpty()) EmptyText("Нет точек")
+    else U3Group {
+        stores.forEachIndexed { i, el ->
+            val s = el.obj()
+            val fc = s["month"].obj()["forecast"].obj()
+            val pct = avgPct(fc, "pct")
+            var open by remember(s["name"].s()) { mutableStateOf(false) }
+            if (i > 0) U3Sep()
+            U3Cell(
+                s["name"].s(), s["org_name"].s(),
+                leading = { U3Tile(s["name"].s().take(2).uppercase(), tint = svColor(s["color"].s().ifEmpty { null })) },
+                trailing = { U3Pie(pct, size = 26.dp) },
+                onClick = { open = !open }
+            )
+            if (open) {
+                Column(Modifier.padding(start = 66.dp, end = 16.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SvData.metrics.forEach { (id, label) ->
+                        val v = fc[id].obj()
+                        BarRow(label, v["total"].d(), v["plan"].d(), v["low"].d().takeIf { v["low"] != null }, v["high"].d().takeIf { v["high"] != null })
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Metric fact/plan cells inside a U3Group for the trend month blocks. */
+@Composable
+private fun SvMetricCells(values: JsonObject, valueKey: String) {
+    SvData.metrics.forEachIndexed { i, (id, label) ->
+        val v = values[id].obj()
+        val fact = v[valueKey].d()
+        val plan = v["plan"].d()
+        val pct = if (plan > 0) (fact / plan * 100).roundToInt() else 0
+        if (i > 0) U3Sep()
+        U3Cell(
+            label, "${fmt(fact)} / ${fmt(plan)}",
+            trailing = { U3Value("$pct%", u3Tone(pct)) }
+        )
     }
 }

@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -318,6 +320,10 @@ fun ProfileScreen(container: AppContainer, me: MeResponse, onOpenSchedule: () ->
         }
         Spacer(Modifier.height(T2Spacing.sp2))
 
+        // --- Beta UI 3.0 switch (web: .beta-ui-card in Профиль, app/nav.ts toggleBetaUi)
+        BetaUiCard()
+        Spacer(Modifier.height(T2Spacing.sp3))
+
         // --- account (lkPhoneAuth): the phone is already the login here, so only sign-out
         Card {
             CardTitle("Аккаунт")
@@ -377,6 +383,36 @@ fun ProfileScreen(container: AppContainer, me: MeResponse, onOpenSchedule: () ->
 private fun Card(content: @Composable () -> Unit) {
     val shape = RoundedCornerShape(T2Radius.default)
     Column(Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(16.dp)) { content() }
+}
+
+/** The "Beta UI 3.0" row: a whole-row toggle (>= 44dp target) with an iOS switch; persists via [UiPrefs]. */
+@Composable
+private fun BetaUiCard() {
+    val on = T2Colors.uiBeta
+    val shape = RoundedCornerShape(T2Radius.default)
+    Row(
+        Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape)
+            .toggleable(value = on, role = androidx.compose.ui.semantics.Role.Switch) { UiPrefs.setBeta(it) }
+            .heightIn(min = T2Spacing.hit).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Beta UI 3.0", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "BETA", color = if (T2Colors.dark) T2Colors.primary else T2Colors.primaryTextBg, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp,
+                    modifier = Modifier.clip(CircleShape).background(T2Colors.primarySoft).padding(horizontal = 7.dp, vertical = 2.dp)
+                )
+            }
+            Text(
+                "Новый вид «Ночная смена»: спокойная палитра, крупные цифры дня, степперы в продаже. Можно выключить в любой момент.",
+                color = T2Colors.hint, fontSize = 13.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        U3Switch(on)
+    }
 }
 
 @Composable

@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val container = (application as T2App).container
+        ru.t2sales.android.ui.UiPrefs.load()
         setContent {
             T2Colors.dark = isSystemInDarkTheme()
             T2Theme { Root(container) }

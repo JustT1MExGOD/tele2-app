@@ -1,0 +1,453 @@
+/* =========================================================
+   T2 Sales — Beta UI 3.0 «Ночная смена» · экраны планов и рейтинга
+   Покрывает: #page-plan (план дня по точкам), #page-monthplan,
+   #page-netmonth, #page-bfq, #page-leaderboard.
+   Концепт: design-system/ui3/v5-team — Large Title «План», hero «N% +
+   прогноз», линия факта против пунктирного плана, метрики с пирогами
+   темпа, рейтинг с подиумом 2-1-3 и строкой «до места выше…».
+   Все селекторы живут только под body[data-ui="beta"].
+   ========================================================= */
+
+/* ---------- Дуал-разметка: блоки .u3-only видны только в бете,
+   .u3-legacy — только в старом UI (переключатель без перерисовки) ---------- */
+body[data-ui="beta"] .u3-only { display: block; }
+body[data-ui="beta"] .u3-legacy { display: none !important; }
+
+/* ---------- Linear pie (статус-темп), 20px ---------- */
+body[data-ui="beta"] .u3-pie {
+  --p: 0;
+  --c: var(--u-accent);
+  width: 20px; height: 20px;
+  border-radius: 999px;
+  flex: none;
+  border: 1.5px solid var(--c);
+  background: conic-gradient(var(--c) calc(var(--p) * 360deg), transparent 0);
+  background-clip: content-box;
+  padding: 2.5px;
+  box-sizing: border-box;
+}
+body[data-ui="beta"] .u3-pie.ok { --c: var(--u-success); }
+body[data-ui="beta"] .u3-pie.warn { --c: var(--u-warning); }
+body[data-ui="beta"] .u3-pie.idle { --c: var(--u-text-3); }
+body[data-ui="beta"] .u3-pie.done { --c: var(--u-success); background: var(--c); padding: 0; }
+body[data-ui="beta"] .u3-pie.done::after {
+  content: "";
+  display: block; width: 100%; height: 100%;
+  border-radius: inherit;
+  background: no-repeat center/10px
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>');
+}
+body[data-ui="beta"][data-theme="dark"] .u3-pie.done::after {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%2303141F" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>');
+}
+
+/* ---------- Группы/ячейки (iOS inset grouped) ---------- */
+body[data-ui="beta"] .u3-g-head {
+  padding: 20px 4px 8px;
+  font-size: 15px; font-weight: 600; letter-spacing: -0.022em;
+  color: var(--u-text);
+}
+body[data-ui="beta"] .u3-group {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  overflow: hidden;
+}
+body[data-ui="beta"] .u3-cell {
+  position: relative;
+  display: flex; align-items: center; gap: 12px;
+  min-height: 56px; padding: 8px 16px;
+}
+body[data-ui="beta"] .u3-cell + .u3-cell::before {
+  content: "";
+  position: absolute; top: 0; right: 0; left: 48px;
+  height: 1px; background: var(--u-sep);
+}
+body[data-ui="beta"] .u3-c-main { flex: 1; min-width: 0; }
+body[data-ui="beta"] .u3-c-t {
+  display: block;
+  font-size: 15px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body[data-ui="beta"] .u3-c-s { display: block; font-size: 13px; color: var(--u-text-2); }
+body[data-ui="beta"] .u3-c-r {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600; font-size: 15px;
+  white-space: nowrap;
+}
+body[data-ui="beta"] .u3-c-r .u3-c-s { font-weight: 400; font-size: 12px; color: var(--u-text-2); }
+/* акцент на отстающей метрике — «нужно X,X в день» */
+body[data-ui="beta"] .u3-cell.behind .u3-c-s { color: var(--u-warning); font-weight: 500; }
+
+/* ---------- Аватар с инициалами ---------- */
+body[data-ui="beta"] .u3-avatar {
+  width: 36px; height: 36px;
+  border-radius: 999px; flex: none;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 600;
+  background: var(--u-cell-2); color: var(--u-text-2);
+}
+body[data-ui="beta"] .u3-avatar.acc { background: var(--u-accent-soft); color: var(--u-accent-text); }
+
+/* ---------- Рейтинговая строка ---------- */
+body[data-ui="beta"] .u3-cell .u3-rank {
+  width: 22px; flex: none;
+  color: var(--u-text-3);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px; font-weight: 500;
+}
+body[data-ui="beta"] .u3-cell.me { background: var(--u-accent-soft); }
+body[data-ui="beta"] .u3-cell.me + .u3-cell::before { left: 16px; }
+body[data-ui="beta"] .u3-cell.me .u3-c-t { color: var(--u-accent-text); }
+
+/* ---------- Подиум 2-1-3 ---------- */
+body[data-ui="beta"] .u3-podium {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 8px; align-items: end;
+  margin: 12px 4px 8px;
+}
+body[data-ui="beta"] .u3-pod {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 12px;
+  text-align: center;
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+}
+body[data-ui="beta"] button.u3-pod { width: 100%; color: var(--u-text); font: inherit; cursor: pointer; }
+body[data-ui="beta"] .u3-pod:active { background: var(--u-cell-press); }
+body[data-ui="beta"] .u3-pod.first { padding: 16px 12px; }
+body[data-ui="beta"] .u3-pod.me { border-color: var(--u-accent); }
+body[data-ui="beta"] .u3-pod-rank { font-size: 12px; font-weight: 600; color: var(--u-text-3); }
+body[data-ui="beta"] .u3-pod .u3-avatar { width: 44px; height: 44px; }
+body[data-ui="beta"] .u3-pod.first .u3-avatar { width: 52px; height: 52px; font-size: 15px; }
+body[data-ui="beta"] .u3-pod-name {
+  font-size: 13px; color: var(--u-text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+body[data-ui="beta"] .u3-pod-val {
+  font-weight: 700; font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .u3-pod.first .u3-pod-val { font-size: 20px; }
+
+/* ---------- «До места выше не хватает…» ---------- */
+body[data-ui="beta"] .u3-gap-note {
+  margin: 12px 4px 4px;
+  padding: 12px 16px;
+  border-radius: var(--u-r-lg);
+  border: 1px solid var(--u-line);
+  background: var(--u-cell);
+  font-size: 13px; color: var(--u-text-2);
+  text-align: center;
+}
+body[data-ui="beta"] .u3-gap-note b { color: var(--u-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- Hero «План на месяц»: плоская карточка (градиент — только
+   на «Мой день», см. NOTES «одна идея») ---------- */
+/* Секция-хост беты (hero + «По метрикам» + legacy-таблица внутри одной
+   .section): убираем рамку вокруг — иначе двойная карточка. Отступы
+   как у обычной секции (12px из base), чтобы hero и метрики совпали. */
+body[data-ui="beta"] .section:has(> #monthPlanList .u3-plan),
+body[data-ui="beta"] .section:has(> #netMonthBody .u3-plan) {
+  background: transparent; border: 0; border-radius: 0; padding: 0;
+}
+body[data-ui="beta"] .section:has(> #monthPlanList .u3-plan) > .section-title,
+body[data-ui="beta"] .section:has(> #netMonthBody .u3-plan) > .section-title {
+  padding-inline: 4px; font-size: 15px; color: var(--u-text); letter-spacing: var(--u-tr-tight);
+}
+body[data-ui="beta"] .u3-plan-hero {
+  position: relative;
+  margin: 4px 0 0;
+  padding: 20px;
+  border-radius: var(--u-r-xl);
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+}
+body[data-ui="beta"] .u3-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+body[data-ui="beta"] .u3-h-label { font-size: 13px; color: var(--u-text-2); font-weight: 500; }
+body[data-ui="beta"] .u3-h-chip {
+  flex: none;
+  display: inline-flex; align-items: center; height: 24px;
+  padding: 0 8px; border-radius: 999px;
+  background: var(--u-cell-2); color: var(--u-text-2);
+  font-size: 12px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .u3-h-chip.warn { background: var(--u-warning-soft); color: var(--u-warning); }
+body[data-ui="beta"] .u3-h-num {
+  font-variant-numeric: tabular-nums;
+  font-size: 40px; font-weight: 700;
+  letter-spacing: var(--u-tr-hero); line-height: 1;
+  margin: 8px 0 4px; color: var(--u-text);
+}
+body[data-ui="beta"] .u3-h-num small {
+  font-size: 28px; font-weight: 600;
+  color: var(--u-text-2); letter-spacing: -0.022em;
+}
+body[data-ui="beta"] .u3-h-sub { font-size: 13px; color: var(--u-text-2); }
+/* линия факта против плана */
+body[data-ui="beta"] .u3-h-chart { display: block; width: 100%; height: 64px; margin-top: 12px; }
+body[data-ui="beta"] .u3-h-chart .pl { fill: none; stroke: var(--u-accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+body[data-ui="beta"] .u3-h-chart .pp { fill: none; stroke: var(--u-line-2); stroke-width: 1.5; stroke-dasharray: 4 5; }
+body[data-ui="beta"] .u3-h-chart .pf { fill: none; stroke: var(--u-accent); stroke-width: 1.5; stroke-dasharray: 1 5; stroke-linecap: round; opacity: .6; }
+body[data-ui="beta"] .u3-h-chart .dot { fill: var(--u-accent); }
+
+/* =========================================================
+   #page-plan — дневной план по точкам
+   ========================================================= */
+body[data-ui="beta"] .store-card {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  box-shadow: none;
+  overflow: hidden;
+}
+body[data-ui="beta"] .store-head { padding: 12px 16px; gap: 12px; transition: background-color var(--u-dur-micro) var(--u-ease-out); }
+body[data-ui="beta"] .store-head:active { opacity: 1; background: var(--u-cell-press); }
+body[data-ui="beta"] .store-badge {
+  width: 40px; height: 40px;
+  border-radius: 999px;
+  background: var(--u-accent-soft);
+  color: var(--u-accent-text);
+  font-weight: 700; font-size: 13px;
+}
+body[data-ui="beta"] .store-name { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+body[data-ui="beta"] .store-code { font-size: 13px; color: var(--u-text-3); }
+/* сворачивание тела: хвост-стрелка вместо угла »
+   (добавляется через ::after, сам .store-pct остаётся цифрой) */
+body[data-ui="beta"] .store-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 16px;
+}
+body[data-ui="beta"] .store-pct::after {
+  content: "";
+  display: inline-block;
+  width: 7px; height: 7px;
+  margin-left: 8px;
+  border-right: 2px solid var(--u-text-3);
+  border-bottom: 2px solid var(--u-text-3);
+  transform: rotate(45deg);
+  transition: transform var(--u-dur-short) var(--u-ease-out);
+}
+body[data-ui="beta"] .store-card.open .store-pct::after { transform: rotate(-135deg) translate(-2px, -2px); }
+body[data-ui="beta"] .store-body { border-top: 1px solid var(--u-sep); padding: 4px 16px 16px; }
+
+/* чипы смены — iOS pill */
+body[data-ui="beta"] .store-body .chips { margin-top: 12px; }
+
+/* «Блок GI / Товарка / …» — заголовок-группа, не капс */
+body[data-ui="beta"] .store-body .block-label {
+  font-size: 13px; font-weight: 600;
+  text-transform: none; letter-spacing: 0;
+  color: var(--u-text-3);
+  margin: 16px 0 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--u-sep);
+}
+body[data-ui="beta"] .store-body .block-label:first-of-type { border-top: 0; padding-top: 0; }
+
+/* прогресс-строки внутри карточки точки — Linear-стиль: имя, тонкий бар */
+body[data-ui="beta"] .progress-item { margin-bottom: 10px; }
+body[data-ui="beta"] .progress-top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 5px;
+}
+body[data-ui="beta"] .progress-top .name { font-size: 13px; font-weight: 500; color: var(--u-text-2); }
+body[data-ui="beta"] .progress-top .val {
+  font-size: 13px; font-weight: 500;
+  color: var(--u-text-2);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .bar i { border-radius: 999px; transition: width 720ms var(--u-ease-out); }
+body[data-ui="beta"] .bar i.good { background: var(--u-success); }
+body[data-ui="beta"] .bar i.mid { background: var(--u-warning); }
+body[data-ui="beta"] .bar i.bad { background: var(--u-danger); }
+body[data-ui="beta"] .bar i:not(.good):not(.mid):not(.bad) { background: var(--u-accent); }
+/* «Я» в рейтинговых барах — мягкий акцентный фон за строкой */
+body[data-ui="beta"] .progress-item.me {
+  margin-left: -16px; margin-right: -16px;
+  padding: 8px 16px;
+  border-radius: var(--u-r-md);
+  background: var(--u-accent-soft);
+}
+body[data-ui="beta"] .progress-item.me .progress-top .name,
+body[data-ui="beta"] .progress-item.me .progress-top .val { color: var(--u-accent-text); font-weight: 600; }
+body[data-ui="beta"] .progress-item.me .bar i { background: var(--u-accent); }
+
+/* =========================================================
+   #page-monthplan / #page-netmonth — месяц
+   ========================================================= */
+/* month-nav: ‹ Месяц › как у iOS */
+body[data-ui="beta"] .month-nav button {
+  width: var(--u-hit); height: var(--u-hit);
+  border-radius: 999px;
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  color: var(--u-text); font-size: 18px;
+  box-shadow: none;
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-micro);
+}
+body[data-ui="beta"] .month-nav button:active { transform: scale(.92); background: var(--u-cell-press); }
+body[data-ui="beta"] .month-nav .label,
+body[data-ui="beta"] #planMonthLabel,
+body[data-ui="beta"] #netMonthLabel {
+  font-size: 16px; font-weight: 600; letter-spacing: -0.022em;
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] #monthPlanMeta { color: var(--u-text-2); font-size: 13px; padding-inline: 4px !important; }
+body[data-ui="beta"] #monthPlanMeta b { color: var(--u-text); }
+
+/* мобильные карточки сотрудника — одна inset-группа */
+body[data-ui="beta"] .mobile-table { gap: 12px; padding: 0 12px 16px; }
+body[data-ui="beta"] .mt-card {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  box-shadow: none;
+}
+body[data-ui="beta"] .mt-name { font-weight: 600; letter-spacing: -0.01em; }
+body[data-ui="beta"] .mt-meta { color: var(--u-text-3); }
+body[data-ui="beta"] .mt-cell {
+  background: var(--u-cell-2);
+  border: 0;
+  border-radius: var(--u-r-sm);
+}
+body[data-ui="beta"] .mt-cell .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .mt-cell .l { text-transform: none; letter-spacing: 0; color: var(--u-text-3); }
+body[data-ui="beta"] .mt-toggle,
+body[data-ui="beta"] .sv-toggle {
+  color: var(--u-accent-text);
+  font-weight: 500; font-size: 13px;
+  min-height: var(--u-hit);
+}
+
+/* «Дневные планы точек» — чипы-цифры как .mt-cell, без капса */
+body[data-ui="beta"] #storeDailyPlans .store-card { border-left-width: 1px !important; }
+body[data-ui="beta"] #storeDailyPlans .stat-chip,
+body[data-ui="beta"] #modalBody .stat-chip {
+  background: var(--u-cell-2);
+  border: 0;
+  border-radius: var(--u-r-sm);
+  padding: 10px 8px;
+}
+body[data-ui="beta"] #storeDailyPlans .stat-chip .n,
+body[data-ui="beta"] #modalBody .stat-chip .n {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.022em;
+}
+body[data-ui="beta"] #storeDailyPlans .stat-chip .l,
+body[data-ui="beta"] #modalBody .stat-chip .l {
+  text-transform: none; letter-spacing: 0;
+  font-size: 11px; font-weight: 500;
+  color: var(--u-text-3);
+}
+
+/* «Сеть за месяц» — барные блоки супервайзера */
+body[data-ui="beta"] .sv-store {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  box-shadow: none;
+}
+body[data-ui="beta"] .sv-store-name { font-weight: 600; letter-spacing: -0.01em; }
+body[data-ui="beta"] .sv-store-code { color: var(--u-text-3); }
+body[data-ui="beta"] .sv-section {
+  color: var(--u-text);
+  font-weight: 600; font-size: 15px; letter-spacing: -0.022em;
+}
+/* подписи вроде «Кредит заявка» не влезали в 42px и ломались в 2 строки */
+body[data-ui="beta"] #page-netmonth .sv-bar-row {
+  grid-template-columns: 92px 1fr auto;
+  font-size: 12px; color: var(--u-text-2);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] #page-netmonth .sv-bar-row > div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body[data-ui="beta"] .sv-bar-track { background: var(--u-track); }
+body[data-ui="beta"] .sv-bar-fill { border-radius: 999px; }
+
+/* =========================================================
+   #page-bfq — список BFQ
+   ========================================================= */
+body[data-ui="beta"] #bfqList .row-icon {
+  background: var(--u-cell-2);
+  color: var(--u-text-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+body[data-ui="beta"] #bfqList .row.me { background: var(--u-accent-soft); }
+body[data-ui="beta"] #bfqList .row.me + .row::before { left: 16px; }
+body[data-ui="beta"] #bfqList .row.me .row-title { color: var(--u-accent-text); }
+body[data-ui="beta"] #bfqList .row.me .row-icon { background: transparent; color: var(--u-accent-text); }
+body[data-ui="beta"] #bfqList .row-value { font-weight: 700; font-size: 16px; }
+/* top-3 уже на подиуме — прячем их строки только в бете */
+body[data-ui="beta"] #bfqList .row.u3-on-podium { display: none; }
+body[data-ui="beta"] #bfqList .row.u3-on-podium + .row:not(.u3-on-podium)::before { display: none; }
+
+/* =========================================================
+   #page-leaderboard — топы
+   ========================================================= */
+body[data-ui="beta"] #page-leaderboard input[type="date"] {
+  flex: 1; min-width: 0;
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: 12px;
+  color: var(--u-text);
+  min-height: 44px;
+  padding: 8px 12px;
+  font: inherit; font-size: 14px;
+}
+/* табы метрик — iOS-чипы, активный — акцент */
+/* одна горизонтально прокручиваемая строка вместо 4 рядов переноса */
+body[data-ui="beta"] #leaderboardMetricTabs {
+  display: flex !important; flex-wrap: nowrap !important; gap: 8px;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity; scroll-padding-inline: 16px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  margin-inline: -16px; padding: 4px 16px 8px;
+}
+body[data-ui="beta"] #leaderboardMetricTabs::-webkit-scrollbar { display: none; }
+body[data-ui="beta"] #leaderboardMetricTabs .btn-ghost {
+  flex: none; scroll-snap-align: start; white-space: nowrap;
+  width: auto; min-height: 34px;
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 13px; font-weight: 500;
+  border-radius: 999px;
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  color: var(--u-text-2);
+}
+body[data-ui="beta"] #leaderboardMetricTabs .btn-ghost.active {
+  background: var(--u-primary);
+  border-color: var(--u-primary);
+  color: var(--u-on-primary);
+}
+body[data-ui="beta"] #leaderboardBody .progress-block { padding: 8px 16px 14px; }
+
+/* дата-поле/тулбары внутри секций — аккуратные поля (бета уже делает
+   это для .field, здесь — те же токены без зависимости от разметки) */
+body[data-ui="beta"] .data-table-toolbar .btn-ghost { min-height: 36px; border-radius: 999px; padding: 8px 14px; font-size: 13px; }
+
+/* =========================================================
+   Десктопные data-table (monthplan/team/…) в бете — hairline-стиль
+   ========================================================= */
+body[data-ui="beta"] .data-table-wrap {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+}
+body[data-ui="beta"] .data-table thead th { background: var(--u-cell-2); color: var(--u-text-3); }
+body[data-ui="beta"] .data-table th[data-sort-key] .dt-sort::after { color: var(--u-accent-text); }
+
+/* =========================================================
+   Reduced motion — без заливки баров и поворотов стрелок
+   ========================================================= */
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .bar i,
+  body[data-ui="beta"] .store-pct::after,
+  body[data-ui="beta"] .month-nav button,
+  body[data-ui="beta"] .store-head { transition: none; }
+}

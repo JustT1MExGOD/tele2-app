@@ -48,6 +48,9 @@ import kotlinx.serialization.json.doubleOrNull
 import ru.t2sales.android.AppContainer
 import ru.t2sales.shared.api.ScheduleRow
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
+import ru.t2sales.shared.theme.T2Motion
+import androidx.compose.foundation.layout.width
 
 
 private val PLAN_KEYS = listOf("sim", "mnp", "pa", "hb", "combo", "phones", "accessories", "insurance")
@@ -104,6 +107,10 @@ fun PlanDayScreen(container: AppContainer) {
         } }.onSuccess { data = it }.onFailure { failed = true }
     }
 
+    if (T2Colors.uiBeta) {
+        PlanDayBeta(data, failed)
+        return
+    }
     Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
         Text("План дня", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 12.dp))
         val d = data
@@ -156,6 +163,115 @@ private fun StoreDayCard(store: JsonObject, d: DayData) {
                     metrics.forEach { (key, label) -> ProgressRow(label ?: LABELS[key] ?: key, fact[key].dbl(), plan[key].dbl()) }
                 }
             }
+        }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (design-system/ui3/v5-team, screen 3 "План") =======================
+
+private fun storeTotals(store: JsonObject, d: DayData): Pair<Double, Double> {
+    val id = store["id"].str()
+    val fact = d.fact[id] ?: JsonObject(emptyMap())
+    val plan = d.plan[id] ?: JsonObject(emptyMap())
+    return PLAN_KEYS.sumOf { fact[it].dbl() } to PLAN_KEYS.sumOf { plan[it].dbl() }
+}
+
+private fun pctOf(f: Double, p: Double) = if (p > 0) ((f / p) * 100).roundToInt() else if (f > 0) 100 else 0
+
+/** Hero with the network's day %, a segment "Точки / Метрики", and grouped lists with pace pies. */
+@Composable
+private fun PlanDayBeta(data: DayData?, failed: Boolean) {
+    var tab by remember { mutableStateOf(0) }
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+        U3LargeTitle("План")
+        val d = data
+        when {
+            failed -> ErrorState("Ошибка загрузки", onRetry = { AppState.refreshTick++ })
+            d == null -> SkeletonBlock(Modifier.fillMaxWidth().height(180.dp), 28.dp)
+            d.stores.isEmpty() -> EmptyText("Нет точек")
+            else -> {
+                val totals = d.stores.map { storeTotals(it, d) }
+                val f = totals.sumOf { it.first }
+                val p = totals.sumOf { it.second }
+                val pct = pctOf(f, p)
+                // pace: share of the working day passed (10:00-21:00 MSK) vs the share of the plan done
+                val now = java.time.ZonedDateTime.now(ZoneId.of("Europe/Moscow"))
+                val dayShare = (((now.hour - 10) * 60 + now.minute) / (11f * 60)).coerceIn(0.05f, 1f)
+                val forecast = if (p > 0) ((f / dayShare) / p * 100).roundToInt() else 0
+                U3Segmented(listOf("Точки", "Метрики"), tab, Modifier.padding(bottom = 12.dp)) { tab = it }
+                U3Hero(Modifier.reveal(0)) {
+                    U3HeroRow("Сеть сегодня", if (p > 0) "прогноз $forecast%" else null)
+                    U3HeroNumber("${animatedInt(pct, T2Motion.count)}", "%")
+                    Text(
+                        if (p > 0) "${f.roundToInt()} из ${p.roundToInt()} по ключевым метрикам" else "План на сегодня не задан",
+                        color = T2Hero.onHero2, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp)
+                    )
+                    if (p > 0) {
+                        val fill = animatedFloat((pct.coerceIn(0, 100)) / 100f, T2Motion.fill)
+                        Box(Modifier.padding(top = 14.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(99.dp)).background(T2Hero.onHeroFill)) {
+                            Box(Modifier.fillMaxWidth(fill).height(6.dp).clip(RoundedCornerShape(99.dp)).background(T2Hero.onHero))
+                            // the pace marker: where the plan should be by now
+                            Box(Modifier.fillMaxWidth(dayShare).height(6.dp)) { Box(Modifier.align(Alignment.CenterEnd).size(width = 2.dp, height = 6.dp).background(T2Hero.spot)) }
+                        }
+                    }
+                }
+                if (tab == 0) PlanStoresBeta(d) else PlanMetricsBeta(d)
+            }
+        }
+        Spacer(Modifier.height(120.dp))
+    }
+}
+
+@Composable
+private fun PlanStoresBeta(d: DayData) {
+    U3GroupHead("По точкам", "${d.stores.size}")
+    U3Group(Modifier.reveal(1)) {
+        d.stores.forEachIndexed { i, store ->
+            if (i > 0) U3Sep()
+            var open by remember { mutableStateOf(false) }
+            val id = store["id"].str()
+            val (f, p) = storeTotals(store, d)
+            val pct = pctOf(f, p)
+            val name = store["name"].str()
+            val staff = d.staff[id].orEmpty()
+            U3Cell(
+                name, staff.joinToString(", ") { it.full_name.split(" ").first() }.ifEmpty { "Нет на смене" },
+                leading = { U3Tile((store["short_name"].str().ifEmpty { name.ifEmpty { "?" } }).take(2), tint = T2Colors.accentText, bg = T2Colors.primarySoft) },
+                trailing = { Row(verticalAlignment = Alignment.CenterVertically) { U3Value("$pct%", u3Tone(pct)); Spacer(Modifier.width(8.dp)); U3Pie(pct, 20.dp) } },
+                onClick = { open = !open }
+            )
+            if (open) {
+                val fact = d.fact[id] ?: JsonObject(emptyMap())
+                val plan = d.plan[id] ?: JsonObject(emptyMap())
+                Column(Modifier.padding(start = 66.dp, end = 16.dp, bottom = 12.dp)) {
+                    GROUPS.flatMap { it.second }.filter { (k, _) -> plan[k].dbl() > 0 || fact[k].dbl() > 0 }.forEach { (k, label) ->
+                        ProgressRow(label ?: LABELS[k] ?: k, fact[k].dbl(), plan[k].dbl())
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlanMetricsBeta(d: DayData) {
+    U3GroupHead("По метрикам")
+    U3Group(Modifier.reveal(1)) {
+        val keys = GROUPS.flatMap { it.second }
+        val rows = keys.map { (k, label) ->
+            Triple(label ?: LABELS[k] ?: k, d.stores.sumOf { (d.fact[it["id"].str()] ?: JsonObject(emptyMap()))[k].dbl() }, d.stores.sumOf { (d.plan[it["id"].str()] ?: JsonObject(emptyMap()))[k].dbl() })
+        }.filter { it.second > 0 || it.third > 0 }
+        if (rows.isEmpty()) U3Cell("Нет данных за сегодня")
+        rows.forEachIndexed { i, (label, f, p) ->
+            if (i > 0) U3Sep(16.dp)
+            val pct = pctOf(f, p)
+            U3Cell(label, trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    U3Value("${f.roundToInt()} / ${p.roundToInt()}", T2Colors.textSecondary)
+                    Spacer(Modifier.width(10.dp))
+                    U3Pie(pct, 20.dp)
+                }
+            })
         }
     }
 }

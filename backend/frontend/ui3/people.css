@@ -1,0 +1,333 @@
+/* =========================================================
+   Beta UI 3.0 «Ночная смена» — people layer
+   Экраны: «Мой» (#page-my / личный кабинет), «Команда» (#page-team),
+   профиль сотрудника (#page-employee-profile), профиль точки
+   (#page-store-profile), график (#page-schedule).
+   Каждый селектор начинается с body[data-ui="beta"]; разметка, id и
+   data-on не меняются — только визуальный слой поверх существующего DOM.
+   ========================================================= */
+
+/* =========================================================
+   «МОЙ» — личный кабинет (#page-my)
+   ========================================================= */
+
+/* ---------- Hero профиля: синий mesh T2, аватар + имя + пилюли ---------- */
+body[data-ui="beta"] .lk-hero {
+  background: var(--u-hero);
+  color: var(--u-on-hero);
+  border: 0;
+  border-radius: var(--u-r-xl);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+  padding: 22px 18px 18px;
+  margin-bottom: 16px;
+}
+body[data-ui="beta"] .lk-hero::after {
+  /* мягкий световой спот поверх mesh — фирменный «блик» беты */
+  background: radial-gradient(circle, rgba(127,211,255,.30), transparent 70%);
+}
+body[data-ui="beta"] .lk-avatar {
+  width: 64px; height: 64px;
+  border-radius: 999px;
+  background: var(--u-hero-chip);
+  border: 2px solid rgba(255,255,255,.28);
+  color: #fff; font-size: 24px; font-weight: 800;
+}
+body[data-ui="beta"] .lk-avatar-edit {
+  width: 24px; height: 24px;
+  border: 2px solid rgba(6,34,56,.9);
+  background: #fff; color: var(--u-hero-3);
+  box-shadow: 0 2px 6px rgba(0,0,0,.3);
+}
+body[data-ui="beta"] .lk-avatar-edit .ic { width: 12px; height: 12px; }
+body[data-ui="beta"] .lk-name {
+  font-size: 21px; font-weight: 700; letter-spacing: var(--u-tr-tight);
+}
+body[data-ui="beta"] .lk-role {
+  background: var(--u-on-hero-fill);
+  border: 1px solid var(--u-on-hero-line);
+  color: var(--u-on-hero);
+  font-size: 11px; font-weight: 700;
+  padding: 4px 10px; border-radius: 999px;
+}
+body[data-ui="beta"] .lk-role.manager {
+  background: rgba(255,214,10,.22); border-color: rgba(255,214,10,.3);
+  color: #FFE083;
+}
+body[data-ui="beta"] .lk-pill {
+  background: var(--u-hero-chip);
+  border: 1px solid var(--u-on-hero-line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px; font-weight: 600;
+  color: var(--u-on-hero-2);
+}
+body[data-ui="beta"] .lk-pill strong { color: #fff; font-weight: 700; }
+body[data-ui="beta"] .lk-pill .ic { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
+
+/* ---------- Кольцо дневного плана: карточка-ячейка + кольцо Linear ---------- */
+body[data-ui="beta"] .lk-ring-card {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  box-shadow: none;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+body[data-ui="beta"] .lk-ring .bg { stroke: var(--u-track); }
+body[data-ui="beta"] .lk-ring .fg { stroke: var(--u-accent); }
+body[data-ui="beta"] .lk-ring .fg.good { stroke: var(--u-success); }
+body[data-ui="beta"] .lk-ring .fg.mid { stroke: var(--u-warning); }
+body[data-ui="beta"] .lk-ring .fg.bad { stroke: var(--u-danger); }
+body[data-ui="beta"] .lk-ring-val {
+  font-weight: 800; font-size: 20px;
+  letter-spacing: var(--u-tr-tight); font-variant-numeric: tabular-nums;
+  color: var(--u-text);
+}
+body[data-ui="beta"] .lk-ring-val small {
+  font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--u-text-3);
+}
+body[data-ui="beta"] .lk-ring-title { font-weight: 700; letter-spacing: -0.01em; }
+body[data-ui="beta"] .lk-ring-sub { color: var(--u-text-3); }
+body[data-ui="beta"] .lk-ring-store {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: 999px;
+  color: var(--u-text-2);
+}
+
+/* ---------- «Смена» / «Фокус сейчас» / «Прогресс» — голые текстовые
+   блоки в lkShift/lkInsight/lkGamification без .section: даём им
+   ячейку-карточку беты, чтобы не висели текстом на холсте ---------- */
+body[data-ui="beta"] #lkShift .progress-block,
+body[data-ui="beta"] #lkInsight .progress-block,
+body[data-ui="beta"] #lkGamification .progress-block {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+body[data-ui="beta"] #lkShift .section-title,
+body[data-ui="beta"] #lkInsight .section-title,
+body[data-ui="beta"] #lkGamification .section-title { padding: 0; }
+body[data-ui="beta"] #lkGamification .lk-pill {
+  background: var(--u-cell-2);
+  border-color: var(--u-line);
+  color: var(--u-text-2);
+}
+body[data-ui="beta"] #lkGamification .lk-pill strong { color: var(--u-text); }
+
+/* ---------- Прогресс-бары внутри lk (месяц, профили) ---------- */
+body[data-ui="beta"] #page-my .progress-block,
+body[data-ui="beta"] #page-employee-profile .progress-block,
+body[data-ui="beta"] #page-store-profile .progress-block { padding: 4px 16px 14px; }
+/* внутри новых карточек выше отступ уже задан — не дублируем */
+body[data-ui="beta"] #lkShift .progress-block.progress-block,
+body[data-ui="beta"] #lkInsight .progress-block.progress-block,
+body[data-ui="beta"] #lkGamification .progress-block.progress-block { padding: 14px 16px; }
+body[data-ui="beta"] .progress-top { font-size: 13px; }
+body[data-ui="beta"] .progress-top .name { font-weight: 600; color: var(--u-text-2); }
+body[data-ui="beta"] .progress-top .val { color: var(--u-text-3); font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .bar > i { background: var(--u-accent); border-radius: 999px; }
+body[data-ui="beta"] .bar > i.good { background: var(--u-success); }
+body[data-ui="beta"] .bar > i.mid { background: var(--u-warning); }
+body[data-ui="beta"] .bar > i.bad { background: var(--u-danger); }
+
+/* ---------- Неделя: 7 плиток, today = акцентный контур ---------- */
+body[data-ui="beta"] .lk-week { gap: 6px; }
+body[data-ui="beta"] .lk-day {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+  box-shadow: none;
+}
+body[data-ui="beta"] .lk-day.today {
+  border-color: var(--u-accent);
+  background: var(--u-accent-soft);
+}
+body[data-ui="beta"] .lk-day.off { opacity: .45; }
+body[data-ui="beta"] .lk-day .wd { color: var(--u-text-3); font-weight: 700; }
+body[data-ui="beta"] .lk-day .dn { font-weight: 800; font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .lk-day.today .dn { color: var(--u-accent-text); }
+body[data-ui="beta"] .lk-day .st { background: var(--u-cell-2); }
+
+/* ---------- BFQ: вторая hero-плашка, градиентный акцент ---------- */
+body[data-ui="beta"] .lk-bfq-card {
+  background: var(--u-hero);
+  color: var(--u-on-hero);
+  border: 0;
+  border-radius: var(--u-r-xl);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+body[data-ui="beta"] .lk-bfq-card .bfq-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--u-on-hero-2); opacity: .85;
+}
+body[data-ui="beta"] .lk-bfq-card .bfq-score {
+  font-size: 34px; font-weight: 800; letter-spacing: var(--u-tr-hero);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .lk-bfq-card .bfq-rank { color: var(--u-on-hero-2); font-weight: 600; }
+
+/* ---------- Быстрые действия: сетка тихих плиток ---------- */
+body[data-ui="beta"] .lk-actions-grid { gap: 8px; }
+body[data-ui="beta"] .lk-action {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+  box-shadow: none;
+  color: var(--u-text);
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-short);
+}
+body[data-ui="beta"] .lk-action:active { transform: scale(.97); background: var(--u-cell-press); }
+body[data-ui="beta"] .lk-action .la-ico {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: var(--u-cell-2); color: var(--u-text-2);
+  display: grid; place-items: center;
+  margin-bottom: 8px;
+}
+body[data-ui="beta"] .lk-action .la-ico .ic { width: 18px; height: 18px; }
+body[data-ui="beta"] .lk-action .la-title { font-weight: 700; letter-spacing: -0.01em; }
+body[data-ui="beta"] .lk-action .la-sub { color: var(--u-text-3); }
+
+/* ---------- Привязка (bind) — тот же хиро-подход, но на холсте ---------- */
+body[data-ui="beta"] .bind-hero { padding: 8px 4px 4px; }
+body[data-ui="beta"] .bind-glow {
+  background: radial-gradient(circle, var(--u-glow), transparent 70%);
+}
+body[data-ui="beta"] .bind-title { letter-spacing: var(--u-tr-tight); }
+body[data-ui="beta"] .bind-sub { color: var(--u-text-3); }
+
+/* =========================================================
+   «КОМАНДА» (#page-team)
+   ========================================================= */
+body[data-ui="beta"] .team-avatar {
+  width: 38px; height: 38px; border-radius: 999px;
+  background: var(--u-cell-2); color: var(--u-text-3);
+  font-size: 14px; font-weight: 700;
+  flex-shrink: 0;
+}
+body[data-ui="beta"] .team-avatar.active {
+  background: var(--u-accent-soft); color: var(--u-accent-text);
+}
+/* строка сотрудника: аватар-иконка + сепаратор iOS */
+body[data-ui="beta"] #teamList > div > .row { min-height: 56px; }
+/* админ-чипы ролей под строкой */
+body[data-ui="beta"] #teamList .mchip { min-height: 36px; }
+
+/* =========================================================
+   ПРОФИЛЬ СОТРУДНИКА (#page-employee-profile) + ТОЧКИ (#page-store-profile)
+   ========================================================= */
+
+/* health-бейдж: семантический soft-тон беты, крупная цифра */
+body[data-ui="beta"] .cc-health {
+  min-width: 56px; height: 56px; border-radius: var(--u-r-md);
+  display: grid; place-items: center;
+  font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+}
+body[data-ui="beta"] .cc-health.good { background: var(--u-success-soft); color: var(--u-success); }
+body[data-ui="beta"] .cc-health.mid { background: var(--u-warning-soft); color: var(--u-warning); }
+body[data-ui="beta"] .cc-health.bad { background: var(--u-danger-soft); color: var(--u-danger); }
+body[data-ui="beta"] .cc-line { color: var(--u-text-2); }
+body[data-ui="beta"] .cc-line b { color: var(--u-text); font-variant-numeric: tabular-nums; }
+
+/* мини-барчарт тренда/смен — тон акцента, скруглённые столбцы */
+body[data-ui="beta"] #page-employee-profile .section [style*="align-items:flex-end"] > div,
+body[data-ui="beta"] #page-store-profile .section [style*="align-items:flex-end"] > div {
+  border-radius: 3px 3px 0 0 !important;
+}
+
+/* =========================================================
+   «ГРАФИК» (#page-schedule) — месяц как тихий iOS-календарь
+   ========================================================= */
+body[data-ui="beta"] .sch-emp-head .cnt {
+  background: var(--u-cell-2); color: var(--u-text-3);
+}
+/* день-ячейка: мягче радиус, табличная цифра */
+body[data-ui="beta"] .sch-cell .d { font-variant-numeric: tabular-nums; }
+/* work/draft уже красятся inline цветом точки — только гармонизируем
+   не-рабочие и прокладки на токены беты */
+body[data-ui="beta"] .sch-cell.off { opacity: .4; }
+body[data-ui="beta"] .sch-cell.pad { opacity: .3; }
+/* сводная таблица: hairline-сетка, sticky-имена на холсте */
+body[data-ui="beta"] .sum-sch-scroll {
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  background: var(--u-cell);
+  overflow: hidden;
+}
+body[data-ui="beta"] .sum-sch-table { border-collapse: collapse; }
+body[data-ui="beta"] .sum-sch-table th,
+body[data-ui="beta"] .sum-sch-table td { border-color: var(--u-sep); }
+body[data-ui="beta"] .sum-sch-table thead th {
+  background: var(--u-cell);
+  color: var(--u-text-3);
+}
+body[data-ui="beta"] .sum-sch-table thead th span { color: var(--u-text-3); }
+body[data-ui="beta"] .sum-sch-day.we { background: var(--u-danger-soft); }
+body[data-ui="beta"] .sum-sch-name {
+  background: var(--u-cell);
+  color: var(--u-text-2);
+}
+body[data-ui="beta"] thead .sum-sch-name { background: var(--u-cell-2); }
+body[data-ui="beta"] .sum-sch-cell.off { background: var(--u-cell-2); color: var(--u-text-3); opacity: .5; }
+/* автогенератор + подсказка */
+body[data-ui="beta"] #scheduleDraftSection .btn-main,
+body[data-ui="beta"] #scheduleDraftSection .btn-ghost { min-height: 44px; font-size: 15px; padding: 10px 14px; }
+body[data-ui="beta"] #scheduleDraftSection select {
+  background: var(--u-cell-2); color: var(--u-text);
+  border: 1px solid var(--u-line); border-radius: 10px;
+  min-height: 44px; padding: 8px 12px; font: inherit; font-size: 15px;
+}
+
+/* =========================================================
+   Общие примитивы этих экранов
+   ========================================================= */
+/* карточка mt-card внутри section — тихая вложенная панель */
+body[data-ui="beta"] #page-my .mt-card,
+body[data-ui="beta"] #page-schedule .mt-card {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] #page-my .mt-name,
+body[data-ui="beta"] #page-schedule .mt-name { font-weight: 700; letter-spacing: -0.01em; }
+body[data-ui="beta"] #page-my .mt-meta,
+body[data-ui="beta"] #page-schedule .mt-meta { color: var(--u-text-3); }
+
+/* store-badge на «План дня» (store-card живёт на page-plan, но точки
+   повторяются в профиле точки) — приводим бейдж к плоской плитке */
+body[data-ui="beta"] .store-badge {
+  background: var(--u-cell-2); color: var(--u-accent-text);
+  border-radius: 12px;
+}
+body[data-ui="beta"] .store-name { font-weight: 700; letter-spacing: -0.01em; }
+body[data-ui="beta"] .store-code { color: var(--u-text-3); }
+body[data-ui="beta"] .store-pct.good { color: var(--u-success); }
+body[data-ui="beta"] .store-pct.mid { color: var(--u-warning); }
+body[data-ui="beta"] .store-pct.bad { color: var(--u-danger); }
+
+/* mchip в этих экранах — плоская плитка-токен */
+body[data-ui="beta"] #page-employee-profile .mchip,
+body[data-ui="beta"] #page-store-profile .mchip,
+body[data-ui="beta"] #page-team .mchip,
+body[data-ui="beta"] #page-my .mchip {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+/* иконка в строке сессии/привязки — квадро-скругление iOS */
+body[data-ui="beta"] #page-my .row-icon {
+  border-radius: 11px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .lk-action:active { transform: none; }
+}

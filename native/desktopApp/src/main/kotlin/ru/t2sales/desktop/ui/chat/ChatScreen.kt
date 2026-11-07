@@ -400,11 +400,12 @@ private fun linkified(body: String): AnnotatedString = buildAnnotatedString {
 @Composable
 private fun MessageRow(m: ChatMessage, mine: Boolean, bubbleMax: androidx.compose.ui.unit.Dp, onAttachment: (ChatAttachment) -> Unit) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    val bubble = if (T2Colors.uiBeta) RoundedCornerShape(18.dp) else RoundedCornerShape(16.dp)
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(
             modifier = Modifier
                 .widthIn(max = bubbleMax)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(bubble)
                 .background(if (mine) T2Colors.primarySoft else T2Colors.surface2)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {

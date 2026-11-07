@@ -193,7 +193,7 @@ fun ReplayScreen(container: AppContainer) {
 private fun MonthButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Text(
         label, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = if (enabled) T2Colors.text else T2Colors.hint.copy(alpha = 0.4f),
-        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(T2Colors.surface2).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = 6.dp)
+        modifier = Modifier.clip(RoundedCornerShape(if (T2Colors.uiBeta) 99.dp else 12.dp)).background(T2Colors.surface2).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = 6.dp)
     )
 }
 
@@ -236,7 +236,7 @@ private fun Controls(playing: Boolean, speed: Int, day: Int, days: Int, onToggle
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             if (playing) "❚❚" else "▶", fontSize = 18.sp, color = T2Colors.onAccent, fontWeight = FontWeight.Bold,
-            modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(T2Colors.accent).clickable(onClick = onToggle).padding(horizontal = 20.dp, vertical = 9.dp)
+            modifier = Modifier.clip(RoundedCornerShape(if (T2Colors.uiBeta) 99.dp else 14.dp)).background(T2Colors.accent).clickable(onClick = onToggle).padding(horizontal = 20.dp, vertical = 9.dp)
         )
         Slider(
             value = day.toFloat(), onValueChange = { onSeek(it.roundToInt()) }, valueRange = 0f..(days - 1).coerceAtLeast(1).toFloat(),
@@ -246,7 +246,7 @@ private fun Controls(playing: Boolean, speed: Int, day: Int, days: Int, onToggle
         listOf(1, 2, 4).forEach { s ->
             Text(
                 "${s}×", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (speed == s) T2Colors.primary else T2Colors.hint,
-                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (speed == s) T2Colors.primarySoft else T2Colors.surface2).clickable { onSpeed(s) }.padding(horizontal = 10.dp, vertical = 6.dp)
+                modifier = Modifier.clip(RoundedCornerShape(if (T2Colors.uiBeta) 99.dp else 10.dp)).background(if (speed == s) T2Colors.primarySoft else T2Colors.surface2).clickable { onSpeed(s) }.padding(horizontal = 10.dp, vertical = 6.dp)
             )
         }
     }

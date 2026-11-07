@@ -506,6 +506,10 @@ internal fun MirandaDevicesTab(container: AppContainer) {
 /** One row with title + sub on the left and a free-form action slot on the right (ported screens use this instead of the desktop's trailing-lambda ListRow). */
 @Composable
 private fun AcListRow(title: String, sub: String?, action: (@Composable () -> Unit)?) {
+    if (T2Colors.uiBeta) {
+        U3Cell(title, sub, trailing = action)
+        return
+    }
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)

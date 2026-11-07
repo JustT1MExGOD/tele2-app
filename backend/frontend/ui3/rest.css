@@ -1,0 +1,384 @@
+/* =========================================================
+   Beta UI 3.0 «Ночная смена» — rest layer
+   Остальные экраны (команда, чат, график, история, сети, аудит,
+   кабинет супервайзера, heatmap/прогноз/объявления/отчёты, live,
+   command center, профили точки/сотрудника, алерты, отчёты,
+   поддержка, задачи). Без глубокого редизайна: те же поверхности,
+   hairline, радиусы и акцент, что в base.css.
+   Каждый селектор начинается с body[data-ui="beta"]; разметка,
+   id и data-on не меняются.
+   ========================================================= */
+
+/* ---------- Topbar экранов супервайзера: Large Title iOS ---------- */
+body[data-ui="beta"] .topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 12px;
+}
+body[data-ui="beta"] .topbar-title {
+  font-size: 28px; font-weight: 700; line-height: 1.15;
+  letter-spacing: var(--u-tr-tight); color: var(--u-text);
+}
+body[data-ui="beta"] .topbar-sub { font-size: 13px; color: var(--u-text-3); margin-top: 2px; }
+
+/* ---------- Пустые/ошибочные состояния ---------- */
+body[data-ui="beta"] .empty { color: var(--u-text-3); font-size: 14px; }
+body[data-ui="beta"] .empty[role="alert"] {
+  margin: 8px 0 12px;
+  padding: 28px 16px 20px;
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  color: var(--u-text-2);
+  font-weight: 600;
+}
+body[data-ui="beta"] .empty[role="alert"]::before {
+  content: "!";
+  display: grid; place-items: center;
+  width: 44px; height: 44px; margin: 0 auto 12px;
+  border-radius: 999px;
+  background: var(--u-danger-soft); color: var(--u-danger);
+  font-size: 20px; font-weight: 800;
+}
+/* внутри секции-карточки ошибка не рисует вторую карточку */
+body[data-ui="beta"] .section .empty[role="alert"] {
+  background: transparent; border: 0; border-radius: 0; margin: 0;
+}
+body[data-ui="beta"] .section .empty[role="alert"] + .btn-main,
+body[data-ui="beta"] .section .empty[role="alert"] ~ .btn-main {
+  width: auto; margin: 0 16px 16px;
+}
+body[data-ui="beta"] .empty-state .es-sub { color: var(--u-text-3); }
+
+/* ---------- Мелкие общие примитивы этих экранов ---------- */
+body[data-ui="beta"] .stat-chip,
+body[data-ui="beta"] .mt-cell {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .stat-chip .l,
+body[data-ui="beta"] .mt-cell .l {
+  text-transform: none; letter-spacing: 0; font-size: 11px; font-weight: 600;
+  color: var(--u-text-3);
+}
+body[data-ui="beta"] .stat-chip .n,
+body[data-ui="beta"] .mt-cell .v { font-variant-numeric: tabular-nums; letter-spacing: var(--u-tr-tight); }
+
+body[data-ui="beta"] .mt-card,
+body[data-ui="beta"] .pulse-chip,
+body[data-ui="beta"] .sv-chart,
+body[data-ui="beta"] .sv-store,
+body[data-ui="beta"] .sv-rank,
+body[data-ui="beta"] .sch-emp,
+body[data-ui="beta"] .gate-card {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  box-shadow: none;
+}
+body[data-ui="beta"] .mt-card { border-radius: var(--u-r-lg); }
+/* карточка внутри секции — без второй рамки, только разделитель */
+body[data-ui="beta"] .section .mt-card {
+  background: transparent; border: 0; border-radius: 0;
+  border-top: 1px solid var(--u-sep);
+}
+body[data-ui="beta"] .section .mobile-table { gap: 0; padding: 0 0 8px; }
+body[data-ui="beta"] #fcList > .empty { padding: 4px 16px 12px !important; }
+/* заметки .empty с text-align:left — строка примечания, не центрированное состояние */
+body[data-ui="beta"] .section .empty:not([role="alert"]) { color: var(--u-text-3); font-size: 13px; }
+body[data-ui="beta"] .pulse-chip { border-radius: var(--u-r-md); }
+body[data-ui="beta"] .pulse-chip .pc-l { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--u-text-3); }
+
+body[data-ui="beta"] .about-block {
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .link-row:active { background: var(--u-cell-press); }
+
+/* сегменты .quick (задачи, фильтры) — iOS segmented */
+body[data-ui="beta"] .quick {
+  gap: 2px; padding: 2px;
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: calc(var(--u-r-seg) + 2px);
+}
+body[data-ui="beta"] .quick button {
+  border: 0; background: transparent;
+  border-radius: var(--u-r-seg);
+  color: var(--u-text-2); font-weight: 600; font-size: 13px;
+  min-height: 36px; padding: 6px 8px;
+}
+body[data-ui="beta"] .quick button.active {
+  background: var(--u-cell-press);
+  color: var(--u-text);
+  border-color: transparent;
+}
+
+/* аватар-инициал в списке команды */
+body[data-ui="beta"] .team-avatar {
+  background: var(--u-cell-2); color: var(--u-text-3); font-weight: 700;
+}
+body[data-ui="beta"] .team-avatar.active { background: var(--u-accent-soft); color: var(--u-accent-text); }
+
+/* таблицы (≥860px) и тулбар над ними */
+body[data-ui="beta"] .data-table-toolbar { border-bottom-color: var(--u-sep); }
+body[data-ui="beta"] .data-table-toolbar select,
+body[data-ui="beta"] .data-table-toolbar input {
+  background: var(--u-cell-2); color: var(--u-text);
+  border: 1px solid var(--u-line); border-radius: 10px;
+  min-height: 36px; padding: 6px 10px; font: inherit; font-size: 13px;
+}
+body[data-ui="beta"] .data-table th,
+body[data-ui="beta"] .data-table td { border-color: var(--u-sep); }
+body[data-ui="beta"] .data-table thead th {
+  background: transparent; color: var(--u-text-3);
+  text-transform: none; letter-spacing: 0; font-weight: 600;
+}
+body[data-ui="beta"] .data-table tbody tr:hover { background: var(--u-cell-2); }
+body[data-ui="beta"] .data-table td.good { color: var(--u-success); }
+body[data-ui="beta"] .data-table td.warn { color: var(--u-warning); }
+body[data-ui="beta"] .data-table td.bad { color: var(--u-danger); }
+
+/* heatmap по часам — плитки */
+body[data-ui="beta"] .hm-cell { border-radius: var(--u-r-md); border: 1px solid var(--u-line); }
+body[data-ui="beta"] .hm-cell .h { color: var(--u-text-3); font-weight: 600; }
+body[data-ui="beta"] .hm-cell .v { font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .hm-cell.best { outline-offset: -1px; }
+
+/* =========================================================
+   ГРАФИК — дни как плитки
+   ========================================================= */
+body[data-ui="beta"] .month-nav { padding: 0 0 12px; }
+body[data-ui="beta"] .month-nav button {
+  width: 44px; height: 44px; border-radius: 999px;
+  background: var(--u-cell); border: 1px solid var(--u-line);
+  color: var(--u-text); box-shadow: none;
+}
+body[data-ui="beta"] .month-nav button:active { background: var(--u-cell-press); transform: scale(.92); }
+body[data-ui="beta"] .month-nav .label {
+  font-size: 20px; font-weight: 700; letter-spacing: var(--u-tr-tight);
+}
+body[data-ui="beta"] .sch-week-head div {
+  text-transform: none; font-size: 12px; color: var(--u-text-3);
+}
+body[data-ui="beta"] .sch-emp { border-radius: var(--u-r-lg); margin-bottom: 16px; }
+body[data-ui="beta"] .sch-emp-head {
+  border-bottom: 0; padding: 14px 16px 4px;
+  font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+}
+body[data-ui="beta"] .sch-emp-head .cnt {
+  font-size: 12px; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--u-cell-2); color: var(--u-text-3);
+}
+body[data-ui="beta"] .sch-grid { gap: 5px; padding: 10px 12px 14px; }
+body[data-ui="beta"] .sch-cell {
+  border-radius: var(--u-r-sm);
+  background: var(--u-cell-2);
+  color: var(--u-text-3);
+}
+body[data-ui="beta"] .sch-cell .d { font-weight: 600; color: var(--u-text-2); font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .sch-cell.work {
+  background: var(--u-accent-soft);
+  color: var(--u-accent-text);
+  border: 1px solid color-mix(in srgb, var(--u-accent) 35%, transparent);
+}
+body[data-ui="beta"] .sch-cell.work .d { color: var(--u-accent-text); font-weight: 700; }
+body[data-ui="beta"] .sch-cell.off { opacity: .45; }
+body[data-ui="beta"] .sch-cell.pad { background: transparent; opacity: .3; }
+/* сводная таблица месяца */
+body[data-ui="beta"] .sum-sch-table th,
+body[data-ui="beta"] .sum-sch-table td { border-color: var(--u-sep); }
+body[data-ui="beta"] .sum-sch-table thead th,
+body[data-ui="beta"] thead .sum-sch-name { background: var(--u-cell-2); color: var(--u-text-3); }
+body[data-ui="beta"] .sum-sch-name { background: var(--u-cell); }
+body[data-ui="beta"] .sum-sch-cell.off { background: var(--u-cell-2); }
+
+/* =========================================================
+   ЧАТ — пузыри и композер. Высота страницы, клавиатура и
+   положение элементов не трогаются (core.ts / chat/index.ts).
+   ========================================================= */
+body[data-ui="beta"] .chat-scroll-box { padding: 12px 16px; }
+body[data-ui="beta"] .chat-feed { gap: 6px; }
+body[data-ui="beta"] .chat-bubble {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: 18px 18px 18px 6px;
+  padding: 8px 12px 6px;
+}
+body[data-ui="beta"] .chat-message-mine .chat-bubble {
+  background: var(--u-primary);
+  border-color: transparent;
+  border-radius: 18px 18px 6px 18px;
+}
+body[data-ui="beta"] .chat-message-mine .chat-bubble-text,
+body[data-ui="beta"] .chat-message-mine .chat-sender-name { color: var(--u-on-primary); }
+body[data-ui="beta"] .chat-message-mine .chat-bubble-text a { color: inherit; }
+body[data-ui="beta"] .chat-message-mine .chat-sender-role,
+body[data-ui="beta"] .chat-message-mine .chat-bubble-time { color: var(--u-on-primary); opacity: .72; }
+body[data-ui="beta"] .chat-message-mine .chat-retry-btn { color: var(--u-on-primary); text-decoration: underline; }
+body[data-ui="beta"] .chat-message-mine .chat-attachment {
+  background: rgba(255,255,255,.16); border-color: transparent; color: var(--u-on-primary);
+}
+body[data-ui="beta"] .chat-message-mine .chat-attachment-size { color: inherit; opacity: .72; }
+body[data-ui="beta"] .chat-sender-name { font-weight: 600; color: var(--u-accent-text); }
+body[data-ui="beta"] .chat-sender-role,
+body[data-ui="beta"] .chat-bubble-time { color: var(--u-text-3); }
+body[data-ui="beta"] .chat-bubble-text { font-size: 15px; line-height: 1.38; }
+body[data-ui="beta"] .chat-bubble-time { justify-content: flex-end; font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .chat-attachment {
+  background: var(--u-cell-2); border-color: var(--u-line); border-radius: var(--u-r-sm);
+}
+body[data-ui="beta"] .chat-new-messages {
+  background: var(--u-glass); color: var(--u-text);
+  border: 1px solid var(--u-glass-line);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+body[data-ui="beta"] .chat-composer {
+  background: transparent;
+  border-top: 0;
+  padding-left: 12px; padding-right: 12px;
+}
+body[data-ui="beta"] .chat-composer-row { align-items: flex-end; gap: 8px; }
+body[data-ui="beta"] .chat-attach-btn { width: 44px; height: 44px; border-radius: 999px; }
+body[data-ui="beta"] .chat-composer-input {
+  min-height: 44px;
+  padding: 11px 16px;
+  font-size: 16px; /* <16px зумит страницу в iOS Safari при фокусе */
+  line-height: 1.3;
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: 22px;
+}
+body[data-ui="beta"] .chat-composer-input::placeholder { color: var(--u-text-3); }
+body[data-ui="beta"] .chat-composer-input:focus { border-color: var(--u-accent); }
+body[data-ui="beta"] .chat-composer-input:focus-visible { outline: 0; }
+body[data-ui="beta"] .chat-send-btn {
+  background: var(--u-primary); color: var(--u-on-primary);
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-short);
+}
+body[data-ui="beta"] .chat-send-btn:active:not(:disabled) { transform: scale(.92); background: var(--u-primary-press); }
+body[data-ui="beta"] .chat-send-btn:disabled { background: var(--u-cell); color: var(--u-text-3); box-shadow: inset 0 0 0 1px var(--u-line); }
+body[data-ui="beta"] .chat-composer-file { background: var(--u-cell); border: 1px solid var(--u-line); }
+
+/* =========================================================
+   КАБИНЕТ СУПЕРВАЙЗЕРА + Command Center: фиолет → синее семейство T2,
+   жёсткие hex-цвета → семантические токены беты
+   ========================================================= */
+body[data-ui="beta"] .sv-hero {
+  margin: 4px 0 12px;
+  border-radius: var(--u-r-xl);
+  background: var(--u-hero);
+  color: var(--u-on-hero);
+  border: 0;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+}
+body[data-ui="beta"] .sv-hero::after { background: radial-gradient(circle, rgba(127,211,255,.22), transparent 70%); }
+body[data-ui="beta"] .sv-kicker { color: var(--u-on-hero-2); letter-spacing: .08em; }
+body[data-ui="beta"] .sv-title { font-weight: 700; letter-spacing: var(--u-tr-tight); }
+body[data-ui="beta"] .sv-hero .sv-sub,
+body[data-ui="beta"] .sv-hero .sv-metric .l,
+body[data-ui="beta"] .sv-pace { color: var(--u-on-hero-2); }
+body[data-ui="beta"] .sv-ring { background: conic-gradient(var(--sv-h, #fff) calc(var(--sv-p, 0) * 1%), var(--u-on-hero-fill) 0); }
+body[data-ui="beta"] .sv-ring::before { background: var(--u-hero-3); }
+body[data-ui="beta"] .sv-metric {
+  background: var(--u-hero-chip); border-color: var(--u-on-hero-line); border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .sv-metric .l { text-transform: none; letter-spacing: 0; font-weight: 600; }
+body[data-ui="beta"] .sv-metric .n { font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .sv-pace b.ahead { color: #7DF0A8; }
+body[data-ui="beta"] .sv-pace b.behind { color: #FFB1B3; }
+
+body[data-ui="beta"] .sv-section {
+  margin: 16px 4px 8px; color: var(--u-text-3);
+  font-size: 13px; font-weight: 600; letter-spacing: 0;
+}
+body[data-ui="beta"] .sv-drop {
+  margin: 8px 0; border-radius: var(--u-r-md);
+  background: var(--u-danger-soft); border: 1px solid transparent;
+}
+body[data-ui="beta"] .sv-drop.warn { background: var(--u-warning-soft); border-color: transparent; }
+body[data-ui="beta"] .sv-drop .s { color: var(--u-text-2); }
+body[data-ui="beta"] .sv-chart { margin: 8px 0 12px; border-radius: var(--u-r-lg); }
+body[data-ui="beta"] .sv-store {
+  margin: 8px 0; border-radius: var(--u-r-lg);
+  border-left: 1px solid var(--u-line);
+  box-shadow: inset 3px 0 0 var(--sc, var(--u-accent));
+}
+body[data-ui="beta"] .sv-store-org,
+body[data-ui="beta"] .sv-rank .org { color: var(--u-accent-text); }
+body[data-ui="beta"] .sv-store-name { font-weight: 700; }
+body[data-ui="beta"] .sv-store-code,
+body[data-ui="beta"] .sv-staff,
+body[data-ui="beta"] .sv-rank .sub { color: var(--u-text-3); }
+body[data-ui="beta"] .sv-bar-track { background: var(--u-track); }
+body[data-ui="beta"] .sv-badge { font-weight: 700; font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .sv-badge.good,
+body[data-ui="beta"] .cc-health.good { background: var(--u-success-soft); color: var(--u-success); border-color: transparent; }
+body[data-ui="beta"] .sv-badge.mid,
+body[data-ui="beta"] .cc-health.mid { background: var(--u-warning-soft); color: var(--u-warning); border-color: transparent; }
+body[data-ui="beta"] .sv-badge.bad,
+body[data-ui="beta"] .cc-health.bad { background: var(--u-danger-soft); color: var(--u-danger); border-color: transparent; }
+body[data-ui="beta"] .store-pct.good { color: var(--u-success); }
+body[data-ui="beta"] .store-pct.mid { color: var(--u-warning); }
+body[data-ui="beta"] .store-pct.bad { color: var(--u-danger); }
+body[data-ui="beta"] .sv-rank { margin: 6px 0; border-radius: var(--u-r-md); }
+body[data-ui="beta"] .sv-rank .pos {
+  border-radius: 999px; background: var(--u-cell-2); color: var(--u-text-2);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .sv-rank .pos.gold { background: var(--u-warning-soft); color: var(--u-warning); }
+body[data-ui="beta"] .sv-exit-btn {
+  margin: 0 0 12px; min-height: 36px;
+  background: var(--u-cell); border: 1px solid var(--u-line); color: var(--u-text);
+  font-weight: 600;
+}
+body[data-ui="beta"] #bottomNavSupervisor .nav-item.active { color: var(--u-accent); }
+body[data-ui="beta"] #page-sv-trend > .field { margin: 0 0 12px !important; }
+body[data-ui="beta"] .cc-line { color: var(--u-text-2); }
+body[data-ui="beta"] .cc-line b { color: var(--u-text); font-variant-numeric: tabular-nums; }
+body[data-ui="beta"] .cc-line.cc-up { color: var(--u-success); }
+body[data-ui="beta"] .cc-line.cc-down { color: var(--u-danger); }
+
+/* ---------- Кнопка «Назад» на профилях точки/сотрудника ---------- */
+body[data-ui="beta"] :is(#page-store-profile, #page-employee-profile) > .icon-btn {
+  margin: 0 0 12px !important;
+  background: var(--u-cell) !important;
+  border: 1px solid var(--u-line);
+  font-size: 22px;
+}
+
+/* ---------- Компактные ghost-кнопки внутри форм (прогноз, what-if) ---------- */
+body[data-ui="beta"] :is(#page-forecast, #page-announce, #page-reportimg) .progress-block .btn-ghost {
+  min-height: 44px; padding: 10px 12px; font-size: 15px;
+}
+body[data-ui="beta"] #page-announce label input[type="checkbox"],
+body[data-ui="beta"] #page-forecast label input[type="checkbox"] { accent-color: var(--u-accent); width: 18px; height: 18px; }
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .month-nav button:active,
+  body[data-ui="beta"] .chat-send-btn:active:not(:disabled) { transform: none; }
+}
+
+/* =========================================================
+   Нижний отступ: последние строки любых списков (команда, график,
+   sv-*, история…) выходят из-под плавающей капсулы таб-бара.
+   Капсула ~64px + 12px от низа + safe-area; запас 24px.
+   ========================================================= */
+@media (max-width: 1199px) {
+  body[data-ui="beta"] .sheet {
+    padding-bottom: calc(64px + 36px + var(--app-safe-bottom, 0px));
+  }
+  /* на экранах плана ещё и FAB над капсулой */
+  body[data-ui="beta"]:has(#page-plan.active, #page-monthplan.active) .sheet {
+    padding-bottom: calc(64px + 96px + var(--app-safe-bottom, 0px));
+  }
+}
+/* Холст за пределами body (overscroll, короткие экраны) — цвет страницы,
+   а не белый html по умолчанию. Токены живут на body, поэтому литералы. */
+html:has(> body[data-ui="beta"]) { background: #F2F2F7; }
+html:has(> body[data-ui="beta"][data-theme="dark"]) { background: #08090A; }

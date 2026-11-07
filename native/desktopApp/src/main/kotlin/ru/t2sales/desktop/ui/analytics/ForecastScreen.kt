@@ -252,7 +252,7 @@ private fun body(date: String, moves: List<Move>): JsonObject = buildJsonObject 
 
 @Composable
 private fun Card(content: @Composable () -> Unit) {
-    val shape = RoundedCornerShape(T2Radius.default)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) T2Radius.cell else T2Radius.default)
     Column(modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(14.dp)) { content() }
 }
 

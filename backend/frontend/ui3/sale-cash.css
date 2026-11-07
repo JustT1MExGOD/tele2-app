@@ -1,0 +1,568 @@
+/* =========================================================
+   T2 Sales — Beta UI 3.0 «Ночная смена» · sale + cash layer
+   Источник: design-system/ui3/v5-team (index.html, NOTES.md).
+   Все селекторы — только внутри body[data-ui="beta"].
+   Экраны: шторка «Добавить продажу» (#overlay .sheet-modal,
+   разметка из features/add-sale) и страница «Касса» (#page-cash,
+   разметка из pages/cash-metrics).
+   ========================================================= */
+
+/* =========================================================
+   ШТОРКА ПРОДАЖИ — iOS bottom sheet на --u-page, grouped cards
+   ========================================================= */
+
+/* Сама шторка: холст page-цвета, под ним внутренние карточки на --u-cell.
+   .sheet-modal уже получает углы/скрим/анимацию в base.css — тут только
+   внутреннее устройство листа. */
+body[data-ui="beta"] .sheet-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  max-height: 92dvh;
+  overflow: hidden;
+  padding-top: 6px;
+}
+body[data-ui="beta"] .sheet-modal .modal-title {
+  flex: none;
+  margin: 2px 0 10px;
+  /* legacy даёт padding-right: 40px под крестик — заголовок уезжал влево.
+     Симметричные поля по обе стороны держат его по центру листа. */
+  padding-inline: 44px;
+  min-height: 30px; line-height: 30px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Тело листа — скроллится, футер с CTA закреплён (concept .sheet-body) */
+body[data-ui="beta"] .sheet-modal #modalBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 0 16px 8px;
+}
+body[data-ui="beta"] .sheet-modal #modalBody::-webkit-scrollbar { display: none; }
+
+/* Кнопка закрытия — iOS-кружок как у .ib, справа сверху листа */
+body[data-ui="beta"] .sheet-modal .modal-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  transition: transform var(--u-dur-micro) var(--u-ease-out);
+}
+body[data-ui="beta"] .sheet-modal .modal-close-btn:active { transform: scale(.92); }
+
+/* --- Кто продаёт: сгруппированная карточка с select-строками --- */
+body[data-ui="beta"] .sheet-modal .u3-sale-who {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  padding: 2px 16px;
+  margin-bottom: 16px;
+}
+body[data-ui="beta"] .sheet-modal .u3-sale-who .field { margin: 0; padding: 10px 0; }
+body[data-ui="beta"] .sheet-modal .u3-sale-who .field + .field { border-top: 1px solid var(--u-sep); }
+body[data-ui="beta"] .sheet-modal .u3-sale-who label { display: block; margin-bottom: 4px; }
+body[data-ui="beta"] .sheet-modal .u3-sale-who select {
+  width: 100%;
+  min-height: 40px;
+  background: var(--u-cell-2);
+}
+body[data-ui="beta"] .sheet-modal .u3-sale-who .field > div { color: var(--u-text-3); }
+
+/* --- «Тип» — сетка чипов уже стилизована в base (.mchip); чуть компактнее --- */
+body[data-ui="beta"] .sheet-modal .u3-sale-types { margin-bottom: 14px; }
+body[data-ui="beta"] .sheet-modal .u3-sale-types > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--u-text-3);
+  padding: 0 4px 8px;
+}
+body[data-ui="beta"] .sheet-modal .metric-grid { gap: 8px; }
+
+/* --- «Количество» — inset-grouped список метрик с iOS-степперами --- */
+body[data-ui="beta"] .sheet-modal .u3-sale-qty > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--u-text-3);
+  padding: 0 4px 8px;
+}
+body[data-ui="beta"] .sheet-modal #saleQtyList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  overflow: hidden;
+}
+/* iOS inset-разделитель: начинается после текста строки, а не от левого края */
+body[data-ui="beta"] .sheet-modal .qty-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 12px 8px 16px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+body[data-ui="beta"] .sheet-modal .qty-row + .qty-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 16px;
+  height: 1px;
+  background: var(--u-sep);
+}
+body[data-ui="beta"] .sheet-modal .qty-row .qty-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--u-text);
+}
+body[data-ui="beta"] .sheet-modal .qty-row .qty-label small {
+  display: block;
+  font-weight: 500;
+  font-size: 12px;
+  opacity: 1;
+  color: var(--u-text-3);
+  margin: 1px 0 0;
+}
+/* денежные метрики: «₽» — внутри поля, прижат вправо (.u3-money-suffix),
+   поэтому под названием единицу не дублируем */
+body[data-ui="beta"] .sheet-modal .qty-row.u3-money .qty-label small { display: none; }
+body[data-ui="beta"] .sheet-modal .qty-row.u3-money .u3-stepper {
+  position: relative;
+  grid-template-columns: 44px 88px 44px;
+}
+body[data-ui="beta"] .sheet-modal .qty-row.u3-money .u3-stepper input {
+  width: 88px;
+  text-align: right;
+  padding: 0 24px 0 6px;
+}
+body[data-ui="beta"] .sheet-modal .u3-money-suffix[hidden] {
+  display: block;
+  position: absolute;
+  top: 50%; right: 54px;
+  transform: translateY(-50%);
+  font-size: 14px; font-weight: 600; line-height: 1;
+  color: var(--u-text-3);
+  pointer-events: none;
+}
+body[data-ui="beta"] .sheet-modal .qty-empty {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--u-text-3);
+}
+
+/* Степпер: − · N · + на общей пилюле, хит-зоны 44×36 (concept .stepper) */
+body[data-ui="beta"] .sheet-modal .u3-stepper {
+  flex: none;
+  display: inline-grid;
+  grid-template-columns: 44px 40px 44px;
+  align-items: center;
+  height: 36px;
+  border-radius: var(--u-r-sm);
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+}
+body[data-ui="beta"] .sheet-modal .u3-step[hidden],
+body[data-ui="beta"] .sheet-modal .u3-step {
+  height: 44px;
+  margin: -5px 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--u-text);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--u-dur-micro) var(--u-ease-out), opacity var(--u-dur-micro);
+}
+body[data-ui="beta"] .sheet-modal .u3-step:active { transform: scale(.94); }
+body[data-ui="beta"] .sheet-modal .u3-step:first-child { border-radius: var(--u-r-sm) 0 0 var(--u-r-sm); }
+body[data-ui="beta"] .sheet-modal .u3-step:last-child { border-radius: 0 var(--u-r-sm) var(--u-r-sm) 0; }
+/* само число — табличное, без рамки: степпер сам и есть поле ввода */
+body[data-ui="beta"] .sheet-modal .u3-stepper input {
+  width: 40px;
+  min-height: 36px;
+  padding: 0;
+  text-align: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--u-text);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 1px 0 0 var(--u-line), inset -1px 0 0 var(--u-line);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+body[data-ui="beta"] .sheet-modal .u3-stepper input::-webkit-outer-spin-button,
+body[data-ui="beta"] .sheet-modal .u3-stepper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+body[data-ui="beta"] .sheet-modal .u3-stepper input:focus-visible {
+  outline: 0;
+  background: var(--u-accent-soft);
+}
+
+/* Быстрые сеты 1/2/5/10 — маленькие тихие чипы под списком
+   («Всем: 1 2 5 10»), не вторая полоса степперов */
+body[data-ui="beta"] .sheet-modal .u3-sale-qty .quick {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  margin: 10px 4px 0; padding: 0;
+  background: transparent; border: 0; border-radius: 0; box-shadow: none;
+}
+body[data-ui="beta"] .sheet-modal .u3-sale-qty .quick::before {
+  content: "Всем:";
+  font-size: 13px; font-weight: 500; color: var(--u-text-3);
+  margin-right: 2px;
+}
+body[data-ui="beta"] .sheet-modal .u3-sale-qty .quick button {
+  flex: none;
+  position: relative;
+  min-width: 40px; height: 28px; min-height: 28px;
+  padding: 0 12px;
+  font-size: 13px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  background: var(--u-accent-soft);
+  border: 0;
+  color: var(--u-accent-text);
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-short);
+}
+/* хит-зона 44px при визуальных 28px */
+body[data-ui="beta"] .sheet-modal .u3-sale-qty .quick button::after {
+  content: ""; position: absolute; inset: -8px -2px;
+}
+body[data-ui="beta"] .sheet-modal .u3-sale-qty .quick button:active {
+  transform: scale(.95);
+  background: color-mix(in srgb, var(--u-accent) 22%, transparent);
+}
+
+/* Футер листа: строка «В продаже: …» + первичная кнопка, закреплён внизу
+   (concept .sheet-foot — выносится из скроллящегося тела) */
+body[data-ui="beta"] .sheet-modal .u3-sale-foot {
+  /* футер живёт внутри скроллящегося #modalBody — sticky держит итог и
+     CTA у нижнего края листа, пока длинный список метрик прокручивается */
+  position: sticky;
+  bottom: -8px; /* компенсирует padding-bottom #modalBody */
+  z-index: 3;
+  margin: 12px -16px -8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--u-sep);
+  background: var(--u-page);
+}
+body[data-ui="beta"] .sheet-modal .u3-sale-foot .u3-foot-meta {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--u-accent-text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  min-height: 18px;
+  padding-bottom: 8px;
+}
+body[data-ui="beta"] .sheet-modal .u3-sale-foot .u3-foot-meta:empty { padding-bottom: 0; min-height: 0; }
+
+/* =========================================================
+   КАССА — hero «Δ наличные», сгруппированная сверка, история
+   ========================================================= */
+
+/* Hero — плоская карточка (concept .hero.flat: на экране один градиент,
+   у Кассы его нет), число в --warning при расхождении */
+body[data-ui="beta"] #page-cash .u3-cash-hero {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  padding: 16px;
+  margin: 0 0 16px;
+}
+body[data-ui="beta"] #page-cash .u3-cash-hero .u3-ch-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--u-text-3);
+  margin-bottom: 8px;
+}
+body[data-ui="beta"] #page-cash .u3-cash-hero .u3-ch-num {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: var(--u-tr-hero);
+  line-height: 1.05;
+  color: var(--u-text);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] #page-cash .u3-cash-hero .u3-ch-num.warn { color: var(--u-warning); }
+body[data-ui="beta"] #page-cash .u3-cash-hero .u3-ch-sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--u-success);
+  font-weight: 600;
+}
+body[data-ui="beta"] #page-cash .u3-cash-hero .u3-ch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--u-warning-soft);
+  color: var(--u-warning);
+  font-size: 12px;
+  font-weight: 600;
+}
+/* hero, таилы и кнопки степпера в разметке [hidden] — видны только в бете */
+body[data-ui="beta"] #page-cash .u3-cash-hero[hidden] { display: block; }
+body[data-ui="beta"] #page-cash .u3-cash-hero .u3-ch-sub.u3-muted { color: var(--u-text-3); font-weight: 500; }
+
+/* Форма «Внести кассу» — тот же grouped-стиль, уже покрыт base (.section,
+   .field, .btn-main). Только заголовок и отступы по концепту. */
+body[data-ui="beta"] #page-cash #cashEditSection .progress-block { padding: 4px 16px 16px; }
+body[data-ui="beta"] #page-cash #cashEditSection .btn-main { margin-top: 4px; }
+body[data-ui="beta"] #page-cash #cashMeta {
+  font-size: 12px;
+  color: var(--u-text-3);
+  padding: 0 16px 8px !important;
+}
+
+/* День = g-head + grouped list: шапка даты сверху списка, не внутри карточки */
+body[data-ui="beta"] #page-cash #cashTable { overflow-x: visible; }
+body[data-ui="beta"] #page-cash .cash-day {
+  margin: 0 0 16px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+body[data-ui="beta"] #page-cash .cash-day:last-child { margin-bottom: 4px; }
+body[data-ui="beta"] #page-cash .cash-day-h {
+  padding: 0 16px 8px;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--u-text-3);
+}
+body[data-ui="beta"] #page-cash .cash-cols {
+  /* в бете колонки подписей не нужны — у строк свои подписи Факт/1С/Δ */
+  display: none;
+}
+
+/* Сама группа — одна карточка на все строки дня (Apple inset grouped) */
+body[data-ui="beta"] #page-cash .cash-day > .cash-cols + .cash-row { border-top-left-radius: var(--u-r-lg); border-top-right-radius: var(--u-r-lg); }
+body[data-ui="beta"] #page-cash .cash-day > .cash-row:last-child { border-bottom-left-radius: var(--u-r-lg); border-bottom-right-radius: var(--u-r-lg); }
+body[data-ui="beta"] #page-cash .cash-day .cash-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0,1fr) auto auto;
+  grid-template-rows: auto auto;
+  grid-template-areas: "tile name fact fact" "tile name c1 d";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 3px;
+  min-height: 56px;
+  padding: 8px 16px;
+  background: var(--u-cell);
+  border: 0;
+  border-left: 1px solid var(--u-line);
+  border-right: 1px solid var(--u-line);
+  font-size: 15px;
+}
+body[data-ui="beta"] #page-cash .cash-day > .cash-cols + .cash-row { border-top: 1px solid var(--u-line); }
+body[data-ui="beta"] #page-cash .cash-day > .cash-row:last-child { border-bottom: 1px solid var(--u-line); }
+/* inset-разделитель между строками — через псевдо на строке ниже */
+body[data-ui="beta"] #page-cash .cash-day .cash-row { position: relative; }
+body[data-ui="beta"] #page-cash .cash-day .cash-row + .cash-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 66px;
+  height: 1px;
+  background: var(--u-sep);
+}
+
+/* Иконка-таил слева (concept .tile.neu) — пустой квадрат, глиф через ::after */
+body[data-ui="beta"] #page-cash .cash-row .u3-cash-tile[hidden],
+body[data-ui="beta"] #page-cash .cash-row .u3-cash-tile {
+  display: block;
+  grid-area: tile;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--u-cell-2);
+  position: relative;
+}
+body[data-ui="beta"] #page-cash .cash-row .u3-cash-tile::after {
+  content: "₽";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--u-text-2);
+}
+body[data-ui="beta"] #page-cash .cash-row .sn {
+  grid-area: name;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--u-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Правая часть: Факт сверху, под ним «1С X» и Δ-чип (concept .r-right) */
+body[data-ui="beta"] #page-cash .cash-row .u3-v-fact {
+  grid-area: fact;
+  justify-self: end;
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--u-text);
+  text-align: right;
+}
+body[data-ui="beta"] #page-cash .cash-row .u3-v-1c {
+  grid-area: c1;
+  justify-self: end;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--u-text-3);
+  font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] #page-cash .cash-row .u3-v-1c::before { content: "1С "; }
+body[data-ui="beta"] #page-cash .cash-row .u3-v-d {
+  grid-area: d;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--u-cell-2);
+  color: var(--u-text-3);
+}
+body[data-ui="beta"] #page-cash .cash-row .u3-v-d.delta-pos {
+  background: var(--u-success-soft);
+  color: var(--u-success);
+}
+body[data-ui="beta"] #page-cash .cash-row .u3-v-d.delta-neg {
+  background: var(--u-danger-soft);
+  color: var(--u-danger);
+}
+
+/* Расхождение: вся строка в warn-заливке (concept .cell.warn-row),
+   таил становится amber, разделитель под ней уходит на всю ширину */
+body[data-ui="beta"] #page-cash .cash-row.u3-warn { background: var(--u-warning-soft); }
+body[data-ui="beta"] #page-cash .cash-row.u3-warn .u3-cash-tile { background: var(--u-warning-soft); }
+body[data-ui="beta"] #page-cash .cash-row.u3-warn .u3-cash-tile::after { content: "Δ"; color: var(--u-warning); }
+body[data-ui="beta"] #page-cash .cash-row.u3-warn + .cash-row::before,
+body[data-ui="beta"] #page-cash .cash-row + .cash-row.u3-warn::before { left: 0; }
+
+/* «Ещё дни» / история — тихий link-тоггл, список как у дня */
+body[data-ui="beta"] #page-cash .mt-more {
+  border-top: 0;
+  margin-top: 4px;
+  padding-top: 0;
+}
+body[data-ui="beta"] #page-cash .mt-toggle {
+  min-height: var(--u-hit);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--u-accent-text);
+}
+body[data-ui="beta"] #page-cash .sv-extra .cash-day { margin-top: 4px; }
+
+/* Тап по строке дня — лёгкий press-отклик */
+body[data-ui="beta"] #page-cash .cash-row[onclick] {
+  cursor: pointer;
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-short);
+}
+body[data-ui="beta"] #page-cash .cash-row[onclick]:active {
+  transform: scale(.985);
+  background: var(--u-cell-press);
+}
+body[data-ui="beta"] #page-cash .cash-row.u3-warn[onclick]:active { background: var(--u-warning-soft); }
+
+/* Reduced motion — без сдвигов и нажатий */
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .sheet-modal .u3-step:active,
+  body[data-ui="beta"] .sheet-modal .u3-sale-qty .quick button:active,
+  body[data-ui="beta"] .sheet-modal .modal-close-btn:active,
+  body[data-ui="beta"] #page-cash .cash-row[onclick]:active { transform: none; }
+}
+
+/* «Касса по дням» в бете — без внешней карточки: hero и группы дней сами
+   являются карточками (иначе card-in-card) */
+body[data-ui="beta"] #page-cash .section:has(#cashTable) {
+  background: transparent;
+  border: 0;
+}
+body[data-ui="beta"] #page-cash .section:has(#cashTable) > .section-title { padding-left: 4px; }
+
+/* ---- итерация 2 ---- */
+/* ским/лист чуть темнее, чтобы карточки читались на фоне */
+body[data-ui="beta"] .overlay { background: var(--u-scrim); }
+
+/* «Можно вносить только свои продажи» — примечание внутри первой строки */
+body[data-ui="beta"] .sheet-modal .u3-sale-who .field > div {
+  font-size: 12px !important;
+  color: var(--u-text-3) !important;
+  margin-top: 2px !important;
+}
+
+/* «Тип» — iOS segmented на тёмном треке; активный — белая карточка в светлой,
+   светло-серая в тёмной (concept .seg + .seg-thumb) */
+body[data-ui="beta"] .sheet-modal .u3-sale-types > label {
+  padding-bottom: 10px;
+}
+body[data-ui="beta"] .sheet-modal .metric-grid {
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--u-cell-2);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-sm);
+  padding: 4px;
+  gap: 4px;
+}
+body[data-ui="beta"] .sheet-modal .metric-grid .mchip {
+  min-height: 36px;
+  padding: 8px 6px;
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--u-text-2);
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-short) var(--u-ease-out), color var(--u-dur-short) var(--u-ease-out);
+}
+body[data-ui="beta"] .sheet-modal .metric-grid .mchip:active { transform: scale(.95); }
+body[data-ui="beta"] .sheet-modal .metric-grid .mchip.on {
+  background: var(--u-cell-press);
+  color: var(--u-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 0 0 1px var(--u-line-2);
+}
+body[data-ui="beta"]:not([data-theme="dark"]) .sheet-modal .metric-grid .mchip.on {
+  background: var(--u-cell);
+}

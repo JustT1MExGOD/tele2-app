@@ -112,7 +112,23 @@ fun TeamScreen(container: AppContainer, me: MeResponse) {
         }
     }
 
-    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+    if (T2Colors.uiBeta) {
+        TeamBeta(
+            container = container, me = me, myRole = myRole, canManage = canManage, isAdmin = isAdmin,
+            employees = employees, sales = sales, failed = failed, orgs = orgs, viewOrgId = viewOrgId,
+            onViewOrg = { viewOrgId = it }, onOpen = { opened = it },
+            onSetRole = { emp, r ->
+                scope.launch {
+                    runCatching { teamApi.setRole(emp.id, r) }
+                        .onSuccess { Toaster.show("Роль: ${roleLabel(r)}"); reloadKey++ }
+                        .onFailure { Toaster.show(it.message ?: "Ошибка", true) }
+                }
+            },
+            onRemove = { confirmRemove = it }, onReload = { reloadKey++ },
+            onAddEmployee = { addEmployee = true }, onAddStore = { addStore = true }, onMetrics = { metricsDialog = true }
+        )
+    } else {
+        Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
         // an administrator looks at one network at a time (the web's org switcher: Дилер → Сектор → Сеть)
         if (isAdmin && orgs.size > 1) {
             OrgSwitcher(orgs, viewOrgId ?: me.org_id) { viewOrgId = it }
@@ -199,6 +215,7 @@ fun TeamScreen(container: AppContainer, me: MeResponse) {
             }
         }
         Spacer(Modifier.height(96.dp))
+    }
     }
 
     if (addEmployee) {
@@ -325,5 +342,132 @@ private fun OrgSwitcher(orgs: List<ru.t2sales.shared.api.OrgAdminItem>, currentI
         SelectField("Сеть", current.name, inSector.map { it.name }) { n ->
             inSector.firstOrNull { it.name == n }?.let { onPick(it.id) }
         }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (tab screen "Команда") =======================
+
+/**
+ * Beta layout: big title, the admin's org switcher, then the team as one grouped list — a cell per employee with an
+ * avatar, today's SIM/Комбо/Тел in the sub and a chevron; role chips and «Удалить» keep their manager gate under the cell.
+ * «Управление» becomes a second group of action cells.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TeamBeta(
+    container: AppContainer, me: MeResponse, myRole: String, canManage: Boolean, isAdmin: Boolean,
+    employees: List<EmployeeListItem>?, sales: JsonArray, failed: Boolean,
+    orgs: List<ru.t2sales.shared.api.OrgAdminItem>, viewOrgId: String?,
+    onViewOrg: (String) -> Unit, onOpen: (EmployeeListItem) -> Unit,
+    onSetRole: (EmployeeListItem, String) -> Unit, onRemove: (EmployeeListItem) -> Unit, onReload: () -> Unit,
+    onAddEmployee: () -> Unit, onAddStore: () -> Unit, onMetrics: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val teamApi = container.teamApi
+    val today = remember { LocalDate.now(ZoneId.of("Europe/Moscow")).toString() }
+    fun export(type: String) {
+        val month = today.take(7)
+        val path = when (type) {
+            "sales" -> "/export/sales.csv?from=$month-01&to=$today"
+            "bfq" -> "/export/bfq.csv?month=$month"
+            else -> "/export/schedules.csv?month=$month"
+        }
+        scope.launch {
+            runCatching { teamApi.exportCsv(path) }
+                .onSuccess { bytes -> FileShare.share("${type}_$month.csv", "text/csv", bytes) }
+                .onFailure { Toaster.show("Ошибка экспорта", true) }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp)) {
+        U3LargeTitle("Команда")
+
+        // an administrator looks at one network at a time (the web's org switcher: Дилер → Сектор → Сеть)
+        if (isAdmin && orgs.size > 1) {
+            OrgSwitcher(orgs, viewOrgId ?: me.org_id, onViewOrg)
+            Spacer(Modifier.height(12.dp))
+        }
+
+        val list = employees
+        when {
+            failed -> ErrorState("Не получилось загрузить команду, зайди чуть позже", onRetry = onReload)
+            list == null -> SkeletonBlock(Modifier.fillMaxWidth().height(200.dp), 28.dp)
+            list.isEmpty() -> EmptyText("В команде пока никого нет")
+            else -> {
+                val totals = HashMap<Int, DayTotals>()
+                sales.forEach { row ->
+                    val o = row as? JsonObject ?: return@forEach
+                    val id = o["employee_id"]?.jsonPrimitive?.intOrNull ?: return@forEach
+                    val t = totals.getOrPut(id) { DayTotals() }
+                    t.sim += o.num("sim"); t.combo += o.num("combo"); t.phones += o.num("phones"); t.active = true
+                }
+                val mine = if (canManage) assignableRoles(myRole).filter { it != "supervisor" } else emptyList()
+                U3GroupHead("Сотрудники", "${list.size}")
+                U3Group {
+                    list.sortedBy { it.full_name.lowercase() }.forEachIndexed { i, e ->
+                        if (i > 0) U3Sep()
+                        val t = totals[e.id] ?: DayTotals()
+                        U3Cell(
+                            e.full_name + if (e.role != "employee" && e.role != "trainee" && e.role.isNotBlank()) " ★" else "",
+                            "SIM ${t.sim.toInt()} · Комбо ${t.combo.toInt()} · Тел ${t.phones.toInt()} · ${roleLabel(e.role)}",
+                            highlight = e.id == me.employee_id,
+                            leading = {
+                                AvatarImage(teamApi, e.id, e.full_name.trim().take(1).uppercase(), 38.dp, active = t.active)
+                            },
+                            trailing = { Text("›", color = T2Colors.hint, fontSize = 18.sp) },
+                            onClick = { onOpen(e) }
+                        )
+                        if (canManage) {
+                            FlowRow(Modifier.padding(start = 66.dp, end = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                mine.filter { it != e.role }.forEach { r -> Chip(roleLabel(r)) { onSetRole(e, r) } }
+                                Chip("Удалить", danger = true) { onRemove(e) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (canManage) {
+            U3GroupHead("Управление")
+            U3Group {
+                U3Cell("История продаж", leading = { U3IconTile(NavIcons.history) }, onClick = { HistoryFilter.employeeId = null; Nav.open(Page.History) })
+                U3Sep()
+                U3Cell("BFQ", leading = { U3IconTile(NavIcons.bfq) }, onClick = { Nav.open(Page.Bfq) })
+                U3Sep()
+                U3Cell("Экспорт продаж CSV", leading = { U3IconTile(NavIcons.download) }, onClick = { export("sales") })
+                U3Sep()
+                U3Cell("Экспорт BFQ CSV", leading = { U3IconTile(NavIcons.download) }, onClick = { export("bfq") })
+                U3Sep()
+                U3Cell("Экспорт графика CSV", leading = { U3IconTile(NavIcons.download) }, onClick = { export("schedules") })
+                U3Sep()
+                U3Cell("Добавить сотрудника", leading = { U3IconTile(NavIcons.plus) }, onClick = onAddEmployee)
+                U3Sep()
+                U3Cell("Добавить точку", leading = { U3IconTile(NavIcons.svStores) }, onClick = onAddStore)
+                if (isAdmin) {
+                    U3Sep()
+                    U3Cell("Сети", leading = { U3IconTile(NavIcons.globe) }, onClick = { Nav.open(Page.Orgs) })
+                    U3Sep()
+                    U3Cell("История действий", leading = { U3IconTile(NavIcons.auditClock) }, onClick = { Nav.open(Page.Audit) })
+                    U3Sep()
+                    U3Cell("Дилеры/Секторы", leading = { U3IconTile(NavIcons.dealers) }, onClick = { Nav.open(Page.Dealers) })
+                }
+                U3Sep()
+                U3Cell("Новая метрика плана", "SIM, MNP… + свои пункты", leading = { U3IconTile(NavIcons.newMetric) }, onClick = onMetrics)
+                if (isAdmin) {
+                    U3Sep()
+                    U3Cell("Тикеты поддержки", leading = { U3Tile("🆘") }, onClick = { Nav.open(Page.Support) })
+                }
+                if (myRole == "supervisor" || isAdmin) {
+                    U3Sep()
+                    U3Cell("Кабинет супервайзера", leading = { U3IconTile(NavIcons.svOverview) }, onClick = { Nav.open(Page.SvOverview) })
+                }
+                if (isAdmin) {
+                    U3Sep()
+                    U3Cell("Admin Center", "Организации, точки, сотрудники, коррекции", leading = { U3IconTile(NavIcons.settings) }, onClick = { Nav.open(Page.AdminCenter) })
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
     }
 }

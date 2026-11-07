@@ -71,6 +71,22 @@ export async function loadLeaderboard(): Promise<void> {
   }
 }
 
+function u3Initials(name: string): string {
+  return String(name || '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+}
+
+/** «Игорь Смирнов» → «Игорь С.» (подиум, как в концепте). */
+function u3ShortName(name: string): string {
+  const [a, b] = String(name || '').trim().split(/\s+/);
+  return b ? `${a} ${b[0]}.` : a || '';
+}
+
 function renderList(body: HTMLElement, res: LeaderboardResponse): void {
   if (!res.items.length) {
     body.innerHTML = `<div class="empty-state">
@@ -82,11 +98,57 @@ function renderList(body: HTMLElement, res: LeaderboardResponse): void {
   }
   const max = res.items[0].value || 1;
   const unitSuffix = res.metric.unit === 'money' ? ' ₽' : '';
-  body.innerHTML = `<div class="progress-block">${res.items
+  // API отдаёт 'count' | 'money'; человекочитаемая единица — из каталога
+  // метрик (window.METRICS: «шт» / «₽»), иначе по типу.
+  const catalogUnit = (window.METRICS || []).find((m) => m.id === res.metric.id)?.unit || '';
+  const unit = catalogUnit || (res.metric.unit === 'money' ? '₽' : 'шт');
+
+  // Beta UI 3.0 «Ночная смена» — подиум 2-1-3 и список ячейками. Блоки
+  // с атрибутом hidden невидимы в legacy, ui3/plans-rating.css показывает
+  // их и прячет legacy-вертикальные бары (toggle без перерисовки).
+  const myId = me?.employee_id != null ? String(me.employee_id) : '';
+  const meIdx = res.items.findIndex((it) => String(it.employee_id) === myId);
+  const podiumItems = res.items.slice(0, 3);
+  const podOrder = [1, 0, 2];
+  const podium =
+    podiumItems.length >= 3
+      ? `<div class="u3-only u3-podium" hidden>${podOrder
+          .map((i) => {
+            const it = podiumItems[i];
+            const mine = i === meIdx;
+            return `<div class="u3-pod${i === 0 ? ' first' : ''}${mine ? ' me' : ''}">
+              <span class="u3-pod-rank">${it.rank} место</span>
+              <span class="u3-avatar${i === 0 || mine ? ' acc' : ''}">${esc(u3Initials(it.full_name))}</span>
+              <span class="u3-pod-name" title="${esc(it.full_name)}">${esc(u3ShortName(it.full_name))}</span>
+              <span class="u3-pod-val">${it.value}${unitSuffix}</span>
+            </div>`;
+          })
+          .join('')}</div>`
+      : '';
+  const cells = res.items
+    .map((it) => {
+      const mine = String(it.employee_id) === myId;
+      return `<div class="u3-only u3-cell${mine ? ' me' : ''}"${mine ? ' aria-current="true"' : ''} hidden>
+        <span class="u3-rank">${it.rank}</span>
+        <span class="u3-avatar${mine ? ' acc' : ''}">${esc(u3Initials(it.full_name))}</span>
+        <span class="u3-c-main"><span class="u3-c-t">${mine ? 'Вы, ' + esc(it.full_name) : esc(it.full_name)}</span></span>
+        <span class="u3-c-r">${it.value.toLocaleString('ru-RU')}<span class="u3-c-s">${esc(unit)}</span></span>
+      </div>`;
+    })
+    .join('');
+  const gap =
+    meIdx > 0
+      ? `<p class="u3-only u3-gap-note" hidden>До ${res.items[meIdx - 1].rank} места не хватает <b>${(res.items[meIdx - 1].value - res.items[meIdx].value).toLocaleString('ru-RU')}${unitSuffix ? ' ' + unitSuffix.trim() : ''}</b></p>`
+      : meIdx === 0
+        ? '<p class="u3-only u3-gap-note" hidden>Вы на <b>1 месте</b></p>'
+        : '';
+  const u3 = `${podium}<div class="u3-only u3-group" hidden>${cells}</div>${gap}`;
+
+  const legacy = `<div class="progress-block u3-legacy">${res.items
     .map((item) => {
       const pct = Math.max(2, Math.round((item.value / max) * 100));
       return `
-        <div class="progress-item">
+        <div class="progress-item${String(item.employee_id) === myId ? ' me' : ''}">
           <div class="progress-top">
             <span class="name">${item.rank}. ${esc(item.full_name)}</span>
             <span class="val">${item.value}${unitSuffix}</span>
@@ -95,6 +157,7 @@ function renderList(body: HTMLElement, res: LeaderboardResponse): void {
         </div>`;
     })
     .join('')}</div>`;
+  body.innerHTML = u3 + legacy;
 }
 
 declare global {

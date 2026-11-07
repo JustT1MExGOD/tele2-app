@@ -88,7 +88,7 @@ fun main(args: Array<String>) {
 
     application {
         val container = remember { AppContainer() }
-        remember { T2Colors.dark = ThemePrefs.isDark() }
+        remember { T2Colors.dark = ThemePrefs.isDark(); T2Colors.uiBeta = ThemePrefs.isUiBeta() }
 
         val icon = remember { androidx.compose.ui.graphics.painter.BitmapPainter(androidx.compose.ui.res.useResource("icon.png", ::loadImageBitmapFrom)) }
 
@@ -206,6 +206,26 @@ fun main(args: Array<String>) {
             }
         ) {
             LaunchedEffect(Unit) { AppWindow.awt = window }
+            // immersive dark title bar: the OS frame would stay light next to our dark canvas without it (Windows 11 / Win10 1809+; a no-op elsewhere)
+            LaunchedEffect(Unit) {
+                var applied: Boolean? = null
+                while (true) {
+                    val want = T2Colors.dark || T2Colors.uiBeta
+                    if (applied != want) {
+                        runCatching {
+                            val dwm = com.sun.jna.Native.load("dwmapi", DwmApi::class.java)
+                            dwm.DwmSetWindowAttribute(
+                                com.sun.jna.platform.win32.WinDef.HWND(com.sun.jna.Native.getWindowPointer(window)),
+                                20, // DWMWA_USE_IMMERSIVE_DARK_MODE (19 pre-20H1, 20 since; 20 covers both on modern builds)
+                                com.sun.jna.ptr.IntByReference(if (want) 1 else 0),
+                                4
+                            )
+                        }
+                        applied = want
+                    }
+                    kotlinx.coroutines.delay(800)
+                }
+            }
             // the splash (always on top), the tray, a hotkey or a second start asked for the client: bring it to the front
             LaunchedEffect(AppWindow.frontTick) {
                 if (AppWindow.visible) { window.isMinimized = false; window.toFront(); window.requestFocus() }
@@ -325,3 +345,8 @@ private fun AppRoot(container: AppContainer, initialMe: MeResponse?) {
 }
 
 private fun loadImageBitmapFrom(stream: java.io.InputStream) = androidx.compose.ui.res.loadImageBitmap(stream)
+
+/** dwmapi.dll: DwmSetWindowAttribute, used to switch the non-client area (title bar) to dark. */
+private interface DwmApi : com.sun.jna.Library {
+    fun DwmSetWindowAttribute(hwnd: com.sun.jna.platform.win32.WinDef.HWND?, dwAttribute: Int, pvAttribute: com.sun.jna.ptr.IntByReference, cbAttribute: Int): Int
+}

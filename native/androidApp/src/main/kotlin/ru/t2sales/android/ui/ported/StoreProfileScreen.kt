@@ -43,6 +43,7 @@ import ru.t2sales.android.AppContainer
 import ru.t2sales.shared.api.MeResponse
 import ru.t2sales.shared.navigation.Screen
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
 
 private val HEALTH_LABEL = mapOf("plan" to "План", "trend" to "Темп дня", "staffing" to "Штат", "cash_discipline" to "Касса")
 
@@ -82,6 +83,12 @@ fun StoreProfileScreen(container: AppContainer, me: MeResponse, onNavigate: (Scr
             val comps = health["components"].obj()
             val staff = store["staff"].arr().map { it.obj().let { s -> s["name"].str().ifEmpty { s["full_name"].str() } } }.filter { it.isNotEmpty() }.joinToString(", ")
 
+            if (T2Colors.uiBeta) {
+                StoreProfileBeta(d, store, health, score, comps, staff, canManage, onNavigate,
+                    onRename = { renaming = true })
+                if (renaming) StoreRenameSheet(storeId, store, scope, container, onDismiss = { renaming = false }) { reload++ }
+                return
+            }
             PageSection(null) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
@@ -182,6 +189,112 @@ fun StoreProfileScreen(container: AppContainer, me: MeResponse, onNavigate: (Scr
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+/** Beta profile: the health ring leads the hero; components, today, trend, tasks and alerts as flat groups. */
+@Composable
+private fun StoreProfileBeta(
+    d: JsonObject, store: JsonObject, health: JsonObject, score: Double, comps: JsonObject, staff: String,
+    canManage: Boolean, onNavigate: (Screen) -> Unit, onRename: () -> Unit
+) {
+    val name = store["name"].str().ifEmpty { "Точка" }
+    val staffCount = store["staff_count"].dbl().toInt()
+    val pct = score.roundToInt()
+    U3Hero {
+        U3HeroRow(name, chip = if (canManage) "Переименовать" else null, chipText = T2Hero.onHero)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("$staffCount на смене сегодня", color = T2Hero.onHero, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                if (staff.isNotEmpty()) Text(staff, color = T2Hero.onHero2, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+            }
+            U3Ring(pct, "здоровье", size = 84.dp)
+        }
+        if (canManage) {
+            Spacer(Modifier.height(10.dp))
+            U3SecondaryButton("✎ Название", onClick = onRename)
+        }
+    }
+    if (comps.isNotEmpty()) {
+        U3GroupHead("Здоровье точки")
+        U3Group {
+            comps.entries.toList().forEachIndexed { i, (k, v) ->
+                if (i > 0) U3Sep()
+                val cv = v.obj()["value"].dbl().roundToInt()
+                U3Cell(
+                    HEALTH_LABEL[k] ?: k, null,
+                    leading = { U3Tile((HEALTH_LABEL[k] ?: k).take(1).uppercase(), tint = u3Tone(cv)) },
+                    trailing = { U3Value("$cv%", u3Tone(cv)) }
+                )
+            }
+        }
+    }
+
+    U3GroupHead("Сегодня")
+    U3Group {
+        listOf("sim" to "SIM", "mnp" to "MNP", "pa" to "ПА", "combo" to "Комбо").forEachIndexed { i, (id, label) ->
+            if (i > 0) U3Sep(inset = 16.dp)
+            val m = d["today"].obj()["metrics"].obj()[id].obj()
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                ProgressRow(label, m["fact"].dbl(), m["plan"].dbl())
+            }
+        }
+    }
+
+    val trend = d["trend"].arr().map { it.obj()["units"].dbl().toFloat() }
+    if (trend.isNotEmpty() && trend.any { it > 0f }) {
+        U3GroupHead("Тренд, юниты в день")
+        U3Group {
+            Box(Modifier.padding(16.dp)) { U3Sparkline(trend, height = 64.dp, line = T2Colors.accentText, fill = T2Colors.primarySoft) }
+        }
+    }
+
+    val tasks = d["tasks"].arr()
+    if (tasks.isNotEmpty()) {
+        U3GroupHead("Задачи по точке")
+        U3Group {
+            tasks.forEachIndexed { i, el ->
+                if (i > 0) U3Sep()
+                val t = el.obj()
+                U3Cell(
+                    t["title"].str(), t["assignee_name"].str() + " · " + if (t["status"].str() == "in_progress") "В работе" else "Открыта",
+                    leading = { U3IconTile(NavIcons.plan, tint = T2Colors.textSecondary) },
+                    trailing = { U3Value("›", T2Colors.hint) },
+                    onClick = { onNavigate(Screen.Tasks) }
+                )
+            }
+        }
+    }
+
+    val alerts = d["alerts"].arr()
+    if (alerts.isNotEmpty()) {
+        U3GroupHead("Алерты")
+        alerts.forEach { a ->
+            U3WarnRow(a.str())
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+    Spacer(Modifier.height(96.dp))
+}
+
+/** The rename sheet, shared shape with the classic one. */
+@Composable
+private fun StoreRenameSheet(storeId: String?, store: JsonObject, scope: kotlinx.coroutines.CoroutineScope, container: AppContainer, onDismiss: () -> Unit, onSaved: () -> Unit) {
+    var name by remember { mutableStateOf(store["display_name"].str()) }
+    SheetDialog("Название точки", onDismiss = onDismiss) {
+        Text("Кастомное название точки (пусто — вернуть обычное имя):", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 12.dp))
+        Field("", name, { name = it }, fill = T2Colors.surface2)
+        Spacer(Modifier.height(16.dp))
+        MainButton("Сохранить", enabled = true) {
+            val id = storeId ?: return@MainButton
+            scope.launch {
+                runCatching { container.analyticsApi.setStoreDisplayName(id, name.trim().ifEmpty { null }) }
+                    .onSuccess { T2Toast.show("Название обновлено"); onDismiss(); onSaved() }
+                    .onFailure { T2Toast.show("Ошибка сохранения", true) }
             }
         }
     }

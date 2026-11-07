@@ -90,6 +90,12 @@ fun MonthPlanScreen(container: AppContainer, me: MeResponse) {
         runCatching { container.plansApi.storeDaily().stores }.onSuccess { stores = it }.onFailure { stores = emptyList() }
     }
 
+    if (T2Colors.uiBeta) {
+        MonthPlanBeta(container, month, data, failed, stores, metrics, canManage, showAll, { showAll = !showAll },
+            onEditEmp = { editEmp = it }, onEditStore = { editStore = it }, onRetry = { reload++ }, onReload = { reload++ })
+        MonthPlanBetaOverlays(container, scope, metrics, month, editEmp, { editEmp = it }, editStore, { editStore = it }) { reload++ }
+        return
+    }
     PageSection("Планы и факт за месяц") {
         MonthNav(month) { PlanMonthState.month = it }
         val d = data
@@ -283,5 +289,120 @@ private fun PlanEditDialog(
             }
             onSave(body)
         }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+/** Beta month plan: employees as grouped cells (name / role / shifts + blended %), drafts + daily store plans below. */
+@Composable
+private fun MonthPlanBeta(
+    container: AppContainer, month: java.time.YearMonth, data: MonthSummaryResponse?, failed: Boolean, stores: List<StoreDailyPlan>?,
+    metrics: List<MetricDef>, canManage: Boolean, showAll: Boolean, onToggleAll: () -> Unit,
+    onEditEmp: (MonthSummaryRow) -> Unit, onEditStore: (StoreDailyPlan) -> Unit, onRetry: () -> Unit, onReload: () -> Unit
+) {
+    val d = data
+    U3LargeTitle("Планы", monthLabel(month))
+    MonthNav(month) { PlanMonthState.month = it }
+    Spacer(Modifier.height(8.dp))
+    when {
+        failed -> ErrorState("Планы месяца недоступны", onRetry = onRetry)
+        d == null -> SkeletonBlock(Modifier.fillMaxWidth().height(200.dp), 22.dp)
+        d.rows.isEmpty() -> EmptyText("Нет данных за $month")
+        else -> {
+            Text("Сотрудников: ${d.rows.size} · ост. дней: ${d.remaining_days ?: "—"}", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp))
+            val cols = if (showAll) metrics else metrics.take(4)
+            U3GroupHead("Сотрудники", if (showAll) "Ключевые метрики" else "Все метрики", onToggleAll)
+            U3Group {
+                d.rows.forEachIndexed { i, r ->
+                    if (i > 0) U3Sep()
+                    val pcts = cols.mapNotNull { m -> r.pct[m.id] }.filter { it > 0 }
+                    val p = if (pcts.isNotEmpty()) (pcts.sum() / pcts.size).toInt() else 0
+                    U3Cell(
+                        r.full_name, "${ROLES[r.role] ?: r.role} · смен ${r.shifts ?: 0} · ост. ${r.remaining_shifts ?: 0}",
+                        leading = { U3Tile(r.full_name.take(1).uppercase(), tint = u3Tone(p)) },
+                        trailing = { Row(verticalAlignment = Alignment.CenterVertically) { U3Pie(p, 18.dp); Spacer(Modifier.width(8.dp)); U3Value("$p%", u3Tone(p)) } },
+                        onClick = if (canManage) ({ onEditEmp(r) }) else null
+                    )
+                    Text(
+                        cols.joinToString("  ·  ") { m -> "${m.short_label ?: m.label ?: m.id} ${n(r.fact[m.id] ?: 0.0)}" },
+                        color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(start = 70.dp, end = 16.dp, bottom = 10.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    if (canManage) {
+        U3GroupHead("Автоматический расчёт")
+        U3Group {
+            Box(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+                EmployeePlanDraftSection(container, metrics, onApplied = onReload)
+            }
+        }
+    }
+
+    U3GroupHead("Дневные планы точек сегодня")
+    val list = stores
+    when {
+        list == null -> SkeletonBlock(Modifier.fillMaxWidth().height(120.dp), 22.dp)
+        list.isEmpty() -> EmptyText("Нет данных")
+        else -> U3Group {
+            list.forEachIndexed { i, st ->
+                if (i > 0) U3Sep()
+                val color = st.color?.let { runCatching { Color(("FF" + it.removePrefix("#")).toLong(16)) }.getOrNull() } ?: T2Colors.blue
+                U3Cell(
+                    st.name, "${st.code ?: ""} · дневной план" + if (st.has_plan) "" else " · план на месяц не задан",
+                    leading = { U3Tile(st.name.take(2).uppercase(), tint = color, bg = color.copy(alpha = 0.16f)) },
+                    trailing = { if (canManage) U3Value("›", T2Colors.hint) },
+                    onClick = if (canManage) ({ onEditStore(st) }) else null
+                )
+                Text(
+                    metrics.take(6).joinToString("  ·  ") { m -> "${m.short_label ?: m.label ?: m.id} ${n(st.plan[m.id] ?: 0.0)}" },
+                    color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(start = 70.dp, end = 16.dp, bottom = 10.dp)
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(96.dp))
+}
+
+/** The two edit sheets, kept outside the beta list so their state lives next to the screen's. */
+@Composable
+private fun MonthPlanBetaOverlays(
+    container: AppContainer, scope: kotlinx.coroutines.CoroutineScope, metrics: List<MetricDef>, month: java.time.YearMonth,
+    editEmp: MonthSummaryRow?, onEditEmp: (MonthSummaryRow?) -> Unit,
+    editStore: StoreDailyPlan?, onEditStore: (StoreDailyPlan?) -> Unit, onReload: () -> Unit
+) {
+    editEmp?.let { r ->
+        PlanEditDialog(
+            title = "План: ${r.full_name}", note = "Месяц $month. Дневной = остаток / смены.", metrics = metrics,
+            load = { container.plansApi.employeePlan(r.employee_id, month.toString()) },
+            onDismiss = { onEditEmp(null) },
+            onSave = { body ->
+                scope.launch {
+                    runCatching { container.plansApi.saveEmployeePlan(r.employee_id, body) }
+                        .onSuccess { T2Toast.show("План сохранён"); onEditEmp(null); onReload() }
+                        .onFailure { T2Toast.show(it.message ?: "Ошибка", true) }
+                }
+            },
+            month = month.toString()
+        )
+    }
+    editStore?.let { st ->
+        val cur = YearMonth.from(LocalDate.now(ZoneId.of("Europe/Moscow"))).toString()
+        PlanEditDialog(
+            title = "План точки: ${st.name}", note = "Месяц $cur, план на всю точку целиком. Дневной = остаток / оставшиеся дни.", metrics = metrics,
+            load = { container.plansApi.storePlan(st.store_id, cur) },
+            onDismiss = { onEditStore(null) },
+            onSave = { body ->
+                scope.launch {
+                    runCatching { container.plansApi.saveStorePlan(st.store_id, body) }
+                        .onSuccess { T2Toast.show("План точки сохранён"); onEditStore(null); onReload() }
+                        .onFailure { T2Toast.show(it.message ?: "Ошибка", true) }
+                }
+            },
+            month = cur
+        )
     }
 }

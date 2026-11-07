@@ -62,6 +62,21 @@ fun AlertsScreen(container: AppContainer, onNavigate: (Screen) -> Unit) {
         runCatching { api.list(filter) }.onSuccess { items = it }.onFailure { failed = true }
     }
 
+    if (T2Colors.uiBeta) {
+        AlertsBeta(
+            filter, items, failed,
+            onFilter = { filter = it; items = null },
+            onOpen = { a -> opened = a.id; scope.launch { runCatching { api.markRead(a.id) } } },
+            onRetry = { reload++ }
+        )
+        val id = opened
+        if (id != null) {
+            val a = items?.firstOrNull { it.id == id } ?: AlertItem(id = id, title = "Алерт", status = filter)
+            AlertDetail(api, a, onDismiss = { opened = null }, onChanged = { reload++ }, onOpenTask = { opened = null; onNavigate(Screen.Tasks) })
+        }
+        return
+    }
+
     Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FILTERS.forEach { s ->
             val active = s == filter
@@ -151,5 +166,59 @@ private fun AlertDetail(api: ru.t2sales.shared.api.AlertsApi, a: AlertItem, onDi
                 ) { Text(label, fontWeight = FontWeight.Bold, fontSize = 14.sp, textAlign = TextAlign.Center) }
             }
         }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (design-system/ui3/v5-team, screen "Алерты") =======================
+
+private fun alertSeverity(a: AlertItem) = a.severity == "critical"
+
+/** Hero with the count of items under the current filter, a status segmented control, then the alerts as grouped cells. */
+@Composable
+private fun AlertsBeta(
+    filter: String, items: List<AlertItem>?, failed: Boolean,
+    onFilter: (String) -> Unit, onOpen: (AlertItem) -> Unit, onRetry: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("Алерты")
+        val list = items
+        when {
+            failed -> ErrorState("Не удалось загрузить алерты", onRetry = onRetry)
+            list == null -> SkeletonBlock(Modifier.fillMaxWidth().height(160.dp), 28.dp)
+            else -> {
+                val critical = list.count(::alertSeverity)
+                U3Hero {
+                    U3HeroRow(
+                        STATUS[filter] ?: filter,
+                        chip = if (critical > 0) "$critical критич." else null,
+                        chipColor = T2Colors.danger.copy(alpha = 0.9f),
+                        chipText = androidx.compose.ui.graphics.Color(0xFF1A1000)
+                    )
+                    U3HeroNumber("${list.size}", if (list.size == 1) "алерт" else "алертов")
+                }
+                Spacer(Modifier.height(14.dp))
+            }
+        }
+        U3Segmented(FILTERS.map { STATUS[it] ?: it }, FILTERS.indexOf(filter).coerceAtLeast(0)) { onFilter(FILTERS[it]) }
+        Spacer(Modifier.height(12.dp))
+        when {
+            failed -> {}
+            list == null -> {}
+            list.isEmpty() -> EmptyText("Нет алертов")
+            else -> U3Group {
+                list.forEachIndexed { i, a ->
+                    if (i > 0) U3Sep()
+                    val critical = alertSeverity(a)
+                    U3Cell(
+                        a.title,
+                        (a.store_name ?: "") + " · " + (STATUS[a.status] ?: a.status) + if (a.task_id != null) " · есть задача" else "",
+                        leading = { U3Tile(if (critical) "!" else "⚠", tint = if (critical) T2Colors.danger else T2Colors.warning) },
+                        trailing = { Text("›", color = T2Colors.hint, fontSize = 18.sp) },
+                        onClick = { onOpen(a) }
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
     }
 }

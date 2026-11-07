@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
@@ -49,6 +50,7 @@ import ru.t2sales.shared.api.ScheduleBulkItem
 import ru.t2sales.shared.api.ScheduleRow
 import ru.t2sales.shared.api.StoreInfo
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
 import ru.t2sales.shared.theme.T2Radius
 import ru.t2sales.shared.theme.T2Spacing
 
@@ -106,8 +108,41 @@ fun ScheduleScreen(container: AppContainer, me: MeResponse) {
         runCatching { scheduleApi.getScheduleMonth(month.toString()) }.onSuccess { rows = it.items }.onFailure { failed = true }
     }
 
+    if (T2Colors.uiBeta) {
+        ScheduleBeta(container, me, month, { month = it }, rows, failed, stores, employees,
+            canEdit = canEdit, managerTier = managerTier, today = today,
+            onEdit = { target -> editing = target }, draft = draft, onDraft = { draft = it }, onApplied = { reloadKey++ })
+    } else {
+        ScheduleClassic(container, me, month, { month = it }, rows, failed, stores, employees,
+            canEdit = canEdit, managerTier = managerTier, today = today,
+            onEdit = { target -> editing = target }, draft = draft, onDraft = { draft = it }, onApplied = { reloadKey++ })
+    }
+
+    editing?.let { target ->
+        val scope = rememberCoroutineScope()
+        EditShiftSheet(target, stores.values.sortedBy { it.name }, onDismiss = { editing = null }) { item, onError ->
+            scope.launch {
+                runCatching { scheduleApi.saveShift(item) }
+                    .onSuccess {
+                        if (it.count == 1) { editing = null; reloadKey++; Toaster.show("Смена сохранена") }
+                        else onError("Смена не сохранена: обновите график и повторите")
+                    }
+                    .onFailure { onError(it.message ?: "Нет прав") }
+            }
+        }
+    }
+}
+
+/** The classic layout, exactly as before the beta gate: month switcher, summary grid, draft, per-person calendars. */
+@Composable
+private fun ScheduleClassic(
+    container: AppContainer, me: MeResponse, month: YearMonth, onMonth: (YearMonth) -> Unit,
+    rows: List<ScheduleRow>?, failed: Boolean, stores: Map<String, StoreInfo>, employees: List<EmployeeListItem>?,
+    canEdit: Boolean, managerTier: Boolean, today: LocalDate,
+    onEdit: (EditTarget) -> Unit, draft: ScheduleDraft?, onDraft: (ScheduleDraft?) -> Unit, onApplied: () -> Unit
+) {
     Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
-        MonthSwitcher(month) { month = it }
+        MonthSwitcher(month, onMonth)
         val list = rows
         val emps = employees
         when {
@@ -120,7 +155,7 @@ fun ScheduleScreen(container: AppContainer, me: MeResponse) {
                     Spacer(Modifier.height(T2Spacing.sp3))
                 }
                 if (canEdit) {
-                    DraftSection(scheduleApi, stores, emps, draft, { draft = it }, { reloadKey++ })
+                    DraftSection(container.scheduleApi, stores, emps, draft, onDraft, onApplied)
                     Spacer(Modifier.height(T2Spacing.sp3))
                 }
                 if (canEdit) Text("Нажми на день, чтобы поставить / убрать смену", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
@@ -142,26 +177,12 @@ fun ScheduleScreen(container: AppContainer, me: MeResponse) {
                             Text("${days.size} смен", color = T2Colors.hint, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(T2Colors.border))
-                        MonthGrid(month, days, today, stores, if (canEdit) { date, row -> editing = EditTarget(empId, name, date, row) } else null)
+                        MonthGrid(month, days, today, stores, if (canEdit) { date, row -> onEdit(EditTarget(empId, name, date, row)) } else null)
                     }
                 }
             }
         }
         Spacer(Modifier.height(96.dp))
-    }
-
-    editing?.let { target ->
-        val scope = rememberCoroutineScope()
-        EditShiftSheet(target, stores.values.sortedBy { it.name }, onDismiss = { editing = null }) { item, onError ->
-            scope.launch {
-                runCatching { scheduleApi.saveShift(item) }
-                    .onSuccess {
-                        if (it.count == 1) { editing = null; reloadKey++; Toaster.show("Смена сохранена") }
-                        else onError("Смена не сохранена: обновите график и повторите")
-                    }
-                    .onFailure { onError(it.message ?: "Нет прав") }
-            }
-        }
     }
 }
 
@@ -316,5 +337,99 @@ private fun EditShiftSheet(target: EditTarget, stores: List<StoreInfo>, onDismis
         Spacer(Modifier.height(16.dp))
         Field("Смена", text, { text = it.take(20) })
         error?.let { Text(it, color = T2Colors.danger, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (tab screen "График") =======================
+
+/** Beta layout: big title, a hero with the month's shift total, then the team summary / draft / per-person calendars. */
+@Composable
+private fun ScheduleBeta(
+    container: AppContainer, me: MeResponse, month: YearMonth, onMonth: (YearMonth) -> Unit,
+    rows: List<ScheduleRow>?, failed: Boolean, stores: Map<String, StoreInfo>, employees: List<EmployeeListItem>?,
+    canEdit: Boolean, managerTier: Boolean, today: LocalDate,
+    onEdit: (EditTarget) -> Unit, draft: ScheduleDraft?, onDraft: (ScheduleDraft?) -> Unit, onApplied: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp)) {
+        ScheduleBetaNav(month, onMonth)
+        U3LargeTitle("График", "${MONTHS[month.monthValue - 1]} ${month.year}")
+
+        val list = rows
+        val emps = employees
+        when {
+            failed -> ErrorState("Не удалось получить смены — зайди чуть позже", onRetry = null)
+            list == null || emps == null -> SkeletonBlock(Modifier.fillMaxWidth().height(200.dp), 28.dp)
+            else -> {
+                val byEmp = list.groupBy { it.employee_id }
+                val people = emps.map { it.id to it.full_name }
+                    .plus(list.filter { r -> emps.none { it.id == r.employee_id } }.map { it.employee_id to it.full_name }.distinct())
+                    .sortedBy { it.second.lowercase() }
+                val totalShifts = list.count { (it.hours ?: 0.0) > 0 }
+                val myShifts = me.employee_id?.let { id -> byEmp[id].orEmpty().count { (it.hours ?: 0.0) > 0 } }
+                val workdays = list.map { it.work_date.take(10) }.distinct().size
+
+                U3Hero {
+                    U3HeroRow("Смен в ${MONTHS[month.monthValue - 1].lowercase()}", chip = if (myShifts != null) "у меня $myShifts" else "$workdays дн.")
+                    U3HeroNumber(animatedInt(totalShifts).toString(), "смен")
+                    Text(
+                        if (people.isEmpty()) "В команде пока никого нет" else "В команде ${people.size} · $workdays рабочих дней в графике",
+                        color = T2Hero.onHero2, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+
+                if (managerTier) {
+                    U3GroupHead("Сводный график команды")
+                    U3Group { SummaryGrid(list, emps, month, stores, today) }
+                }
+                if (canEdit) {
+                    Spacer(Modifier.height(T2Spacing.sp4))
+                    DraftSection(container.scheduleApi, stores, emps, draft, onDraft, onApplied)
+                }
+                if (canEdit) {
+                    Text(
+                        "Нажми на день, чтобы поставить / убрать смену", color = T2Colors.hint, fontSize = 13.sp,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
+                    )
+                }
+                if (people.isEmpty()) {
+                    Spacer(Modifier.height(T2Spacing.sp4))
+                    EmptyText("Нет данных за этот месяц")
+                } else {
+                    U3GroupHead("Люди", "${people.size}")
+                    people.forEach { (empId, name) ->
+                        val days = byEmp[empId].orEmpty().associateBy { it.work_date.take(10) }
+                        U3Group(Modifier.padding(bottom = 12.dp)) {
+                            U3Cell(
+                                name,
+                                "${days.size} смен",
+                                leading = { U3IconTile(NavIcons.profile) },
+                                trailing = { U3Value(days.size.toString()) }
+                            )
+                            U3Sep(inset = 10.dp)
+                            MonthGrid(month, days, today, stores, if (canEdit) { date, row -> onEdit(EditTarget(empId, name, date, row)) } else null)
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
+    }
+}
+
+/** Beta month navigator: ‹ month year ›, each chevron a 44dp round target (web .ib). */
+@Composable
+private fun ScheduleBetaNav(month: YearMonth, onChange: (YearMonth) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(T2Spacing.hit).clip(CircleShape).bouncyClickable(to = 0.92f) { onChange(month.minusMonths(1)) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(36.dp).clip(CircleShape).background(T2Colors.surface).border(1.dp, T2Colors.border, CircleShape), contentAlignment = Alignment.Center) {
+                Text("‹", fontSize = 20.sp, color = T2Colors.text)
+            }
+        }
+        Text("${MONTHS[month.monthValue - 1]} ${month.year}", color = T2Colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Box(Modifier.size(T2Spacing.hit).clip(CircleShape).bouncyClickable(to = 0.92f) { onChange(month.plusMonths(1)) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(36.dp).clip(CircleShape).background(T2Colors.surface).border(1.dp, T2Colors.border, CircleShape), contentAlignment = Alignment.Center) {
+                Text("›", fontSize = 20.sp, color = T2Colors.text)
+            }
+        }
     }
 }

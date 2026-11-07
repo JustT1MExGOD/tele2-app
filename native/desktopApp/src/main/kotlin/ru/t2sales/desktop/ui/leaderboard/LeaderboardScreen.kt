@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -111,6 +112,26 @@ fun LeaderboardScreen(container: AppContainer) {
                 } else {
                     val max = items.first().value.takeIf { it > 0 } ?: 1.0
                     val unitSuffix = if (result?.metric?.unit == "money") " ₽" else ""
+                    if (T2Colors.uiBeta) {
+                        BetaPodium(items.take(3), unitSuffix)
+                        ru.t2sales.desktop.ui.components.Group(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                            items.drop(3).forEachIndexed { i, item ->
+                                if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator(60.dp)
+                                val p = (item.value / max).toFloat()
+                                ru.t2sales.desktop.ui.components.BetaCell(
+                                    item.full_name, "${(p * 100).toInt()}% от лидера",
+                                    leading = { Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("${item.rank}", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.width(22.dp))
+                                        ru.t2sales.desktop.ui.components.Initials(item.full_name, 32.dp)
+                                    } },
+                                    value = "${item.value.toInt()}$unitSuffix",
+                                    trailing = { ru.t2sales.desktop.ui.components.BetaPie(p, 18.dp) }
+                                )
+                            }
+                            if (items.size <= 3) Text("Все участники на пьедестале", color = T2Colors.hint, fontSize = 15.sp, modifier = Modifier.padding(16.dp))
+                        }
+                        return@PageSection
+                    }
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items.forEach { item ->
                             val pct = (item.value / max).coerceIn(0.02, 1.0)
@@ -127,6 +148,31 @@ fun LeaderboardScreen(container: AppContainer) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Beta UI 3.0 podium (design-system/ui3/v5-team, frame 4): 2nd · 1st (taller, highlighted) · 3rd. */
+@Composable
+private fun BetaPodium(top: List<ru.t2sales.shared.api.LeaderboardItem>, unit: String) {
+    if (top.isEmpty()) return
+    val order = listOfNotNull(top.getOrNull(1), top.getOrNull(0), top.getOrNull(2))
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+        order.forEach { it ->
+            val first = it.rank == 1
+            val shape = RoundedCornerShape(ru.t2sales.shared.theme.T2Radius.cell)
+            Column(
+                Modifier.weight(1f).clip(shape).background(T2Colors.surface).border(1.dp, if (first) T2Colors.borderStrong else T2Colors.border, shape)
+                    .padding(horizontal = 10.dp, vertical = if (first) 22.dp else 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("${it.rank} место", color = T2Colors.hint, fontSize = 12.sp)
+                Spacer(Modifier.height(8.dp))
+                ru.t2sales.desktop.ui.components.Initials(it.full_name, if (first) 44.dp else 36.dp, highlight = first)
+                Spacer(Modifier.height(8.dp))
+                Text(it.full_name.split(" ").let { p -> p.getOrNull(1)?.let { n -> "$n ${p[0].take(1)}." } ?: p[0] }, color = T2Colors.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text("${it.value.toInt()}$unit", color = T2Colors.text, fontSize = if (first) 22.sp else 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }

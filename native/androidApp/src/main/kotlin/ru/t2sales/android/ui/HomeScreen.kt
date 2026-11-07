@@ -52,10 +52,13 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import ru.t2sales.android.AppContainer
 import ru.t2sales.shared.api.DashboardLeaderRow
+import ru.t2sales.shared.api.HistorySale
 import ru.t2sales.shared.api.MeDayResponse
 import ru.t2sales.shared.api.MeResponse
 import ru.t2sales.shared.api.SupervisorHealthResponse
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
+import ru.t2sales.shared.theme.T2Motion
 import ru.t2sales.shared.theme.T2Radius
 import ru.t2sales.shared.theme.T2Spacing
 
@@ -172,6 +175,10 @@ fun HomeScreen(container: AppContainer, me: MeResponse) {
     }
 
     if (about) AboutSheet { about = false }
+    if (T2Colors.uiBeta) {
+        HomeBeta(container, me, data, daysOffText, onRefresh = { refresh++ }, onAbout = { about = true })
+        return
+    }
     Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
         AppHeader(me, data?.myDay, container) { refresh++ }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -530,4 +537,199 @@ fun AboutSheet(onDismiss: () -> Unit) {
         Text("Версия ${ru.t2sales.android.BuildConfig.VERSION_NAME}", color = T2Colors.hint, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
         Text("Нативное приложение для Android. Те же данные и тот же сервер, что в веб-версии.", color = T2Colors.textSecondary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 12.dp))
     }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (design-system/ui3/v5-team, screen 1 "Мой день") =======================
+
+private val WEEKDAYS = listOf("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье")
+
+private fun salePieces(s: HistorySale) = (s.sim ?: 0.0) + (s.mnp ?: 0.0) + (s.pa ?: 0.0)
+
+private fun saleSummary(s: HistorySale): String = listOfNotNull(
+    s.sim?.takeIf { it > 0 }?.let { "SIM ${it.roundToInt()}" },
+    s.mnp?.takeIf { it > 0 }?.let { "MNP ${it.roundToInt()}" },
+    s.pa?.takeIf { it > 0 }?.let { "ПА ${it.roundToInt()}" }
+).joinToString(" · ").ifEmpty { "Продажа" }
+
+/** 44dp target around a 36dp round icon button (web .ib). */
+@Composable
+private fun BetaIconButton(desc: String, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(Modifier.size(T2Spacing.hit).clip(CircleShape).bouncyClickable(to = 0.92f, onClick = onClick), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(36.dp).clip(CircleShape).background(T2Colors.surface).border(1.dp, T2Colors.border, CircleShape), contentAlignment = Alignment.Center) { content() }
+    }
+}
+
+/** Hero card + round quick actions + rings + my sales grouped by day; the classic tools stay reachable below. */
+@Composable
+private fun HomeBeta(container: AppContainer, me: MeResponse, data: HomeData?, daysOffText: String, onRefresh: () -> Unit, onAbout: () -> Unit) {
+    val today = remember { LocalDate.now(MOSCOW) }
+    // my own sales for the last 7 days: the sparkline (per-day totals) and the feed (today / yesterday)
+    var history by remember { mutableStateOf<List<HistorySale>?>(null) }
+    LaunchedEffect(AppState.refreshTick, me.employee_id) {
+        runCatching { container.salesApi.getHistory(today.minusDays(6).toString(), today.toString(), me.employee_id) }
+            .onSuccess { history = it.items }
+            .onFailure { if (history == null) history = emptyList() }
+    }
+    val firstName = me.full_name?.split(" ")?.getOrNull(1) ?: me.full_name.orEmpty()
+    val shift = data?.myDay?.shift
+    val lede = listOfNotNull(
+        "${WEEKDAYS[today.dayOfWeek.value - 1]}, ${today()}",
+        shift?.let { it.store_name ?: it.store_code },
+        shift?.shift_text?.takeIf { it.isNotBlank() }
+    ).joinToString(", ")
+
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 120.dp)) {
+        HomeBetaNavbar(container, me, onRefresh)
+        U3LargeTitle(if (firstName.isBlank()) greetingByHour() else "${greetingByHour()}, $firstName", lede)
+        val d = data
+        if (d == null) {
+            SkeletonBlock(Modifier.fillMaxWidth().height(200.dp), 28.dp)
+        } else {
+            HomeBetaBody(me, d, history, today, daysOffText, onAbout)
+        }
+    }
+}
+/** Navbar: avatar + outbox on the left, theme and refresh on the right (44dp targets). */
+@Composable
+private fun HomeBetaNavbar(container: AppContainer, me: MeResponse, onRefresh: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        val initials = me.full_name.orEmpty().split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1) }.ifEmpty { "T2" }
+        Box(Modifier.size(36.dp).clip(CircleShape).background(Brush.linearGradient(listOf(T2Hero.c1, T2Hero.c3))), contentAlignment = Alignment.Center) {
+            Text(initials, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+        Spacer(Modifier.width(8.dp))
+        OutboxPill(container.outbox)
+        Spacer(Modifier.weight(1f))
+        BetaIconButton("Тема", { T2Colors.dark = !T2Colors.dark }) { Text("◐", fontSize = 17.sp, color = T2Colors.text) }
+        BetaIconButton("Обновить", onRefresh) { NavIcon(NavIcons.refresh, contentDescription = "Обновить", tint = T2Colors.text, size = 18.dp) }
+    }
+}
+
+/** The piece metrics the beta hero and the sale sheet's "план дня станет" count (matches web and desktop). */
+internal val HERO_UNITS = setOf("sim", "mnp", "pa", "combo")
+
+@Composable
+private fun HomeBetaBody(me: MeResponse, d: HomeData, history: List<HistorySale>?, today: LocalDate, daysOffText: String, onAbout: () -> Unit) {
+    // ---- hero: "продажи сегодня X из Y" + sparkline of the last 7 days
+    val day = d.myDay
+    // web u3HeroHTML / desktop HERO_UNITS: only piece metrics count, ₽ metrics would swamp the number
+    val heroUnits = day?.progress.orEmpty().filterKeys { it in HERO_UNITS }.values
+    val fact = heroUnits.sumOf { it.fact }.roundToInt()
+    val plan = heroUnits.sumOf { it.plan }.roundToInt()
+    val pct = if (plan > 0) (fact * 100.0 / plan).roundToInt() else 0
+    val spark = history?.let { h ->
+        (6 downTo 0).map { back -> val key = today.minusDays(back.toLong()).toString(); h.filter { it.sale_date.take(10) == key }.sumOf(::salePieces).toFloat() }
+    }?.takeIf { s -> s.any { it > 0f } }
+    Box(Modifier.reveal(0)) {
+        U3Hero {
+            U3HeroRow("Продажи сегодня", chip = if (plan > 0) "$pct% плана" else daysOffText)
+            U3HeroNumber("${animatedInt(fact, T2Motion.count)}", if (plan > 0) "из $plan" else null)
+            Text(
+                when {
+                    day == null -> "Не удалось загрузить «Мой день»"
+                    !day.bound -> "Аккаунт не привязан к сотруднику"
+                    plan <= 0 -> "Плана на сегодня нет"
+                    fact >= plan -> "План дня выполнен"
+                    else -> "Ещё ${plan - fact} до плана" + if (d.shiftOpen == true) ", смена открыта" else ""
+                },
+                color = T2Hero.onHero2, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+            )
+            if (spark != null) {
+                U3Sparkline(spark)
+                Text("Последние 7 дней", color = T2Hero.onHero2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+    }
+
+    // ---- round quick actions
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp).reveal(1), horizontalArrangement = Arrangement.SpaceEvenly) {
+        U3RoundAction("Продажа", icon = NavIcons.plus, primary = true) { AppState.openAddSale() }
+        U3RoundAction("Касса", icon = NavIcons.cash) { Nav.open(Page.Cash) }
+        U3RoundAction("План", icon = NavIcons.monthPlan) { Nav.open(Page.MonthPlan) }
+        U3RoundAction("Топы", icon = NavIcons.trophy) { Nav.open(Page.Leaderboard) }
+    }
+
+    // ---- plan of the day: rings for the first five metrics, cells with pies for the rest
+    val progress = day?.progress?.filterValues { it.plan > 0 }.orEmpty()
+    if (progress.isNotEmpty()) {
+        U3GroupHead("План дня", "Месяц") { Nav.open(Page.MonthPlan) }
+        U3Group(Modifier.reveal(2)) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 16.dp, horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                progress.entries.take(5).forEach { (m, e) -> U3Ring((e.fact * 100 / e.plan).roundToInt(), METRIC_SHORT_LABEL[m] ?: m, size = 52.dp) }
+            }
+            progress.entries.drop(5).forEach { (m, e) ->
+                U3Sep(16.dp)
+                U3Cell(METRIC_SHORT_LABEL[m] ?: m, trailing = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        U3Value("${e.fact.roundToInt()} / ${e.plan.roundToInt()}")
+                        Spacer(Modifier.width(8.dp))
+                        U3Pie((e.fact * 100 / e.plan).roundToInt())
+                    }
+                })
+            }
+        }
+    }
+
+    // ---- my sales, grouped by day
+    val todayKey = today.toString()
+    val yKey = today.minusDays(1).toString()
+    val todays = history.orEmpty().filter { it.sale_date.take(10) == todayKey }
+    val ydays = history.orEmpty().filter { it.sale_date.take(10) == yKey }
+    U3GroupHead("Сегодня", if (history != null) "${todays.size} чек. · ${todays.sumOf(::salePieces).roundToInt()} прод." else null)
+    U3Group(Modifier.reveal(3)) {
+        when {
+            history == null -> LoadingBlock(Modifier.padding(16.dp), lines = 2)
+            todays.isEmpty() -> U3Cell("Пока нет продаж", "Внеси первую кнопкой «Продажа» выше", leading = { U3Tile("0") })
+            else -> todays.forEachIndexed { i, s ->
+                if (i > 0) U3Sep()
+                U3Cell(saleSummary(s), s.store_name, leading = { U3IconTile(NavIcons.history) }, trailing = { U3Value("+${salePieces(s).roundToInt()}") })
+            }
+        }
+    }
+    if (ydays.isNotEmpty()) {
+        U3GroupHead("Вчера", "${ydays.sumOf(::salePieces).roundToInt()} прод.")
+        U3Group {
+            ydays.forEachIndexed { i, s ->
+                if (i > 0) U3Sep()
+                U3Cell(saleSummary(s), s.store_name, leading = { U3IconTile(NavIcons.history) }, trailing = { U3Value("+${salePieces(s).roundToInt()}", T2Colors.textSecondary) })
+            }
+        }
+    }
+    // ---- network today
+    U3GroupHead("Сеть сегодня")
+    U3Group {
+        val t = d.totals
+        listOf("SIM" to t.sim, "MNP" to t.mnp, "ПА" to t.pa, "Комбо" to t.combo, "Телефоны" to t.phones, "Аксессуары" to t.accessories).forEachIndexed { i, (label, v) ->
+            if (i > 0) U3Sep(16.dp)
+            U3Cell(label, trailing = { U3Value(NumberFormat.getInstance(Locale("ru", "RU")).format(animatedInt(v.roundToInt()))) })
+        }
+    }
+
+    if (me.role in ANALYTICS_ROLES) {
+        Spacer(Modifier.height(16.dp))
+        CommandCenterSection(d.health) { Nav.open(Page.CommandCenter) }
+    }
+
+    // ---- top 7 days: my row highlighted, the full board one tap away
+    if (d.leaders.isNotEmpty()) {
+        U3GroupHead("Топ за 7 дней", "Все") { Nav.open(Page.Leaderboard) }
+        U3Group {
+            d.leaders.take(5).forEachIndexed { i, row ->
+                if (i > 0) U3Sep()
+                val total = row.sim + row.mnp + row.pa + row.combo
+                U3Cell(
+                    row.full_name, "SIM ${row.sim.roundToInt()} · MNP ${row.mnp.roundToInt()} · ПА ${row.pa.roundToInt()}",
+                    highlight = row.employee_id == me.employee_id,
+                    leading = { U3Tile("${i + 1}", tint = if (i == 0) T2Colors.accentText else T2Colors.textSecondary) },
+                    trailing = { U3Value(total.roundToInt().toString()) }
+                )
+            }
+        }
+    }
+
+    // the classic tool lists stay reachable; they pick up the beta palette through the tokens
+    Spacer(Modifier.height(16.dp))
+    CalcSection()
+    Spacer(Modifier.height(12.dp))
+    ToolsSection(onAbout = onAbout)
 }

@@ -53,6 +53,14 @@ fun BfqPage(container: AppContainer, me: MeResponse) {
 
     LaunchedEffect(reload) { runCatching { api.getBfq(month).items }.onSuccess { items = it }.onFailure { failed = true } }
 
+    if (T2Colors.uiBeta) {
+        // Beta UI 3.0 «Ночная смена»: the page keeps PageScaffold's back header, the body becomes a big title + a
+        // grouped list — a cell per person with their rank tile and the BFQ total.
+        BfqBeta(container, me, items, failed, onRetry = { reload++ }, onOpen = { opened = it })
+        opened?.let { id -> BfqCard(container, id, month, canManage, onDismiss = { opened = null }, onSaved = { opened = null; reload++ }) }
+        return
+    }
+
     PageScaffold("BFQ") {
         Section("BFQ за месяц") {
             val list = items
@@ -145,5 +153,38 @@ fun StatBox(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier.clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape).padding(horizontal = 8.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, fontSize = 20.sp, fontWeight = FontWeight.Black)
         Text(label.uppercase(), color = T2Colors.hint, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp, modifier = Modifier.padding(top = 3.dp))
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+/** BFQ body in beta: big title under the scaffold's back header, the ranking as a grouped list, my row highlighted. */
+@Composable
+private fun BfqBeta(container: AppContainer, me: MeResponse, items: List<BfqItem>?, failed: Boolean, onRetry: () -> Unit, onOpen: (Int) -> Unit) {
+    PageScaffold("BFQ") {
+        U3LargeTitle("BFQ", "Качество работы за месяц")
+        val list = items
+        when {
+            failed -> ErrorState("Ошибка BFQ", onRetry = onRetry)
+            list == null -> SkeletonBlock(Modifier.fillMaxWidth().height(200.dp), 28.dp)
+            list.isEmpty() -> EmptyText("Нет данных BFQ")
+            else -> {
+                U3GroupHead("Рейтинг", "${list.size}")
+                U3Group {
+                    list.forEachIndexed { i, e ->
+                        if (i > 0) U3Sep()
+                        U3Cell(
+                            e.full_name ?: "",
+                            "Кач. ${numText(e.quality)} · Приб. ${numText(e.profit)} · VMR ${numText(e.vmr ?: 0.0)}",
+                            highlight = e.employee_id == me.employee_id,
+                            leading = { U3Tile("${i + 1}", tint = if (i == 0) T2Colors.accentText else T2Colors.textSecondary) },
+                            trailing = { U3Value(numText(e.total)) },
+                            onClick = { onOpen(e.employee_id) }
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(32.dp))
     }
 }

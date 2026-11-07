@@ -1,0 +1,461 @@
+/* =========================================================
+   T2 Sales — Beta UI 3.0 «Ночная смена» · Главная + оболочка
+   Источник: design-system/ui3/v5-team (экран «Мой день»).
+
+   Каждый селектор начинается с body[data-ui="beta"]. Разметка .u3h-*
+   рендерит pages/home/index.ts всегда, с атрибутом hidden; здесь она
+   становится видимой, а старые блоки (.u3-legacy и замещённые секции)
+   прячутся. Без атрибута беты файл ничего не меняет.
+   ========================================================= */
+
+/* ---------- Дуал-разметка ---------- */
+body[data-ui="beta"] .u3h[hidden] { display: block; }
+body[data-ui="beta"] .u3-legacy { display: none !important; }
+
+/* =========================================================
+   Оболочка на главной: Large Title вместо даты в шапке, без FAB
+   (на главной «Продажа» — первая круглая кнопка под hero)
+   ========================================================= */
+body[data-ui="beta"] .shell-main:has(#page-home.active) .header-pills { display: none; }
+body[data-ui="beta"] .shell-main:has(#page-home.active) .app-header-top { margin-bottom: 0; }
+/* FAB «+» виден только на экранах плана; на главной его роль у первой
+   круглой кнопки, на списках он закрывал значения справа в строках.
+   !important — nav.ts пишет display инлайном при каждом switchPage. */
+body[data-ui="beta"]:not(:has(#page-plan.active, #page-monthplan.active)) .fab { display: none !important; }
+
+/* Контент полностью вылезает из-под капсулы таб-бара (и FAB, где он есть) */
+body[data-ui="beta"] .sheet { padding-bottom: 32px; }
+body[data-ui="beta"]:has(#page-plan.active, #page-monthplan.active) .sheet { padding-bottom: 96px; }
+
+/* Концепт держит капсулу на холсте: плавающая, но НЕ прозрачная —
+   строки под ней не читаются. Стекло сменяем на почти-непрозрачный цвет. */
+body[data-ui="beta"] .bottom-nav {
+  background: color-mix(in srgb, var(--u-page) 88%, var(--u-cell) 12%);
+  border-color: var(--u-line-2);
+}
+body[data-ui="beta"][data-theme="dark"] .bottom-nav { background: #141518; }
+
+/* Шапка на остальных экранах (мобильный): одна строка
+   «аватар · 04.11.2026 · Гелиос · кнопки» вместо большого блока даты.
+   app-header-top растворяется (display: contents), и плашки встают в его ряд. */
+@media (max-width: 1199px) {
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) .app-header {
+    display: flex; align-items: center; gap: 10px;
+    padding-bottom: 8px;
+  }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) .app-header-top { display: contents; }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) .header-actions { order: 2; margin-left: 0; }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) .header-pills {
+    order: 1; flex: 1; min-width: 0;
+    display: flex; flex-wrap: nowrap; align-items: baseline; gap: 6px;
+    margin: 0; overflow: hidden;
+  }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) .store-pill { padding: 0; min-width: 0; flex: none; }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) .store-pill .label,
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) .store-pill-addr { display: none; }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) .store-pill .value,
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) #headerStorePill .value {
+    font-size: 15px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em;
+    color: var(--u-text-2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) #headerStorePill { flex: 0 1 auto; }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) #headerStorePill .value { color: var(--u-text); }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) #headerStorePill::before {
+    content: "·"; color: var(--u-text-3); margin-right: 6px; font-weight: 600;
+  }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) #headerStorePill { display: flex; align-items: baseline; }
+  body[data-ui="beta"] .shell-main:not(:has(#page-home.active)) #headerStorePill[style*="none"] { display: none; }
+}
+
+/* ---------- Секции главной, которые бета перерисовывает сама ---------- */
+body[data-ui="beta"] #homeGreeting,
+body[data-ui="beta"] #homeTodaySwipe {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0 !important;
+  margin-bottom: 0;
+  overflow: visible;
+}
+body[data-ui="beta"] #homeTodaySwipe > .swipe-dots,
+body[data-ui="beta"] #homeTodaySwipe .swipe-panel:nth-child(2),
+body[data-ui="beta"] #homeTodaySwipe .swipe-panel:first-child > .section-title,
+body[data-ui="beta"] #myDayBody > .progress-block,
+body[data-ui="beta"] #myDayBodyDesktop > .progress-block { display: none; }
+/* трек свайпа не нужен: вторая панель («Сеть сегодня») вошла в первую */
+body[data-ui="beta"] #homeTodaySwipe .swipe-track {
+  transform: none !important;
+  height: auto !important;
+  display: block;
+}
+
+/* ---------- Точка смены: отдельная строка скрыта — точка в подписи
+   под приветствием, «сменить» — тихим чипом там же ---------- */
+body[data-ui="beta"] #myDayStoreHead,
+body[data-ui="beta"] #myDayStoreHeadDesktop { display: none; }
+body[data-ui="beta"] .u3h-store-chip {
+  display: inline-flex; align-items: center;
+  margin-left: 2px; margin-top: -4px; padding: 3px 9px; border-radius: 999px;
+  background: var(--u-cell-2); color: var(--u-text-2);
+  border: 1px solid var(--u-line);
+  font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  cursor: pointer; vertical-align: 1px;
+  -webkit-tap-highlight-color: transparent;
+}
+body[data-ui="beta"] .u3h-store-chip:active { background: var(--u-cell-press); }
+
+/* =========================================================
+   Large Title + подпись
+   ========================================================= */
+body[data-ui="beta"] .u3h-large {
+  margin: 4px 4px 2px;
+  font-size: 34px; line-height: 1.12; font-weight: 700;
+  letter-spacing: var(--u-tr-tight);
+  color: var(--u-text);
+  text-wrap: balance;
+}
+body[data-ui="beta"] .u3h-lede {
+  margin: 0 4px 16px;
+  font-size: 15px; line-height: 1.35;
+  color: var(--u-text-2);
+}
+
+/* =========================================================
+   Hero — единственная градиентная карточка продукта
+   ========================================================= */
+body[data-ui="beta"] .u3h-hero {
+  position: relative; overflow: hidden;
+  border-radius: var(--u-r-xl);
+  padding: 20px;
+  color: var(--u-on-hero);
+  background:
+    radial-gradient(120% 90% at 100% 0%, var(--u-hero-spot) 0%, transparent 30%),
+    radial-gradient(90% 120% at 0% 100%, var(--u-hero-3) 0%, transparent 60%),
+    linear-gradient(150deg, var(--u-hero-1) 0%, var(--u-hero-2) 48%, var(--u-hero-4) 100%);
+  box-shadow: inset 0 0 0 1px var(--u-on-hero-line);
+}
+body[data-ui="beta"] .u3h-hero-row {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+}
+body[data-ui="beta"] .u3h-h-label { font-size: 13px; font-weight: 500; color: var(--u-on-hero-2); }
+body[data-ui="beta"] .u3h-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 24px; padding: 0 8px; border-radius: 999px;
+  background: var(--u-hero-chip); color: var(--u-on-hero);
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* жёлтый акцент — только когда прогноз ниже плана */
+body[data-ui="beta"] .u3h-chip.warn {
+  background: rgba(245,165,36,.22); color: #FFD27A;
+  box-shadow: inset 0 0 0 1px rgba(245,165,36,.35);
+}
+body[data-ui="beta"] .u3h-h-num {
+  margin: 8px 0 4px;
+  font-size: 56px; line-height: 1; font-weight: 700;
+  letter-spacing: var(--u-tr-hero);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "cv11", "ss01";
+}
+body[data-ui="beta"] .u3h-h-num small {
+  font-size: 28px; font-weight: 600; color: var(--u-on-hero-2);
+  letter-spacing: var(--u-tr-tight);
+}
+body[data-ui="beta"] .u3h-h-sub { margin: 0; font-size: 13px; line-height: 1.35; color: var(--u-on-hero-2); }
+body[data-ui="beta"] .u3h-spark { display: block; width: 100%; height: 44px; margin-top: 12px; overflow: visible; }
+body[data-ui="beta"] .u3h-spark .l { fill: none; stroke: var(--u-on-hero); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+body[data-ui="beta"] .u3h-spark .a { fill: var(--u-on-hero-fill); }
+body[data-ui="beta"] .u3h-spark .pp { stroke: var(--u-on-hero-line); stroke-width: 1.5; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; }
+body[data-ui="beta"] .u3h-spark .pf { stroke: var(--u-on-hero-2); stroke-width: 2; stroke-dasharray: 1 5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+body[data-ui="beta"] .u3h-spark .dot { fill: var(--u-on-hero); }
+body[data-ui="beta"] .u3h-hero.behind .u3h-spark .pf { stroke: #FFD27A; }
+body[data-ui="beta"] .u3h-axis {
+  display: flex; justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12px; color: var(--u-on-hero-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================
+   Быстрые действия — круглые кнопки Revolut
+   ========================================================= */
+body[data-ui="beta"] .u3h-qa {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px; margin: 20px 0 4px;
+}
+body[data-ui="beta"] .u3h-qa-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0; border: 0; background: none;
+  font: inherit; font-size: 12px; font-weight: 500; color: var(--u-text-2);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+body[data-ui="beta"] .u3h-round {
+  width: 52px; height: 52px; border-radius: 999px;
+  display: grid; place-items: center;
+  background: var(--u-cell-2); color: var(--u-text);
+  border: 1px solid var(--u-line);
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-micro) var(--u-ease-out);
+}
+body[data-ui="beta"] .u3h-round .ic { width: 22px; height: 22px; }
+body[data-ui="beta"] .u3h-round.pri { background: var(--u-primary); color: var(--u-on-primary); border-color: transparent; }
+body[data-ui="beta"] .u3h-qa-btn:active .u3h-round { transform: scale(.92); }
+body[data-ui="beta"] .u3h-qa-btn:focus-visible { outline: none; }
+body[data-ui="beta"] .u3h-qa-btn:focus-visible .u3h-round { outline: 2px solid var(--u-accent); outline-offset: 2px; }
+@media (hover: hover) {
+  body[data-ui="beta"] .u3h-qa-btn:hover .u3h-round { background: var(--u-cell-press); }
+  body[data-ui="beta"] .u3h-qa-btn:hover .u3h-round.pri { background: var(--u-primary-press); }
+}
+
+/* =========================================================
+   Apple inset grouped: заголовки, группы, строки
+   ========================================================= */
+body[data-ui="beta"] .u3h-g-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 24px 4px 8px;
+  font-size: 15px; font-weight: 600; letter-spacing: var(--u-tr-tight);
+  color: var(--u-text);
+}
+body[data-ui="beta"] .u3h-g-head.sub { padding-top: 20px; }
+body[data-ui="beta"] .u3h-meta,
+body[data-ui="beta"] .u3h-link {
+  font-size: 13px; font-weight: 500; letter-spacing: 0;
+  color: var(--u-accent-text); font-variant-numeric: tabular-nums;
+}
+body[data-ui="beta"] .u3h-meta { color: var(--u-text-3); }
+body[data-ui="beta"] .u3h-link {
+  background: none; border: 0; padding: 8px 0; margin: -8px 0;
+  font-family: inherit; cursor: pointer;
+}
+body[data-ui="beta"] .u3h-group {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  overflow: hidden;
+}
+body[data-ui="beta"][data-theme="light"] .u3h-group,
+body[data-ui="beta"]:not([data-theme]) .u3h-group { border-color: transparent; }
+body[data-ui="beta"] .u3h-cell {
+  position: relative;
+  display: flex; align-items: center; gap: 12px;
+  min-height: 56px; padding: 8px 16px;
+}
+body[data-ui="beta"] .u3h-cell + .u3h-cell::before {
+  content: ""; position: absolute; top: 0; right: 0; left: 44px;
+  height: 1px; background: var(--u-sep);
+}
+body[data-ui="beta"] .u3h-group.has-tile .u3h-cell + .u3h-cell::before { left: 64px; }
+body[data-ui="beta"] .u3h-c-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+body[data-ui="beta"] .u3h-c-t {
+  font-size: 15px; font-weight: 500; color: var(--u-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body[data-ui="beta"] .u3h-c-s {
+  font-size: 13px; color: var(--u-text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body[data-ui="beta"] .u3h-c-r {
+  flex: none; text-align: right;
+  font-size: 15px; font-weight: 600; color: var(--u-text);
+  font-variant-numeric: tabular-nums;
+  display: flex; flex-direction: column; align-items: flex-end;
+}
+body[data-ui="beta"] .u3h-c-r .u3h-c-s { font-size: 12px; font-weight: 400; }
+/* отставание: текст темпа нейтральный, цвет несёт только пирог —
+   иначе при общем отставании весь список выглядит как авария */
+body[data-ui="beta"] .u3h-cell.behind .u3h-c-main .u3h-c-s,
+body[data-ui="beta"] .u3h-cell.mild .u3h-c-main .u3h-c-s { color: var(--u-text-2); }
+body[data-ui="beta"] .u3h-empty {
+  padding: 16px; font-size: 15px; line-height: 1.4; color: var(--u-text-2);
+}
+
+/* иконка-плитка ленты */
+body[data-ui="beta"] .u3h-tile {
+  width: 36px; height: 36px; flex: none;
+  border-radius: var(--u-r-sm);
+  display: grid; place-items: center;
+  background: var(--u-accent-soft); color: var(--u-accent-text);
+}
+body[data-ui="beta"] .u3h-tile.neu { background: var(--u-cell-2); color: var(--u-text-2); }
+body[data-ui="beta"] .u3h-tile .ic { width: 18px; height: 18px; }
+
+/* ---------- Пирог статуса (Linear): --p от 0 до 1 ---------- */
+@property --u3h-p { syntax: "<number>"; inherits: false; initial-value: 0; }
+body[data-ui="beta"] .u3h-pie {
+  --c: var(--u-accent);
+  --track: color-mix(in srgb, var(--c) 26%, transparent);
+  width: 18px; height: 18px; flex: none; box-sizing: border-box;
+  border-radius: 999px;
+  border: 2px solid var(--c);
+  padding: 2px;
+  background:
+    conic-gradient(var(--c) calc(var(--p) * 360deg), var(--track) 0) content-box;
+  position: relative;
+}
+body[data-ui="beta"] .u3h-pie.ok { --c: var(--u-accent); }
+body[data-ui="beta"] .u3h-pie.warn { --c: var(--u-warning); }
+body[data-ui="beta"] .u3h-pie.bad { --c: var(--u-danger); }
+/* «!» у отстающих — внутри кольца, на тёмном треке: остаётся виден
+   даже при 5% заполнения и не затирает прогресс. */
+body[data-ui="beta"] .u3h-cell.behind .u3h-pie::after {
+  content: "!"; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 9px; font-weight: 800; line-height: 1; color: var(--c);
+  text-shadow: 0 0 3px var(--u-cell);
+  pointer-events: none;
+}
+body[data-ui="beta"] .u3h-pie.done { --c: var(--u-success); padding: 0; background: var(--c); position: relative; }
+body[data-ui="beta"] .u3h-pie.done::after {
+  content: ""; position: absolute; inset: 2px;
+  background: var(--u-cell);
+  -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>') center / contain no-repeat;
+          mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>') center / contain no-repeat;
+}
+body[data-ui="beta"] .u3h-net .u3h-pie { width: 20px; height: 20px; }
+
+/* ---------- Задачи под днём ---------- */
+body[data-ui="beta"] #myDayBody > .section-title { padding: 24px 4px 8px !important; color: var(--u-text); font-size: 15px; }
+body[data-ui="beta"] #myDayBody > .row {
+  background: var(--u-cell); border-radius: var(--u-r-lg); margin-bottom: 8px;
+  border: 1px solid var(--u-line);
+}
+
+/* ---------- Остальные секции главной: заголовки снаружи карточки ---------- */
+body[data-ui="beta"] #page-home > .section:not(#homeGreeting):not(#homeTodaySwipe) { margin-top: 0; }
+body[data-ui="beta"] #page-home > #homeCalcSection { margin-top: 24px; }
+body[data-ui="beta"] #commandCenterSection { margin-top: 16px; }
+body[data-ui="beta"] #page-home .section > .section-title { font-size: 13px; }
+
+/* Command Center (менеджер): плитка здоровья в палитре беты */
+body[data-ui="beta"] .cc-row { padding: 0 16px 14px; }
+body[data-ui="beta"] .cc-health { border-radius: var(--u-r-md); }
+body[data-ui="beta"] .cc-health.good { background: var(--u-success-soft); color: var(--u-success); border-color: transparent; }
+body[data-ui="beta"] .cc-health.mid  { background: var(--u-warning-soft); color: var(--u-warning); border-color: transparent; }
+body[data-ui="beta"] .cc-health.bad  { background: var(--u-danger-soft);  color: var(--u-danger);  border-color: transparent; }
+body[data-ui="beta"] .cc-line.cc-up { color: var(--u-success); }
+body[data-ui="beta"] .cc-line.cc-down { color: var(--u-danger); }
+body[data-ui="beta"] .sv-drop { background: var(--u-cell-2); border: 1px solid var(--u-line); border-radius: var(--u-r-md); }
+body[data-ui="beta"] .sv-drop.warn { background: var(--u-warning-soft); }
+
+/* ---------- Десктоп-дашборд главной (≥1200) ---------- */
+body[data-ui="beta"] .desktop-dashboard .stat-chip {
+  background: var(--u-cell); border: 1px solid var(--u-line); border-radius: var(--u-r-lg); box-shadow: none;
+}
+body[data-ui="beta"] .desktop-dashboard .stat-chip .n { font-variant-numeric: tabular-nums; letter-spacing: var(--u-tr-tight); }
+body[data-ui="beta"] .desktop-dashboard #myDayBodyDesktop { padding: 0 16px 16px; }
+body[data-ui="beta"] .desktop-dashboard .u3h-group { background: var(--u-cell-2); }
+body[data-ui="beta"] .pulse-chip {
+  background: var(--u-cell-2); border: 1px solid var(--u-line); box-shadow: none; border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .pulse-chip .pc-l { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--u-text-3); }
+body[data-ui="beta"] .pulse-chip .pc-v { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* =========================================================
+   ОБОЛОЧКА — шлифовка поверх ui3/base.css (все экраны)
+   ========================================================= */
+/* Шапка: при прокрутке — стекло, иначе прозрачная над холстом */
+body[data-ui="beta"] .app-header {
+  position: sticky; top: 0; z-index: 50;
+  background: linear-gradient(var(--u-page) 0%, color-mix(in srgb, var(--u-page) 82%, transparent) 70%, transparent 100%);
+}
+body[data-ui="beta"] .icon-btn {
+  border-radius: 999px;
+  font-size: 15px;
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-micro) var(--u-ease-out);
+}
+body[data-ui="beta"] .icon-btn .ic { width: 18px; height: 18px; }
+/* кнопка-зона 44px при визуальных 36px */
+body[data-ui="beta"] .icon-btn,
+body[data-ui="beta"] .avatar { position: relative; }
+body[data-ui="beta"] .icon-btn::after,
+body[data-ui="beta"] .avatar::after { content: ""; position: absolute; inset: -4px; }
+body[data-ui="beta"] .header-actions { gap: 8px; }
+
+/* Таб-бар: стеклянная капсула, активный — акцент + точка-индикатор */
+body[data-ui="beta"] .bottom-nav {
+  left: 16px; right: 16px;
+  border-radius: var(--u-r-xl);
+  padding: 4px;
+  min-height: 64px;
+  align-items: stretch;
+  box-shadow: 0 12px 32px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.04);
+}
+body[data-ui="beta"][data-theme="light"] .bottom-nav,
+body[data-ui="beta"]:not([data-theme]) .bottom-nav { box-shadow: 0 10px 30px rgba(0,0,0,.08); }
+body[data-ui="beta"] .nav-item {
+  min-height: 44px; min-width: 0;
+  padding: 6px 0 4px;
+  font-size: 10px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1;
+  gap: 3px; justify-content: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-radius: 22px;
+  transition: color var(--u-dur-short) var(--u-ease-out), background-color var(--u-dur-micro) var(--u-ease-out);
+}
+body[data-ui="beta"] .nav-item.active { color: var(--u-accent-text); }
+body[data-ui="beta"] .nav-item.active .ico { animation: none; }
+body[data-ui="beta"] .nav-item:active { background: transparent; }
+body[data-ui="beta"] .nav-item:active .ico { transform: scale(.9); }
+body[data-ui="beta"] .nav-item .ico { transition: transform var(--u-dur-micro) var(--u-ease-out); }
+@media (hover: hover) {
+  body[data-ui="beta"] .nav-item:hover { color: var(--u-text); }
+  body[data-ui="beta"] .nav-item.active:hover { color: var(--u-accent-text); }
+}
+
+/* FAB на прочих экранах: тот же круг, что primary-кнопка ряда действий */
+body[data-ui="beta"] .fab {
+  right: calc(20px + var(--app-safe-right));
+  bottom: calc(var(--bottom-nav-safe-offset) + 12px);
+  border: 0;
+  font-size: 30px; font-weight: 300;
+  box-shadow: 0 10px 24px -8px rgba(16,111,163,.6), inset 0 0 0 1px rgba(255,255,255,.12);
+  transition: transform var(--u-dur-micro) var(--u-ease-out), background-color var(--u-dur-micro) var(--u-ease-out);
+}
+body[data-ui="beta"][data-theme="dark"] .fab { box-shadow: 0 12px 28px -8px rgba(42,171,238,.5), inset 0 0 0 1px rgba(255,255,255,.18); }
+
+/* Тост: над стеклянной капсулой-таббаром. top:auto снимает top из styles.css,
+   иначе он был бы растянут между top и bottom в полосу на весь экран. */
+body[data-ui="beta"] .toast {
+  top: auto;
+  bottom: calc(var(--bottom-nav-safe-offset) + 12px);
+  max-width: calc(100vw - 32px);
+  padding: 12px 18px;
+  font-size: 15px;
+}
+
+/* Skeleton: тихая пульсация на cell-2, без бегущего блика */
+body[data-ui="beta"] .skeleton {
+  background: var(--u-cell-2);
+  background-size: auto;
+  height: 16px;
+  border-radius: 6px;
+}
+body[data-ui="beta"] .u3h-hero-slot .u3h-h-num { color: var(--u-on-hero-2); }
+
+/* Пустые состояния: плитка как в DS-полосе концепта */
+body[data-ui="beta"] .empty { color: var(--u-text-2); font-size: 15px; }
+body[data-ui="beta"] .empty-state { color: var(--u-text-2); gap: 6px; padding: 32px 16px; }
+body[data-ui="beta"] .empty-state .es-icon {
+  width: 44px; height: 44px; border-radius: var(--u-r-md); margin-bottom: 6px;
+}
+body[data-ui="beta"] .empty-state .es-icon svg { width: 20px; height: 20px; }
+body[data-ui="beta"] .empty-state .es-title { font-size: 17px; font-weight: 600; letter-spacing: var(--u-tr-tight); color: var(--u-text); }
+body[data-ui="beta"] .empty-state .es-sub { font-size: 13px; line-height: 1.4; color: var(--u-text-2); }
+
+/* =========================================================
+   Моушн: пироги заполняются от 0, reduced-motion — сразу
+   ========================================================= */
+@keyframes u3hPieIn { from { --u3h-p: 0; } to { --u3h-p: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+  body[data-ui="beta"] .u3h-pie:not(.done) {
+    background: conic-gradient(var(--c) calc(var(--p) * var(--u3h-p) * 360deg), var(--track) 0) content-box;
+    animation: u3hPieIn 720ms var(--u-ease-out) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .u3h-qa-btn:active .u3h-round,
+  body[data-ui="beta"] .nav-item:active .ico { transform: none; }
+  body[data-ui="beta"] .u3h-round,
+  body[data-ui="beta"] .nav-item,
+  body[data-ui="beta"] .nav-item .ico { transition: none; }
+}

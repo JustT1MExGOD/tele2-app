@@ -49,6 +49,7 @@ import ru.t2sales.shared.api.MeResponse
 import ru.t2sales.shared.api.MetricDef
 import ru.t2sales.shared.api.StoreInfo
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
 import ru.t2sales.shared.theme.T2Radius
 
 private class Move(val emp: Int, val from: String?, val to: String)
@@ -102,6 +103,13 @@ fun ForecastScreen(container: AppContainer, me: MeResponse) {
         val sid = fcStore ?: return@LaunchedEffect
         forecast = null; fcFailed = false
         runCatching { api.forecast(sid) }.onSuccess { forecast = it }.onFailure { fcFailed = true }
+    }
+
+    if (T2Colors.uiBeta) {
+        ForecastBeta(canManage, api, scope, stores, fcStore, { fcStore = it }, forecast, fcFailed, hints,
+            wiEmp, { wiEmp = it }, wiFrom, { wiFrom = it }, wiTo, { wiTo = it }, wiDate, { wiDate = it },
+            moves, wiBusy, { wiBusy = it }, wiMessage, { wiMessage = it }, last, { last = it }, scenarioA, { scenarioA = it })
+        return
     }
 
     // ---------------- Forecast
@@ -340,4 +348,153 @@ private fun Compare(a: WiResult, b: WiResult, onClear: () -> Unit) {
         Text(if (better != null) "Сценарий $better меньше проседает в своей самой слабой точке" else "Сценарии равнозначны по худшей точке", color = T2Colors.hint, fontSize = 12.sp)
         MChipButton("Очистить сравнение", modifier = Modifier.fillMaxWidth(), onClick = onClear)
     }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+/** One forecast day as a compact grouped cell: date, the four headline metrics, the day total. */
+@Composable
+private fun ForecastBetaDay(it: JsonObject) {
+    val p = it["predicted"].obj()
+    fun n(v: Double) = v.roundToInt()
+    val total = n(p["sim"].dbl() + p["mnp"].dbl() + p["pa"].dbl() + p["combo"].dbl())
+    U3Cell(
+        it["date"].str(),
+        "SIM ${n(p["sim"].dbl())} · MNP ${n(p["mnp"].dbl())} · ПА ${n(p["pa"].dbl())} · Комбо ${n(p["combo"].dbl())}",
+        leading = { U3Tile(it["date"].str().slice(8..9)) },
+        trailing = { U3Value("$total", T2Colors.text) }
+    )
+}
+
+/** Beta forecast + staffing hints + the what-if controls (the latter keep their classic widgets inside a group). */
+@Composable
+private fun ForecastBeta(
+    canManage: Boolean, api: ru.t2sales.shared.api.AnalyticsApi, scope: kotlinx.coroutines.CoroutineScope,
+    stores: List<StoreInfo>, fcStore: String?, onFcStore: (String) -> Unit,
+    forecast: JsonObject?, fcFailed: Boolean, hints: List<JsonObject>?,
+    wiEmp: String, onWiEmp: (String) -> Unit, wiFrom: String?, onWiFrom: (String?) -> Unit,
+    wiTo: String?, onWiTo: (String?) -> Unit, wiDate: String, onWiDate: (String) -> Unit,
+    moves: MutableList<Move>, wiBusy: Boolean, onWiBusy: (Boolean) -> Unit,
+    wiMessage: String?, onWiMessage: (String?) -> Unit, last: WiResult?, onLast: (WiResult?) -> Unit,
+    scenarioA: WiResult?, onScenarioA: (WiResult?) -> Unit
+) {
+    U3LargeTitle("Прогноз", "7 дней вперёд · what-if переносы")
+    U3FilterChips(stores.map { it.id to it.name }, fcStore ?: "", onSelect = onFcStore)
+    Spacer(Modifier.height(12.dp))
+
+    val d = forecast
+    when {
+        fcFailed -> ErrorState("Прогноз сейчас недоступен, зайди чуть позже")
+        d == null -> SkeletonBlock(Modifier.fillMaxWidth().height(180.dp), 28.dp)
+        else -> {
+            val hist = d["history_days"].dbl().toInt()
+            val items = d["items"].arr().map { it.obj() }
+            if (items.isEmpty()) {
+                EmptyText("Пока нет истории для прогноза по этой точке")
+            } else {
+                val totals = items.map { it["predicted"].obj().let { p -> p["sim"].dbl() + p["mnp"].dbl() + p["pa"].dbl() + p["combo"].dbl() } }
+                val weekTotal = totals.sum().roundToInt()
+                U3Hero {
+                    U3HeroRow("Форма недели", chip = if (hist < 14) "грубый прогноз" else null)
+                    U3HeroNumber("$weekTotal", "юнитов")
+                    Text("по ${items.size} дн. вперёд · история $hist дн.", color = T2Hero.onHero2, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+                    Spacer(Modifier.height(10.dp))
+                    U3Sparkline(totals.map { it.toFloat() }, height = 56.dp)
+                }
+                if (hist < 14) {
+                    Spacer(Modifier.height(10.dp))
+                    U3WarnRow("Пока только $hist дн. истории — прогноз грубый, будет точнее по мере накопления данных")
+                }
+                d["ai_summary"].str().takeIf { it.isNotEmpty() }?.let { ai ->
+                    Spacer(Modifier.height(10.dp))
+                    U3Group { U3Cell("Прогноз недели", ai, leading = { U3Tile("✨") }) }
+                }
+                U3GroupHead("По дням")
+                U3Group {
+                    items.forEachIndexed { i, it ->
+                        if (i > 0) U3Sep()
+                        ForecastBetaDay(it)
+                    }
+                }
+            }
+        }
+    }
+
+    if (canManage && hints != null) {
+        val list = hints.orEmpty()
+        U3GroupHead("Кого куда поставить")
+        if (list.isEmpty()) {
+            EmptyText("На неделю вперёд перекосов не видно — график и прогноз сходятся")
+        } else U3Group {
+            list.forEachIndexed { i, h ->
+                if (i > 0) U3Sep()
+                val warn = h["severity"].str() != "critical"
+                val c = if (warn) T2Colors.warning else T2Colors.danger
+                U3Cell(
+                    "${h["store_name"].str()} · ${h["date"].str()}", h["message"].str(),
+                    leading = { U3Tile(if (warn) "!" else "‼", tint = c, bg = if (warn) T2Colors.warningSoft else T2Colors.dangerSoft) },
+                    trailing = { U3Value("→", c) },
+                    onClick = { onWiTo(h["store_id"].str()); onWiDate(h["date"].str()); T2Toast.show("Точка выбрана — укажи сотрудника и «с точки»") }
+                )
+            }
+        }
+    }
+
+    U3GroupHead("What-if: переносы")
+    U3Group {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Field("Сотрудник id", wiEmp, { v -> onWiEmp(v.filter { it.isDigit() }) }, placeholder = "2", fill = T2Colors.surface2)
+            SelectField("С точки", stores.firstOrNull { it.id == wiFrom }?.name ?: "", stores.map { it.name }) { n -> stores.firstOrNull { it.name == n }?.let { onWiFrom(it.id) } }
+            SelectField("На точку", stores.firstOrNull { it.id == wiTo }?.name ?: "", stores.map { it.name }) { n -> stores.firstOrNull { it.name == n }?.let { onWiTo(it.id) } }
+            Field("Дата", wiDate, onWiDate, placeholder = "ГГГГ-ММ-ДД", fill = T2Colors.surface2)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) {
+                    U3SecondaryButton("+ Добавить перенос") {
+                        val e = wiEmp.toIntOrNull(); val to = wiTo
+                        if (e == null || to == null) { T2Toast.show("Укажи сотрудника и точку назначения", true) } else { moves.add(Move(e, wiFrom, to)); onWiEmp("") }
+                    }
+                }
+                Box(Modifier.weight(1f)) { U3SecondaryButton("Очистить") { moves.clear() } }
+            }
+            moves.forEachIndexed { i, m ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("#${m.emp}: ${m.from ?: "авто"} → ${m.to}", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("×", color = T2Colors.danger, fontSize = 18.sp, modifier = Modifier.clickable { moves.removeAt(i) }.padding(6.dp))
+                }
+            }
+            U3PrimaryButton(if (wiBusy) "Считаем…" else "Пересчитать покрытие", enabled = !wiBusy) {
+                var use = moves.toList()
+                if (use.isEmpty()) {
+                    val e = wiEmp.toIntOrNull(); val to = wiTo
+                    if (e != null && to != null) use = listOf(Move(e, wiFrom, to))
+                }
+                if (use.isEmpty()) { onWiMessage("Добавь хотя бы один перенос в сценарий"); return@U3PrimaryButton }
+                onWiBusy(true); onWiMessage(null)
+                scope.launch {
+                    runCatching { api.whatIf(body(wiDate, use)) }
+                        .onSuccess { r -> onLast(WiResult(r, r["date"].str().ifEmpty { wiDate }, use)); if (scenarioA != null) onWiMessage(null) }
+                        .onFailure { onWiMessage(it.message ?: "Ошибка") }
+                    onWiBusy(false)
+                }
+            }
+            wiMessage?.let { Text(it, color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
+            last?.let { r ->
+                Scenario(r, canManage,
+                    onApply = {
+                        scope.launch {
+                            runCatching { api.applyWhatIf(body(r.date, r.moves)) }
+                                .onSuccess { T2Toast.show("График обновлён: ${it["count"].dbl().toInt()} смен") }
+                                .onFailure { T2Toast.show(it.message ?: "Не удалось применить", true) }
+                        }
+                    },
+                    onSaveA = { onScenarioA(r); T2Toast.show("Сценарий A сохранён") }
+                )
+            }
+            val a = scenarioA
+            val b = last
+            if (a != null && b != null) Compare(a, b) { onScenarioA(null) }
+            else if (a != null) Text("Сценарий A сохранён (${a.moves.size} перенос(ов)). Собери другой набор переносов и пересчитай — появится сравнение.", color = T2Colors.hint, fontSize = 12.sp)
+        }
+    }
+    Spacer(Modifier.height(96.dp))
 }

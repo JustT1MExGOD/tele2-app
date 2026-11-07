@@ -53,6 +53,7 @@ import ru.t2sales.shared.api.EmployeeListItem
 import ru.t2sales.shared.api.MeResponse
 import ru.t2sales.shared.navigation.Screen
 import ru.t2sales.shared.theme.T2Colors
+import ru.t2sales.shared.theme.T2Hero
 import ru.t2sales.shared.theme.T2Radius
 import ru.t2sales.shared.theme.T2Spacing
 
@@ -77,7 +78,30 @@ fun CommandCenterScreen(container: AppContainer, me: MeResponse, onNavigate: (Sc
     }
 
     val d = data
-    when {
+    if (T2Colors.uiBeta) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            U3LargeTitle("Command Center", "сеть в реальном времени")
+            CcBeta(d, failed, me,
+                onRetry = { reload++ },
+                onAction = { a ->
+                    when (a.type) {
+                        "open_employee" -> onNavigate(Screen.Team)
+                        "open_store" -> AppNav.openStore(a.id?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: a.store_id ?: "")
+                        "create_task" -> taskCtx = TaskCtx(a.store_id, a.employee_id, a.alert_id, a.message ?: "")
+                    }
+                },
+                onAck = { id ->
+                    scope.launch {
+                        runCatching { api.ackAlert(id) }
+                            .onSuccess { T2Toast.show("Взято в работу"); reload++ }
+                            .onFailure { T2Toast.show("Не удалось обновить алерт", true) }
+                    }
+                },
+                onAnalytics = { onNavigate(Screen.SvOverview) }
+            )
+            Spacer(Modifier.height(96.dp))
+        }
+    } else when {
         failed -> ErrorState(
             "Command Center сейчас недоступен, зайди чуть позже",
             onRetry = { reload++ }
@@ -256,6 +280,104 @@ private fun Chip(label: String, onClick: () -> Unit) {
         label, fontWeight = FontWeight.Bold, fontSize = 13.sp,
         modifier = Modifier.clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp)
     )
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+/** Command Center in beta: hero with the network health, stores as cells with U3Pie, problems as warn rows with action chips, sector analytics link. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CcBeta(
+    d: CcResponse?, failed: Boolean, me: MeResponse,
+    onRetry: () -> Unit, onAction: (CcAction) -> Unit, onAck: (Int) -> Unit, onAnalytics: () -> Unit
+) {
+    when {
+        failed -> { ErrorState("Command Center сейчас недоступен, зайди чуть позже", onRetry = onRetry); return }
+        d == null -> { SkeletonBlock(Modifier.fillMaxWidth().height(200.dp), 28.dp); return }
+    }
+    val n = d.network
+    val health = n.health.roundToInt()
+    val pace = n.pace_delta.roundToInt()
+
+    U3Hero {
+        U3HeroRow(
+            "Что происходит",
+            chip = if (d.problems.isEmpty()) "в ритме" else "проблем: ${d.problems.size}",
+            chipColor = if (d.problems.isEmpty()) T2Hero.chip else T2Colors.danger.copy(alpha = 0.9f),
+            chipText = if (d.problems.isEmpty()) T2Hero.onHero else Color.White
+        )
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                U3HeroNumber("${n.overall_pct.roundToInt()}", "% плана дня")
+                Text(
+                    "${n.staff_on_shift} на смене · ${n.stores_count} точек · темп ${(if (pace >= 0) "+$pace" else "$pace")}%",
+                    color = T2Hero.onHero2, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            U3Ring(health, "здоровье", size = 76.dp)
+        }
+    }
+
+    U3GroupHead("Точки", "${d.stores.size}")
+    if (d.stores.isEmpty()) {
+        U3Group { U3Cell("Нет точек в сети") }
+    } else {
+        U3Group {
+            d.stores.forEachIndexed { i, st ->
+                if (i > 0) U3Sep()
+                val t = st.today
+                val pct = (t?.overall ?: 0.0).roundToInt()
+                val tint = st.color?.let { runCatching { Color(("FF" + it.removePrefix("#")).toLong(16)) }.getOrNull() } ?: T2Colors.blue
+                U3Cell(
+                    st.name,
+                    "${st.staff_count ?: 0} на смене · SIM ${(t?.sim ?: 0.0).roundToInt()}/${(t?.plan_sim ?: 0.0).roundToInt()} · MNP ${(t?.mnp ?: 0.0).roundToInt()}/${(t?.plan_mnp ?: 0.0).roundToInt()}",
+                    leading = { U3Tile(st.name.take(2).uppercase(), tint = tint) },
+                    trailing = { U3Pie(pct, size = 26.dp) }
+                )
+            }
+        }
+    }
+
+    U3GroupHead("Где проблема", if (d.problems.isNotEmpty()) "${d.problems.size}" else null)
+    if (d.problems.isEmpty()) {
+        U3Group { U3Cell("Проблем нет", "сеть в ритме", leading = { U3Tile("✓", tint = T2Colors.success) }) }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            d.problems.forEach { p ->
+                val warn = p.severity != "critical"
+                val tone = if (warn) T2Colors.warning else T2Colors.danger
+                val soft = if (warn) T2Colors.warningSoft else T2Colors.dangerSoft
+                Column {
+                    U3WarnRow((p.store_name ?: "Точка") + " — " + p.message, tone = tone, soft = soft)
+                    if (!p.ai_comment.isNullOrBlank()) {
+                        Text("✨ ${p.ai_comment}", color = T2Colors.hint, fontSize = 12.sp, fontStyle = FontStyle.Italic, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+                    }
+                    val hasActions = p.actions.isNotEmpty() || p.alert_id != null
+                    if (hasActions) {
+                        FlowRow(modifier = Modifier.padding(start = 8.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            p.actions.forEach { a ->
+                                val label = when (a.type) { "open_employee" -> "Открыть сотрудника"; "open_store" -> "Открыть точку"; "create_task" -> "Создать задачу"; else -> null }
+                                if (label != null) Chip(label) { onAction(a) }
+                            }
+                            p.alert_id?.let { id -> Chip("Взять в работу") { onAck(id) } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (me.role == "admin" || me.role == "supervisor") {
+        U3GroupHead("Аналитика")
+        U3Group {
+            U3Cell(
+                "Полная аналитика сектора", "Тренд · топ продавцов · разбивка по точкам",
+                leading = { U3IconTile(NavIcons.commandCenter, tint = T2Colors.accentText) },
+                trailing = { Text("›", color = T2Colors.hint, fontSize = 18.sp) },
+                onClick = onAnalytics
+            )
+        }
+    }
 }
 
 @Composable

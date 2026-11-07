@@ -55,6 +55,26 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
         if (isAdmin) runCatching { api.allTickets() }.onSuccess { all = it }.onFailure { all = emptyList() }
     }
 
+    fun send() {
+        val m = message.trim()
+        if (m.isEmpty()) { T2Toast.show("Введите сообщение", true); return }
+        scope.launch {
+            runCatching { api.createTicket(m, me.full_name ?: "Гость") }
+                .onSuccess { r -> result = r.auto_reply ?: r.message ?: "Отправлено"; message = ""; T2Toast.show("Отправлено"); reload++ }
+                .onFailure { T2Toast.show("Ошибка отправки", true) }
+        }
+    }
+
+    if (T2Colors.uiBeta) {
+        SupportBeta(
+            faq, faqFailed, my, all, isAdmin,
+            expanded, { expanded = it }, message, { message = it }, result,
+            onRetry = { reload++ }, onSend = ::send, onReply = { replyTo = it }
+        )
+        replyTo?.let { t -> SupportReplySheet(t, api, { replyTo = null }, { reload++ }) }
+        return
+    }
+
     PageSection("Частые вопросы") {
         val list = faq
         when {
@@ -86,15 +106,7 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
             Spacer(Modifier.height(8.dp))
             Field("Сообщение", message, { message = it }, placeholder = "Опишите вопрос или проблему", fill = T2Colors.surface2)
             Spacer(Modifier.height(12.dp))
-            MainButton("Отправить", enabled = true) {
-                val m = message.trim()
-                if (m.isEmpty()) { T2Toast.show("Введите сообщение", true); return@MainButton }
-                scope.launch {
-                    runCatching { api.createTicket(m, me.full_name ?: "Гость") }
-                        .onSuccess { r -> result = r.auto_reply ?: r.message ?: "Отправлено"; message = ""; T2Toast.show("Отправлено"); reload++ }
-                        .onFailure { T2Toast.show("Ошибка отправки", true) }
-                }
-            }
+            MainButton("Отправить", enabled = true) { send() }
             result?.let { Text(it, color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) }
         }
     }
@@ -117,19 +129,99 @@ fun SupportScreen(container: AppContainer, me: MeResponse) {
         }
     }
 
-    replyTo?.let { t ->
-        var reply by remember(t.id) { mutableStateOf("") }
-        SheetDialog("Ответ на тикет #${t.id}", onDismiss = { replyTo = null }) {
-            Field("", reply, { reply = it }, placeholder = "Ответ", fill = T2Colors.surface2)
-            Spacer(Modifier.height(16.dp))
-            MainButton("Отправить", enabled = true) {
-                if (reply.isBlank()) return@MainButton
-                scope.launch {
-                    runCatching { api.replyTicket(t.id, reply.trim()) }
-                        .onSuccess { T2Toast.show("Ответ отправлен"); replyTo = null; reload++ }
-                        .onFailure { T2Toast.show("Ошибка", true) }
+    replyTo?.let { t -> SupportReplySheet(t, api, { replyTo = null }, { reload++ }) }
+}
+
+@Composable
+private fun SupportReplySheet(t: SupportTicket, api: ru.t2sales.shared.api.InfoApi, onDismiss: () -> Unit, onChanged: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var reply by remember(t.id) { mutableStateOf("") }
+    SheetDialog("Ответ на тикет #${t.id}", onDismiss = onDismiss) {
+        Field("", reply, { reply = it }, placeholder = "Ответ", fill = T2Colors.surface2)
+        Spacer(Modifier.height(16.dp))
+        MainButton("Отправить", enabled = true) {
+            if (reply.isBlank()) return@MainButton
+            scope.launch {
+                runCatching { api.replyTicket(t.id, reply.trim()) }
+                    .onSuccess { T2Toast.show("Ответ отправлен"); onDismiss(); onChanged() }
+                    .onFailure { T2Toast.show("Ошибка", true) }
+            }
+        }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» (design-system/ui3/v5-team, screen "Поддержка") =======================
+
+/** FAQ accordion as grouped expandable cells, my tickets as a group, the send form, and — for admins — the ticket list. */
+@Composable
+private fun SupportBeta(
+    faq: List<FaqItem>?, faqFailed: Boolean, my: List<SupportTicket>, all: List<SupportTicket>?, isAdmin: Boolean,
+    expanded: Int?, onExpand: (Int?) -> Unit, message: String, onMessage: (String) -> Unit, result: String?,
+    onRetry: () -> Unit, onSend: () -> Unit, onReply: (SupportTicket) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("Поддержка")
+        U3GroupHead("Частые вопросы")
+        val list = faq
+        when {
+            list == null -> SkeletonBlock(Modifier.fillMaxWidth().height(120.dp), 22.dp)
+            faqFailed -> ErrorState("Не удалось загрузить FAQ", onRetry = onRetry)
+            list.isEmpty() -> EmptyText("FAQ пока пуст")
+            else -> U3Group {
+                list.forEachIndexed { i, f ->
+                    if (i > 0) U3Sep()
+                    val open = expanded == f.id
+                    U3Cell(
+                        f.question, if (open) f.answer else null,
+                        leading = { U3IconTile(NavIcons.info, tint = T2Colors.accentText) },
+                        trailing = { Text(if (open) "▴" else "›", color = T2Colors.hint, fontSize = 18.sp) },
+                        onClick = { onExpand(if (open) null else f.id) }
+                    )
                 }
             }
         }
+
+        U3GroupHead("Чат с поддержкой")
+        if (my.isEmpty()) EmptyText("Пока нет обращений")
+        else U3Group {
+            my.take(8).forEachIndexed { i, t ->
+                if (i > 0) U3Sep()
+                U3Cell(
+                    "#${t.id} · ${t.status ?: ""}",
+                    t.message + (t.admin_reply?.takeIf { it.isNotBlank() }?.let { "\n↩ $it" } ?: ""),
+                    leading = { U3IconTile(NavIcons.chat, tint = T2Colors.textSecondary) }
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        U3Group {
+            Column(Modifier.padding(16.dp)) {
+                Field("Сообщение", message, onMessage, placeholder = "Опишите вопрос или проблему", fill = T2Colors.surface2)
+                Spacer(Modifier.height(12.dp))
+                U3PrimaryButton("Отправить", onClick = onSend)
+                result?.let { Text(it, color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) }
+            }
+        }
+
+        if (isAdmin) {
+            U3GroupHead("Тикеты")
+            val tickets = all
+            when {
+                tickets == null -> SkeletonBlock(Modifier.fillMaxWidth().height(120.dp), 22.dp)
+                tickets.isEmpty() -> EmptyText("Нет тикетов")
+                else -> U3Group {
+                    tickets.forEachIndexed { i, t ->
+                        if (i > 0) U3Sep()
+                        U3Cell(
+                            "#${t.id} ${t.full_name ?: ""}", t.message,
+                            leading = { U3IconTile(NavIcons.support, tint = T2Colors.textSecondary) },
+                            trailing = { Text("›", color = T2Colors.hint, fontSize = 18.sp) },
+                            onClick = { onReply(t) }
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
     }
 }

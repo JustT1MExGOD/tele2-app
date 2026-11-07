@@ -48,6 +48,24 @@ fun HistoryScreen(api: SalesApi, me: MeResponse) {
             .onFailure { failed = true }
     }
 
+    if (T2Colors.uiBeta) {
+        val list = items
+        when {
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить историю", onRetry = { reload++ })
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
+            list.isEmpty() -> Text("Нет продаж за период", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            else -> ru.t2sales.desktop.ui.components.Group {
+                list.forEachIndexed { i, s ->
+                    if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator()
+                    ru.t2sales.desktop.ui.components.BetaCell(
+                        title = if (filter != null) s.store_name ?: "" else s.full_name,
+                        sub = s.sale_date.take(10) + (if (filter == null) " · ${s.store_name ?: ""}" else "") + " · SIM ${n(s.sim)} · MNP ${n(s.mnp)} · ПА ${n(s.pa)}"
+                    )
+                }
+            }
+        }
+        return
+    }
     PageSection("История продаж") {
         val list = items
         when {

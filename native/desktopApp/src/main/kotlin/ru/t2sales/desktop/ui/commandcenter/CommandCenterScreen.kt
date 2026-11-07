@@ -103,7 +103,9 @@ fun CommandCenterScreen(container: AppContainer, me: MeResponse, onNavigate: (Sc
 
             Section("Что происходит") {
                 Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Box(
+                    if (T2Colors.uiBeta) {
+                        ru.t2sales.desktop.ui.components.BetaRing((n.health / 100.0).toFloat().coerceIn(0f, 1f), "${n.health.roundToInt()}", size = 56.dp, stroke = 5.dp, tone = tone)
+                    } else Box(
                         modifier = Modifier.size(52.dp).clip(CircleShape).background(tone.copy(alpha = 0.13f)).border(2.dp, tone.copy(alpha = 0.27f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) { Text(n.health.roundToInt().toString(), color = tone, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp) }
@@ -180,6 +182,11 @@ fun CommandCenterScreen(container: AppContainer, me: MeResponse, onNavigate: (Sc
 
 @Composable
 private fun Section(title: String?, content: @Composable () -> Unit) {
+    if (T2Colors.uiBeta) {
+        if (title != null) ru.t2sales.desktop.ui.components.GroupHead(title)
+        ru.t2sales.desktop.ui.components.Group { Column(Modifier.padding(vertical = 6.dp)) { content() } }
+        return
+    }
     val shape = RoundedCornerShape(T2Radius.default)
     Column(modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(vertical = 6.dp)) {
         if (title != null) {
@@ -260,7 +267,7 @@ private fun ProblemCard(p: CcProblem, onAction: (CcAction) -> Unit, onAck: (Int)
 
 @Composable
 private fun Chip(label: String, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(if (T2Colors.uiBeta) 99.dp else 12.dp)
     Text(
         label, fontWeight = FontWeight.Bold, fontSize = 13.sp,
         modifier = Modifier.clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp)

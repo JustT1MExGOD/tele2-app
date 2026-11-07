@@ -67,11 +67,13 @@ export async function loadCash(): Promise<void> {
           const delta = c.delta != null ? Number(c.delta) : fact != null && c1 != null ? Number(fact) - (Number(c1) + 2000) : null;
           const dClass = delta == null ? '' : delta >= 0 ? 'delta-pos' : 'delta-neg';
           const click = `onclick="fillCashForm('${s.id}','${d}',${Number(fact) || 0},${Number(c1) || 0})"`;
-          return `<div class="cash-row" ${click} style="${click ? 'cursor:pointer' : ''}">
+          const warn = delta != null && Number(delta) !== 0 ? ' u3-warn' : '';
+          return `<div class="cash-row${warn}" ${click} style="${click ? 'cursor:pointer' : ''}">
+              <div class="u3-cash-tile" hidden aria-hidden="true"></div>
               <div class="sn">${esc(s.name || s.id)}</div>
-              <div>${fact != null && fact !== '' ? Number(fact).toLocaleString('ru-RU') : '—'}</div>
-              <div>${c1 != null && c1 !== '' ? Number(c1).toLocaleString('ru-RU') : '—'}</div>
-              <div class="${dClass}">${delta == null || (delta as any) === '' ? '—' : (delta > 0 ? '+' : '') + Number(delta).toLocaleString('ru-RU')}</div>
+              <div class="u3-v-fact">${fact != null && fact !== '' ? Number(fact).toLocaleString('ru-RU') : '—'}</div>
+              <div class="u3-v-1c">${c1 != null && c1 !== '' ? Number(c1).toLocaleString('ru-RU') : '—'}</div>
+              <div class="u3-v-d ${dClass}">${delta == null || (delta as any) === '' ? '—' : (delta > 0 ? '+' : '') + Number(delta).toLocaleString('ru-RU')}</div>
             </div>`;
         })
         .join('');
@@ -87,7 +89,24 @@ export async function loadCash(): Promise<void> {
     // факт за месяц» — dates уже по возрастанию даты).
     const recent = dates.slice(-2);
     const rest = dates.slice(0, -2);
+    // Beta UI 3.0: hero «Δ наличные» по последнему дню — [hidden] вне беты.
+    const lastD = dates.slice().sort()[dates.length - 1];
+    let heroSum = 0;
+    let heroOff = 0;
+    let heroHas = false;
+    for (const s of stList as any[]) {
+      const c: any = (cells as any)[lastD]?.[s.id] || {};
+      const dv = c.delta != null ? Number(c.delta) : c.cash_fact != null && c.cash_1c != null ? Number(c.cash_fact) - (Number(c.cash_1c) + 2000) : null;
+      if (dv != null) { heroSum += dv; heroHas = true; if (dv !== 0) heroOff++; }
+    }
+    const heroLabel = String(lastD).slice(8, 10) + '.' + String(lastD).slice(5, 7);
+    const hero = `<div class="u3-cash-hero" hidden>
+        <div class="u3-ch-label">Δ наличные, ${lastD === todayMoscow() ? 'сегодня' : esc(heroLabel)}</div>
+        <div class="u3-ch-num${heroSum !== 0 ? ' warn' : ''}">${heroHas ? (heroSum > 0 ? '+' : heroSum < 0 ? '−' : '') + Math.abs(heroSum).toLocaleString('ru-RU') + ' ₽' : '—'}</div>
+        ${heroOff ? `<div class="u3-ch-chip">Расхождение на ${heroOff} ${heroOff === 1 ? 'точке' : 'точках'}, пересчитайте</div>` : heroHas ? '<div class="u3-ch-sub">Касса сходится с 1С</div>' : '<div class="u3-ch-sub u3-muted">Касса за день ещё не внесена</div>'}
+      </div>`;
     box.innerHTML =
+      hero +
       recent.map(dayHtml).join('') +
       (rest.length
         ? `

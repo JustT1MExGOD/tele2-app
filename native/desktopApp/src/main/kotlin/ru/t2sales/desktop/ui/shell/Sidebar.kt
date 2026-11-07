@@ -201,16 +201,18 @@ private fun NavItem(entry: NavEntry, isSelected: Boolean, onClick: () -> Unit) {
     )
     val tint by animateColorAsState(if (isSelected) T2Colors.primary else T2Colors.hint, tween(200))
     val labelColor by animateColorAsState(if (isSelected) T2Colors.primary else T2Colors.text, tween(200))
+    // Beta UI 3.0: capsule nav items (no left accent bar).
+    val capsule = T2Colors.uiBeta
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(T2Radius.sm))
+            .clip(RoundedCornerShape(if (capsule) 99.dp else T2Radius.sm))
             .background(bg)
             .hoverable(source)
             .clickable(interactionSource = source, indication = LocalIndication.current, enabled = entry.screen != null, onClick = onClick)
     ) {
         AnimatedVisibility(
-            visible = isSelected,
+            visible = isSelected && !capsule,
             modifier = Modifier.align(Alignment.CenterStart),
             enter = fadeIn(tween(200)) + scaleIn(tween(260), initialScale = 0.2f),
             exit = fadeOut(tween(120))

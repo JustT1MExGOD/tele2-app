@@ -117,6 +117,19 @@
     });
   </script>
   <link rel="stylesheet" href="/styles.css">
+  <!-- Beta UI 3.0 «Ночная смена» — действует только при body[data-ui="beta"]
+       (переключатель в Профиле, app/nav.ts toggleBetaUi). base.css —
+       токены и оболочка, остальные файлы — по экранам. -->
+  <link rel="stylesheet" href="/ui3/base.css">
+  <link rel="stylesheet" href="/ui3/home.css">
+  <link rel="stylesheet" href="/ui3/sale-cash.css">
+  <link rel="stylesheet" href="/ui3/plans-rating.css">
+  <link rel="stylesheet" href="/ui3/rest.css">
+  <link rel="stylesheet" href="/ui3/supervisor.css">
+  <link rel="stylesheet" href="/ui3/comms.css">
+  <link rel="stylesheet" href="/ui3/people.css">
+  <link rel="stylesheet" href="/ui3/shell.css">
+  <link rel="stylesheet" href="/ui3/admin.css">
 </head>
 <body data-theme="light">
   <!-- ACCESS GATE: вне .sheet, иначе visibility:hidden на sheet прячет и gate -->
@@ -695,6 +708,20 @@
         <div id="lkActions"></div>
         <div id="lkPhoneAuth"></div>
         <div id="lkSessions"></div>
+      </div>
+
+      <!-- Beta UI 3.0 (21.0) — переключатель внешнего вида «Ночная смена».
+           Статичный блок вне #lkRoot (его содержимое перерисовывает
+           my-plan/index.ts). Меняет только стили через body[data-ui="beta"]
+           (app/nav.ts toggleBetaUi), выбор хранится в localStorage. -->
+      <div class="section beta-ui-card" id="betaUiCard">
+        <label class="beta-ui-row">
+          <span class="beta-ui-text">
+            <span class="beta-ui-title">Beta UI 3.0 <span class="beta-ui-badge">beta</span></span>
+            <span class="beta-ui-sub">Новый внешний вид приложения. Всё работает как раньше, выключить можно в любой момент.</span>
+          </span>
+          <input type="checkbox" class="beta-ui-switch" data-beta-ui-switch role="switch" aria-label="Beta UI 3.0" data-on="toggleBetaUi" data-on-event="change">
+        </label>
       </div>
 
       <div class="section" id="myBindSection" style="display:none;">

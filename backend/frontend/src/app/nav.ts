@@ -126,6 +126,43 @@ export function applyTheme(theme: string): void {
   localStorage.setItem('t2_theme', theme);
 }
 
+// ===== Beta UI 3.0 =====
+// Переключатель внешнего вида «Ночная смена» (design-system/ui3/v5-team).
+// Только визуальный слой: ставит data-ui="beta" на <body>, а все стили
+// беты в frontend/ui3/*.css начинаются с body[data-ui="beta"] — без
+// атрибута они ни на что не влияют, логика экранов не меняется. Выбор
+// хранится локально на устройстве (t2_ui), по умолчанию — текущий UI.
+const UI_KEY = 't2_ui';
+
+export function isBetaUi(): boolean {
+  return document.body.getAttribute('data-ui') === 'beta';
+}
+
+function setUiVisual(beta: boolean): void {
+  if (beta) document.body.setAttribute('data-ui', 'beta');
+  else document.body.removeAttribute('data-ui');
+  document.querySelectorAll<HTMLInputElement>('[data-beta-ui-switch]').forEach((el) => {
+    el.checked = beta;
+  });
+}
+
+export function initUi(): void {
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(UI_KEY);
+  } catch (_) {}
+  setUiVisual(saved === 'beta');
+}
+
+export function toggleBetaUi(): void {
+  const next = !isBetaUi();
+  setUiVisual(next);
+  try {
+    localStorage.setItem(UI_KEY, next ? 'beta' : 'legacy');
+  } catch (_) {}
+  toast(next ? 'Beta UI 3.0 включён' : 'Вернули привычный интерфейс', 'ok');
+}
+
 export function toggleTheme(): void {
   const cur = document.body.getAttribute('data-theme') || 'light';
   applyTheme(cur === 'light' ? 'dark' : 'light');
@@ -602,6 +639,8 @@ declare global {
     tgUser: typeof tgUser;
     applyTheme: typeof applyTheme;
     toggleTheme: typeof toggleTheme;
+    toggleBetaUi: typeof toggleBetaUi;
+    isBetaUi: typeof isBetaUi;
     goBack: typeof goBack;
     switchPage: typeof switchPage;
     loadPage: typeof loadPage;
@@ -618,6 +657,11 @@ window.tgUser = tgUser;
 window.applyTheme = applyTheme;
 window.toggleTheme = toggleTheme;
 window.initTheme = initTheme;
+window.toggleBetaUi = toggleBetaUi;
+window.isBetaUi = isBetaUi;
+// Применяем сразу при загрузке бандла (скрипты подключены в конце <body>,
+// body уже существует) — до первой отрисовки данных, без мигания старого UI.
+initUi();
 window.goBack = goBack;
 window.switchPage = switchPage;
 window.loadPage = loadPage;

@@ -1,4 +1,4 @@
-﻿package ru.t2sales.desktop.ui.cash
+package ru.t2sales.desktop.ui.cash
 
 import ru.t2sales.desktop.ui.components.LoadingBlock
 import androidx.compose.foundation.background
@@ -38,6 +38,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import ru.t2sales.desktop.di.AppContainer
 import ru.t2sales.desktop.ui.components.Field
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.ShoppingCart
 import ru.t2sales.desktop.ui.components.MainButton
 import ru.t2sales.desktop.ui.components.SelectField
 import ru.t2sales.desktop.ui.components.T2Toast
@@ -77,6 +81,63 @@ fun CashScreen(container: AppContainer) {
     LaunchedEffect(reload) {
         failed = false
         runCatching { api.getTable(today.take(8) + "01", today) }.onSuccess { table = it }.onFailure { failed = true }
+    }
+
+    if (T2Colors.uiBeta) {
+        val onFill = { sid: String, d: String, f: Double, c: Double ->
+            storeId = sid; date = d
+            fact = f.toLong().toString(); c1 = c.toLong().toString()
+        }
+        BetaCashTop(table, failed, if (table?.stores?.isNotEmpty() == true) table!!.stores else stores, today, onRetry = { reload++ }, onFill = onFill)
+        ru.t2sales.desktop.ui.components.GroupHead("Внести кассу")
+        ru.t2sales.desktop.ui.components.Group {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Field("Дата", date, { date = it }, placeholder = "ГГГГ-ММ-ДД", fill = T2Colors.surface2)
+                Spacer(Modifier.height(12.dp))
+                SelectField("Точка", stores.firstOrNull { it.id == storeId }?.name ?: "", stores.map { it.name ?: it.id }) { picked ->
+                    stores.firstOrNull { (it.name ?: it.id) == picked }?.let { storeId = it.id }
+                }
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) { Field("Касса (факт)", fact, { v -> fact = v.filter { it.isDigit() || it == '-' || it == '.' } }, placeholder = "0", fill = T2Colors.surface2) }
+                    Box(Modifier.weight(1f)) { Field("Касса 1С", c1, { v -> c1 = v.filter { it.isDigit() || it == '-' || it == '.' } }, placeholder = "0", fill = T2Colors.surface2) }
+                }
+                Spacer(Modifier.height(12.dp))
+                Field("Комментарий", comment, { comment = it }, placeholder = "опционально", fill = T2Colors.surface2)
+                val f = fact.toDoubleOrNull(); val o = c1.toDoubleOrNull()
+                if (f != null && o != null) {
+                    val d = f - (o + 2000)
+                    Text("Δ = ${if (d > 0) "+" else ""}${NF.format(d)} ₽", color = if (d == 0.0) T2Colors.success else T2Colors.warning, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+                }
+                Spacer(Modifier.height(12.dp))
+                ru.t2sales.desktop.ui.components.BetaButton("Сохранить") {
+                    val sid = storeId ?: run { T2Toast.show("Выбери точку", true); return@BetaButton }
+                    val body = buildJsonObject {
+                        put("store_id", JsonPrimitive(sid))
+                        put("cash_date", JsonPrimitive(date.ifBlank { today }))
+                        put("cash_fact", JsonPrimitive(fact.toDoubleOrNull() ?: 0.0))
+                        put("cash_1c", JsonPrimitive(c1.toDoubleOrNull() ?: 0.0))
+                        put("comment", JsonPrimitive(comment))
+                    }
+                    scope.launch {
+                        runCatching { api.save(body) }
+                            .onSuccess { T2Toast.show("Касса сохранена"); reload++ }
+                            .onFailure { T2Toast.show(it.message ?: "Ошибка", true) }
+                    }
+                }
+            }
+        }
+        val t = table
+        if (t != null && t.dates.size > 1) {
+            ru.t2sales.desktop.ui.components.GroupHead("История")
+            val list = if (t.stores.isNotEmpty()) t.stores else stores
+            t.dates.dropLast(if (t.dates.last() == today) 1 else 0).reversed().take(if (showAll) 31 else 5).forEach { d -> DayCard(d, list, t.cells[d].orEmpty(), onFill) }
+            if (t.dates.size > 6) Text(
+                if (showAll) "Свернуть" else "Ещё дни", color = T2Colors.accentText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().clickable { showAll = !showAll }.padding(12.dp)
+            )
+        }
+        return
     }
 
     Section("Внести кассу") {
@@ -183,6 +244,76 @@ private fun DayCard(date: String, stores: List<CashStore>, cells: Map<String, Ca
                 )
             }
             if (i < stores.lastIndex) Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(T2Colors.border))
+        }
+    }
+}
+
+/**
+ * Beta UI 3.0 «Касса» (design-system/ui3/v5-team, frame 5): flat hero with today's total Δ, then «Сверка»,
+ * one cell per store with fact / 1С / Δ and a warning row under every store whose Δ is not zero.
+ */
+@Composable
+private fun BetaCashTop(table: CashTable?, failed: Boolean, stores: List<CashStore>, today: String, onRetry: () -> Unit, onFill: (String, String, Double, Double) -> Unit) {
+    when {
+        failed -> { ru.t2sales.desktop.ui.components.ErrorState("Касса сейчас недоступна, зайди чуть позже", onRetry = onRetry); return }
+        table == null -> { ru.t2sales.desktop.ui.components.SkeletonBlock(Modifier.fillMaxWidth().height(160.dp), 22.dp); return }
+    }
+    val t = table!!
+    // today if it has entries, otherwise the last day with data
+    val day = if (t.cells[today].orEmpty().isNotEmpty()) today else t.dates.lastOrNull() ?: today
+    val cells = t.cells[day].orEmpty()
+    data class R(val s: CashStore, val f: Double?, val one: Double?, val d: Double?)
+    val rows = stores.map { s ->
+        val c = cells[s.id]
+        val f = c?.cash_fact.num(); val one = c?.cash_1c.num()
+        R(s, f, one, c?.delta.num() ?: if (f != null && one != null) f - (one + 2000) else null)
+    }
+    val filled = rows.filter { it.d != null }
+    val total = filled.sumOf { it.d ?: 0.0 }
+    val off = filled.count { (it.d ?: 0.0) != 0.0 }
+    val label = if (day == today) "Δ наличные, сегодня" else "Δ наличные, " + day.slice(8..9) + "." + day.slice(5..6)
+    ru.t2sales.desktop.ui.components.BetaHero(
+        label,
+        chip = when { filled.isEmpty() -> "нет записей"; off > 0 -> "Нужна сверка"; else -> "Сходится" },
+        flat = true,
+        chipWarn = off > 0
+    ) {
+        val tone = when { filled.isEmpty() -> T2Colors.hint; total == 0.0 -> T2Colors.success; else -> T2Colors.warning }
+        ru.t2sales.desktop.ui.components.HeroNumber((if (total > 0) "+" else "") + NF.format(total), "₽", tone, size = 48)
+        Text("Δ = Факт − (1С + 2 000 ₽ размена)." + if (off > 0) " Расхождение на точках: $off. Пересчитайте наличные до закрытия смены." else "",
+            color = T2Colors.textSecondary, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+    }
+    ru.t2sales.desktop.ui.components.GroupHead("Сверка", "${filled.size} из ${rows.size} точек")
+    ru.t2sales.desktop.ui.components.Group {
+        if (rows.isEmpty()) Text("Точек нет", color = T2Colors.hint, fontSize = 15.sp, modifier = Modifier.padding(16.dp))
+        rows.forEachIndexed { i, r ->
+            if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator(60.dp)
+            val warn = r.d != null && r.d != 0.0
+            ru.t2sales.desktop.ui.components.BetaCell(
+                title = r.s.name ?: r.s.id,
+                sub = if (r.one != null) "1С ${NF.format(r.one)} ₽, размен 2 000 ₽" else "нет записи",
+                leading = { ru.t2sales.desktop.ui.components.BetaTile(androidx.compose.material.icons.Icons.Outlined.ShoppingCart, tone = when { r.d == null -> null; warn -> T2Colors.warning; else -> T2Colors.success }) },
+                value = r.f?.let { "${NF.format(it)} ₽" } ?: "—",
+                valueSub = r.d?.let { "Δ ${if (it > 0) "+" else ""}${NF.format(it)}" },
+                onClick = { onFill(r.s.id, day, r.f ?: 0.0, r.one ?: 0.0) }
+            )
+            if (warn) {
+                ru.t2sales.desktop.ui.components.BetaCell(
+                    title = if (r.d!! > 0) "Лишние ${NF.format(r.d)} ₽ в наличных" else "Не хватает ${NF.format(-r.d)} ₽",
+                    sub = "Проверьте размен и пересчитайте кассу",
+                    leading = { ru.t2sales.desktop.ui.components.BetaTile(androidx.compose.material.icons.Icons.Outlined.Info, tone = T2Colors.warning) },
+                    background = T2Colors.warningSoft
+                )
+            }
+        }
+        if (filled.isNotEmpty()) {
+            ru.t2sales.desktop.ui.components.GroupSeparator(60.dp)
+            ru.t2sales.desktop.ui.components.BetaCell(
+                "Итого", "1С с разменом ${NF.format(filled.sumOf { (it.one ?: 0.0) + 2000 })} ₽",
+                leading = { ru.t2sales.desktop.ui.components.BetaTile(androidx.compose.material.icons.Icons.Outlined.Check) },
+                value = "${NF.format(filled.sumOf { it.f ?: 0.0 })} ₽",
+                valueSub = "Δ ${if (total > 0) "+" else ""}${NF.format(total)}"
+            )
         }
     }
 }

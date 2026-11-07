@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -118,9 +119,16 @@ fun AddSaleSheet(container: AppContainer, myEmployeeId: Int?, myName: String?, r
         }.onSuccess { form = it }.onFailure { failed = true }
     }
 
+    val beta = T2Colors.uiBeta
     BottomSheet("Добавить продажу", busy, onDismiss, footer = form?.let { f ->
         {
-            MainButton(if (busy) "Сохраняем…" else "Добавить", !busy) {
+            // beta: the web's .sheet-foot — "план дня станет X/Y" + "+N к плану" above the primary CTA
+            if (beta) BetaPlanFoot(container, employeeId, selection)
+            MainButton(
+                if (busy) "Сохраняем…" else if (beta) "Сохранить продажу" else "Добавить", !busy,
+                container = if (beta) T2Colors.primary else null,
+                content = if (beta) T2Colors.onPrimary else null
+            ) {
                 val emp = employeeId
                 val store = storeId
                 if (emp == null || store == null) { Toaster.show("Укажи сотрудника и точку", true); return@MainButton }
@@ -165,8 +173,34 @@ fun AddSaleSheet(container: AppContainer, myEmployeeId: Int?, myName: String?, r
         when {
             failed -> Text("Ошибка загрузки", color = T2Colors.danger, modifier = Modifier.padding(vertical = 16.dp))
             f == null -> LoadingBlock(Modifier.padding(vertical = 8.dp), lines = 4)
+            beta -> BetaSaleFormBody(f, canManage, employeeId, storeId, selection, { employeeId = it }, { storeId = it })
             else -> SaleFormBody(f, canManage, employeeId, storeId, selection, { employeeId = it }, { storeId = it })
         }
+    }
+}
+
+/** "план дня станет 14 из 16 · +N к плану" — the selected metrics against today's plan for this employee. */
+@Composable
+private fun BetaPlanFoot(container: AppContainer, employeeId: Int?, selection: Map<String, String>) {
+    // /me/day is the signed-in user's own day, so the line is shown only for a sale in their own name
+    var day by remember { mutableStateOf<ru.t2sales.shared.api.MeDayResponse?>(null) }
+    LaunchedEffect(Unit) { runCatching { container.homeApi.getMyDay() }.onSuccess { day = it } }
+    if (employeeId == null || employeeId != AppNav.myEmployeeId) return
+    // same piece metrics as the Home hero (HERO_UNITS), so "станет X из Y" continues that number
+    val adding = selection.filterKeys { it in HERO_UNITS }.values.sumOf { it.replace(',', '.').toDoubleOrNull() ?: 0.0 }
+    val units = day?.progress.orEmpty().filterKeys { it in HERO_UNITS }.values
+    val plan = units.sumOf { it.plan }
+    if (adding <= 0 || plan <= 0) return
+    val become = units.sumOf { it.fact } + adding
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "План дня станет ${become.roundToInt().let { if (become % 1.0 == 0.0) it.toString() else "%.1f".format(java.util.Locale.US, become) }} из ${plan.roundToInt()}",
+            color = T2Colors.text, fontSize = 14.sp, fontWeight = FontWeight.Bold
+        )
+        Text("+${if (adding % 1.0 == 0.0) adding.toInt().toString() else "%.1f".format(java.util.Locale.US, adding)} к плану", color = T2Colors.accentText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -244,6 +278,59 @@ private fun SaleFormBody(
             ) { Text(n.toString(), fontWeight = FontWeight.Bold, fontSize = 14.sp) }
         }
     }
+}
+
+/**
+ * Beta UI 3.0 sheet body (web scr-add): employee picker, store as a segmented control when there are 2-3 stores,
+ * then "Что продали": one grouped list, a −/+ stepper per piece metric, a number field per money metric.
+ * Same [selection] map as the classic body (metric id -> amount), so saving is unchanged.
+ */
+@Composable
+private fun BetaSaleFormBody(
+    f: SaleForm, canManage: Boolean, employeeId: Int?, storeId: String?, selection: MutableMap<String, String>,
+    onEmployee: (Int) -> Unit, onStore: (String) -> Unit
+) {
+    if (canManage) {
+        Label("Сотрудник")
+        PickerField(f.employees.firstOrNull { it.id == employeeId }?.full_name ?: "", f.employees.map { it.full_name }, true) { picked ->
+            f.employees.firstOrNull { it.full_name == picked }?.let { e -> onEmployee(e.id); f.byEmp[e.id]?.let(onStore) }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+    if (f.stores.size in 2..3) {
+        U3Segmented(f.stores.map { it.name }, f.stores.indexOfFirst { it.id == storeId }.coerceAtLeast(0)) { onStore(f.stores[it].id) }
+    } else {
+        Label("Точка")
+        PickerField(f.stores.firstOrNull { it.id == storeId }?.name ?: "", f.stores.map { it.name }, true) { picked -> f.stores.firstOrNull { it.name == picked }?.let { onStore(it.id) } }
+    }
+    val count = selection.count { (it.value.replace(',', '.').toDoubleOrNull() ?: 0.0) > 0 }
+    U3GroupHead("Что продали", if (count > 0) "$count поз." else null)
+    U3Group {
+        f.metrics.forEachIndexed { i, m ->
+            if (i > 0) U3Sep(16.dp)
+            val money = m.unit == "₽"
+            val raw = selection[m.id]
+            U3Cell(m.label ?: m.id, if (money) "₽" else null, trailing = {
+                if (money) {
+                    val inShape = RoundedCornerShape(10.dp)
+                    BasicTextField(
+                        value = raw ?: "",
+                        onValueChange = { v -> val c = v.filter { it.isDigit() || it == '.' || it == ',' }.take(9); if (c.isEmpty()) selection.remove(m.id) else selection[m.id] = c },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        textStyle = TextStyle(color = T2Colors.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End),
+                        cursorBrush = SolidColor(T2Colors.primary),
+                        decorationBox = { inner -> Box(contentAlignment = Alignment.CenterEnd) { if (raw.isNullOrEmpty()) Text("0", color = T2Colors.hint, fontSize = 16.sp); inner() } },
+                        modifier = Modifier.width(112.dp).heightIn(min = 44.dp).clip(inShape).background(T2Colors.surface2).padding(horizontal = 12.dp, vertical = 12.dp)
+                    )
+                } else {
+                    val n = raw?.replace(',', '.')?.toDoubleOrNull()?.toInt() ?: 0
+                    U3Stepper(n, { v -> if (v <= 0) selection.remove(m.id) else selection[m.id] = v.toString() }, m.label ?: m.id)
+                }
+            })
+        }
+    }
+    Spacer(Modifier.height(4.dp))
 }
 
 @Composable

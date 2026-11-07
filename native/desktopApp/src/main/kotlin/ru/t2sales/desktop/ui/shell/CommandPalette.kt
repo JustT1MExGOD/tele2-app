@@ -100,6 +100,9 @@ fun CommandPaletteHost(container: AppContainer, role: String, isManager: Boolean
                 T2Colors.dark = !T2Colors.dark
                 ThemePrefs.setDark(T2Colors.dark)
             })
+            add(Cmd(if (T2Colors.uiBeta) "Выключить Beta UI 3.0" else "Включить Beta UI 3.0", "Новый интерфейс «Ночная смена»", "Действие", "бета beta ui 3 ночная смена оформление") {
+                ThemePrefs.setUiBeta(!T2Colors.uiBeta)
+            })
             add(Cmd("Тема как в Windows", "Следовать светлой или тёмной теме системы", "Действие", "оформление авто system") { ThemePrefs.auto = true })
             add(Cmd("Обновить данные", "Перезагрузить экран", "Действие", "refresh") { onRefresh() })
             add(Cmd("Сохранить диагностику", "Файл с версиями и состоянием на рабочий стол", "Действие", "лог журнал debug logs") {
@@ -130,7 +133,7 @@ fun CommandPaletteHost(container: AppContainer, role: String, isManager: Boolean
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { CommandPalette.close() },
         contentAlignment = Alignment.TopCenter
     ) {
-        val shape = RoundedCornerShape(20.dp)
+        val shape = RoundedCornerShape(if (T2Colors.uiBeta) ru.t2sales.shared.theme.T2Radius.cell else 20.dp)
         Column(
             Modifier.padding(top = 96.dp).widthIn(max = 620.dp).fillMaxWidth(0.9f)
                 .graphicsLayer { translationY = (1f - enter.value) * -14.dp.toPx(); scaleX = 0.97f + 0.03f * enter.value; scaleY = 0.97f + 0.03f * enter.value }

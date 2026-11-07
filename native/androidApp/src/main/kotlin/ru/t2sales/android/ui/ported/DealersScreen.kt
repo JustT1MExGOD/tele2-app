@@ -58,6 +58,9 @@ fun DealersScreen(api: AdminApi) {
     }
 
     val t = tree
+    if (T2Colors.uiBeta) {
+        DealersBeta(t, failed, { reload++ }, { assignFor = it }, { rename = it })
+    } else {
     if (t != null && t.unassigned_supervisors.isNotEmpty()) {
         PageSection("Супервайзеры без сектора") {
             Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
@@ -96,6 +99,7 @@ fun DealersScreen(api: AdminApi) {
                 }
             }
         }
+    }
     }
 
     val r = rename
@@ -163,8 +167,75 @@ private fun SectorCard(s: SectorNode, onRename: () -> Unit) {
                 }
                 MChipButton("Переименовать", onClick = onRename)
             }
-            Text("Сети: " + (s.orgs.joinToString(", ") { it.name }.ifEmpty { "\u2014" }), color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            Text("Сети: " + (s.orgs.joinToString(", ") { it.name }.ifEmpty { "—" }), color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
             Text("Супервайзеры: " + (s.supervisors.joinToString(", ") { it.full_name }.ifEmpty { "не назначен" }), color = T2Colors.hint, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+private val SECTOR_TINT = Color(0xFFA78BFA)
+
+@Composable
+private fun DealersBeta(
+    t: DealersTree?, failed: Boolean, onRetry: () -> Unit,
+    onAssign: (Pair<Int, String>) -> Unit, onRename: (Rename) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("Дилеры/Секторы")
+        if (t != null && t.unassigned_supervisors.isNotEmpty()) {
+            U3GroupHead("Супервайзеры без сектора")
+            U3Group {
+                t.unassigned_supervisors.forEachIndexed { i, s ->
+                    if (i > 0) U3Sep()
+                    U3Cell(
+                        s.full_name, null,
+                        leading = { U3Tile(s.full_name.take(1).uppercase(), tint = T2Colors.warning) },
+                        trailing = { Text("Назначить", color = T2Colors.accentText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
+                        onClick = { onAssign(s.id to s.full_name) }
+                    )
+                }
+            }
+        }
+        when {
+            failed -> ErrorState("Не удалось загрузить дилеров/секторы", onRetry = onRetry)
+            t == null -> SkeletonBlock(Modifier.fillMaxWidth().height(160.dp).padding(top = 12.dp), 28.dp)
+            t.dealers.isEmpty() && t.unassigned_sectors.isEmpty() -> EmptyText("Дилеров пока нет — заведите через форму сети")
+            else -> {
+                t.dealers.forEach { d ->
+                    U3GroupHead(d.name, "переименовать", { onRename(Rename.Dealer(d.id, d.name)) })
+                    U3Group {
+                        if (d.sectors.isEmpty()) U3Cell("Секторов пока нет", null)
+                        else d.sectors.forEachIndexed { i, s ->
+                            if (i > 0) U3Sep()
+                            DealersSectorCell(s) { onRename(Rename.Sector(s.id, s.name)) }
+                        }
+                    }
+                }
+                if (t.unassigned_sectors.isNotEmpty()) {
+                    U3GroupHead("Без дилера")
+                    U3Group {
+                        t.unassigned_sectors.forEachIndexed { i, s ->
+                            if (i > 0) U3Sep()
+                            DealersSectorCell(s) { onRename(Rename.Sector(s.id, s.name)) }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
+    }
+}
+
+@Composable
+private fun DealersSectorCell(s: SectorNode, onRename: () -> Unit) {
+    val n = s.orgs.size
+    U3Cell(
+        s.name,
+        "${n} сет${if (n == 1) "ь" else "и"} · " + (s.supervisors.joinToString(", ") { it.full_name }.ifEmpty { "супервайзер не назначен" }),
+        leading = { U3Tile(s.name.take(1).uppercase(), tint = SECTOR_TINT) },
+        trailing = { Text("Переименовать", color = T2Colors.accentText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+        onClick = onRename
+    )
 }

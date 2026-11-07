@@ -35,7 +35,8 @@ fun AddEmployeeSheet(roles: List<String>, onDismiss: () -> Unit, onCreate: (Stri
     var role by remember { mutableStateOf(if ("employee" in roles) "employee" else roles.first()) }
     var error by remember { mutableStateOf<String?>(null) }
     BottomSheet("Новый сотрудник", onDismiss = onDismiss, footer = {
-        MainButton("Создать") { if (name.isBlank()) error = "Укажите ФИО" else onCreate(name.trim(), role) }
+        if (T2Colors.uiBeta) U3PrimaryButton("Создать") { if (name.isBlank()) error = "Укажите ФИО" else onCreate(name.trim(), role) }
+        else MainButton("Создать") { if (name.isBlank()) error = "Укажите ФИО" else onCreate(name.trim(), role) }
     }) {
         Field("ФИО", name, { name = it })
         Spacer(Modifier.height(16.dp))
@@ -57,7 +58,7 @@ fun AddStoreSheet(onDismiss: () -> Unit, onCreate: (CreateStoreRequest) -> Unit)
     var allDay by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     BottomSheet("Новая точка", onDismiss = onDismiss, footer = {
-        MainButton("Создать") {
+        val create = {
             if (id.isBlank() || name.isBlank()) error = "ID и название обязательны"
             else onCreate(
                 CreateStoreRequest(
@@ -69,6 +70,7 @@ fun AddStoreSheet(onDismiss: () -> Unit, onCreate: (CreateStoreRequest) -> Unit)
                 )
             )
         }
+        if (T2Colors.uiBeta) U3PrimaryButton("Создать") { create() } else MainButton("Создать") { create() }
     }) {
         Field("ID (латиница)", id, { id = it }); Spacer(Modifier.height(12.dp))
         Field("Название", name, { name = it }); Spacer(Modifier.height(12.dp))

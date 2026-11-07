@@ -134,13 +134,15 @@ fun DraftSection(
     var availability by remember { mutableStateOf(false) }
     var planPromptMonth by remember { mutableStateOf<String?>(null) }
 
-    val shape = RoundedCornerShape(T2Radius.default)
+    val beta = T2Colors.uiBeta
+    val shape = RoundedCornerShape(if (beta) T2Radius.cell else T2Radius.default)
+    if (beta) ru.t2sales.desktop.ui.components.GroupHead("Автоматический расчёт графика")
     Column(modifier = Modifier.fillMaxWidth().clip(shape).background(T2Colors.surface).border(1.dp, T2Colors.border, shape).padding(vertical = 6.dp)) {
-        Text(
+        if (!beta) Text(
             "АВТОМАТИЧЕСКИЙ РАСЧЁТ ГРАФИКА",
             color = T2Colors.hint, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.7.sp,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
-        )
+        ) else Spacer(Modifier.height(10.dp))
         FlowRow(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

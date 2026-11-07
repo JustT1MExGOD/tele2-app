@@ -53,6 +53,26 @@ val FALLBACK_METRICS = listOf(
 
 @Composable
 fun MonthNav(month: java.time.YearMonth, onChange: (java.time.YearMonth) -> Unit) {
+    if (T2Colors.uiBeta) {
+        // Beta: a flat segmented strip instead of two circle buttons \u2014 same pick, calmer chrome.
+        U3Group {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(CircleShape).bouncyClickable { onChange(month.minusMonths(1)) },
+                    contentAlignment = Alignment.Center
+                ) { Text("\u2039", fontSize = 20.sp, color = T2Colors.textSecondary) }
+                Text(
+                    monthLabel(month), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = T2Colors.text,
+                    textAlign = TextAlign.Center, modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier.size(40.dp).clip(CircleShape).bouncyClickable { onChange(month.plusMonths(1)) },
+                    contentAlignment = Alignment.Center
+                ) { Text("\u203A", fontSize = 20.sp, color = T2Colors.textSecondary) }
+            }
+        }
+        return
+    }
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically

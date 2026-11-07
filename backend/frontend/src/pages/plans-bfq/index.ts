@@ -62,6 +62,105 @@ type EmployeePlanDraftState = {
 let planDraft: EmployeePlanDraftState | null = null;
 let planDraftItems: EmployeeMonthPlanDraftItem[] = [];
 
+// ===== Beta UI 3.0 («Ночная смена») — только разметка-хуки =====
+// Блоки ниже рендерятся всегда, но с атрибутом hidden: в старом UI они не
+// видны и не занимают место, ui3/plans-rating.css показывает их только при
+// body[data-ui="beta"] (переключатель работает без перерисовки страницы).
+// Данные — те же, что уже пришли в ответе, без новых запросов.
+function u3Dec(n: number): string {
+  return (Math.round(n * 10) / 10).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+/** «нужно X в день»: без «,0» у целых значений. */
+function u3Need(n: number): string {
+  return (Math.round(n * 10) / 10).toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+}
+
+/** Сколько дней месяца прошло: текущий — по Москве, прошлый — весь, будущий — 0. */
+function u3MonthProgress(ym: string): { day: number; days: number } {
+  const [y, m] = ym.split('-').map(Number);
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const today = todayMoscow();
+  const cur = today.slice(0, 7);
+  if (ym < cur) return { day: days, days };
+  if (ym > cur) return { day: 0, days };
+  return { day: Number(today.slice(8, 10)) || 1, days };
+}
+
+/** Hero «N% + прогноз», линия факта против плана и строки «По метрикам» с пирогами темпа. */
+export function u3PlanHeroHTML(ym: string, fact: Record<string, unknown>, plan: Record<string, unknown>): string {
+  const { day, days } = u3MonthProgress(ym);
+  const expected = days ? day / days : 0;
+  const left = Math.max(1, days - day);
+  let sf = 0;
+  let sp = 0;
+  const rows = METRICS.map((m) => {
+    const f = Number(fact[m.id]) || 0;
+    const p = Number(plan[m.id]) || 0;
+    // каталог метрик хранит денежную единицу как «₽» (GET /metrics)
+    const money = m.unit === '₽' || m.unit === 'money';
+    if (!money && p > 0) {
+      sf += f;
+      sp += p;
+    }
+    if (p <= 0) return '';
+    const r = f / p;
+    const pace = expected > 0 ? r / expected : 1;
+    const tone = r >= 1 ? 'done' : pace >= 0.9 ? 'ok' : pace >= 0.8 ? 'idle' : 'warn';
+    const state = r >= 1 ? 'план закрыт' : pace >= 0.9 ? 'в темпе' : pace >= 0.8 ? 'чуть отстаёт' : 'отстаёт';
+    const need = Math.max(0, (p - f) / left);
+    const needTxt = r >= 1 ? '' : money ? `нужно ${Math.ceil(need).toLocaleString('ru-RU')} ₽ в день, ` : `нужно ${u3Need(need)} в день, `;
+    const unit = money ? ' ₽' : '';
+    return `<div class="u3-cell${tone === 'warn' ? ' behind' : ''}">
+        <span class="u3-pie ${tone}" style="--p:${Math.min(1, r).toFixed(3)}" role="img" aria-label="${Math.round(r * 100)}%, ${state}"></span>
+        <span class="u3-c-main"><span class="u3-c-t">${esc(m.label)}</span><span class="u3-c-s">${needTxt}${state}</span></span>
+        <span class="u3-c-r">${f.toLocaleString('ru-RU')}${unit}<span class="u3-c-s">из ${p.toLocaleString('ru-RU')}${unit}</span></span>
+      </div>`;
+  }).join('');
+  const pct = sp > 0 ? Math.round((sf / sp) * 100) : 0;
+  const forecast = expected > 0 && sp > 0 ? Math.round((sf / sp / expected) * 100) : pct;
+  const needAll = Math.max(0, (sp - sf) / left);
+  const behind = forecast < 100 && day > 0;
+  // График: план — прямой пунктир 0→100% через весь месяц, факт — сплошная
+  // до сегодня с маркером. Прогноз — только в чипе: вторая пунктирная линия
+  // рядом с плановой читалась как пересечение.
+  const W = 320;
+  const H = 64;
+  const yOf = (v: number): number => H - 4 - Math.min(1.2, v) * ((H - 8) / 1.2);
+  const xNow = days ? (day / days) * W : 0;
+  const yNow = yOf(sp > 0 ? sf / sp : 0);
+  const chart = `<svg class="u3-h-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <line class="pp" x1="0" y1="${yOf(0)}" x2="${W}" y2="${yOf(1)}"/>
+      <polyline class="pl" points="0,${yOf(0)} ${xNow.toFixed(1)},${yNow.toFixed(1)}"/>
+      ${day > 0 ? `<circle class="dot" cx="${Math.min(W - 4, Math.max(4, xNow)).toFixed(1)}" cy="${yNow.toFixed(1)}" r="3.5"/>` : ''}
+    </svg>`;
+  return `<div class="u3-only u3-plan" hidden>
+      <section class="u3-plan-hero" aria-label="План на ${esc(monthLabel(ym))}">
+        <div class="u3-hero-row"><span class="u3-h-label">${esc(monthLabel(ym))}${day ? `, день ${day} из ${days}` : ''}</span><span class="u3-h-chip${behind ? ' warn' : ''}">прогноз ${forecast}%</span></div>
+        <p class="u3-h-num">${pct}<small>%</small></p>
+        <p class="u3-h-sub">${sf.toLocaleString('ru-RU')} из ${sp.toLocaleString('ru-RU')} продаж${sp > sf && day < days ? `. Нужно ${u3Need(needAll)} в день, чтобы закрыть план` : ''}</p>
+        ${chart}
+      </section>
+      ${rows ? `<div class="u3-g-head">По метрикам</div><div class="u3-group">${rows}</div>` : ''}
+    </div>`;
+}
+
+/** «Игорь Смирнов» → «Игорь С.» (подиум, как в концепте). */
+function u3ShortName(name: string): string {
+  const [a, b] = String(name || '').trim().split(/\s+/);
+  return b ? `${a} ${b[0]}.` : a || '';
+}
+
+function u3Initials(name: string): string {
+  return String(name || '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+}
+
 // ===== BFQ =====
 export async function loadBFQ(): Promise<void> {
   const box = document.getElementById('bfqList');
@@ -80,10 +179,33 @@ export async function loadBFQ(): Promise<void> {
       box.innerHTML = '<div class="empty">Нет данных BFQ</div>';
       return;
     }
-    box.innerHTML = list
+    const myId = me?.employee_id != null ? String(me.employee_id) : '';
+    const val = (e: any): number => Number(e.total ?? e.bfq ?? 0) || 0;
+    const meIdx = list.findIndex((e: any) => String(e.employee_id) === myId);
+    const pod = (i: number): string => {
+      const e = list[i];
+      if (!e) return '<div></div>';
+      const mine = i === meIdx;
+      return `<button type="button" class="u3-pod${i === 0 ? ' first' : ''}${mine ? ' me' : ''}" onclick="openBFQCard(${e.employee_id})">
+          <span class="u3-pod-rank">${i + 1} место</span>
+          <span class="u3-avatar${i === 0 || mine ? ' acc' : ''}">${esc(u3Initials(e.full_name || e.name))}</span>
+          <span class="u3-pod-name" title="${esc(e.full_name || e.name)}">${esc(u3ShortName(e.full_name || e.name))}</span>
+          <span class="u3-pod-val">${e.total ?? e.bfq ?? '—'}</span>
+        </button>`;
+    };
+    const podium = list.length >= 3 ? `<div class="u3-only u3-podium" hidden>${pod(1)}${pod(0)}${pod(2)}</div>` : '';
+    const gap =
+      meIdx > 0
+        ? `<p class="u3-only u3-gap-note" hidden>До ${meIdx} места не хватает <b>${u3Dec(val(list[meIdx - 1]) - val(list[meIdx]))}</b> балла BFQ</p>`
+        : meIdx === 0
+          ? '<p class="u3-only u3-gap-note" hidden>Вы на <b>1 месте</b> в сети</p>'
+          : '';
+    box.innerHTML =
+      podium +
+      list
       .map(
         (e: any, i: number) => `
-          <button class="row" onclick="openBFQCard(${e.employee_id})">
+          <button class="row${i === meIdx ? ' me' : ''}${i < 3 && list.length >= 3 ? ' u3-on-podium' : ''}" onclick="openBFQCard(${e.employee_id})">
             <div class="row-icon">${i + 1}</div>
             <div class="row-body">
               <div class="row-title">${esc(e.full_name || e.name)}</div>
@@ -94,7 +216,8 @@ export async function loadBFQ(): Promise<void> {
           </button>
         `
       )
-      .join('');
+      .join('') +
+      gap;
   } catch (e) {
     console.error(e);
     renderLoadError(box, 'Ошибка BFQ', () => loadBFQ());
@@ -203,7 +326,14 @@ export async function loadMonthPlans(): Promise<void> {
       return;
     }
 
-    let html =
+    const tf = (data.totals && data.totals.fact) || null;
+    const tpl = (data.totals && data.totals.plan) || {};
+
+    // Beta UI 3.0 «Ночная смена» — hero «N% + прогноз» и метрики пирогами.
+    // Виден только при body[data-ui="beta"] (атрибут hidden снимает CSS).
+    let html = tf ? u3PlanHeroHTML(planMonth, tf, tpl) : '';
+
+    html +=
       '<div class="mobile-table">' +
       rows
         .map((r, idx) => {
@@ -231,7 +361,6 @@ export async function loadMonthPlans(): Promise<void> {
         .join('') +
       '</div>';
 
-    const tf = (data.totals && data.totals.fact) || null;
     // data.totals.pct тоже существовал в ответе (getMonthSummaryTable()),
     // просто раньше не читался — карточка всегда рендерилась без тона
     // (зелёный/жёлтый), потому что cell() получала пустой {} вместо pct.
@@ -368,7 +497,7 @@ export async function loadNetMonth(): Promise<void> {
   const box = document.getElementById('netMonthBody');
   const label = document.getElementById('netMonthLabel');
   if (!box) return;
-  if (label) label.textContent = planMonth;
+  if (label) label.textContent = monthLabel(planMonth);
   box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
   try {
     // «Динамика выполнения» (переименовано из «...по сотрудникам» — теперь
@@ -383,8 +512,11 @@ export async function loadNetMonth(): Promise<void> {
     const fact = totals.fact || {};
     const plan = totals.plan || {};
     const netRows = METRICS.map((m) => svBarRowHTML(m.label, Number(fact[m.id]) || 0, Number(plan[m.id]) || 0)).join('');
-    let html =
-      `<div class="sv-store" style="--sc:#2AABEE"><div class="sv-bars">${netRows}</div></div>` +
+    // Beta UI 3.0 — hero «N% + прогноз» и «По метрикам» пирогами, как на
+    // «Планах и факте за месяц» (legacy-разметка ниже не трогается).
+    let html = u3PlanHeroHTML(planMonth, fact, plan);
+    html +=
+      `<div class="sv-store u3-legacy" style="--sc:#2AABEE"><div class="sv-bars">${netRows}</div></div>` +
       `<div class="empty" style="text-align:left;padding:8px 16px">Сотрудников: ${empData.rows ? empData.rows.length : 0} · ост. дней: ${empData.remaining_days ?? '—'}</div>`;
 
     html += renderNetMonthSection(

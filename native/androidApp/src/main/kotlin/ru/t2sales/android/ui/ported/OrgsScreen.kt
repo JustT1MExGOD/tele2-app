@@ -60,6 +60,9 @@ fun OrgsScreen(api: AdminApi) {
         runCatching { api.getOrgs() }.onSuccess { orgs = it }.onFailure { failed = true }
     }
 
+    if (T2Colors.uiBeta) {
+        OrgsBeta(orgs, failed, { reload++ }, sort, { k -> if (sort == k) asc = !asc else { sort = k; asc = true } }, asc, { adding = true }, { editing = it })
+    } else {
     PageSection("Сети") {
         Row(
             modifier = Modifier.fillMaxWidth().clickable { adding = true }.padding(horizontal = 16.dp, vertical = 13.dp),
@@ -141,6 +144,7 @@ fun OrgsScreen(api: AdminApi) {
             }
         }
     }
+    }
 
     if (adding || editing != null) {
         OrgForm(
@@ -213,5 +217,70 @@ private fun OrgForm(org: OrgAdminItem?, onDismiss: () -> Unit, onSave: (String, 
             }
             onSave(finalId, body, org == null)
         }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+private val ORG_SORT_LABEL = linkedMapOf(
+    OrgSort.Name to "Название",
+    OrgSort.Dealer to "Дилер",
+    OrgSort.Sector to "Сектор",
+    OrgSort.Status to "Статус"
+)
+
+@Composable
+private fun OrgsBeta(
+    orgs: List<OrgAdminItem>?, failed: Boolean, onRetry: () -> Unit,
+    sort: OrgSort, onSort: (OrgSort) -> Unit, asc: Boolean,
+    onAdd: () -> Unit, onEdit: (OrgAdminItem) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("Сети")
+        U3Group {
+            U3Cell(
+                "Добавить сеть", null,
+                leading = { U3IconTile(NavIcons.plus, tint = T2Colors.accentText) },
+                trailing = { U3Value("›", T2Colors.hint) },
+                onClick = onAdd
+            )
+        }
+        val list = orgs
+        when {
+            failed -> ErrorState("Не получилось загрузить сети", onRetry = onRetry)
+            list == null -> SkeletonBlock(Modifier.fillMaxWidth().height(160.dp).padding(top = 12.dp), 28.dp)
+            list.isEmpty() -> EmptyText("Сетей пока нет")
+            else -> {
+                U3GroupHead("Сортировка", "${ORG_SORT_LABEL[sort]}${if (asc) " ↑" else " ↓"}")
+                U3FilterChips(
+                    ORG_SORT_LABEL.entries.map { it.key.name to it.value },
+                    sort.name
+                ) { id -> onSort(OrgSort.valueOf(id)) }
+                val sorted = list.sortedWith { a, b ->
+                    val c = when (sort) {
+                        OrgSort.Name -> a.name.compareTo(b.name, true)
+                        OrgSort.Dealer -> (a.dealer_name ?: "").compareTo(b.dealer_name ?: "", true)
+                        OrgSort.Sector -> (a.sector_id ?: "").compareTo(b.sector_id ?: "", true)
+                        OrgSort.Status -> (a.is_active != false).compareTo(b.is_active != false)
+                    }
+                    if (asc) c else -c
+                }
+                Spacer(Modifier.height(12.dp))
+                U3Group {
+                    sorted.forEachIndexed { i, o ->
+                        if (i > 0) U3Sep()
+                        val active = o.is_active != false
+                        U3Cell(
+                            o.name,
+                            o.id + (o.dealer_name?.let { " · дилер $it" } ?: "") + (o.sector_id?.let { " · сектор $it" } ?: ""),
+                            leading = { U3Tile(o.name.take(1).uppercase(), tint = if (active) T2Colors.accentText else T2Colors.hint) },
+                            trailing = { U3Value(if (active) "активна" else "выкл.", if (active) T2Colors.success else T2Colors.danger) },
+                            onClick = { onEdit(o) }
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
     }
 }

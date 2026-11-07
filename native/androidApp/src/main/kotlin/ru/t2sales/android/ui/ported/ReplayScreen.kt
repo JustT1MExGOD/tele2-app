@@ -136,6 +136,16 @@ fun ReplayScreen(container: AppContainer) {
         }
     }
 
+    if (T2Colors.uiBeta) {
+        ReplayBeta(
+            month, { month = it }, metric, { metric = it }, metrics, series, loaded, days, failed,
+            playing, speed, day,
+            onToggle = { if (!playing && day >= days - 1) day = 0; playing = !playing },
+            onSpeed = { speed = it }, onSeek = { playing = false; day = it },
+            canNext = month < YearMonth.from(today)
+        )
+        return
+    }
     PageSection("Повтор месяца") {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -244,5 +254,65 @@ private fun Controls(playing: Boolean, speed: Int, day: Int, days: Int, onToggle
                 modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (speed == s) T2Colors.primarySoft else T2Colors.surface2).clickable { onSpeed(s) }.padding(horizontal = 10.dp, vertical = 6.dp)
             )
         }
+    }
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+@Composable
+private fun ReplayBeta(
+    month: YearMonth, onMonth: (YearMonth) -> Unit,
+    metric: String, onMetric: (String) -> Unit, metrics: List<Pair<String, String>>,
+    series: Map<Int, Series>?, loaded: Int, days: Int, failed: Boolean,
+    playing: Boolean, speed: Int, day: Int,
+    onToggle: () -> Unit, onSpeed: (Int) -> Unit, onSeek: (Int) -> Unit,
+    canNext: Boolean
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("Повтор месяца", "Гонка продаж день за днём")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            MonthButton("‹") { onMonth(month.minusMonths(1)) }
+            Text("${MONTHS_NOM[month.monthValue - 1]} ${month.year}", fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+            MonthButton("›", enabled = canNext) { onMonth(month.plusMonths(1)) }
+        }
+        Spacer(Modifier.height(10.dp))
+        val options = listOf(DropdownItem("Единицы (SIM + MNP + ПА + Комбо)", UNITS)) + metrics.map { DropdownItem(it.second, it.first) }
+        DropdownField(options.firstOrNull { it.key == metric }?.label ?: "Единицы (SIM + MNP + ПА + Комбо)", options, selected = metric) { onMetric(it.key as String) }
+        Spacer(Modifier.height(14.dp))
+
+        val data = series
+        when {
+            failed -> ErrorState("Не получилось загрузить продажи за месяц")
+            data == null -> Column {
+                Text("Загружаем дни: $loaded из $days", color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp))
+                SkeletonBlock(Modifier.fillMaxWidth().height(160.dp), 28.dp)
+            }
+            data.isEmpty() -> EmptyText("За этот месяц нет продаж")
+            else -> {
+                val colors = remember(data) { data.keys.sorted().mapIndexed { i, id -> id to PALETTE[i % PALETTE.size] }.toMap() }
+                val value: (Int, Int) -> Double = { id, upTo ->
+                    var sum = 0.0
+                    for (d in 0..upTo) {
+                        val m = data[id]!!.perDay[d]
+                        sum += if (metric == UNITS) UNIT_METRICS.sumOf { m[it] ?: 0.0 } else m[metric] ?: 0.0
+                    }
+                    sum
+                }
+                val frame = data.keys.associateWith { value(it, day.coerceIn(0, days - 1)) }
+                U3Hero {
+                    U3HeroRow("${month.atDay(day + 1).dayOfMonth} ${MONTHS_GEN[month.monthValue - 1]}", chip = "день ${day + 1} из $days")
+                    U3HeroNumber("${month.atDay(day + 1).dayOfMonth}", MONTHS_GEN[month.monthValue - 1])
+                }
+                Spacer(Modifier.height(14.dp))
+                U3Group {
+                    Column(Modifier.padding(14.dp)) {
+                        RaceChart(data.mapValues { it.value.name }, frame, colors)
+                        Spacer(Modifier.height(10.dp))
+                        Controls(playing, speed, day, days, onToggle = onToggle, onSpeed = onSpeed, onSeek = onSeek)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
     }
 }

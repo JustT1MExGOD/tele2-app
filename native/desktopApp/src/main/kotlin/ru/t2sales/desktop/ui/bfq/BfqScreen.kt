@@ -68,6 +68,30 @@ fun BfqScreen(container: AppContainer, me: MeResponse) {
 
     LaunchedEffect(reload) { runCatching { api.getBfq(month).items }.onSuccess { items = it }.onFailure { failed = true } }
 
+    if (T2Colors.uiBeta) {
+        val list = items
+        when {
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Ошибка BFQ", onRetry = { reload++ })
+            list == null -> LoadingBlock(Modifier.padding(16.dp))
+            list.isEmpty() -> Text("Нет данных BFQ", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            else -> ru.t2sales.desktop.ui.components.Group {
+                list.forEachIndexed { i, e ->
+                    if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator()
+                    ru.t2sales.desktop.ui.components.BetaCell(
+                        title = e.full_name ?: "",
+                        sub = "Кач. ${num(e.quality)} · Приб. ${num(e.profit)} · VMR ${num(e.vmr ?: 0.0)}",
+                        leading = { ru.t2sales.desktop.ui.components.BetaTile(null, text = (i + 1).toString(), tone = if (i < 3) T2Colors.primary else null) },
+                        value = num(e.total),
+                        chevron = true,
+                        onClick = { opened = e.employee_id }
+                    )
+                }
+            }
+        }
+        val idB = opened
+        if (idB != null) BfqCard(container, idB, month, canManage, onDismiss = { opened = null }, onSaved = { opened = null; reload++ })
+        return
+    }
     PageSection("BFQ за месяц") {
         val list = items
         when {

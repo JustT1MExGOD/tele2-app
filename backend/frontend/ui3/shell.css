@@ -1,0 +1,260 @@
+/* =========================================================
+   T2 Sales — Beta UI 3.0 «Ночная смена» · shell layer
+   Общая обвязка и мелкие экраны, не покрытые base.css/home.css/
+   rest.css. Каждый селектор начинается с body[data-ui="beta"];
+   без атрибута беты файл ничего не меняет.
+
+   Здесь:
+   - полноэкранные гейты (access gate, splash) — hero-градиент;
+   - coach-overlay и cutscene-экраны обучения;
+   - промокоды (список и карточка);
+   - офлайн-очередь (кнопка-индикатор + dialog);
+   - результат калькуляторов внутри шторки (.combo-result);
+   - мелкая шлифовка шторки/скрима поверх base.css.
+   ========================================================= */
+
+/* =========================================================
+   ГЕЙТЫ — access gate + splash. Единственные экраны,
+   которые держат тёмный градиент в ОБЕИХ темах: это вход,
+   брендовая «обложка», не рабочий холст. В light-теме он
+   намеренно остаётся ночным — контраст с белым листом за ним.
+   ========================================================= */
+body[data-ui="beta"] #accessGate,
+body[data-ui="beta"] #appSplash {
+  background:
+    radial-gradient(110% 60% at 50% 0%, rgba(20,124,184,.35) 0%, transparent 60%),
+    linear-gradient(165deg, #0B1B2A 0%, #081018 60%, #06090C 100%) !important;
+  color: #EFF9FF;
+}
+body[data-ui="beta"] .gate-brand { color: #EFF9FF; letter-spacing: var(--u-tr-hero); }
+body[data-ui="beta"] .gate-sub { color: rgba(230,242,250,.62); }
+body[data-ui="beta"] .gate-logo { filter: drop-shadow(0 10px 28px rgba(42,171,238,.45)); }
+
+/* карточка гейта — тёмное стекло в обеих темах */
+body[data-ui="beta"] .gate-card,
+body[data-ui="beta"] #accessGate .gate-card {
+  background: linear-gradient(165deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.02) 100%) !important;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: var(--u-r-xl);
+  box-shadow: 0 24px 60px rgba(0,0,0,.45);
+  color: #EFF9FF;
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+body[data-ui="beta"] .gate-card .gate-title { color: #EFF9FF; letter-spacing: var(--u-tr-tight); }
+body[data-ui="beta"] .gate-card .gate-desc { color: rgba(230,242,250,.66); }
+body[data-ui="beta"] .gate-card .field label { color: rgba(230,242,250,.55); }
+body[data-ui="beta"] .gate-card input,
+body[data-ui="beta"] .gate-card select {
+  background: rgba(255,255,255,.07);
+  border-color: rgba(255,255,255,.14);
+  color: #EFF9FF;
+  border-radius: var(--u-r-md);
+  min-height: 50px;
+}
+body[data-ui="beta"] .gate-card input:focus,
+body[data-ui="beta"] .gate-card select:focus {
+  border-color: var(--u-accent);
+  box-shadow: 0 0 0 3px var(--u-accent-soft);
+}
+body[data-ui="beta"] .gate-icon { background: var(--u-accent-soft); }
+body[data-ui="beta"] .gate-icon.warn { background: var(--u-warning-soft); }
+body[data-ui="beta"] .gate-icon.danger { background: var(--u-danger-soft); }
+body[data-ui="beta"] .gate-card .btn-main { margin-top: 4px; }
+body[data-ui="beta"] .gate-card select option { color: var(--u-text); background: var(--u-cell); }
+
+/* =========================================================
+   BIND-HERO — «Привяжи Telegram» внутри Профиля. Тоже
+   обложечный блок: ночной градиент + свечение, не cell-карточка.
+   ========================================================= */
+body[data-ui="beta"] .bind-hero {
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(20,124,184,.4) 0%, transparent 60%),
+    linear-gradient(165deg, #0E1E2E 0%, #0A141C 60%, #080B0E 100%);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: var(--u-r-xl);
+  color: #EFF9FF;
+  box-shadow: 0 18px 48px rgba(0,0,0,.32);
+}
+body[data-ui="beta"] .bind-title { color: #EFF9FF; letter-spacing: var(--u-tr-tight); }
+body[data-ui="beta"] .bind-sub { color: rgba(230,242,250,.66); }
+body[data-ui="beta"] .bind-foot { color: rgba(230,242,250,.5); }
+body[data-ui="beta"] .bind-hero .field label { color: rgba(230,242,250,.6); }
+body[data-ui="beta"] .bind-hero select {
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.14);
+  color: #EFF9FF;
+}
+body[data-ui="beta"] .bind-hero select option { color: var(--u-text); background: var(--u-cell); }
+
+/* =========================================================
+   ОБУЧЕНИЕ — coach-overlay (карточка поверх живого UI).
+   Скрим уже задан в styles.css; здесь — карточка в палитре беты.
+   ========================================================= */
+body[data-ui="beta"] #tutorialOverlay .tut-card {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-lg);
+  box-shadow: 0 24px 60px rgba(0,0,0,.4);
+  color: var(--u-text);
+}
+body[data-ui="beta"] .tut-step { color: var(--u-accent-text); }
+body[data-ui="beta"] .tut-title { color: var(--u-text); letter-spacing: var(--u-tr-tight); }
+body[data-ui="beta"] .tut-text { color: var(--u-text-2); }
+body[data-ui="beta"] .tut-badge { background: var(--u-accent-soft); color: var(--u-accent-text); }
+body[data-ui="beta"] .tut-badge.mgr { background: var(--u-warning-soft); color: var(--u-warning); }
+body[data-ui="beta"] .tut-dot { background: var(--u-line-2); }
+body[data-ui="beta"] .tut-dot.on { background: var(--u-accent); }
+body[data-ui="beta"] .tut-progress { background: var(--u-track); }
+body[data-ui="beta"] .tut-progress-bar { background: var(--u-accent); }
+body[data-ui="beta"] .tut-char-avatar { background: var(--u-accent-soft); }
+body[data-ui="beta"] .tut-task {
+  background: var(--u-accent-soft);
+  border-color: color-mix(in srgb, var(--u-accent) 40%, transparent);
+  color: var(--u-text);
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .tut-task.done {
+  background: var(--u-success-soft);
+  border-color: color-mix(in srgb, var(--u-success) 40%, transparent);
+}
+body[data-ui="beta"] .tut-practice button {
+  background: var(--u-cell-2); color: var(--u-text);
+  border: 1px solid var(--u-line); border-radius: var(--u-r-sm);
+}
+body[data-ui="beta"] .tut-practice button.ok {
+  background: var(--u-success-soft); border-color: var(--u-success); color: var(--u-success);
+}
+/* кнопки карточки — приглушённый ghost + акцентный primary */
+body[data-ui="beta"] .tut-actions .tut-btn-skip {
+  background: var(--u-cell-2); color: var(--u-text-2);
+  border: 1px solid var(--u-line); border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .tut-actions .tut-btn-next {
+  background: var(--u-primary); color: var(--u-on-primary);
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"][data-theme="dark"] .tut-actions .tut-btn-next {
+  background: var(--u-primary); color: var(--u-on-primary);
+}
+body[data-ui="beta"] .tut-highlight,
+body[data-ui="beta"] .tut-highlight-pulse {
+  outline: 3px solid var(--u-accent) !important;
+  box-shadow: 0 0 0 6px var(--u-accent-soft), 0 10px 30px rgba(0,0,0,.4) !important;
+}
+
+/* =========================================================
+   ОБУЧЕНИЕ — cutscene (полноэкранный Арбузыч). Своё ночное
+   небо в обеих темах, чуть ближе к синему семейству беты.
+   ========================================================= */
+body[data-ui="beta"] #tutorialScreen {
+  background:
+    radial-gradient(120% 90% at 50% 0%, #173654 0%, transparent 65%),
+    linear-gradient(170deg, #0C2033 0%, #081018 60%, #05090C 100%);
+}
+body[data-ui="beta"] .ts-chapter { color: var(--u-accent-text); }
+body[data-ui="beta"] .ts-bubble {
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: var(--u-r-lg);
+}
+body[data-ui="beta"] .ts-dots .tut-dot { background: rgba(255,255,255,.22); }
+body[data-ui="beta"] .ts-dots .tut-dot.on { background: var(--u-accent); }
+body[data-ui="beta"] .ts-actions .tut-btn-skip {
+  background: rgba(255,255,255,.08); color: rgba(230,240,248,.72);
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .ts-actions .tut-btn-next {
+  background: var(--u-primary); color: var(--u-on-primary);
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .ts-practice button {
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.14); color: #EFF9FF;
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .ts-practice button.ok {
+  background: var(--u-success-soft); border-color: var(--u-success); color: #7DF0A8;
+}
+body[data-ui="beta"] .ts-reward {
+  background: var(--u-success-soft); border-color: color-mix(in srgb, var(--u-success) 40%, transparent);
+  color: #7DF0A8; border-radius: var(--u-r-md);
+}
+
+/* =========================================================
+   ПРОМОКОДЫ — список и карточка кода. Список — cell-строки
+   с inset-разделителем, код — моноширинный акцентный блок.
+   ========================================================= */
+body[data-ui="beta"] .promo-item {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+  color: var(--u-text);
+}
+body[data-ui="beta"] .promo-item:active { background: var(--u-cell-press); opacity: 1; }
+body[data-ui="beta"] .promo-mask { color: var(--u-text); }
+body[data-ui="beta"] .promo-meta { color: var(--u-text-3); }
+body[data-ui="beta"] .promo-code-big {
+  background: var(--u-accent-soft);
+  border: 1px dashed color-mix(in srgb, var(--u-accent) 45%, transparent);
+  color: var(--u-accent-text);
+  border-radius: var(--u-r-md);
+}
+
+/* =========================================================
+   ОФЛАЙН-ОЧЕРЕДЬ — кнопка-индикатор и dialog. Индикатор
+   прижимаем к таб-бару (поднимаем выше капсулы), dialog —
+   та же шторка-эстетика, что overlay/sheet-modal.
+   ========================================================= */
+body[data-ui="beta"] #offlineQueueStatus {
+  bottom: calc(var(--bottom-nav-safe-offset, 76px) + 76px) !important;
+  background: var(--u-cell);
+  color: var(--u-text);
+  border: 1px solid var(--u-line) !important;
+  border-radius: 999px;
+  box-shadow: var(--u-shadow-float);
+  font-weight: 600;
+}
+body[data-ui="beta"] #offlineQueueDialog {
+  background: var(--u-page);
+  color: var(--u-text);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-xl);
+  box-shadow: var(--u-shadow-sheet);
+}
+body[data-ui="beta"] #offlineQueueDialog::backdrop { background: var(--u-scrim); }
+body[data-ui="beta"] #offlineQueueDialog section {
+  border-top: 1px solid var(--u-sep);
+  padding-top: 10px; margin-top: 10px;
+  color: var(--u-text-2);
+}
+body[data-ui="beta"] #offlineQueueDialog button {
+  background: var(--u-cell-2); color: var(--u-text);
+  border: 1px solid var(--u-line); border-radius: var(--u-r-md);
+  padding: 10px 14px; font: inherit; font-weight: 600; cursor: pointer;
+}
+
+/* =========================================================
+   ШТОРКА — мелкая шлифовка поверх base.css. Результат
+   калькуляторов (.combo-result) — акцентный inset-блок.
+   ========================================================= */
+body[data-ui="beta"] .combo-result {
+  background: var(--u-cell);
+  border: 1px solid var(--u-line);
+  border-radius: var(--u-r-md);
+}
+body[data-ui="beta"] .combo-result .big { color: var(--u-accent-text); letter-spacing: var(--u-tr-tight); }
+body[data-ui="beta"] .combo-result .hint { color: var(--u-text-3); }
+
+/* Скрим чуть глубже в тёмной теме — лист отделяется от
+   затемнённого холста, не сливается с ним. */
+body[data-ui="beta"][data-theme="dark"] .overlay { background: rgba(0,0,0,.62); }
+
+/* Reduced motion: гейт-пульсации и bob-анимации отключаем. */
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="beta"] .tut-char-avatar,
+  body[data-ui="beta"] .ts-avatar,
+  body[data-ui="beta"] .tut-highlight-pulse,
+  body[data-ui="beta"] .tut-card,
+  body[data-ui="beta"] .ts-inner { animation: none !important; }
+}

@@ -1,6 +1,7 @@
 package ru.t2sales.android.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
@@ -98,8 +99,13 @@ private fun ComingSoon(title: String) {
 /** The web's .bottom-nav: a surface bar with a hairline on top, icon over caption, the active one in the primary colour (it fades in and the icon hops). */
 @Composable
 private fun BottomNav(current: Tab, onSelect: (Tab) -> Unit) {
-    Column(Modifier.fillMaxWidth().background(T2Colors.surface).navigationBarsPadding()) {
-        Divider(color = T2Colors.border, thickness = 1.dp)
+    val beta = T2Colors.uiBeta
+    // beta (web base.css .bottom-nav): a glass capsule floating 12dp from the edges instead of a full-width bar
+    val outer = if (beta) Modifier.fillMaxWidth().background(T2Colors.bg).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+        .clip(RoundedCornerShape(30.dp)).background(T2Colors.glass).border(1.dp, T2Colors.border, RoundedCornerShape(30.dp))
+    else Modifier.fillMaxWidth().background(T2Colors.surface).navigationBarsPadding()
+    Column(outer) {
+        if (!beta) Divider(color = T2Colors.border, thickness = 1.dp)
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             Tab.entries.forEach { t ->
                 val active = t == current
@@ -125,5 +131,5 @@ private fun Fab(modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }.size(56.dp).clip(CircleShape).background(T2Colors.primary).bouncyClickable(to = 0.9f, onClick = onClick),
         contentAlignment = Alignment.Center
-    ) { Text("+", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light, modifier = Modifier.offset(y = (-2).dp)) }
+    ) { Text("+", color = if (T2Colors.uiBeta) T2Colors.onPrimary else Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light, modifier = Modifier.offset(y = (-2).dp)) }
 }

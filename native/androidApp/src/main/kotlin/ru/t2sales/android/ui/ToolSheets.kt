@@ -75,14 +75,17 @@ private fun ComboCalc(onDismiss: () -> Unit) {
     var discount by remember { mutableStateOf("0") }
     var result by remember { mutableStateOf<Pair<String, String>?>(null) }
     BottomSheet("Расчёт комбо", onDismiss = onDismiss, footer = {
-        MainButton("Посчитать") {
+        val calc = {
             val p = price.toDoubleOrNull() ?: 0.0
             val d = discount.toDoubleOrNull() ?: 0.0
-            if (p <= 0) { Toaster.show("Укажи цену", true); return@MainButton }
-            val after = p * (1 - d / 100)
-            val total = (after + p * 0.28 + 2400).roundToLong()
-            result = "${rub(total)} ₽" to "${rub(p.roundToLong())} − ${d.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }}% = ${rub(after.roundToLong())}\n+ 28% (${rub((p * 0.28).roundToLong())}) + 2 400"
+            if (p <= 0) Toaster.show("Укажи цену", true)
+            else {
+                val after = p * (1 - d / 100)
+                val total = (after + p * 0.28 + 2400).roundToLong()
+                result = "${rub(total)} ₽" to "${rub(p.roundToLong())} − ${d.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }}% = ${rub(after.roundToLong())}\n+ 28% (${rub((p * 0.28).roundToLong())}) + 2 400"
+            }
         }
+        if (T2Colors.uiBeta) U3PrimaryButton("Посчитать") { calc() } else MainButton("Посчитать") { calc() }
     }) {
         Text("Формула T2:\nцена − скидка% + 28% от цены + 2400", color = T2Colors.hint, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
         Field("Цена телефона, ₽", price, { v -> price = v.filter { it.isDigit() || it == '.' } }, keyboard = KeyboardType.Decimal)
@@ -97,14 +100,17 @@ private fun SchoolCalc(onDismiss: () -> Unit) {
     var price by remember { mutableStateOf("") }
     var result by remember { mutableStateOf<Pair<String, String>?>(null) }
     BottomSheet("Калькулятор школа", onDismiss = onDismiss, footer = {
-        MainButton("Посчитать") {
+        val calc = {
             val p = price.toDoubleOrNull() ?: 0.0
-            if (p <= 0) { Toaster.show("Укажи цену", true); return@MainButton }
-            val afterCut = p - p * 0.7
-            val bonus = p * 0.3
-            val total = (afterCut + bonus + 3600 + 3490).roundToLong()
-            result = "${rub(total)} ₽" to "${rub(p.roundToLong())} − 70% = ${rub(afterCut.roundToLong())}\n+ 30% от цены (${rub(bonus.roundToLong())}) + 3 600 + 3 490"
+            if (p <= 0) Toaster.show("Укажи цену", true)
+            else {
+                val afterCut = p - p * 0.7
+                val bonus = p * 0.3
+                val total = (afterCut + bonus + 3600 + 3490).roundToLong()
+                result = "${rub(total)} ₽" to "${rub(p.roundToLong())} − 70% = ${rub(afterCut.roundToLong())}\n+ 30% от цены (${rub(bonus.roundToLong())}) + 3 600 + 3 490"
+            }
         }
+        if (T2Colors.uiBeta) U3PrimaryButton("Посчитать") { calc() } else MainButton("Посчитать") { calc() }
     }) {
         Text("Формула:\nцена − 70% цены + 30% от цены + 3600 + 3490", color = T2Colors.hint, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
         Field("Цена телефона, ₽", price, { v -> price = v.filter { it.isDigit() || it == '.' } }, keyboard = KeyboardType.Decimal)
@@ -145,13 +151,25 @@ private fun PromosSheet(container: AppContainer, onDismiss: () -> Unit) {
         when (val v = view) {
             PromoView.List -> {
                 Text("Общий пул твоей сети. Коды скрыты — открой карточку, чтобы увидеть. Если использовал — отметь, код исчезнет из пула.", color = T2Colors.hint, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
-                MainButton("+ Добавить промокод") { code = ""; note = ""; view = PromoView.Add }
+                if (T2Colors.uiBeta) U3PrimaryButton("+ Добавить промокод") { code = ""; note = ""; view = PromoView.Add }
+                else MainButton("+ Добавить промокод") { code = ""; note = ""; view = PromoView.Add }
                 Spacer(Modifier.height(14.dp))
                 val list = items
                 when {
                     failed -> Text("🍉 Промокоды сейчас недоступны, зайди чуть позже", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
                     list == null -> LoadingBlock()
                     list.isEmpty() -> Text("Пока пусто — добавь первый код", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
+                    T2Colors.uiBeta -> U3Group {
+                        list.forEachIndexed { i, it ->
+                            if (i > 0) U3Sep()
+                            U3Cell(
+                                it.mask.ifEmpty { "••••" },
+                                "${it.created_by_name ?: ""} · ${it.created_at.take(10)}",
+                                trailing = { Text("›", color = T2Colors.hint) },
+                                onClick = { view = PromoView.Card(it.id) }
+                            )
+                        }
+                    }
                     else -> list.forEach {
                         val shape = RoundedCornerShape(14.dp)
                         Row(Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(shape).background(T2Colors.surface2).border(1.dp, T2Colors.border, shape).clickable { view = PromoView.Card(it.id) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -169,16 +187,18 @@ private fun PromosSheet(container: AppContainer, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(14.dp))
                 Field("Заметка (необязательно)", note, { note = it })
                 Spacer(Modifier.height(16.dp))
-                MainButton("Сохранить") {
-                    if (code.isBlank()) { Toaster.show("Введи код", true); return@MainButton }
-                    scope.launch {
+                val save = {
+                    if (code.isBlank()) Toaster.show("Введи код", true)
+                    else scope.launch {
                         runCatching { api.createPromo(code.trim(), note.trim()) }
                             .onSuccess { Toaster.show("Добавлено"); back() }
                             .onFailure { Toaster.show(it.message ?: "Ошибка", true) }
                     }
                 }
+                if (T2Colors.uiBeta) U3PrimaryButton("Сохранить") { save() } else MainButton("Сохранить") { save() }
                 Spacer(Modifier.height(8.dp))
-                MainButton("Назад к списку", container = T2Colors.surface2, content = T2Colors.text) { back() }
+                if (T2Colors.uiBeta) U3SecondaryButton("Назад к списку") { back() }
+                else MainButton("Назад к списку", container = T2Colors.surface2, content = T2Colors.text) { back() }
             }
             is PromoView.Card -> {
                 val c = card
@@ -194,11 +214,15 @@ private fun PromosSheet(container: AppContainer, onDismiss: () -> Unit) {
                     }
                     c.note?.takeIf { it.isNotBlank() }?.let { Text(it, color = T2Colors.hint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 4.dp)) }
                     Text(c.created_by_name ?: "", color = T2Colors.hint, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
-                    MainButton("Промокод использован") {
+                    if (T2Colors.uiBeta) U3PrimaryButton("Промокод использован") {
+                        scope.launch { runCatching { api.markPromoUsed(v.id) }.onSuccess { Toaster.show("Списан из пула"); back() }.onFailure { Toaster.show("Ошибка", true) } }
+                    } else MainButton("Промокод использован") {
                         scope.launch { runCatching { api.markPromoUsed(v.id) }.onSuccess { Toaster.show("Списан из пула"); back() }.onFailure { Toaster.show("Ошибка", true) } }
                     }
                     Spacer(Modifier.height(8.dp))
-                    MainButton("Не использован", container = T2Colors.surface2, content = T2Colors.text) {
+                    if (T2Colors.uiBeta) U3SecondaryButton("Не использован") {
+                        scope.launch { runCatching { api.keepPromo(v.id) }; back() }
+                    } else MainButton("Не использован", container = T2Colors.surface2, content = T2Colors.text) {
                         scope.launch { runCatching { api.keepPromo(v.id) }; back() }
                     }
                 }

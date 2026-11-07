@@ -115,6 +115,15 @@ fun AuditScreen(api: AdminApi) {
         fetch(false)
     }
 
+    if (T2Colors.uiBeta) {
+        AuditBeta(
+            items, loaded, failed, { reload++ },
+            action, { action = it }, target, { target = it },
+            from, { from = it }, to, { to = it },
+            sort, { k -> if (sort == k) asc = !asc else { sort = k; asc = true } }, asc,
+            more, { offset += LIMIT; fetch(true) }, { opened = it }
+        )
+    } else {
     PageSection("История действий") {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SelectField("", action, listOf(ALL_ACTIONS) + ACTION_LABEL.values) { action = it }
@@ -202,6 +211,7 @@ fun AuditScreen(api: AdminApi) {
             }
         }
     }
+    }
 
     val item = opened
     if (item != null) {
@@ -225,4 +235,73 @@ private fun DiffBox(text: String) {
         text, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(T2Colors.surface2).padding(10.dp)
     )
+}
+
+// ======================= Beta UI 3.0 «Ночная смена» =======================
+
+private val AUDIT_SORT_LABEL = linkedMapOf(
+    AuditSort.Date to "Дата",
+    AuditSort.Action to "Действие",
+    AuditSort.Actor to "Актор",
+    AuditSort.Target to "Объект"
+)
+
+private fun auditDay(iso: String): String = runCatching { OffsetDateTime.parse(iso).dayOfMonth.toString() }.getOrDefault("·")
+private fun auditTime(iso: String): String = runCatching { OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("HH:mm")) }.getOrDefault("")
+
+@Composable
+private fun AuditBeta(
+    items: List<AuditItem>, loaded: Boolean, failed: Boolean, onRetry: () -> Unit,
+    action: String, onAction: (String) -> Unit, target: String, onTarget: (String) -> Unit,
+    from: String, onFrom: (String) -> Unit, to: String, onTo: (String) -> Unit,
+    sort: AuditSort, onSort: (AuditSort) -> Unit, asc: Boolean,
+    more: Boolean, onMore: () -> Unit, onOpen: (AuditItem) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        U3LargeTitle("История действий")
+        U3FilterChips((listOf(ALL_ACTIONS) + ACTION_LABEL.values).map { it to it }, action) { onAction(it) }
+        Spacer(Modifier.height(6.dp))
+        U3FilterChips((listOf(ALL_TARGETS) + TARGET_LABEL.values).map { it to it }, target) { onTarget(it) }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) { Field("", from, onFrom, placeholder = "С даты ГГГГ-ММ-ДД", fill = T2Colors.surface2) }
+            Box(Modifier.weight(1f)) { Field("", to, onTo, placeholder = "По дату ГГГГ-ММ-ДД", fill = T2Colors.surface2) }
+        }
+        when {
+            failed -> ErrorState("Не получилось загрузить историю", onRetry = onRetry)
+            !loaded -> SkeletonBlock(Modifier.fillMaxWidth().height(160.dp).padding(top = 12.dp), 28.dp)
+            items.isEmpty() -> EmptyText("Действий пока нет")
+            else -> {
+                val sorted = items.sortedWith { a, b ->
+                    val c = when (sort) {
+                        AuditSort.Date -> a.created_at.compareTo(b.created_at)
+                        AuditSort.Action -> (ACTION_LABEL[a.action] ?: a.action).compareTo(ACTION_LABEL[b.action] ?: b.action, true)
+                        AuditSort.Actor -> (a.actor_name ?: "").compareTo(b.actor_name ?: "", true)
+                        AuditSort.Target -> a.target_type.compareTo(b.target_type, true)
+                    }
+                    if (asc) c else -c
+                }
+                U3GroupHead("Записи", "${AUDIT_SORT_LABEL[sort]}${if (asc) " ↑" else " ↓"}")
+                U3FilterChips(AUDIT_SORT_LABEL.entries.map { it.key.name to it.value }, sort.name) { onSort(AuditSort.valueOf(it)) }
+                Spacer(Modifier.height(12.dp))
+                U3Group {
+                    sorted.forEachIndexed { i, item ->
+                        if (i > 0) U3Sep()
+                        U3Cell(
+                            ACTION_LABEL[item.action] ?: item.action,
+                            (item.actor_name ?: "Система") + " · " + (TARGET_LABEL[item.target_type] ?: item.target_type) + (item.target_id?.let { " #$it" } ?: ""),
+                            leading = { U3Tile(auditDay(item.created_at)) },
+                            trailing = { U3Value(auditTime(item.created_at), T2Colors.textSecondary) },
+                            onClick = { onOpen(item) }
+                        )
+                    }
+                }
+                if (more) {
+                    Spacer(Modifier.height(12.dp))
+                    U3SecondaryButton("Показать ещё", onClick = onMore)
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
+    }
 }

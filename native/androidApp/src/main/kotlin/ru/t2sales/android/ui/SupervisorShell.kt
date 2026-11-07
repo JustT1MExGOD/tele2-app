@@ -61,8 +61,8 @@ fun SupervisorShell(container: AppContainer, me: MeResponse, onLogout: () -> Uni
                 ToastHost(Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp, start = 16.dp, end = 16.dp))
             }
             if (WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) == 0) {
-                Column(Modifier.fillMaxWidth().background(T2Colors.surface).navigationBarsPadding()) {
-                    Divider(color = T2Colors.border, thickness = 1.dp)
+                Column(Modifier.fillMaxWidth().background(if (T2Colors.uiBeta) T2Colors.glass else T2Colors.surface).navigationBarsPadding()) {
+                    Divider(color = if (T2Colors.uiBeta) T2Colors.separator else T2Colors.border, thickness = 1.dp)
                     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         SvNav.entries.forEach { t ->
                             val tint = if (t == current) T2Colors.primary else T2Colors.hint

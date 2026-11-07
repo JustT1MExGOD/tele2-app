@@ -56,6 +56,54 @@ fun AnnounceScreen(container: AppContainer, me: MeResponse) {
 
     LaunchedEffect(reload) { runCatching { api.announcements() }.onSuccess { items = it }.onFailure { failed = true } }
 
+    if (T2Colors.uiBeta) {
+        val listB = items
+        when {
+            failed -> ru.t2sales.desktop.ui.components.ErrorState("Не удалось загрузить объявления", onRetry = { reload++ })
+            listB == null -> LoadingBlock(Modifier.padding(16.dp))
+            listB.isEmpty() -> Text("Нет объявлений", color = T2Colors.hint, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            else -> ru.t2sales.desktop.ui.components.Group {
+                listB.forEachIndexed { i, a ->
+                    if (i > 0) ru.t2sales.desktop.ui.components.GroupSeparator()
+                    ru.t2sales.desktop.ui.components.BetaCell(
+                        title = a.title + if (a.required) " · обязательно" else "",
+                        sub = (if (a.is_read) "✓ прочитано" else "не прочитано") + " · " + a.created_at.take(10) + "\n" + a.body,
+                        chevron = canManage,
+                        onClick = if (canManage) { { readsFor = a } } else null
+                    )
+                    if (!a.is_read) ru.t2sales.desktop.ui.components.BetaCell(
+                        title = "Отметить прочитанным",
+                        valueColor = T2Colors.accentText,
+                        onClick = { scope.launch { runCatching { api.markAnnouncementRead(a.id) }; reload++ } }
+                    )
+                }
+            }
+        }
+        if (canManage) {
+            ru.t2sales.desktop.ui.components.GroupHead("Новое объявление")
+            ru.t2sales.desktop.ui.components.Group {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Field("Заголовок", title, { title = it }, fill = T2Colors.surface2)
+                    Spacer(Modifier.height(14.dp))
+                    Field("Текст", body, { body = it }, fill = T2Colors.surface2)
+                    Row(modifier = Modifier.padding(vertical = 8.dp).clip(RoundedCornerShape(8.dp)).clickable { required = !required }.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (required) "☑" else "☐", fontSize = 20.sp, color = T2Colors.primary)
+                        Text(" Обязательное", fontSize = 13.sp)
+                    }
+                    ru.t2sales.desktop.ui.components.BetaButton("Опубликовать") {
+                        if (title.isBlank() || body.isBlank()) { T2Toast.show("Заполни заголовок и текст", true); return@BetaButton }
+                        scope.launch {
+                            runCatching { api.createAnnouncement(title.trim(), body.trim(), required) }
+                                .onSuccess { T2Toast.show("Опубликовано"); title = ""; body = ""; required = false; reload++ }
+                                .onFailure { T2Toast.show((it.message ?: "Ошибка") + " (нужна таблица announcements)", true) }
+                        }
+                    }
+                }
+            }
+        }
+        readsFor?.let { a -> AnnounceReads(a, api) { readsFor = null } }
+        return
+    }
     PageSection("Объявления сети") {
         val list = items
         when {
@@ -100,11 +148,15 @@ fun AnnounceScreen(container: AppContainer, me: MeResponse) {
         }
     }
 
-    readsFor?.let { a ->
+    readsFor?.let { a -> AnnounceReads(a, api) { readsFor = null } }
+}
+
+@Composable
+private fun AnnounceReads(a: AnnouncementItem, api: ru.t2sales.shared.api.InfoApi, onDismiss: () -> Unit) {
         var reads by remember(a.id) { mutableStateOf<AnnouncementReads?>(null) }
         var readsFailed by remember(a.id) { mutableStateOf(false) }
         LaunchedEffect(a.id) { runCatching { api.announcementReads(a.id) }.onSuccess { reads = it }.onFailure { readsFailed = true } }
-        SheetDialog("Кто прочитал", onDismiss = { readsFor = null }) {
+        SheetDialog("Кто прочитал", onDismiss = onDismiss) {
             val r = reads
             when {
                 readsFailed -> Text("Не удалось загрузить", color = T2Colors.hint, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
@@ -121,4 +173,3 @@ fun AnnounceScreen(container: AppContainer, me: MeResponse) {
             }
         }
     }
-}
