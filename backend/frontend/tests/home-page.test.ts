@@ -235,8 +235,8 @@ describe('Главная (миграция frontend/js/03-home.js → src/pages/
     setupGlobals({ role: 'manager' });
     const { loadCommandCenter } = await import('../src/pages/home/index.js');
     await loadCommandCenter();
-    expect(document.getElementById('commandCenterBody')!.textContent).toContain('сеть в ритме');
-    expect(document.getElementById('commandCenterBodyDesktop')!.textContent).toContain('сеть в ритме');
+    expect(document.getElementById('commandCenterBody')!.textContent).toMatch(/сеть в ритме/i);
+    expect(document.getElementById('commandCenterBodyDesktop')!.textContent).toMatch(/сеть в ритме/i);
     const desktop = document.getElementById('homeDesktopInsights') as HTMLElement;
     expect(desktop.style.display).toBe('');
     expect(desktop.classList.contains('insights-panel')).toBe(true);

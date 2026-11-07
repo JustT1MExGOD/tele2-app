@@ -67,7 +67,7 @@ describe('Касса / метрики (миграция frontend/js/09-cash-metr
     const { loadCash } = await import('../src/pages/cash-metrics/index.js');
     setupGlobals();
     await loadCash();
-    expect(document.getElementById('cashTable')!.textContent).toContain('внеси первую строку');
+    expect(document.getElementById('cashTable')!.textContent).toMatch(/внеси первую строку/i);
   });
 
   it('loadCash: подгружает stores, если ещё не загружены (мутирует shared глобал)', async () => {

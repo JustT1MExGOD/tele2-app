@@ -334,7 +334,7 @@ describe('График (миграция frontend/js/04-schedule.js → src/page
     const html = document.getElementById('modalBody')!.innerHTML;
     expect(html).toContain('value="__REPLACEMENT__"');
     expect(html).toContain('Замена');
-    expect(html).toMatch(/value="__REPLACEMENT__"[^>]*background:#00c853/);
+    expect(html).toMatch(/value="__REPLACEMENT__"[^>]*background:var\(--success\)/);
   });
 
   it('editDay: текущая смена уже "Замена" — этот пункт выбран (selected)', async () => {

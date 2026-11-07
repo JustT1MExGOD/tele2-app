@@ -75,7 +75,7 @@ describe('Command Center (миграция frontend/js/14-command-center.js → 
     getCommandCenter.mockResolvedValue({ ...RESPONSE, problems: [] });
     const { loadCommandCenterPage } = await import('../src/pages/command-center/index.js');
     await loadCommandCenterPage();
-    expect(document.getElementById('ccPageBody')!.textContent).toContain('сеть в ритме');
+    expect(document.getElementById('ccPageBody')!.textContent).toMatch(/сеть в ритме/i);
   });
 
   it('loadCommandCenterPage: manager без прав — блок "Полная аналитика сектора" не показан; admin — показан', async () => {

@@ -211,7 +211,7 @@ function u3FeedRows(rows: any[]): { html: string; count: number } {
 let u3FeedSeq = 0;
 async function u3LoadFeed(): Promise<void> {
   const boxes = document.querySelectorAll<HTMLElement>('.u3h-feed');
-  if (!boxes.length || !isBetaUi()) return;
+  if (!boxes.length || !window.isBetaUi?.()) return;
   const seq = ++u3FeedSeq;
   const empId = String(me?.employee_id || '');
   const today = todayMoscow();
