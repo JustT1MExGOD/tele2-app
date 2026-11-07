@@ -230,6 +230,12 @@ declare global {
   function toggleBetaUi(): void;
   /** app/nav.ts — true while Beta UI 3.0 is on. */
   function isBetaUi(): boolean;
+  /** features/add-sale — beta stepper − (delegated, data-on). */
+  function u3StepDown(ev: Event): void;
+  /** features/add-sale — beta stepper + (delegated, data-on). */
+  function u3StepUp(ev: Event): void;
+  /** features/add-sale — beta qty input (delegated, data-on). */
+  function u3SaleQtyInput(ev: Event): void;
   /** app/core.ts — canManage() || isSupervisor(), approve-access shorthand. */
   function canApprove(): boolean;
   /** src/pages/home — loads the Главная page. */

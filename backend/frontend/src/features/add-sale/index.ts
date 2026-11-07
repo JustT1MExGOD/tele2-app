@@ -195,11 +195,11 @@ export function renderSaleQtyList(): void {
           <div class="qty-row${money ? ' u3-money' : ''}">
             <div class="qty-label">${esc(m.label)}<small>${(m as any).unit || ''}</small></div>
             <div class="u3-stepper">
-            <button type="button" class="u3-step" hidden aria-label="Меньше" onclick="var i=this.parentNode.querySelector('input');i.stepDown();i.dispatchEvent(new Event('input'))">−</button>
+            <button type="button" class="u3-step" hidden aria-label="Меньше" data-on="u3StepDown" data-on-event="click">−</button>
             <input type="number" min="0" step="1" inputmode="decimal"
               value="${saleSelection[key]}"
-              oninput="saleSelection['${key}'] = Number(String(this.value).replace(',','.')) || 0" />${money ? '<span class="u3-money-suffix" hidden aria-hidden="true">₽</span>' : ''}
-            <button type="button" class="u3-step" hidden aria-label="Больше" onclick="var i=this.parentNode.querySelector('input');i.stepUp();i.dispatchEvent(new Event('input'))">+</button>
+              data-on="u3SaleQtyInput" data-on-event="input" data-m="${key}" />${money ? '<span class="u3-money-suffix" hidden aria-hidden="true">₽</span>' : ''}
+            <button type="button" class="u3-step" hidden aria-label="Больше" data-on="u3StepUp" data-on-event="click">+</button>
             </div>
           </div>
         `;
@@ -539,3 +539,26 @@ window.openModal = openModal;
 window.closeModal = closeModal;
 window.openCorrectSale = openCorrectSale;
 window.submitSale = submitSale;
+
+// Бета-степперы −/+/поле — делегированные обработчики через data-on (CSP-friendly,
+// без inline onclick). Вызываются ratchet-делегатом nav.ts.
+export function u3StepDown(ev: Event): void {
+  const btn = (ev.target as HTMLElement).closest('button');
+  const input = btn?.parentElement?.querySelector('input');
+  (input as HTMLInputElement | null)?.stepDown();
+  input?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+export function u3StepUp(ev: Event): void {
+  const btn = (ev.target as HTMLElement).closest('button');
+  const input = btn?.parentElement?.querySelector('input');
+  (input as HTMLInputElement | null)?.stepUp();
+  input?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+export function u3SaleQtyInput(ev: Event): void {
+  const input = ev.target as HTMLInputElement;
+  const key = input.dataset.m || '';
+  if (key) saleSelection[key] = Number(String(input.value).replace(',', '.')) || 0;
+}
+window.u3StepDown = u3StepDown;
+window.u3StepUp = u3StepUp;
+window.u3SaleQtyInput = u3SaleQtyInput;
